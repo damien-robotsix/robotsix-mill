@@ -231,7 +231,7 @@ class RefineResult(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _absorb_spec_markdown_typos(cls, data):
-        """deepseek-v4-pro consistently mis-types ``spec_markdown`` as
+        """Some models consistently mis-type ``spec_markdown`` as
         ``spec_markmark`` (observed three times in production today on
         tickets 5061, efd4, f93f). pydantic-ai silently drops the
         unknown key, ``spec_markdown`` stays None, refine stage blocks
@@ -530,7 +530,7 @@ def run_refine_agent(
     ticket. When present AND the claude_sdk backend is active for
     refine, each image is read and passed to the model as a
     ``pydantic_ai.BinaryContent`` block so the agent can *see* it. On
-    the non-vision default (DeepSeek) path the images are not attached;
+    the non-vision default (OpenRouter) path the images are not attached;
     a short text note tells the agent they exist instead.
 
     ``standards_context`` — pre-fetched robotsix-standards content
@@ -696,12 +696,12 @@ def run_refine_agent(
     # When a cheap triage classifier rules the ticket trivial-scope,
     # override the YAML's default model level (3 / Opus) with the
     # configured trivial level (default 3 = subscription; set to 1/2
-    # to roll back to DeepSeek).
+    # to roll back to the level-1 model).
     if refine_level is not None:
         overrides["level"] = refine_level
 
     # Right-size the level-3 Claude model (subscription transport unchanged).
-    # Skip when downgraded to a DeepSeek level (1/2), which ignores `model`.
+    # Skip when downgraded to an OpenRouter level (1/2), which ignores `model`.
     resolved_level = refine_level if refine_level is not None else 3
     if resolved_level == 3 and refine_model is not None:
         overrides["model"] = refine_model
@@ -815,7 +815,7 @@ def run_refine_agent(
     # on the claude_sdk path AND only when that backend can actually view
     # inline images (the capability gate — default OFF, because the
     # installed llmio bridge silently mishandles BinaryContent and stalls
-    # the CLI for 1200s). The DeepSeek default has no vision either. When
+    # the CLI for 1200s). The OpenRouter default has no vision either. When
     # images exist but the backend can't see them, leave a text note so
     # the agent knows they're there.
     _vision = (

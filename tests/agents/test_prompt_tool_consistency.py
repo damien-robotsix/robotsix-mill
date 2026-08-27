@@ -132,7 +132,7 @@ def test_build_agent_allows_disclaimer_mention(tmp_path, monkeypatch):
     # level (2) resolves to the DeepSeek transport, so patching the
     # DeepSeek handle builder is enough.
     sentinel = object()
-    monkeypatch.setattr(base, "_build_deepseek_handle", lambda *a, **k: sentinel)
+    monkeypatch.setattr(base, "_build_openrouter_handle", lambda *a, **k: sentinel)
 
     handle = base.build_agent(
         s,
@@ -182,7 +182,7 @@ def _capture(monkeypatch, output_obj):
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
-        bmod, "new_deepseek_model", lambda model_name, level: (object(), object())
+        bmod, "new_openrouter_model", lambda model_name, level: (object(), object())
     )
     # Force the DeepSeek (pydantic-ai) provider for ALL levels so the
     # FakeAgent above intercepts the build. refine is level 3 (Claude SDK)

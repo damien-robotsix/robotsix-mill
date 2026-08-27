@@ -371,7 +371,7 @@ def reviewer_agreement_guard(
     Gated by ``reviewer_agreement_gate_enabled`` AND
     ``refine_triage_enabled`` (both must be True), and only runs when
     ``reviewer_comments`` is present (truthy).  A single cheap L1
-    classifier (DeepSeek flash, ~$0.0003) replaces what would
+    classifier (the level-1 model, ~$0.0003) replaces what would
     otherwise be a full Opus refine call (~$0.28).
 
     Returns an :class:`Outcome` to short-circuit, or ``None`` to fall

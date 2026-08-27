@@ -44,8 +44,8 @@ class AgentDefinition(BaseModel):
     description: str | None = None
     category: str | None = None
     # Capability level (1/2/3/4) → resolved to (transport, model) by build_agent
-    # via llmio's tier defaults: L1 DeepSeek flash, L2 DeepSeek pro, L3 Claude
-    # opus, L4 Claude fable-5. Replaces the old provider-specific ``model`` field.
+    # via llmio's tier defaults (see llmio tier config for current mapping).
+    # Replaces the old provider-specific ``model`` field.
     level: int = Field(ge=1, le=4)
     system_prompt: str
     tools: list[str] = []

@@ -605,15 +605,15 @@ def reraise_if_transient(exc: BaseException) -> None:
     LLM-agent stages (review, refine, retrospect) historically caught
     every exception and converted it to a hard ``BLOCKED`` Outcome —
     which BYPASSES the worker's stage-retry. That turned every transient
-    model blip (OpenRouter 5xx/429/timeout, the DeepSeek thinking-mode
-    reasoning round-trip 400) into a block needing a manual resume.
+    model blip (OpenRouter 5xx/429/timeout, provider-specific reasoning
+    errors) into a block needing a manual resume.
 
     Call this at the top of such an except-clause: a transient error is
     re-raised so the worker's ``classify_stage_error`` schedules a fresh
     re-run with backoff (bounded by ``stage_retry_max_attempts``); a
     fatal error returns and the caller blocks as before. This is the
     same fix applied inline in ``stages/implement.py``, factored out so
-    the LLM stages stay consistent. See [[project-deepseek-pin-reasoning-blocker]].
+    the LLM stages stay consistent.
     """
     if classify_stage_error(exc) == "transient":
         raise exc
@@ -664,10 +664,11 @@ def classify_stage_error(exc: BaseException) -> str:
 
         if _check_one_transient(current):
             return "transient"
-        # NOTE: the DeepSeek thinking-mode reasoning round-trip 400 detector
-        # was removed — OpenRouter no longer raises that 400 when reasoning is
-        # stripped from a tool-call turn, so robotsix-llmio dropped the
-        # detector and this classifier branch with it. A plain 400 is fatal.
+        # NOTE: the provider-specific thinking-mode reasoning round-trip
+        # 400 detector was removed — the upstream provider no longer raises
+        # that 400 when reasoning is stripped from a tool-call turn, so
+        # robotsix-llmio dropped the detector and this classifier branch
+        # with it. A plain 400 is fatal.
 
         if current.__cause__ is not None and id(current.__cause__) not in seen:
             current = current.__cause__

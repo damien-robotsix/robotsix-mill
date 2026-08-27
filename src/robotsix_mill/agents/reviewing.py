@@ -340,7 +340,7 @@ def _review_attempt(
     # backend can actually view inline images (the capability gate
     # — default OFF, because the installed llmio bridge silently
     # mishandles BinaryContent and stalls the CLI for 1200s).
-    # DeepSeek has no vision either. A missing/unreadable file
+    # The default model has no vision either. A missing/unreadable file
     # degrades silently to the text-only path — never crash review.
     if (
         screenshot_path is not None
@@ -442,8 +442,8 @@ def run_review_agent(
     agent is routed to the Claude SDK backend (vision-capable), the PNG
     is read and attached as a ``pydantic_ai.BinaryContent`` image on the
     FINAL user turn so the model sees the rendered board alongside the
-    diff. On the default DeepSeek path (no Claude SDK routing) the image
-    is never attached — DeepSeek has no vision and would reject an image
+    diff. On the default OpenRouter path (no Claude SDK routing) the image
+    is never attached — the default model has no vision and would reject an image
     block. A missing/unreadable screenshot degrades silently to the
     text-only path; it never alters routing or crashes review.
     """

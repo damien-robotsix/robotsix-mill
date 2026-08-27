@@ -45,7 +45,7 @@ def fake_ai(monkeypatch):
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
         bmod,
-        "new_deepseek_model",
+        "new_openrouter_model",
         lambda model_name, level: (FakeModel(model_name), object()),
     )
     return cap
@@ -443,7 +443,7 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
         bmod,
-        "new_deepseek_model",
+        "new_openrouter_model",
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
@@ -582,7 +582,7 @@ def test_test_agent_rc126_unrelated_path_still_distills(tmp_path, monkeypatch):
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
         bmod,
-        "new_deepseek_model",
+        "new_openrouter_model",
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
@@ -617,7 +617,7 @@ def test_test_agent_normal_failure_still_distills(tmp_path, monkeypatch):
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
         bmod,
-        "new_deepseek_model",
+        "new_openrouter_model",
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
@@ -647,7 +647,7 @@ def test_build_agent_forwards_name(tmp_path, monkeypatch):
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
         bmod,
-        "new_deepseek_model",
+        "new_openrouter_model",
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
@@ -702,7 +702,7 @@ def test_build_agent_does_not_inject_tool_prose_into_prompt(tmp_path, monkeypatc
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
         bmod,
-        "new_deepseek_model",
+        "new_openrouter_model",
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
@@ -741,7 +741,7 @@ def test_build_agent_without_name_is_compatible(tmp_path, monkeypatch):
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
         bmod,
-        "new_deepseek_model",
+        "new_openrouter_model",
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
@@ -787,7 +787,7 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
         bmod,
-        "new_deepseek_model",
+        "new_openrouter_model",
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
@@ -904,7 +904,7 @@ def test_test_agent_distill_injects_file_map_scope(tmp_path, monkeypatch):
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
         bmod,
-        "new_deepseek_model",
+        "new_openrouter_model",
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
@@ -965,7 +965,7 @@ def test_test_agent_distill_no_file_map_unaffected(tmp_path, monkeypatch):
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
         bmod,
-        "new_deepseek_model",
+        "new_openrouter_model",
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
@@ -1019,7 +1019,7 @@ def test_test_agent_distill_explicit_file_map_override(tmp_path, monkeypatch):
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
         bmod,
-        "new_deepseek_model",
+        "new_openrouter_model",
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 

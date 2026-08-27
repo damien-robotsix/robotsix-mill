@@ -7,7 +7,7 @@ historical mill API: the retry/backoff constants are baked in the library
 re-exported.
 
 The call-level retry predicate is the OpenRouter transient set (429/5xx/timeout/
-malformed-JSON/upstream-error) — deliberately NOT the DeepSeek reasoning-400,
+malformed-JSON/upstream-error) — deliberately NOT provider-specific reasoning-400,
 which surfaces to the worker's stage-retry (a fresh re-run) rather than being
 retried in the same conversation. ``classify_stage_error`` picks up the
 reasoning-400 via the re-exported detector.
@@ -91,9 +91,9 @@ def _is_claude_sdk_degenerate_result(exc: BaseException) -> bool:
 def is_transient(exc: BaseException) -> bool:
     """Transient if EITHER backend's classifier says so.
 
-    mill runs both the OpenRouter/DeepSeek and the Claude SDK transports, so a
+    mill runs both the OpenRouter and Claude SDK transports, so a
     single retry predicate must recognise both families: OpenRouter
-    429/5xx/upstream on the DeepSeek path, and Claude SDK subprocess/connection/
+    429/5xx/upstream on the OpenRouter path, and Claude SDK subprocess/connection/
     query-timeout failures on the Claude path. The two sets don't overlap in
     practice, so OR-ing them keeps local retries correct for whichever backend
     actually ran — previously only OpenRouter errors were retried, so a Claude
@@ -126,7 +126,7 @@ def is_transient(exc: BaseException) -> bool:
 
 
 # NOTE: is_deepseek_reasoning_roundtrip_error was removed from robotsix-llmio
-# (OpenRouter no longer raises the DeepSeek thinking-mode 400 when reasoning is
+# (the upstream provider no longer raises the thinking-mode 400 when reasoning is
 # stripped from a tool-call turn), so it is no longer imported or re-exported.
 
 T = TypeVar("T")
@@ -312,7 +312,7 @@ async def acall_with_retry[T](
     When *fallback_fn* is provided, the primary is retried locally first.  Only
     when local retries are exhausted does the fallback run, itself through a
     fresh retry session.  This guards against persistent provider-side outages
-    (e.g. DeepSeek 503 on OpenRouter) by falling back to a different model.
+    (e.g. provider 503 on OpenRouter) by falling back to a different model.
 
     After a successful run, per-step usage data is recorded on the current OTel
     span (same contract as :func:`run_agent`).
@@ -396,7 +396,7 @@ def run_agent[T](
     When *fallback_fn* is provided, the primary agent is retried locally
     first (same transient/backoff schedule).  Only when local retries are
     exhausted does the fallback run, itself through a fresh retry session.
-    This guards against persistent provider-side outages (e.g. DeepSeek 503
+    This guards against persistent provider-side outages (e.g. provider 503
     on OpenRouter) by falling back to a different model.
 
     After a successful run, per-step usage data (token counts, model name,

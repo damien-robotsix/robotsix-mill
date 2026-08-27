@@ -60,11 +60,10 @@ class ImplementResult(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _absorb_summary_typos(cls, data):
-        """deepseek-v4-pro repeatedly mis-keys the required ``summary``
-        field. pydantic-ai's strict validation then exceeds output
-        retries, the implement stage blocks the ticket with "Exceeded
-        maximum output retries", and the user pays $1+ in coordinator
-        cost per retry.
+        """Some models repeatedly mis-key the required ``summary`` field.
+        pydantic-ai's strict validation then exceeds output retries, the
+        implement stage blocks the ticket with "Exceeded maximum output
+        retries", and the user pays $1+ in coordinator cost per retry.
 
         Two-tier absorption:
         1. Preferred: a known near-miss key (``summary_text``, ``text``,
@@ -703,7 +702,7 @@ def run_coordinator(
         # every tool turn (file dumps, git-diff output). Cap it to the last
         # N tool turns plus a rolling summary of older exchanges — cutting
         # WHOLE turns only so a tool_call is never orphaned from its return
-        # (a 400 failure mode on the DeepSeek capable tier).
+        # (a 400 failure mode on some model backends).
         if message_history is not None and settings.implement_history_max_turns > 0:
             from ..core.delta_context import compact_message_history
 
