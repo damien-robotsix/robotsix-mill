@@ -1120,6 +1120,55 @@ class TestVerifySummaryClaims:
         )
         assert missing == ["src/new_module.py"]
 
+    def test_bare_basename_resolves_against_branch_changes(self, tmp_path, monkeypatch):
+        """'Created 18 tests in test_utils.py' names a file by basename; the
+        file lives at tests/robotsix_invest/test_utils.py and is untracked.
+        Must NOT be flagged (robotsix-invest dea0 blocked on exactly this)."""
+        repo_dir = self._repo(tmp_path, files=["tests/robotsix_invest/test_utils.py"])
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.implementation_logic._collect_changed_files",
+            lambda repo, target: {
+                "src/robotsix_invest/_utils.py",
+                "tests/robotsix_invest/test_utils.py",
+            },
+        )
+        missing = _verify_summary_claims(
+            "Created 18 tests in test_utils.py. Registered both new files in "
+            "docs/modules.yaml.",
+            repo_dir,
+            "ticket-1",
+        )
+        assert "test_utils.py" not in missing
+
+    def test_bare_basename_not_in_branch_changes_is_still_missing(
+        self, tmp_path, monkeypatch
+    ):
+        """A basename that matches nothing the branch touched is a real
+        hallucination and keeps being flagged."""
+        repo_dir = self._repo(tmp_path)
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.implementation_logic._collect_changed_files",
+            lambda repo, target: {"src/other.py"},
+        )
+        missing = _verify_summary_claims(
+            "created helpers.py",
+            repo_dir,
+            "ticket-1",
+        )
+        assert missing == ["helpers.py"]
+
+    def test_bare_basename_with_no_git_diff_available_is_still_missing(
+        self, tmp_path, monkeypatch
+    ):
+        repo_dir = self._repo(tmp_path)
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.implementation_logic._collect_changed_files",
+            lambda repo, target: None,
+        )
+        assert _verify_summary_claims("created helpers.py", repo_dir, "t") == [
+            "helpers.py"
+        ]
+
     def test_generic_created_path_exists(self, tmp_path):
         repo_dir = self._repo(tmp_path, files=["src/new_module.py"])
         missing = _verify_summary_claims(
