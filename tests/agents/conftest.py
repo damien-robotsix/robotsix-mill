@@ -11,6 +11,22 @@ from robotsix_mill.agents.refining import (
 from robotsix_mill.stages import StageContext
 
 
+@pytest.fixture
+def level1_model() -> str:
+    """The level-1 model name, read from llmio's tier defaults.
+
+    Tests assert mill's *wiring* — that level 1 reaches the cheap tier — not
+    llmio's choice of slug. llmio re-pins the DeepSeek snapshot whenever
+    upstream reprices or retires one, and hardcoding the literal here turned
+    every such bump into a mill CI failure. Worse, when llmio briefly shipped
+    the unroutable ``deepseek/deepseek-v4-flash-latest``, these assertions were
+    updated to match it — so a green mill CI certified a slug OpenRouter 400s.
+    """
+    from robotsix_llmio.core.factory import default_tier_config
+
+    return default_tier_config().for_level(1).model_name
+
+
 def _single(spec: str, file_map=None) -> RefineResult:
     """Shorthand for a single-scope refine result."""
     return RefineResult(split=False, spec_markdown=spec, file_map=file_map)
