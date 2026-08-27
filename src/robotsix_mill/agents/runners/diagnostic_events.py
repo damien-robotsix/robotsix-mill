@@ -136,7 +136,7 @@ def _parse_event_line(obj: dict[str, Any]) -> DiagnosticEvent | None:
             normalized_key=str(obj["normalized_key"]),
             timestamp=str(obj.get("timestamp", "")),
         )
-    except KeyError, TypeError, ValueError:
+    except (KeyError, TypeError, ValueError):
         return None
 
 
