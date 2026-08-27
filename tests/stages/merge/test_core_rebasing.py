@@ -80,9 +80,9 @@ def _gh(tmp_path, **extra):
         extra["repo_auto_merge_enabled"] = True
     return _ctx(
         tmp_path,
-        FORGE_KIND="github",
+        forge_kind="github",
         FORGE_TOKEN="t",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_remote_url="https://github.com/o/r.git",
         **extra,
     )
 
@@ -909,7 +909,7 @@ def test_rebase_success_no_pre_rebase_files_passes_integrity(tmp_path, monkeypat
 
 def test_rebasing_push_targets_per_repo_remote(tmp_path, monkeypatch):
     """Regression: the post-rebase force-push must target the ticket's
-    *per-repo* remote, not the global FORGE_REMOTE_URL.
+    *per-repo* remote, not the global forge_remote_url.
 
     A ticket on a non-mill board whose rebased commit was pushed to the
     global (mill) remote left the real PR branch untouched → GitHub kept
@@ -917,7 +917,7 @@ def test_rebasing_push_targets_per_repo_remote(tmp_path, monkeypatch):
     """
     from robotsix_mill.config import RepoConfig
 
-    base = _gh(tmp_path)  # global FORGE_REMOTE_URL = https://github.com/o/r.git
+    base = _gh(tmp_path)  # global forge_remote_url = https://github.com/o/r.git
     per_repo_url = "https://github.com/o/other-repo.git"
     ctx = StageContext(
         settings=base.settings,

@@ -41,6 +41,6 @@ def test_repo_config_none_falls_back():
 
 
 def test_custom_forge_target_branch():
-    settings = Settings(FORGE_TARGET_BRANCH="develop")
+    settings = Settings(forge_target_branch="develop")
     repo_config = _repo_config(None)
     assert target_branch_for(settings, repo_config) == "develop"

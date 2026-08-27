@@ -52,8 +52,8 @@ class TestGetForgeAuto:
     def test_auto_github_com_returns_github_forge(self):
         """forge_kind=auto with a github.com URL returns GitHubForge."""
         s = Settings(
-            FORGE_KIND="auto",
-            FORGE_REMOTE_URL="https://github.com/owner/repo.git",
+            forge_kind="auto",
+            forge_remote_url="https://github.com/owner/repo.git",
         )
         forge = get_forge(s)
         assert isinstance(forge, GitHubForge)
@@ -61,8 +61,8 @@ class TestGetForgeAuto:
     def test_auto_gitlab_com_returns_gitlab_forge(self):
         """forge_kind=auto with a gitlab.com URL returns GitLabForge."""
         s = Settings(
-            FORGE_KIND="auto",
-            FORGE_REMOTE_URL="https://gitlab.com/ns/project.git",
+            forge_kind="auto",
+            forge_remote_url="https://gitlab.com/ns/project.git",
         )
         forge = get_forge(s)
         assert isinstance(forge, GitLabForge)
@@ -70,8 +70,8 @@ class TestGetForgeAuto:
     def test_auto_custom_domain_raises(self):
         """forge_kind=auto with a custom domain raises RuntimeError."""
         s = Settings(
-            FORGE_KIND="auto",
-            FORGE_REMOTE_URL="https://gitlab.mycompany.com/ns/project.git",
+            forge_kind="auto",
+            forge_remote_url="https://gitlab.mycompany.com/ns/project.git",
         )
         with pytest.raises(RuntimeError, match="cannot auto-detect forge kind"):
             get_forge(s)
@@ -80,13 +80,13 @@ class TestGetForgeAuto:
         """forge_kind=auto without forge_remote_url raises ValidationError
         from the cross-field validator (not from get_forge)."""
         with pytest.raises(ValidationError):
-            Settings(FORGE_KIND="auto")
+            Settings(forge_kind="auto")
 
     def test_explicit_github_still_works(self):
         """forge_kind=github still returns GitHubForge (unchanged)."""
         s = Settings(
-            FORGE_KIND="github",
-            FORGE_REMOTE_URL="https://github.com/owner/repo.git",
+            forge_kind="github",
+            forge_remote_url="https://github.com/owner/repo.git",
         )
         forge = get_forge(s)
         assert isinstance(forge, GitHubForge)
@@ -94,23 +94,23 @@ class TestGetForgeAuto:
     def test_explicit_gitlab_still_works(self):
         """forge_kind=gitlab still returns GitLabForge (unchanged)."""
         s = Settings(
-            FORGE_KIND="gitlab",
-            FORGE_REMOTE_URL="https://gitlab.com/ns/project.git",
+            forge_kind="gitlab",
+            forge_remote_url="https://gitlab.com/ns/project.git",
         )
         forge = get_forge(s)
         assert isinstance(forge, GitLabForge)
 
     def test_none_raises(self):
         """forge_kind=none raises RuntimeError (unchanged)."""
-        s = Settings(FORGE_KIND="none")
+        s = Settings(forge_kind="none")
         with pytest.raises(RuntimeError, match="no forge configured"):
             get_forge(s)
 
     def test_auto_with_per_repo_remote(self):
         """forge_kind=auto uses per-repo forge_remote_url when provided."""
         s = Settings(
-            FORGE_KIND="auto",
-            FORGE_REMOTE_URL="https://github.com/global/repo.git",
+            forge_kind="auto",
+            forge_remote_url="https://github.com/global/repo.git",
         )
         from robotsix_mill.config import RepoConfig
 
@@ -129,7 +129,7 @@ class TestGetForgeAuto:
 
 # ---------------------------------------------------------------------------
 # get_forge per-repo routing with an *explicit* global forge_kind
-# (the multi-repo, mixed-forge production scenario: global FORGE_KIND=github
+# (the multi-repo, mixed-forge production scenario: global forge_kind=github
 # but one repo is hosted on gitlab.com)
 # ---------------------------------------------------------------------------
 
@@ -152,8 +152,8 @@ class TestGetForgePerRepoRouting:
         """A github.com repo_config + global github → GitHubForge,
         identical to today, with repo_config threaded through."""
         s = Settings(
-            FORGE_KIND="github",
-            FORGE_REMOTE_URL="https://github.com/owner/repo.git",
+            forge_kind="github",
+            forge_remote_url="https://github.com/owner/repo.git",
         )
         rc = _repo_config("https://github.com/owner/repo.git")
         forge = get_forge(s, repo_config=rc)
@@ -162,11 +162,11 @@ class TestGetForgePerRepoRouting:
         assert forge._repo_config is rc
 
     def test_gitlab_repo_config_overrides_global_github(self):
-        """The fix: a gitlab.com repo_config under global FORGE_KIND=github
+        """The fix: a gitlab.com repo_config under global forge_kind=github
         routes to GitLabForge instead of crashing as GitHub."""
         s = Settings(
-            FORGE_KIND="github",
-            FORGE_REMOTE_URL="https://github.com/owner/repo.git",
+            forge_kind="github",
+            forge_remote_url="https://github.com/owner/repo.git",
         )
         rc = _repo_config("https://gitlab.com/damien_six_tii/robotsix-mill-gitlab")
         forge = get_forge(s, repo_config=rc)
@@ -175,8 +175,8 @@ class TestGetForgePerRepoRouting:
     def test_no_repo_config_github(self):
         """No repo_config + global github → GitHubForge (unchanged)."""
         s = Settings(
-            FORGE_KIND="github",
-            FORGE_REMOTE_URL="https://github.com/owner/repo.git",
+            forge_kind="github",
+            forge_remote_url="https://github.com/owner/repo.git",
         )
         forge = get_forge(s)
         assert isinstance(forge, GitHubForge)
@@ -185,8 +185,8 @@ class TestGetForgePerRepoRouting:
         """A repo_config URL on an ambiguous/custom domain falls back to
         the global forge_kind — get_forge must NOT raise RuntimeError."""
         s = Settings(
-            FORGE_KIND="github",
-            FORGE_REMOTE_URL="https://github.com/owner/repo.git",
+            forge_kind="github",
+            forge_remote_url="https://github.com/owner/repo.git",
         )
         rc = _repo_config("https://gitlab.mycompany.com/ns/project.git")
         forge = get_forge(s, repo_config=rc)

@@ -81,6 +81,21 @@ def load_settings_block() -> dict[str, Any]:
             for k, v in data.items()
             if k not in ("secrets", "repos", "core", "langfuse", "openrouter")
         }
+    # Translate legacy UPPERCASE config keys to their lowercase
+    # replacements so operators with unmodified config.json keep working.
+    _LEGACY_KEY_RENAMES: dict[str, str] = {
+        "FORGE_KIND": "forge_kind",
+        "FORGE_REMOTE_URL": "forge_remote_url",
+        "FORGE_TARGET_BRANCH": "forge_target_branch",
+        "FORGE_AUTH": "forge_auth",
+        "MILL_SANDBOX_OP_TIMEOUT": "sandbox_op_timeout",
+        "MILL_IMPLEMENT_PASS_TIMEOUT": "implement_pass_timeout",
+    }
+    for old, new in _LEGACY_KEY_RENAMES.items():
+        if old in block and new not in block:
+            block[new] = block.pop(old)
+        elif old in block:
+            block.pop(old)
     # Lift the top-level langfuse block into settings so
     # Settings.langfuse is populated from the canonical top-level key
     # (robotsix-standards#189).

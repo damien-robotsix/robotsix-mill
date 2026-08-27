@@ -1245,7 +1245,7 @@ def test_convergence_backstop_uses_cross_repo_base_branch(
     remote = _make_bare_repo_on_branch(tmp_path, "develop")
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="true",
         max_implement_review_cycles="10",
@@ -1318,7 +1318,7 @@ def test_resume_guard_branch_green_ci_no_pr_routes_to_deliverable(
     remote = _make_bare_repo_on_branch(tmp_path, "main")
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="true",
         max_implement_review_cycles="10",
@@ -1376,7 +1376,7 @@ def test_resume_guard_pr_exists_skips_guard(ctx_factory, tmp_path, monkeypatch):
     remote = _make_bare_repo_on_branch(tmp_path, "main")
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="true",
         max_implement_review_cycles="10",
@@ -1441,7 +1441,7 @@ def test_resume_zero_edit_green_gates_routes_to_done(
     remote = _make_bare_repo_on_branch(tmp_path, "main")
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="true",
         max_implement_review_cycles="10",
@@ -1521,7 +1521,7 @@ def test_resume_zero_tool_calls_green_gates_routes_to_done(
     remote = _make_bare_repo_on_branch(tmp_path, "main")
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="true",
         max_implement_review_cycles="10",
@@ -1597,7 +1597,7 @@ def test_preflight_deploy_freshness_stale_image_blocks(
     image, preflight must block BEFORE a trace opens."""
     remote = _make_bare_repo_on_branch(tmp_path, "main")
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
     # Inject a deploy_api_url so the gate activates.
     ctx.settings.deploy_api_url = "http://deploy:8080"
@@ -1649,7 +1649,7 @@ def test_preflight_deploy_freshness_current_image_passes(
     """When the deploy server reports a current image, preflight passes."""
     remote = _make_bare_repo_on_branch(tmp_path, "main")
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
     ctx.settings.deploy_api_url = "http://deploy:8080"
 
@@ -1696,7 +1696,7 @@ def test_preflight_deploy_freshness_unconfigured_passes(
     """When deploy_api_url is None, the freshness gate is disabled."""
     remote = _make_bare_repo_on_branch(tmp_path, "main")
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
     # deploy_api_url defaults to None in Settings — no explicit set needed.
 
@@ -1713,7 +1713,7 @@ def test_preflight_deploy_freshness_server_unreachable_passes(
     """When the deploy server is unreachable, preflight passes (don't block on infra)."""
     remote = _make_bare_repo_on_branch(tmp_path, "main")
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
     ctx.settings.deploy_api_url = "http://deploy:8080"
 

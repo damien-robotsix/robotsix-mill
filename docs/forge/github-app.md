@@ -1,10 +1,10 @@
 # Delivery identity: GitHub App bot (recommended) or PAT
 
 The `deliver` stage pushes the ticket branch and opens a Pull Request.
-Two ways to authenticate, set via `FORGE_AUTH` in `config/config.yaml`
+Two ways to authenticate, set via `forge_auth` in `config/config.yaml`
 (or as an environment variable):
 
-| `FORGE_AUTH` | Identity on the PR/commits | Setup |
+| `forge_auth` | Identity on the PR/commits | Setup |
 |---|---|---|
 | `token` | **you** (the PAT owner) | 1 line |
 | `app` (recommended) | a **bot**: `<app-slug>[bot]` | one-time App creation |
@@ -93,7 +93,7 @@ Leave everything else **No access**. Click **Create GitHub App**.
 
 App page → **Install App** → install on your account → **Only select
 repositories** → pick `<owner>/<repo>` → **Install**. (mill resolves the
-installation automatically from `FORGE_REMOTE_URL`.)
+installation automatically from `forge_remote_url`.)
 
 ### 4. Configure settings and secrets
 
@@ -124,18 +124,18 @@ or place the key under `./.data` so it's already on the volume.
 
 When serving multiple repos from a single mill process (see
 `config/repos.yaml`), each repo entry can specify its own
-`FORGE_REMOTE_URL`:
+`forge_remote_url`:
 
 ```yaml
 # config/repos.yaml
 repos:
   - repo_id: repo-a
     board_id: board-a
-    FORGE_REMOTE_URL: https://github.com/owner-a/repo-a.git
+    forge_remote_url: https://github.com/owner-a/repo-a.git
     # … Langfuse keys …
   - repo_id: repo-b
     board_id: board-b
-    FORGE_REMOTE_URL: https://github.com/owner-b/repo-b.git
+    forge_remote_url: https://github.com/owner-b/repo-b.git
     # … Langfuse keys …
 ```
 
@@ -151,7 +151,7 @@ if the operator registers separate credentials.
 
 1. Create and install the App(s) on each target repo as described in
    [Option B](#option-b--github-app-bot-recommended) above.
-2. Set `FORGE_REMOTE_URL` on each repo entry in `config/repos.yaml`.
+2. Set `forge_remote_url` on each repo entry in `config/repos.yaml`.
 3. The mill automatically mints installation tokens for the correct
    repo at delivery time, caching them independently per
    `(app_id, remote_url)` pair.
@@ -163,7 +163,7 @@ if the operator registers separate credentials.
 > App credentials are a future enhancement. For most deployments, one
 > App installed on all repos is sufficient.
 
-When a repo entry does **not** specify `FORGE_REMOTE_URL`, the mill
+When a repo entry does **not** specify `forge_remote_url`, the mill
 falls back to the global `settings.forge_remote_url` for backward
 compatibility with single-repo deployments.
 

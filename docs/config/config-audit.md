@@ -390,12 +390,12 @@ pydantic-settings provides type coercion (`str`, `int`, `float`, `bool`,
 
 - **No range checks**: `MILL_MAX_CONCURRENCY=0` or `=-1` is accepted.
   `MILL_MODEL_REQUEST_TIMEOUT=0` disables timeouts silently.
-- **No cross-field consistency**: `FORGE_AUTH=app` but `GITHUB_APP_ID` unset
+- **No cross-field consistency**: `forge_auth=app` but `GITHUB_APP_ID` unset
   → runtime error in `forge/auth.py`, not a startup validation failure.
-  `FORGE_KIND=github` but `FORGE_REMOTE_URL` unset → same.
+  `forge_kind=github` but `forge_remote_url` unset → same.
 - **No required-if logic**: Many `str|None` fields are effectively required
   in certain modes (e.g. `FORGE_TOKEN` must be set when
-  `FORGE_AUTH=token`), but the schema treats them as always-optional.
+  `forge_auth=token`), but the schema treats them as always-optional.
 - **No URL/format validation**: `MILL_API_URL` accepts any string. `NTFY_URL`
   accepts any string (empty = disabled is convention, not enforced).
 - **Path existence not checked**: `MILL_SKILLS_DIR`, `GITHUB_APP_PRIVATE_KEY_PATH`,

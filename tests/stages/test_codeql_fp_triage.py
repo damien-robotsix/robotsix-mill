@@ -65,9 +65,9 @@ def _fixing_ci(ctx):
 def _gh(tmp_path, **extra):
     return _ctx(
         tmp_path,
-        FORGE_KIND="github",
+        forge_kind="github",
         FORGE_TOKEN="t",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_remote_url="https://github.com/o/r.git",
         **extra,
     )
 
@@ -889,8 +889,8 @@ def test_dismiss_code_scanning_alert_patch(monkeypatch):
 
     s = Settings(
         data_dir="/tmp/test_dismiss",
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
     )
     import robotsix_mill.config as _cfg
     from robotsix_mill.config import Secrets, _reset_secrets

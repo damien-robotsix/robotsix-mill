@@ -133,8 +133,8 @@ def test_create_pr_posts_to_github_api(tmp_path, monkeypatch):
     _cfg._secrets = Secrets(forge_token="tok")
     s = Settings(
         data_dir=str(tmp_path),
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
     )
     url = github.GitHubForge(s).open_merge_request(
         source_branch="mill/x", title="T", body="B"
@@ -160,33 +160,33 @@ def test_blocked_without_forge_kind(tmp_path):
     ctx.service.transition(t.id, State.DELIVERABLE)
     out = DeliverStage().run(ctx.service.get(t.id), ctx)
     assert out.next_state is State.BLOCKED
-    assert "FORGE_KIND" in out.note
+    assert "forge_kind" in out.note
 
 
 def test_auto_forge_kind_bypasses_none_guard(tmp_path):
     """forge_kind=auto with a valid remote_url bypasses the
-    FORGE_KIND=none guard — it should NOT block with "FORGE_KIND"."""
+    forge_kind=none guard — it should NOT block with   "forge_kind"."""
     _remote, _ = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="auto",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="auto",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     t = ctx.service.create("x", "y")
     ctx.service.transition(t.id, State.READY)
     ctx.service.transition(t.id, State.DELIVERABLE)
     out = DeliverStage().run(ctx.service.get(t.id), ctx)
-    # Should NOT be blocked due to FORGE_KIND — the "auto" value is
+    # Should NOT be blocked due to forge_kind — the "auto" value is
     # allowed through. It may block elsewhere (e.g. no workspace
-    # branch), but the note must not contain the "FORGE_KIND not
+    # branch), but the note must not contain the "forge_kind not
     # configured" sentinel.
-    assert "FORGE_KIND not configured" not in out.note
+    assert "forge_kind not configured" not in out.note
 
 
 def test_blocked_without_token(tmp_path):
     remote, _ = _bare(tmp_path)
-    ctx = _ctx(tmp_path, FORGE_KIND="github", FORGE_REMOTE_URL=remote)
+    ctx = _ctx(tmp_path, forge_kind="github", forge_remote_url=remote)
     t = ctx.service.create("x", "y")
     ctx.service.transition(t.id, State.READY)
     ctx.service.transition(t.id, State.DELIVERABLE)
@@ -199,8 +199,8 @@ def test_blocked_without_branch(tmp_path):
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     t = ctx.service.create("x", "y")
@@ -218,8 +218,8 @@ def test_success_pushes_and_opens_pr(tmp_path, monkeypatch):
     remote, bare = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     seen = {}
@@ -253,8 +253,8 @@ def test_pr_api_error_blocks_resumable(tmp_path, monkeypatch):
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
 
@@ -282,8 +282,8 @@ def test_pr_422_no_commits_routes_to_done(tmp_path, monkeypatch):
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
 
@@ -310,8 +310,8 @@ def test_pr_non_422_error_still_blocks_resumable(tmp_path, monkeypatch):
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
 
@@ -340,8 +340,8 @@ def test_zero_diff_branch_routes_to_done_without_pr_call(tmp_path, monkeypatch):
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     pr_called = False
@@ -378,8 +378,8 @@ def test_zero_diff_guard_happy_path_unaffected(tmp_path, monkeypatch):
     remote, bare = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     seen = {}
@@ -433,8 +433,8 @@ def test_cross_repo_pushes_to_fork_and_opens_fork_to_upstream_pr(tmp_path, monke
     ctx = _ctx_cross(
         tmp_path,
         cct,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
 
@@ -479,8 +479,8 @@ def test_cross_repo_auto_fork_forks_before_push(tmp_path, monkeypatch):
     ctx = _ctx_cross(
         tmp_path,
         cct,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
 
@@ -620,8 +620,8 @@ def test_multi_repo_happy_path_opens_one_pr_per_repo(tmp_path, monkeypatch):
     remote_b, _bare_b = _bare_in(tmp_path, "b")
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote_a,
+        forge_kind="github",
+        forge_remote_url=remote_a,
         FORGE_TOKEN="t",
     )
     _install_repos_registry(
@@ -691,8 +691,8 @@ def test_empty_touched_repos_routes_to_done_without_forge(tmp_path, monkeypatch)
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
 
@@ -730,8 +730,8 @@ def test_per_repo_ahead_guard_skips_repo_without_commits(tmp_path, monkeypatch):
     remote_b, _ = _bare_in(tmp_path, "b")
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote_a,
+        forge_kind="github",
+        forge_remote_url=remote_a,
         FORGE_TOKEN="t",
     )
     _install_repos_registry(
@@ -781,8 +781,8 @@ def test_all_repos_skipped_routes_to_done_without_pr_urls(tmp_path, monkeypatch)
     remote_b, _ = _bare_in(tmp_path, "b")
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote_a,
+        forge_kind="github",
+        forge_remote_url=remote_a,
         FORGE_TOKEN="t",
     )
     _install_repos_registry(
@@ -825,8 +825,8 @@ def test_mid_loop_pr_failure_blocks_and_preserves_partial_manifest(
     remote_c, _ = _bare_in(tmp_path, "c")
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote_a,
+        forge_kind="github",
+        forge_remote_url=remote_a,
         FORGE_TOKEN="t",
     )
     _install_repos_registry(
@@ -875,8 +875,8 @@ def test_unknown_repo_id_is_blocked_resumable_not_crash(tmp_path, monkeypatch):
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     # Empty registry — any repo_id lookup will raise ConfigError.
@@ -913,8 +913,8 @@ def test_missing_branch_in_touched_repo_is_blocked_resumable(tmp_path, monkeypat
     remote, _ = _bare_in(tmp_path, "a")
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     _install_repos_registry([("repo-a", remote)])
@@ -972,8 +972,8 @@ def test_meta_triage_fallback_blocks_new_top_level_files(tmp_path, monkeypatch):
     remote, _ = _bare_in(tmp_path, "a")
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     _install_repos_registry([("repo-a", remote)])
@@ -1016,8 +1016,8 @@ def test_genuine_all_repos_ticket_still_delivers_new_files(tmp_path, monkeypatch
     remote, _ = _bare_in(tmp_path, "a")
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     _install_repos_registry([("repo-a", remote)])
@@ -1047,8 +1047,8 @@ def test_meta_triage_fallback_allows_non_top_level_files(tmp_path, monkeypatch):
     remote, _ = _bare_in(tmp_path, "a")
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     _install_repos_registry([("repo-a", remote)])
@@ -1087,8 +1087,8 @@ def test_lockfile_regen_uv_lock_called_when_pyproject_changed(tmp_path, monkeypa
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     t = ctx.service.create("update deps", "bump deps")
@@ -1127,8 +1127,8 @@ def test_lockfile_regen_not_called_when_manifest_unchanged(tmp_path, monkeypatch
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     t = ctx.service.create("doc update", "update readme")
@@ -1196,8 +1196,8 @@ def test_lockfile_regen_called_when_lock_stale_manifest_unchanged_uv(
 
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote2,
+        forge_kind="github",
+        forge_remote_url=remote2,
         FORGE_TOKEN="t",
     )
     t = ctx.service.create("doc update", "update readme only")
@@ -1259,8 +1259,8 @@ def test_lockfile_regen_called_when_lock_stale_manifest_unchanged_npm(
 
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote3,
+        forge_kind="github",
+        forge_remote_url=remote3,
         FORGE_TOKEN="t",
     )
     t = ctx.service.create("doc update", "update readme only")
@@ -1298,8 +1298,8 @@ def test_lockfile_regen_skipped_when_lockfile_absent(tmp_path, monkeypatch):
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     t = ctx.service.create("add dep", "add dep")
@@ -1394,8 +1394,8 @@ def test_merge_guard_first_block_stores_fingerprint(tmp_path, monkeypatch):
     remote, _ = _bare_in(tmp_path, "a")
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     _install_repos_registry([("repo-a", remote)])
@@ -1435,8 +1435,8 @@ def test_merge_guard_second_identical_block_escalates(tmp_path, monkeypatch):
     remote, _ = _bare_in(tmp_path, "a")
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     _install_repos_registry([("repo-a", remote)])
@@ -1478,8 +1478,8 @@ def test_merge_guard_fingerprint_change_resets_counter(tmp_path, monkeypatch):
     remote, _ = _bare_in(tmp_path, "a")
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
     )
     _install_repos_registry([("repo-a", remote)])
@@ -1539,8 +1539,8 @@ def test_merge_guard_loop_detection_disabled_when_max_zero(tmp_path, monkeypatch
     remote, _ = _bare_in(tmp_path, "a")
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL=remote,
+        forge_kind="github",
+        forge_remote_url=remote,
         FORGE_TOKEN="t",
         deliver_max_identical_blocks="0",
     )

@@ -92,7 +92,7 @@ def _ticket(ctx, body="Add feature.txt"):
 
 
 def test_approve_transitions_to_deliverable(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_review(
@@ -123,7 +123,7 @@ def test_approve_transitions_to_deliverable(ctx_factory, monkeypatch):
 
 
 def test_request_changes_transitions_to_ready(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_review(
@@ -161,7 +161,7 @@ def test_needs_discussion_pauses_for_user_reply(ctx_factory, monkeypatch):
     """NEEDS_DISCUSSION is a human-decision verdict, not a failure — it
     pauses the ticket for the operator's reply (AWAITING_USER_REPLY)
     with an [ASK_USER] thread, NOT BLOCKED."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_review(
@@ -198,7 +198,7 @@ def test_needs_discussion_pauses_for_user_reply(ctx_factory, monkeypatch):
 
 
 def test_blind_review_only_diff_and_spec(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     captured: dict = {}
@@ -239,7 +239,7 @@ def test_blind_review_only_diff_and_spec(ctx_factory, monkeypatch):
 
 
 def test_agent_error_blocks_resumable(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_review(
@@ -270,7 +270,7 @@ def test_agent_error_blocks_resumable(ctx_factory, monkeypatch):
 
 
 def test_empty_diff_approves_without_agent(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     # Remove the commit so diff is empty.
@@ -307,7 +307,7 @@ def test_empty_diff_approves_without_agent(ctx_factory, monkeypatch):
 
 
 def test_missing_repo_blocks(ctx_factory):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = ctx.service.create("No clone")
     ctx.service.transition(t.id, State.READY)
     # Pipeline flip: READY -> CODE_REVIEW directly.
@@ -324,7 +324,7 @@ def test_missing_repo_blocks(ctx_factory):
 
 def test_writes_review_artifact_on_approve(ctx_factory, monkeypatch):
     """APPROVE with auto_merge_eligible=True → review.md exists."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_review(
@@ -361,7 +361,7 @@ def test_writes_review_artifact_on_approve(ctx_factory, monkeypatch):
 
 def test_writes_review_artifact_on_request_changes(ctx_factory, monkeypatch):
     """REQUEST_CHANGES → review.md exists with auto_merge_eligible: false."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_review(
@@ -398,7 +398,7 @@ def test_writes_review_artifact_on_request_changes(ctx_factory, monkeypatch):
 
 def test_comment_multiline_collapse(ctx_factory, monkeypatch):
     """Multiline reviewer comments are collapsed with ' / ' in the artifact."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_review(
@@ -431,7 +431,7 @@ def test_comment_multiline_collapse(ctx_factory, monkeypatch):
 
 def test_comment_truncation(ctx_factory, monkeypatch):
     """Comments longer than 300 chars are truncated with '…'."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     long_comment = "x" * 350
@@ -473,7 +473,7 @@ def test_comment_truncation(ctx_factory, monkeypatch):
 
 def test_comment_empty_returns_no_details(ctx_factory, monkeypatch):
     """Empty comments → 'comment: (no details)'."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_review(
@@ -506,7 +506,7 @@ def test_comment_empty_returns_no_details(ctx_factory, monkeypatch):
 
 def test_auto_merge_eligible_defaults_false(ctx_factory, monkeypatch):
     """When the model omits auto_merge_eligible, it defaults to False."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     _ticket(ctx)
 
     # Simulate an agent response that only includes verdict + comments
@@ -525,7 +525,7 @@ def test_auto_merge_eligible_defaults_false(ctx_factory, monkeypatch):
 
 def test_request_changes_under_cap(ctx_factory, monkeypatch):
     """REQUEST_CHANGES with review_rounds < max → READY, counter incremented."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     ctx.service.set_review_rounds(t.id, 1)  # 1 round already used
     t = ctx.service.get(t.id)  # refresh in-memory object
@@ -565,7 +565,7 @@ def test_request_changes_under_cap(ctx_factory, monkeypatch):
 def test_request_changes_at_cap_escalates(ctx_factory, monkeypatch):
     """When review_rounds hits the cap, REQUEST_CHANGES → DELIVERABLE."""
     ctx = ctx_factory(
-        FORGE_REMOTE_URL="file:///dummy",
+        forge_remote_url="file:///dummy",
         review_enabled="true",
         review_max_rounds="3",
     )
@@ -609,7 +609,7 @@ def test_request_changes_at_cap_escalates(ctx_factory, monkeypatch):
 
 def test_approve_resets_counter(ctx_factory, monkeypatch):
     """APPROVE resets review_rounds to 0."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     ctx.service.set_review_rounds(t.id, 2)
     t = ctx.service.get(t.id)  # refresh in-memory object
@@ -643,7 +643,7 @@ def test_approve_resets_counter(ctx_factory, monkeypatch):
 
 def test_needs_discussion_preserves_counter(ctx_factory, monkeypatch):
     """NEEDS_DISCUSSION does NOT reset the review_rounds counter."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     ctx.service.set_review_rounds(t.id, 1)
     t = ctx.service.get(t.id)  # refresh in-memory object
@@ -724,7 +724,7 @@ def _write_file_map(ctx, ticket, files: list[str]) -> None:
 def test_request_changes_in_scope_no_deps(ctx_factory, monkeypatch):
     """All asks touch files inside file_map → no dep tickets, single
     review comment, parent goes to READY (existing behaviour)."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, ["feature.txt"])
 
@@ -765,7 +765,7 @@ def test_request_changes_out_of_scope_spawns_followup_ticket(ctx_factory, monkey
     after it merges), the parent is NOT parked, and since nothing in-scope
     needs fixing the parent is approved (DOCUMENTING). This is the
     direction fix for the 104b/413d deadlock."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, ["feature.txt"])  # .gitignore is out-of-scope
 
@@ -804,7 +804,7 @@ def test_request_changes_mixed_scope_one_dep_one_in_scope(ctx_factory, monkeypat
     """Mixed verdict: in-scope asks keep the parent in READY (re-implement),
     the out-of-scope ask spawns ONE follow-up that depends on the parent —
     and the parent is NOT parked on it."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, ["feature.txt"])
 
@@ -839,7 +839,7 @@ def test_request_changes_mixed_scope_one_dep_one_in_scope(ctx_factory, monkeypat
 def test_request_changes_no_file_map_all_in_scope(ctx_factory, monkeypatch):
     """No file_map.json → every ask is treated as in-scope (legacy /
     scope-free flow). No deps spawned regardless of files_touched."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     # no file_map.json written
 
@@ -870,7 +870,7 @@ def test_out_of_scope_ask_uses_explicit_title(ctx_factory, monkeypatch):
     what stops the reviewer's symptom-framing ('remove
     __pycache__/foo.pyc') from becoming the new ticket's title when
     the proper fix is something else ('add __pycache__ to .gitignore')."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, ["feature.txt"])
 
@@ -907,7 +907,7 @@ def test_gaps_already_addressed_all_filtered_approves(ctx_factory, monkeypatch):
     """Every out-of-scope ask targets files already in the implementer's
     branch diff → all filtered as already-addressed, no follow-ups
     spawned, ticket approved directly (DOCUMENTING)."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, ["feature.txt"])  # .gitignore is out-of-scope
 
@@ -954,7 +954,7 @@ def test_gaps_already_addressed_mixed_some_filtered(ctx_factory, monkeypatch):
     one still pending (files NOT in diff).  The pending ask spawns a
     follow-up; the already-addressed ask is skipped with a comment.
     In-scope asks still return READY."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, ["feature.txt"])
 
@@ -1030,7 +1030,7 @@ def test_gaps_already_addressed_verify_claim_false_moves_to_pending(
     the ask is moved to still_out_of_scope instead of being silently
     approved — the cited PR/commit does not actually touch the target
     files."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, ["feature.txt"])  # .gitignore is out-of-scope
 
@@ -1081,7 +1081,7 @@ def test_gaps_already_addressed_verify_claim_false_moves_to_pending(
 def test_screenshot_passed_when_board_png_present(ctx_factory, monkeypatch):
     """When artifacts/board.png exists, the stage passes it as
     ``screenshot_path`` to ``run_review_agent``."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     ws = ctx.service.workspace(t)
     board_png = ws.artifacts_dir / "board.png"
@@ -1106,7 +1106,7 @@ def test_screenshot_passed_when_board_png_present(ctx_factory, monkeypatch):
 def test_screenshot_none_when_board_png_absent(ctx_factory, monkeypatch):
     """With no artifacts/board.png, the stage passes ``screenshot_path=None``
     and review behaves exactly as today."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     captured: dict = {}
@@ -1136,7 +1136,7 @@ def test_prior_context_caps_oversized(ctx_factory):
     from robotsix_mill.stages.review import _build_prior_context
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL="file:///dummy",
+        forge_remote_url="file:///dummy",
         review_enabled="true",
         review_prior_context_max_chars="300",
     )
@@ -1173,7 +1173,7 @@ def test_prior_context_under_cap_verbatim(ctx_factory):
     """Content shorter than the cap is returned verbatim — no note."""
     from robotsix_mill.stages.review import _build_prior_context
 
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = ctx.service.create("Small", "body")
     ws = ctx.service.workspace(t)
     ws.artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -1210,7 +1210,7 @@ def test_oversized_diff_is_truncated_before_agent(ctx_factory, monkeypatch):
     (marker present, length bounded) before reaching run_review_agent;
     modified_paths derivation still works off the diff content."""
     ctx = ctx_factory(
-        FORGE_REMOTE_URL="file:///dummy",
+        forge_remote_url="file:///dummy",
         review_enabled="true",
         review_diff_max_chars="2000",
     )
@@ -1241,7 +1241,7 @@ def test_preseed_ranges_derived_from_untruncated_diff(ctx_factory, monkeypatch):
     diff, so a *modified* file whose hunks fall in the dropped middle still
     gets an excerpt — the reviewer never loses a referenced file."""
     ctx = ctx_factory(
-        FORGE_REMOTE_URL="file:///dummy",
+        forge_remote_url="file:///dummy",
         review_enabled="true",
         review_diff_max_chars="1500",
     )
@@ -1282,7 +1282,7 @@ def test_preseed_ranges_derived_from_untruncated_diff(ctx_factory, monkeypatch):
 def test_small_diff_passes_through_unchanged(ctx_factory, monkeypatch):
     """A normal small diff (under the default cap) reaches the agent
     verbatim — no truncation marker."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     captured = _capture_review(monkeypatch)
@@ -1386,7 +1386,7 @@ def test_workflow_refs_use_untruncated_diff(ctx_factory, monkeypatch):
     captured — ``_workflow_refs_from_diff`` is called on the untruncated
     diff (same pattern as ``_paths_from_diff``)."""
     ctx = ctx_factory(
-        FORGE_REMOTE_URL="file:///dummy",
+        forge_remote_url="file:///dummy",
         review_enabled="true",
         review_diff_max_chars="500",
     )
@@ -1439,7 +1439,7 @@ def test_extra_roots_passed_when_workflow_ref_matches_repos_config(
     from robotsix_mill.vcs import git_ops
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL="file:///dummy",
+        forge_remote_url="file:///dummy",
         review_enabled="true",
     )
     t = _ticket(ctx)
@@ -1501,7 +1501,7 @@ def test_extra_roots_passed_when_workflow_ref_matches_repos_config(
 
 def test_extra_roots_none_when_no_workflow_refs(ctx_factory, monkeypatch):
     """When the diff has no workflow refs, ``extra_roots`` is None."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     captured = _capture_review(monkeypatch)
@@ -1513,7 +1513,7 @@ def test_extra_roots_none_when_no_workflow_refs(ctx_factory, monkeypatch):
 def test_extra_roots_skips_unmatched_ref_gracefully(ctx_factory, monkeypatch):
     """When the diff references a workflow for a repo NOT in the repos
     config, the stage continues gracefully — ``extra_roots`` is None."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     ws = ctx.service.workspace(t)
@@ -1553,7 +1553,7 @@ def _write_workflow_yaml(repo_dir: Path, uses_line: str) -> None:
 def test_action_ref_valid_sha_no_blocking(ctx_factory, monkeypatch):
     """A valid 40-char hex SHA pin produces no blocking finding; the LLM
     verdict (APPROVE) is preserved."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     repo_dir = ctx.service.workspace(t).dir / "repo"
@@ -1580,7 +1580,7 @@ def test_action_ref_valid_sha_no_blocking(ctx_factory, monkeypatch):
 def test_action_ref_invalid_tag_blocks_approve(ctx_factory, monkeypatch):
     """A version tag (``@v4``) is accepted for third-party actions —
     Dependabot handles SHA pinning, so the LLM APPROVE is preserved."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     repo_dir = ctx.service.workspace(t).dir / "repo"
@@ -1605,7 +1605,7 @@ def test_action_ref_invalid_tag_blocks_approve(ctx_factory, monkeypatch):
 def test_action_ref_invalid_branch_blocks(ctx_factory, monkeypatch):
     """A branch ref (``@main``) is accepted for third-party actions —
     Dependabot handles SHA pinning, so the LLM APPROVE is preserved."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     repo_dir = ctx.service.workspace(t).dir / "repo"
@@ -1629,7 +1629,7 @@ def test_action_ref_invalid_branch_blocks(ctx_factory, monkeypatch):
 def test_action_ref_subpath_invalid_tag_blocks(ctx_factory, monkeypatch):
     """A subpath action with a tag (``github/codeql-action/init@v3.29.2``)
     is accepted — Dependabot handles SHA pinning."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     repo_dir = ctx.service.workspace(t).dir / "repo"
@@ -1652,7 +1652,7 @@ def test_action_ref_subpath_invalid_tag_blocks(ctx_factory, monkeypatch):
 
 def test_action_ref_local_ignored(ctx_factory, monkeypatch):
     """A local ``./`` action ref is NOT flagged — it passes through."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     repo_dir = ctx.service.workspace(t).dir / "repo"
@@ -1674,7 +1674,7 @@ def test_action_ref_local_ignored(ctx_factory, monkeypatch):
 
 def test_action_ref_docker_ignored(ctx_factory, monkeypatch):
     """A ``docker://`` ref is NOT flagged — it passes through."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     repo_dir = ctx.service.workspace(t).dir / "repo"
@@ -1698,7 +1698,7 @@ def test_action_ref_reusable_workflow_not_double_reported(ctx_factory, monkeypat
     """A reusable-workflow ref (``uses: org/repo/.github/workflows/...``)
     is NOT flagged by the action-ref validator — it belongs to the
     ``_workflow_refs_from_diff`` pathway."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     repo_dir = ctx.service.workspace(t).dir / "repo"
@@ -1728,7 +1728,7 @@ def test_action_ref_violations_appended_to_existing_request_changes(
     """When the LLM already returned REQUEST_CHANGES and action refs
     are valid (tag refs accepted), the LLM verdict passes through
     unchanged — no synthetic action-ref violations are added."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     repo_dir = ctx.service.workspace(t).dir / "repo"
@@ -1763,7 +1763,7 @@ def test_action_ref_violations_appended_to_existing_request_changes(
 def test_action_ref_no_violations_no_effect_on_verdict(ctx_factory, monkeypatch):
     """When there are no action-ref violations, the LLM verdict is
     passed through unchanged (REQUEST_CHANGES stays REQUEST_CHANGES)."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     repo_dir = ctx.service.workspace(t).dir / "repo"
@@ -1795,7 +1795,7 @@ def test_action_ref_no_violations_no_effect_on_verdict(ctx_factory, monkeypatch)
 
 def test_review_cache_hit_skips_agent(ctx_factory, monkeypatch):
     """An unchanged ticket (same spec + same diff) is not re-audited."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx, body="Add feature.txt")
 
     agent_calls = []
@@ -1841,7 +1841,7 @@ def test_review_cache_hit_skips_agent(ctx_factory, monkeypatch):
 
 def test_review_cache_different_diff_miss(ctx_factory, monkeypatch):
     """A changed diff invalidates the review cache."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx, body="Add feature.txt")
 
     agent_calls = []
@@ -1890,7 +1890,7 @@ def test_request_changes_cache_does_not_replay_across_rounds(ctx_factory, monkey
     round-aware caching, a REQUEST_CHANGES verdict persists forever
     and the ticket burns the implement/review ceiling on a loop.
     """
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx, body="Add feature.txt")
 
     agent_calls = []

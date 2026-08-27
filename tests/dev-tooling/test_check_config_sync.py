@@ -43,7 +43,7 @@ def test_real_repo_has_no_config_drift() -> None:
 
 
 def test_invariant1_detects_bogus_settings_key() -> None:
-    valid_names = {"model", "explore_model", "FORGE_KIND"}
+    valid_names = {"model", "explore_model", "forge_kind"}
     example_keys = {"model", "bogus_key"}
     drift = check_settings_keys_in_model(
         example_keys, valid_names, exceptions=frozenset()
@@ -162,4 +162,6 @@ def test_valid_names_include_field_names_and_aliases() -> None:
     # Field name with no alias.
     assert "claude_sdk_vision_enabled" in names
     # Alias-bearing field exposes both the name and the alias.
-    assert "FORGE_KIND" in names
+    # After the alias removal (Uppercase→lowercase rename), validation_alias
+    # uses AliasChoices — both forms appear in valid names.
+    assert "forge_kind" in names

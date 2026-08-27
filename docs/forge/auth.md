@@ -5,14 +5,14 @@ authentication modes for forge API calls.
 
 ## Modes
 
-| Mode | `FORGE_AUTH` | Forges | Token lifetime |
+| Mode | `forge_auth` | Forges | Token lifetime |
 |------|-------------|--------|----------------|
 | **Static token** | `token` | GitHub, GitLab | Until revoked |
 | **GitHub App** | `app` | GitHub only | ~1 hour (auto-refreshed) |
 
-## Static token (`FORGE_AUTH=token`)
+## Static token (`forge_auth=token`)
 
-Set `FORGE_AUTH=token` (the default) and provide `Secrets.forge_token`.
+Set `forge_auth=token` (the default) and provide `Secrets.forge_token`.
 
 ```yaml
 # config/config.yaml
@@ -43,7 +43,7 @@ A personal or project access token needs:
 - `api` — full API access (or `write_repository` + `read_api` for narrower scope)
 - The token must belong to a user with at least **Developer** role on the project
 
-## GitHub App (`FORGE_AUTH=app`)
+## GitHub App (`forge_auth=app`)
 
 GitHub-only. Mills a short-lived installation access token at deliver
 time via JWT → installation lookup → access token.

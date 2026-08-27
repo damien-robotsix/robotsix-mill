@@ -1,7 +1,7 @@
 """Resolve the effective GitHub token for push + PR.
 
-``FORGE_AUTH=token`` → use ``FORGE_TOKEN`` (a PAT) as-is.
-``FORGE_AUTH=app``   → mint a short-lived GitHub App *installation*
+``forge_auth=token`` → use ``FORGE_TOKEN`` (a PAT) as-is.
+``forge_auth=app``   → mint a short-lived GitHub App *installation*
 access token (JWT signed with the App private key → installation
 token), so the PR is authored by ``<app-slug>[bot]`` — the
 robotsix-project bot identity, without GitHub Actions.
@@ -93,7 +93,7 @@ def classify_token_error(exc: BaseException) -> str:
             "GITHUB_APP_ID",
             "GITHUB_APP_PRIVATE_KEY",
             "FORGE_TOKEN",
-            "FORGE_AUTH",
+            "forge_auth=app",
         )
     ):
         return "permanent"
@@ -172,7 +172,7 @@ def github_push_token(settings: Settings, repo_config: RepoConfig | None = None)
         or get_secrets().github_app_private_key_path
     ):
         raise RuntimeError(
-            "FORGE_AUTH=app needs GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY[_PATH]"
+            "forge_auth=app needs GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY[_PATH]"
         )
 
     remote_url = _resolve_remote_url(settings, repo_config)
@@ -208,7 +208,7 @@ def github_token(settings: Settings, repo_config: RepoConfig | None = None) -> s
         or get_secrets().github_app_private_key_path
     ):
         raise RuntimeError(
-            "FORGE_AUTH=app needs GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY[_PATH]"
+            "forge_auth=app needs GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY[_PATH]"
         )
 
     remote_url = _resolve_remote_url(settings, repo_config)

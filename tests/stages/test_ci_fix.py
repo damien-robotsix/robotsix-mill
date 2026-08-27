@@ -123,9 +123,9 @@ def _fixing_ci(ctx):
 def _gh(tmp_path, **extra):
     return _ctx(
         tmp_path,
-        FORGE_KIND="github",
+        forge_kind="github",
         FORGE_TOKEN="t",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_remote_url="https://github.com/o/r.git",
         **extra,
     )
 
@@ -369,9 +369,9 @@ def test_auto_forge_kind_bypasses_none_guard(tmp_path):
     forge_kind=none guard and does not block with 'forge not configured'."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="auto",
+        forge_kind="auto",
         FORGE_TOKEN="t",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_remote_url="https://github.com/o/r.git",
     )
     out = CIFixStage().run(_fixing_ci(ctx), ctx)
     # Should NOT block due to forge_kind=none. May fail for other

@@ -584,63 +584,6 @@
       "additionalProperties": false,
       "description": "Runtime settings for robotsix-mill: concurrency limits,\nAPI endpoints, feature toggles, stage-level controls,\nsandbox configuration, and agent budgets.",
       "properties": {
-        "FORGE_AUTH": {
-          "default": "token",
-          "description": "Forge authentication method: token (PAT) or app (GitHub App installation token).",
-          "enum": [
-            "token",
-            "app"
-          ],
-          "title": "Forge Auth",
-          "type": "string"
-        },
-        "FORGE_KIND": {
-          "default": "none",
-          "description": "Forge backend: github, gitlab, none, or auto (detected from remote URL).",
-          "enum": [
-            "github",
-            "gitlab",
-            "none",
-            "auto"
-          ],
-          "title": "Forge Kind",
-          "type": "string"
-        },
-        "FORGE_REMOTE_URL": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Git remote URL of the forge repository.",
-          "title": "Forge Remote Url"
-        },
-        "FORGE_TARGET_BRANCH": {
-          "default": "main",
-          "description": "Default target branch for PRs.",
-          "title": "Forge Target Branch",
-          "type": "string"
-        },
-        "MILL_IMPLEMENT_PASS_TIMEOUT": {
-          "advanced": true,
-          "default": 300,
-          "description": "Progress-reset watchdog (seconds) for the implement agent. The timer resets on every tool call (read_file, write_file, explore, etc.) \u2014 the agent is killed only after this many seconds of NO progress. 0 disables the watchdog and falls back to the flat coordinator_timeout_seconds cap.",
-          "minimum": 0,
-          "title": "Mill Implement Pass Timeout",
-          "type": "integer"
-        },
-        "MILL_SANDBOX_OP_TIMEOUT": {
-          "advanced": true,
-          "default": 300,
-          "description": "Per-docker-exec timeout (seconds) for individual sandbox operations. 0 disables.",
-          "minimum": 0,
-          "title": "Mill Sandbox Op Timeout",
-          "type": "integer"
-        },
         "agent_check_interval_seconds": {
           "advanced": true,
           "default": 604800,
@@ -1464,12 +1407,47 @@
           "description": "Fleet notification endpoint URL for dispatching alerts to robotsix-chat.",
           "title": "Fleet Notify Url"
         },
+        "forge_auth": {
+          "default": "token",
+          "description": "Forge authentication method: token (PAT) or app (GitHub App installation token).",
+          "enum": [
+            "token",
+            "app"
+          ],
+          "title": "Forge Auth",
+          "type": "string"
+        },
+        "forge_kind": {
+          "default": "none",
+          "description": "Forge backend: github, gitlab, none, or auto (detected from remote URL).",
+          "enum": [
+            "github",
+            "gitlab",
+            "none",
+            "auto"
+          ],
+          "title": "Forge Kind",
+          "type": "string"
+        },
         "forge_parity_interval_seconds": {
           "advanced": true,
           "default": 604800,
           "description": "Seconds between periodic forge-parity passes. 0 = disabled.",
           "title": "Forge Parity Interval Seconds",
           "type": "integer"
+        },
+        "forge_remote_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Git remote URL of the forge repository.",
+          "title": "Forge Remote Url"
         },
         "forge_repo_create_token": {
           "anyOf": [
@@ -1485,6 +1463,12 @@
           "default": null,
           "description": "A PAT used ONLY for repository creation (POST /user/repos). Falls back to forge_token if unset. GitHub App tokens cannot create repos \u2014 use a classic PAT with repo-creation scope.",
           "title": "Forge Repo Create Token"
+        },
+        "forge_target_branch": {
+          "default": "main",
+          "description": "Default target branch for PRs.",
+          "title": "Forge Target Branch",
+          "type": "string"
         },
         "freshness_gate_enabled": {
           "default": false,
@@ -1565,6 +1549,14 @@
           "default": null,
           "description": "Path to the implement agent's Markdown memory ledger. When unset, derives from data_dir/board/implement_memory.md.",
           "title": "Implement Memory Path"
+        },
+        "implement_pass_timeout": {
+          "advanced": true,
+          "default": 300,
+          "description": "Progress-reset watchdog (seconds) for the implement agent. The timer resets on every tool call (read_file, write_file, explore, etc.) \u2014 the agent is killed only after this many seconds of NO progress. 0 disables the watchdog and falls back to the flat coordinator_timeout_seconds cap.",
+          "minimum": 0,
+          "title": "Implement Pass Timeout",
+          "type": "integer"
         },
         "implement_preseed_context_lines": {
           "advanced": true,
@@ -2539,6 +2531,14 @@
           "description": "Docker network sandbox containers connect to.",
           "title": "Sandbox Network",
           "type": "string"
+        },
+        "sandbox_op_timeout": {
+          "advanced": true,
+          "default": 300,
+          "description": "Per-docker-exec timeout (seconds) for individual sandbox operations. 0 disables.",
+          "minimum": 0,
+          "title": "Sandbox Op Timeout",
+          "type": "integer"
         },
         "sandbox_package_cache": {
           "advanced": true,

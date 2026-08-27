@@ -2019,8 +2019,8 @@ def _multirepo_forge_env() -> dict:
     these, ``get_forge`` raises a config error which retrospect's
     try/except silently swallows."""
     return {
-        "FORGE_KIND": "github",
-        "FORGE_REMOTE_URL": "https://github.com/o/global.git",
+        "forge_kind": "github",
+        "forge_remote_url": "https://github.com/o/global.git",
     }
 
 

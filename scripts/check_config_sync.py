@@ -98,12 +98,20 @@ _FIELD_DEF_RE = re.compile(r"^\s*(\w+)\s*:\s*[^=]+\s*=\s*Field\(")
 
 
 def build_valid_settings_names(model: type) -> set[str]:
-    """Return the union of every ``model`` field name and non-null alias."""
+    """Return the union of every ``model`` field name, alias, and validation_alias."""
+    from pydantic import AliasChoices
+
     names: set[str] = set()
     for name, field in model.model_fields.items():
         names.add(name)
         if field.alias:
             names.add(field.alias)
+        va = field.validation_alias
+        if isinstance(va, AliasChoices):
+            for choice in va.choices:
+                names.add(str(choice))
+        elif va is not None:
+            names.add(str(va))
     return names
 
 

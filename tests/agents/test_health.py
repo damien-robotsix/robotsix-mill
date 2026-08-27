@@ -538,8 +538,8 @@ def test_run_health_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 
     settings = _make_settings(
         tmp_path,
-        FORGE_REMOTE_URL="https://example.test/r.git",
-        FORGE_TARGET_BRANCH="main",
+        forge_remote_url="https://example.test/r.git",
+        forge_target_branch="main",
     )
     seen = {"clone": 0, "repo_dir": "unset"}
 
@@ -571,7 +571,7 @@ def test_run_health_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
 
 
 def test_run_health_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
-    settings = _make_settings(tmp_path)  # no FORGE_REMOTE_URL
+    settings = _make_settings(tmp_path)  # no forge_remote_url
     got = {}
     monkeypatch.setattr(
         health_agent,

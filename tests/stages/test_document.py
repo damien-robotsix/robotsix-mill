@@ -100,7 +100,7 @@ def _ticket(ctx, body="Add feature.txt"):
 
 
 def test_user_facing_commits_and_progresses(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
@@ -150,7 +150,7 @@ def test_user_facing_commits_and_progresses(ctx_factory, monkeypatch):
 
 
 def test_internal_skips_commit(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
@@ -192,7 +192,7 @@ def test_internal_skips_commit(ctx_factory, monkeypatch):
 
 
 def test_user_facing_no_changes_skips_commit(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
@@ -241,7 +241,7 @@ def test_user_facing_no_changes_skips_commit(ctx_factory, monkeypatch):
 
 
 def test_empty_diff_skips_agent(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     # Remove the commit so diff is empty.
@@ -275,7 +275,7 @@ def test_empty_diff_skips_agent(ctx_factory, monkeypatch):
 
 
 def test_missing_clone_blocks(ctx_factory):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = ctx.service.create("No clone")
     ctx.service.transition(t.id, State.READY)
     ctx.service.transition(t.id, State.DOCUMENTING)
@@ -290,7 +290,7 @@ def test_missing_clone_blocks(ctx_factory):
 
 
 def test_agent_exception_warns_and_passes(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_doc(
@@ -320,7 +320,7 @@ def test_agent_exception_warns_and_passes(ctx_factory, monkeypatch):
 def test_agent_exception_contains_real_error(ctx_factory, monkeypatch):
     """When doc agent fails, the note and notification carry the actual
     exception type and message — NOT a heuristic hint about deps."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
@@ -393,7 +393,7 @@ def test_agent_exception_contains_real_error(ctx_factory, monkeypatch):
 
 
 def test_diff_base_failure_blocks(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _failing_diff_base(repo, target_branch, **kw):
@@ -413,7 +413,7 @@ def test_diff_base_failure_blocks(ctx_factory, monkeypatch):
 
 
 def test_commit_all_failure_warns_and_passes(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     def _fake_doc(
@@ -449,7 +449,7 @@ def test_commit_all_failure_warns_and_passes(ctx_factory, monkeypatch):
 
 
 def test_review_disabled_transitions_to_deliverable(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="false")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="false")
     t = _ticket(ctx)
 
     def _fake_doc(
@@ -477,7 +477,7 @@ def test_review_disabled_transitions_to_deliverable(ctx_factory, monkeypatch):
 
 
 def test_classifier_internal_skips_full_agent(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
@@ -513,7 +513,7 @@ def test_classifier_internal_skips_full_agent(ctx_factory, monkeypatch):
 
 
 def test_classifier_user_facing_runs_full_agent(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
@@ -556,7 +556,7 @@ def test_classifier_user_facing_runs_full_agent(ctx_factory, monkeypatch):
 
 
 def test_classifier_exception_falls_through_to_full_agent(ctx_factory, monkeypatch):
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
     repo_dir = ctx.service.workspace(t).dir / "repo"
 
@@ -600,7 +600,7 @@ def test_classifier_verdict_recorded_in_history(ctx_factory, monkeypatch):
     transition note (history), not in comments. The previous behaviour
     posted a comment authored by `doc_classifier`; v1 removed that to
     keep comments reserved for ASK_USER + review threads."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     add_comment_calls = []
@@ -640,7 +640,7 @@ def test_agent_exception_non_python_project_reports_real_error(
 ):
     """Doc agent fails but there is no pyproject.toml — the note still
     contains the real exception type and message, not the old hint."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     # No pyproject.toml at all.
@@ -674,7 +674,7 @@ def test_agent_exception_non_python_project_reports_real_error(
 def test_agent_exception_credential_redaction(ctx_factory, monkeypatch):
     """When the exception message embeds a tokenized URL, the secret
     must be redacted from the note and notification."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     tokenized_url = "https://x-access-token:SECRET@github.com/org/repo"
@@ -731,7 +731,7 @@ def test_doc_stage_preserves_source_files(ctx_factory, monkeypatch):
     """The document stage passes ``write_blocked_prefixes`` through to
     ``build_fs_tools`` so that a document agent cannot overwrite
     implement-stage source-code changes under ``src/`` or ``www/``."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///dummy", review_enabled="true")
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
     t = _ticket(ctx)
 
     captured_kwargs: dict = {}
