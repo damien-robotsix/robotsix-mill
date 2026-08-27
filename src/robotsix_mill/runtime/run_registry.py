@@ -12,6 +12,11 @@ from typing import Any, Literal
 
 MAX_ENTRIES = 50
 
+#: ``error`` text stamped on runs that were in-flight when the process
+#: stopped.  Not a failure of the pass itself — a deploy or restart killed
+#: it — so consumers that turn errored runs into tickets skip this value.
+RESTART_INTERRUPTED_ERROR = "interrupted by process restart"
+
 
 @dataclass
 class RunEntry:
@@ -135,7 +140,7 @@ class RunRegistry:
             if e.status == "running":
                 e.status = "error"
                 e.finished_at = now
-                e.error = "interrupted by process restart"
+                e.error = RESTART_INTERRUPTED_ERROR
                 reconciled = True
         if reconciled:
             self.flush()

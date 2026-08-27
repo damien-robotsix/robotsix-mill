@@ -166,6 +166,66 @@ def test_identical_fingerprints_collapse_to_one_ticket(tmp_path, monkeypatch):
 # --- no errors -------------------------------------------------------------
 
 
+def test_restart_interrupted_runs_are_not_filed(tmp_path, monkeypatch, caplog):
+    """Runs killed by a process restart are a deploy artifact, not a defect
+    (mill c05c, 2026-08-26): no ticket, and genuine errors alongside them
+    are still filed."""
+    from robotsix_mill.runtime.run_registry import RESTART_INTERRUPTED_ERROR
+
+    settings = _prepare(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        dce,
+        "query_run_errors",
+        lambda board_id, **k: [
+            _error_run(
+                "r1",
+                "completeness_check",
+                "2026-08-26T06:03:22+00:00",
+                RESTART_INTERRUPTED_ERROR,
+            ),
+            _error_run(
+                "r2",
+                "completeness_check",
+                "2026-08-26T06:35:12+00:00",
+                RESTART_INTERRUPTED_ERROR,
+            ),
+            _error_run(
+                "r3",
+                "pin_bump",
+                "2026-08-26T06:43:48+00:00",
+                "invalid group reference 11 at position 1",
+            ),
+        ],
+    )
+    with caplog.at_level(logging.INFO):
+        result = dce.ErroredRunsCheck().run(_ctx(settings))
+
+    assert result.ok is True
+    titles = [t.title for t in TicketService(settings, board_id=_BOARD).list()]
+    assert len(titles) == 1
+    assert "pin_bump" in titles[0]
+    assert not any("interrupted by process restart" in t for t in titles)
+    assert "skipping 2 run(s) interrupted by process restart" in caplog.text
+
+
+def test_only_restart_interrupted_runs_is_ok_with_no_drafts(tmp_path, monkeypatch):
+    from robotsix_mill.runtime.run_registry import RESTART_INTERRUPTED_ERROR
+
+    settings = _prepare(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        dce,
+        "query_run_errors",
+        lambda board_id, **k: [
+            _error_run(
+                "r1", "audit", "2026-08-26T06:03:22+00:00", RESTART_INTERRUPTED_ERROR
+            ),
+        ],
+    )
+    result = dce.ErroredRunsCheck().run(_ctx(settings))
+    assert result.ok is True
+    assert TicketService(settings, board_id=_BOARD).list() == []
+
+
 def test_no_errors_returns_ok_no_drafts(tmp_path, monkeypatch):
     settings = _prepare(tmp_path, monkeypatch)
     monkeypatch.setattr(dce, "query_run_errors", lambda board_id, **k: [])
