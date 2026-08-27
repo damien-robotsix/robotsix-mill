@@ -75,6 +75,17 @@ class _PeriodicSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+    # --- upstream-CI recovery ---
+    # Interval between upstream-CI recovery passes (seconds). Default 600.
+    # Set to 0 to disable. Resumes tickets that ci_fix parked BLOCKED
+    # because the target branch shared their failing checks, once the
+    # target branch's CI is green again.
+    upstream_ci_recovery_interval_seconds: int = Field(
+        default=600,
+        description="Seconds between upstream-CI recovery passes (auto-resume tickets parked on a red target branch once it is green). 0 = disabled.",
+        json_schema_extra={"advanced": True},
+    )
+
     # --- docstring-coverage agent (public-API documentation oversight) ---
     # Interval between periodic docstring-coverage passes (seconds).
     # Set to 0 to disable.

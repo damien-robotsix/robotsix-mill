@@ -402,6 +402,79 @@ class TestCheckUpstreamCiBreakage:
         )
         assert result is None
 
+    def test_ci_source_ticket_is_exempt(self, monkeypatch):
+        """A source=ci ticket exists to fix the target branch — never park it
+        behind the breakage it was filed for (robotsix-chat 4c2b, 2026-08-26)."""
+        from robotsix_mill.config import Settings
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
+
+        monkeypatch.setattr(
+            "robotsix_mill.config.repos.target_branch_for",
+            lambda s, rc: "main",
+        )
+        calls: list[str] = []
+
+        def _sha(repo, branch):
+            calls.append("sha")
+            return "abc123def4567890"
+
+        monkeypatch.setattr("robotsix_mill.vcs.git_ops.remote_branch_sha", _sha)
+        mock_forge = _FakeForge(
+            commit_ci_conclusion={
+                "conclusion": "failure",
+                "failing": [{"name": "Container image scan (Trivy)"}],
+            }
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.forge.get_forge",
+            lambda s, repo_config: mock_forge,
+        )
+        failing = [{"name": "Container image scan (Trivy)"}]
+
+        assert (
+            _check_upstream_ci_breakage(
+                "t", Settings(), None, "/fake/repo", failing, ticket_source="ci"
+            )
+            is None
+        )
+        assert calls == [], "exemption short-circuits before any lookup"
+        # Same inputs, any other source → still parked.
+        assert (
+            _check_upstream_ci_breakage(
+                "t", Settings(), None, "/fake/repo", failing, ticket_source="user"
+            )
+            is not None
+        )
+
+    def test_block_note_carries_marker_and_auto_resume_hint(self, monkeypatch):
+        from robotsix_mill.config import Settings
+        from robotsix_mill.stages.ci_fix_helpers import (
+            UPSTREAM_CI_BLOCK_MARKER,
+            _check_upstream_ci_breakage,
+        )
+
+        monkeypatch.setattr(
+            "robotsix_mill.config.repos.target_branch_for", lambda s, rc: "main"
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            lambda r, b: "abc123def4567890",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.forge.get_forge",
+            lambda s, repo_config: _FakeForge(
+                commit_ci_conclusion={
+                    "conclusion": "failure",
+                    "failing": [{"name": "ruff"}],
+                }
+            ),
+        )
+        note = _check_upstream_ci_breakage(
+            "t", Settings(), None, "/fake/repo", [{"name": "ruff"}]
+        )
+        assert note is not None and note.startswith(UPSTREAM_CI_BLOCK_MARKER)
+        assert "resumes automatically" in note
+
     def test_same_check_failing_on_both_returns_block_message(self, monkeypatch):
         """When the same check fails on both PR and target, return block message."""
         from robotsix_mill.config import Settings

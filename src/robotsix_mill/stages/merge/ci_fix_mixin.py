@@ -158,6 +158,7 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                 rc_for_upstream,
                 str(repo_dir),
                 failing,
+                ticket_source=ticket.source,
             )
             if upstream_block is not None:
                 return Outcome(
