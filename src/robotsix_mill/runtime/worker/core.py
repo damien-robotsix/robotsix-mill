@@ -278,8 +278,19 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         # ticket is actually processed (cap check passed) or when an
         # explicit priority flip calls requeue_with_current_priority.
         self._cap_deferred: set[str] = set()
-        # ticket_id -> {"stage": str, "started_at": str} while stage.run() is executing
-        self._active: dict[str, dict[str, Any]] = {}
+        # (ticket_id, stage) -> {"stage": str, "started_at": str} while
+        # stage.run() is executing.  Keyed per RUN, not per ticket, so a
+        # duplicate dispatch that slips past the guard below is visible
+        # on /active instead of overwriting the entry it collided with.
+        self._active: dict[tuple[str, str], dict[str, Any]] = {}
+        # (ticket_id, stage) pairs currently executing in THIS process.
+        # ``_pending`` guards the queue against duplicate *enqueues*;
+        # nothing guarded duplicate *dispatch*, so two consumers could run
+        # the same ticket+stage at once — observed on prod 2026-08-25 with
+        # three implement runs on one ticket in a 3h window, two of them
+        # live simultaneously, racing on the same mill/<ticket> branch and
+        # holding a sandbox slot each.
+        self._in_flight: set[tuple[str, str]] = set()
         # Global gate capping total concurrently-running stages across all
         # boards. Created in start() to bind to the running event loop.
         # Priority-aware: the per-board queues rank tickets, but every board
@@ -392,6 +403,39 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         except Exception:
             return None
 
+    def _try_claim(self, ticket_id: str, state: State | None) -> tuple[str, str] | None:
+        """Reserve ``(ticket_id, stage)`` for one run, or ``None`` if taken.
+
+        ``_pending`` guards the queue against duplicate *enqueues*; nothing
+        guarded duplicate *dispatch*, so two consumers could run the same
+        ticket+stage concurrently.  Observed on prod 2026-08-25: one ticket
+        had three distinct implement runs in a 3h window, two of them live
+        at once (the tell is heartbeat ``elapsed`` going backwards, because
+        each run reports its own age).  They race on the same
+        ``mill/<ticket>`` branch and each holds a sandbox slot, which feeds
+        host overload.
+
+        Dropping the duplicate cannot starve the ticket: the run that holds
+        the claim is doing the same work, and its completion re-enqueues
+        whatever comes next through the normal transition path.
+
+        The stage key is derived from *state* — the same input
+        ``process_ticket`` uses to pick a stage — so it matches the key the
+        active map records for the run.
+        """
+        claim = (ticket_id, state.value if state else "")
+        if claim in self._in_flight:
+            log.warning(
+                "%s: stage %s already in flight in this process — dropping "
+                "the duplicate dispatch. The live run covers it; a second "
+                "would race on the same branch and hold another sandbox slot.",
+                ticket_id,
+                claim[1] or "(unknown)",
+            )
+            return None
+        self._in_flight.add(claim)
+        return claim
+
     async def _run(self, board_id: str = "") -> None:
         """Consume tickets from one repo's queue.
 
@@ -413,6 +457,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         )
         while True:
             popped_prio, popped_stage, _seq, ticket_id = await queue.get()
+            claimed: tuple[str, str] | None = None
             try:
                 before = board_service.get(ticket_id)
                 before_state = before.state if before else None
@@ -577,6 +622,10 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                     if before is not None
                     else (popped_prio, popped_stage)
                 )
+                claimed = self._try_claim(ticket_id, before_state)
+                if claimed is None:
+                    continue  # a live run already covers this ticket+stage
+
                 if self._global_semaphore is not None:
                     if self._global_semaphore.locked():
                         log.debug(
@@ -616,7 +665,11 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 # drop from in-flight FIRST so a re-enqueue (e.g. next
                 # merge-poll cycle) is accepted again.
                 self._pending.discard(ticket_id)
-                self._active.pop(ticket_id, None)
+                # Release the claim unconditionally — a leaked claim would
+                # silently block every future run of this ticket+stage.
+                if claimed is not None:
+                    self._in_flight.discard(claimed)
+                    self._active.pop(claimed, None)
                 queue.task_done()
 
     def _maybe_sweep_orphaned_epic(self, epic, svc) -> None:
