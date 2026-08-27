@@ -208,10 +208,19 @@ def run_implement_agent(
                 target_branch=target_branch,
             )
         except Exception as fallback_e:
+            # Keep BOTH failures typed: ``cause`` carries the fallback's
+            # exception and ``from e`` chains the primary's, so the stage's
+            # classifier (which walks the cause chain) can see a 400 "not a
+            # valid model ID" or a token-limit abort instead of one opaque
+            # string.  Without ``cause`` the stage treated every dual
+            # failure as a spec-determined dead-end and recorded a spec
+            # fingerprint — the ticket then re-blocked on "spec unchanged"
+            # at every resume (central-deploy cd92, 2026-08-25).
             raise AgentRunError(
                 f"output retries exhausted on primary + fallback models: "
                 f"primary={e}, fallback={fallback_e}",
                 [],
+                cause=fallback_e,
             ) from e
     except AgentBudgetError, AgentRunError:
         raise

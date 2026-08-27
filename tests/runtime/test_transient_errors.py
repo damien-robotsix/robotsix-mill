@@ -951,3 +951,65 @@ def test_github_throttle_classified_transient_end_to_end():
         response=_throttle_response(403, {"x-ratelimit-remaining": "0"}),
     )
     assert classify_stage_error(exc) == "transient"
+
+
+# --- is_provider_failure -----------------------------------------------------
+
+_LIVE_DUAL_FAILURE = (
+    "output retries exhausted on primary + fallback models: primary=Model token "
+    "limit (32768) exceeded before any response was generated. Increase the "
+    "`max_tokens` model setting, or simplify the prompt, fallback=status_code: "
+    "400, model_name: deepseek/deepseek-v4-flash-latest, body: {'message': "
+    "'deepseek/deepseek-v4-flash-latest is not a valid model ID', 'code': 400}"
+)
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        _LIVE_DUAL_FAILURE,
+        (
+            "status_code: 400, model_name: deepseek/deepseek-v4-flash-latest, body: "
+            "{'message': 'deepseek/deepseek-v4-flash-latest is not a valid model ID'}"
+        ),
+        "Model token limit (32768) exceeded before any response was generated.",
+        "output retries exhausted on primary + fallback models: primary=x, fallback=y",
+    ],
+)
+def test_is_provider_failure_matches_live_model_failures(message):
+    from robotsix_mill.runtime.transient_errors import is_provider_failure
+
+    assert is_provider_failure(RuntimeError(message))
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Tool 'verify_diff' exceeded max retries count of 2",
+        "summary verification failed after retry: test_utils.py",
+        "boom",
+    ],
+)
+def test_is_provider_failure_rejects_agent_behaviour_failures(message):
+    """A tool-validation loop or a hallucinated summary IS about this spec."""
+    from robotsix_mill.runtime.transient_errors import is_provider_failure
+
+    assert not is_provider_failure(RuntimeError(message))
+
+
+def test_is_provider_failure_walks_cause_chain():
+    from robotsix_mill.runtime.transient_errors import is_provider_failure
+
+    inner = RuntimeError("deepseek/x is not a valid model ID")
+    outer = RuntimeError("agent error")
+    outer.__cause__ = inner
+    assert is_provider_failure(outer)
+
+
+def test_invalid_model_id_is_fatal_not_transient():
+    """A bad baked model id does not fix itself between retries: it blocks
+    (without a fingerprint — see implement stage), it is not retried."""
+    assert (
+        classify_stage_error(RuntimeError("deepseek/x is not a valid model ID"))
+        == "fatal"
+    )
