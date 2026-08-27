@@ -118,18 +118,28 @@ def test_safe_close_swallows_exceptions_from_close():
 
 
 def test_default_tier_config_maps_levels():
-    """Each capability level maps to its baked (provider, model) via
-    llmio's default_tier_config: L1 → DeepSeek flash, L2 → Xiaomi MiMo v2.5 pro, L3 → Claude SDK opus."""
+    """Each capability level maps to the backend family mill's code assumes:
+    L1 → DeepSeek flash on OpenRouter, L2 → Xiaomi MiMo pro on OpenRouter,
+    L3 → Claude SDK opus.
+
+    Asserts the *provider* exactly and the model *family* by prefix, not the
+    full slug. The exact slug is llmio's to choose — it re-pins the DeepSeek
+    snapshot whenever upstream reprices or retires one — and mill has no
+    behaviour keyed to which snapshot is current. Pinning the literal here
+    only red-lit mill's CI on every llmio bump, and worse: this assertion
+    spent two days certifying ``deepseek/deepseek-v4-flash-latest``, a slug
+    OpenRouter 400s as "not a valid model ID".
+    """
     from robotsix_llmio.core.factory import default_tier_config
     from robotsix_llmio.core.identifier import parse_model_identifier
 
     parsed1 = parse_model_identifier(default_tier_config().for_level(1).model)
     assert parsed1.provider == "openrouter"
-    assert parsed1.model_name == "deepseek/deepseek-v4-flash-latest"
+    assert parsed1.model_name.startswith("deepseek/deepseek-v4-flash")
 
     parsed2 = parse_model_identifier(default_tier_config().for_level(2).model)
     assert parsed2.provider == "openrouter"
-    assert parsed2.model_name == "xiaomi/mimo-v2.5-pro"
+    assert parsed2.model_name.startswith("xiaomi/mimo-v2.5-pro")
 
     parsed3 = parse_model_identifier(default_tier_config().for_level(3).model)
     assert parsed3.provider == "claudeSDK"
@@ -228,7 +238,7 @@ def test_agent_handle_close_is_idempotent():
 # ---------------------------------------------------------------------------
 
 
-def test_build_agent_deepseek_default_path(monkeypatch, settings):
+def test_build_agent_deepseek_default_path(monkeypatch, settings, level1_model):
     """build_agent constructs an AgentHandle via _build_deepseek_handle when
     the resolved transport is DeepSeek/OpenRouter (levels 1 & 2)."""
     from robotsix_mill.agents import base as bmod
@@ -264,12 +274,12 @@ def test_build_agent_deepseek_default_path(monkeypatch, settings):
     assert len(captured_kwargs) == 1
     kw = captured_kwargs[0]
     # level 1 resolves to the flash model via llmio's tier defaults.
-    assert kw["effective_model"] == "deepseek/deepseek-v4-flash-latest"
+    assert kw["effective_model"] == level1_model
     assert kw["level"] == 1
     assert _cfg._secrets.openrouter_api_key == "sk-test"
 
 
-def test_build_agent_resolves_level_1_to_flash(monkeypatch, settings):
+def test_build_agent_resolves_level_1_to_flash(monkeypatch, settings, level1_model):
     """build_agent level 1 resolves to the concrete flash model."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
@@ -297,7 +307,7 @@ def test_build_agent_resolves_level_1_to_flash(monkeypatch, settings):
         tools=[],
     )
 
-    assert captured_kwargs[0]["effective_model"] == "deepseek/deepseek-v4-flash-latest"
+    assert captured_kwargs[0]["effective_model"] == level1_model
 
 
 def test_build_agent_resolves_level_2_to_pro(monkeypatch, settings):
@@ -993,7 +1003,9 @@ def test_compose_prompt_unparseable_modules_yaml_no_crash(tmp_path, monkeypatch)
 # ---------------------------------------------------------------------------
 
 
-def test_build_openrouter_model_resolves_level_to_model(monkeypatch, settings):
+def test_build_openrouter_model_resolves_level_to_model(
+    monkeypatch, settings, level1_model
+):
     """build_openrouter_model resolves the level to a concrete model and
     delegates to new_deepseek_model, returning its (model, client)."""
     from robotsix_mill.agents import base as bmod
@@ -1021,12 +1033,14 @@ def test_build_openrouter_model_resolves_level_to_model(monkeypatch, settings):
     assert client is fake_client
     # Level 1 resolves to the flash model via llmio's tier defaults.
     assert captured == {
-        "model_name": "deepseek/deepseek-v4-flash-latest",
+        "model_name": level1_model,
         "level": 1,
     }
 
 
-def test_build_openrouter_model_online_appends_suffix(monkeypatch, settings):
+def test_build_openrouter_model_online_appends_suffix(
+    monkeypatch, settings, level1_model
+):
     """When online=True, the resolved model carries the ``:online`` suffix
     that bills the OpenRouter web-search surcharge."""
     from robotsix_mill.agents import base as bmod
@@ -1046,4 +1060,4 @@ def test_build_openrouter_model_online_appends_suffix(monkeypatch, settings):
     monkeypatch.setattr(bmod, "new_deepseek_model", fake_new_deepseek)
 
     bmod.build_openrouter_model(1, online=True)
-    assert captured["model_name"] == "deepseek/deepseek-v4-flash-latest:online"
+    assert captured["model_name"] == f"{level1_model}:online"

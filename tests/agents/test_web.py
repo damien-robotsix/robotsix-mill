@@ -68,7 +68,9 @@ def test_web_research_no_key_degrades(tmp_path):
     assert "OPENROUTER_API_KEY" in out
 
 
-def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
+def test_web_research_subagent_uses_cheap_online_model(
+    tmp_path, monkeypatch, level1_model
+):
     """The sub-agent (and only it) builds the cheap level-1 (flash) model
     WITH ":online" and bounds itself by web_research_request_limit. The
     expensive main agent never carries ":online" — web search is delegated
@@ -107,7 +109,7 @@ def test_web_research_subagent_uses_cheap_online_model(tmp_path, monkeypatch):
     out = asyncio.run(wr.run_web_research(settings=s, query="q"))
     assert out == "ok"
     # The cheap level-1 model carries the :online surcharge for web search.
-    assert captured["model"] == "deepseek/deepseek-v4-flash-latest:online"
+    assert captured["model"] == f"{level1_model}:online"
     assert captured["limit"] == 5
     assert captured["name"] == "web_research"
 
