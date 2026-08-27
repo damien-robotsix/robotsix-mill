@@ -59,22 +59,24 @@ class _MergeSettings(BaseModel):
     # agent's verify loop (it would never be allowed to wait).
     # Sized against observed runs, not guesswork: sampled successful ci_fix
     # stages completed in 300-900 s, all of them on a SINGLE verify iteration.
-    # The retries are for the "fix reveals the next failure" cascade, which is
-    # routine in Flutter/Dart (SDK mismatch -> dependency fix -> analyze fix ->
-    # test fix, each surfacing the next), so 3 was not enough to finish one.
+    # 3 leaves two retries for the "fix reveals the next failure" case while
+    # keeping the derived stage ceiling (see Settings.stage_timeout_for) inside
+    # what a 3-slot worker pool can afford to hold.
     #
-    # Cost of the 4th and 5th, stated plainly because it is not free: this
-    # multiplies into the derived stage ceiling (Settings.stage_timeout_for).
-    # On the shipped defaults (900 s per wait + a 600 s coordinator budget) the
-    # agent budget goes 3300 -> 5100 s and the ci_fix stage ceiling 3600 ->
-    # 5400 s, so a worker slot can be held for 90 min instead of 60. Only a
-    # ticket genuinely looping on CI ever spends it, but on a 3-slot pool that
-    # is a third of the pool for an hour and a half -- revisit here first if
-    # ci_fix starts starving other stages. (A deployment that pins a larger
-    # coordinator_timeout_seconds scales both numbers up accordingly.)
+    # A 3 -> 5 bump has been proposed twice and is deliberately NOT applied:
+    # once as AC #3 of PR #2988 (lost in a rebase, so never shipped) and again
+    # as PR #3018, reverted by #3019. Two reasons it was declined. First it is
+    # inert where it matters: the deployed mill pins this key -- along with ~297
+    # others -- in its stored config, so the shipped default is shadowed and
+    # only the pin decides. Second the ceiling above is real: at 900 s per wait
+    # plus the coordinator budget, 5 iterations take the ci_fix stage ceiling
+    # from 3600 to 5400 s on shipped defaults (4800 -> 6600 s with the live
+    # mill's pinned coordinator budget), i.e. a third of a 3-slot pool held for
+    # 90 minutes. Raise the PIN, per-repo, if a specific board needs the extra
+    # cascade room -- do not raise the fleet default.
     ci_fix_max_iterations: int = Field(
         description="Maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
-        default=5,
+        default=3,
         ge=0,
         json_schema_extra={"advanced": True},
     )
