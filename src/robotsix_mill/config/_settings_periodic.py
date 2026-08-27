@@ -559,6 +559,21 @@ class _PeriodicSettings(BaseModel):
         description="Explicit path for the diagnostic event store JSONL file.",
     )
 
+    # --- diagnostic event aging ---
+    # Events older than this many days are silently dropped during
+    # list/filter operations.  This prevents stale failures from
+    # permanently inflating the recurring-CI count.  Set to 0 to keep
+    # events indefinitely (original behaviour).
+    diagnostic_events_max_age_days: int = Field(
+        default=90,
+        ge=0,
+        description=(
+            "Days after which diagnostic events are considered stale "
+            "and excluded from recurring-failure counts.  0 = no expiry."
+        ),
+        json_schema_extra={"advanced": True},
+    )
+
     # --- recurring CI failure fix-proposal generation ---
     # Number of distinct tickets that must hit the same normalized
     # CI failure key before the recurring-CI diagnostic check auto-files

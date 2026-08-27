@@ -1250,6 +1250,14 @@
           "title": "Diagnostic Ci Failure Threshold",
           "type": "integer"
         },
+        "diagnostic_events_max_age_days": {
+          "advanced": true,
+          "default": 90,
+          "description": "Days after which diagnostic events are considered stale and excluded from recurring-failure counts.  0 = no expiry.",
+          "minimum": 0,
+          "title": "Diagnostic Events Max Age Days",
+          "type": "integer"
+        },
         "diagnostic_events_path": {
           "anyOf": [
             {
