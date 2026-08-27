@@ -20,6 +20,7 @@ from typing import Any
 from ...core.models import SourceKind, TicketKind
 from ...core.service import TicketService
 from ...core.states import DONE_OR_CLOSED
+from ...runtime.run_registry import RESTART_INTERRUPTED_ERROR
 from .diagnostic_checks import (
     DiagnosticCheckContext,
     DiagnosticCheckResult,
@@ -76,6 +77,24 @@ class ErroredRunsCheck:
         today = datetime.now(UTC).strftime("%Y-%m-%d")
 
         errors = query_run_errors(board_id, since=since, settings=settings)
+
+        # A run the process restart killed mid-flight is stamped
+        # RESTART_INTERRUPTED_ERROR by RunRegistry.  That is a deploy
+        # artifact, not a defect in the pass: filing it produced a
+        # "[diagnostic] errored run: completeness_check — interrupted by
+        # process restart" ticket on every mill deploy (c05c, 2026-08-26)
+        # that no one could act on.  Count and skip.
+        restart_interrupted = [
+            run for run in errors if _signature(run) == RESTART_INTERRUPTED_ERROR
+        ]
+        if restart_interrupted:
+            log.info(
+                "errored_runs: skipping %d run(s) interrupted by process restart "
+                "(board=%s)",
+                len(restart_interrupted),
+                board_id,
+            )
+            errors = [run for run in errors if run not in restart_interrupted]
 
         # Group errored runs by fingerprint (kind + normalized signature).
         groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
