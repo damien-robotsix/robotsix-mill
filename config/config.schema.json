@@ -3081,6 +3081,13 @@
           "title": "Triage Request Limit",
           "type": "integer"
         },
+        "upstream_ci_recovery_interval_seconds": {
+          "advanced": true,
+          "default": 600,
+          "description": "Seconds between upstream-CI recovery passes (auto-resume tickets parked on a red target branch once it is green). 0 = disabled.",
+          "title": "Upstream Ci Recovery Interval Seconds",
+          "type": "integer"
+        },
         "web_fetch_max_bytes": {
           "advanced": true,
           "default": 2000000,

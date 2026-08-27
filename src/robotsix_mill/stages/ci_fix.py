@@ -213,7 +213,12 @@ class CIFixStage(Stage):
         # failure is pre-existing (not caused by this PR) — block
         # immediately rather than burning cycles on an unfixable failure.
         upstream_block = _check_upstream_ci_breakage(
-            ticket.id, ctx.settings, ctx.repo_config, repo_dir, failing
+            ticket.id,
+            ctx.settings,
+            ctx.repo_config,
+            repo_dir,
+            failing,
+            ticket_source=ticket.source,
         )
         if upstream_block is not None:
             return Outcome(State.BLOCKED, upstream_block)

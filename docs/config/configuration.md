@@ -705,6 +705,7 @@ Additional fields:
 |-----------|---------|---------|-------------|
 | `periodic.bespoke_discovery_interval_seconds` | `MILL_BESPOKE_DISCOVERY_INTERVAL_SECONDS` | `600` | Seconds between bespoke supervisor clone-refresh and agent-reconciliation cycles. A new YAML committed to a managed repo's `.robotsix-mill/agents/` lands within this window. Set to `0` to disable. |
 | `periodic.config_pin_drift_interval_seconds` | `MILL_CONFIG_PIN_DRIFT_INTERVAL_SECONDS` | `86400` | Seconds between config pin-drift passes. Set to `0` to disable. |
+| `periodic.upstream_ci_recovery_interval_seconds` | `MILL_UPSTREAM_CI_RECOVERY_INTERVAL_SECONDS` | `600` | Seconds between upstream-CI recovery passes: tickets that ci_fix parked BLOCKED because the target branch shared their failing checks are resumed automatically once that branch is green. Set to `0` to disable. |
 | `periodic.config_pin_drift_baseline` | `MILL_CONFIG_PIN_DRIFT_BASELINE` | `[]` | Settings keys whose pinned value deliberately differs from the code default; excluded from pin-drift reporting (ratchet baseline, same idea as the mypy baseline). |
 | `periodic.ci_monitor.log_max_bytes` | `MILL_CI_LOG_MAX_BYTES` | `65536` | Max bytes fetched per CI job log |
 | `periodic.diagnostic.target_repo_id` | `MILL_DIAGNOSTIC_TARGET_REPO_ID` | `robotsix-mill` | Board the diagnostic agent routes activity to; single-repo fallback when the monitored list is empty |

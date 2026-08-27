@@ -351,6 +351,7 @@
         "trace_review_tool_request_limit": 15,
         "triage_boilerplate_interval_seconds": 604800,
         "triage_request_limit": 8,
+        "upstream_ci_recovery_interval_seconds": 600,
         "web_fetch_max_bytes": 2000000,
         "web_fetch_max_calls": 15,
         "web_fetch_max_text_bytes": 40000,

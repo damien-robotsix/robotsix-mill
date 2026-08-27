@@ -534,6 +534,40 @@ class PollLoopsMixin(_WorkerBase):
                 log.exception("timeout-escalation poll failed")
             await asyncio.sleep(interval)
 
+    async def _upstream_ci_recovery_poll_loop(self) -> None:
+        """Periodic upstream-CI recovery: resumes tickets that ci_fix parked
+        because the target branch was red, once that branch is green again.
+
+        Pure forge status reads + state transitions — no AI agent, no
+        Langfuse tracing.  Global pass (non-per-repo): it scans every
+        board's BLOCKED tickets and only touches the ones carrying the
+        upstream-CI block marker.
+        """
+        settings = self.ctx.settings
+        interval = max(60, settings.upstream_ci_recovery_interval_seconds)
+        initial = self._initial_delay("upstream-ci-recovery", interval)
+        await asyncio.sleep(initial)
+        while True:
+            try:
+                from ...agents.runners.upstream_ci_recovery_runner import (
+                    run_upstream_ci_recovery,
+                )
+
+                result = await asyncio.to_thread(
+                    run_upstream_ci_recovery,
+                    settings,
+                )
+                log.info(
+                    "upstream-ci-recovery: pass complete — resumed=%d "
+                    "still_parked=%d skipped=%d",
+                    result.get("resumed", 0),
+                    result.get("still_parked", 0),
+                    result.get("skipped", 0),
+                )
+            except Exception:
+                log.exception("upstream-ci-recovery poll failed")
+            await asyncio.sleep(interval)
+
     async def _config_pin_drift_poll_loop(self) -> None:
         """Periodic config pin-drift check: reports pinned settings that
         shadow a changed code default.

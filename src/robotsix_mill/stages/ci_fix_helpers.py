@@ -690,12 +690,21 @@ class _FailingContext(NamedTuple):
     failing_run_urls: list[str] = []
 
 
+# Stable prefix of the block note emitted when a PR's CI failure is
+# pre-existing on the target branch.  ``upstream_ci_recovery_runner`` keys
+# on this literal to find parked tickets, so it must not be reworded
+# without updating the runner (and vice-versa).
+UPSTREAM_CI_BLOCK_MARKER = "Upstream CI breakage detected"
+
+
 def _check_upstream_ci_breakage(
     ticket_id: str,
     settings: Any,
     repo_config: Any,
     repo_dir: str,
     failing: list[dict[str, Any]],
+    *,
+    ticket_source: str | None = None,
 ) -> str | None:
     """Check whether the PR's CI failures also exist on the target branch.
 
@@ -709,10 +718,31 @@ def _check_upstream_ci_breakage(
     ``None`` when the target branch is green, has no CI configured, or
     the target SHA cannot be resolved (in which case we fall through to
     the normal ci-fix path).
+
+    A ticket whose *ticket_source* is ``"ci"`` is exempt: it was filed BY
+    the target-branch CI monitor to fix that very breakage, so parking it
+    on "fix the target branch first" is a deadlock — nothing else will.
+    The ``CI failure: Release image on main`` ticket on robotsix-chat
+    (2026-08-26) sat BLOCKED behind the failure it existed to fix.
+
+    Tickets that ARE parked here are resumed automatically by
+    ``agents/runners/upstream_ci_recovery_runner`` once the target branch
+    is green again; the block note carries :data:`UPSTREAM_CI_BLOCK_MARKER`
+    so that pass can find them.
     """
     from ..config.repos import target_branch_for
     from ..forge import get_forge
     from ..vcs import git_ops
+
+    # 0. A CI-monitor ticket exists to repair the target branch; the
+    #    upstream guard must never turn it away from its own job.
+    if ticket_source is not None and str(ticket_source) == "ci":
+        _log.info(
+            "%s: source=ci ticket targets the upstream breakage itself — "
+            "skipping upstream CI breakage check",
+            ticket_id,
+        )
+        return None
 
     # 1. Get the target branch name.
     target = target_branch_for(settings, repo_config)
@@ -781,9 +811,10 @@ def _check_upstream_ci_breakage(
     common_list = sorted(common)
     check_names = ", ".join(common_list)
     return (
-        f"Upstream CI breakage detected: the following check(s) are failing "
+        f"{UPSTREAM_CI_BLOCK_MARKER}: the following check(s) are failing "
         f"on both this PR **and** the target branch `{target}` "
         f"({target_sha[:8]}): {check_names}. "
         f"The target branch CI is broken — this PR's changes are not the cause. "
-        f"Fix the target branch CI first, then resume this ticket."
+        f"This ticket resumes automatically once `{target}` is green again "
+        f"(upstream_ci_recovery pass); resume it by hand to retry sooner."
     )

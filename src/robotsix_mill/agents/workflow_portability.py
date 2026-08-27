@@ -63,6 +63,7 @@ _BUILTIN_KINDS: dict[str, str] = {
     "meta": "global_only",
     "run_health": "global_only",
     "timeout_escalation": "global_only",
+    "upstream_ci_recovery": "global_only",
     "trace_health": "global_only",
 }
 
