@@ -1,0 +1,1 @@
+The implement summary verifier no longer flags a file named by bare basename ("Created 18 tests in test_utils.py") as hallucinated when a file of that name is among the branch's changes; it used to resolve the name against the repo root, re-prompt, then block the ticket over a file that was on disk.

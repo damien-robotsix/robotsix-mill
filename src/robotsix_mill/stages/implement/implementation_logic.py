@@ -207,6 +207,20 @@ def _verify_summary_claims(
     for raw in claimed_paths:
         file_path = repo_dir / raw
         if not file_path.exists():
+            # A bare file name ("Created 18 tests in test_utils.py") is
+            # how the agent usually refers to a file it just wrote; it is
+            # not a claim that the file sits at the repo root.  Resolve it
+            # against the files this branch actually touched (committed,
+            # staged, or untracked) before calling it hallucinated —
+            # robotsix-invest dea0 blocked twice over
+            # ``tests/robotsix_invest/test_utils.py`` that was on disk.
+            if "/" not in raw and "\\" not in raw:
+                if changed_files is None:
+                    changed_files = _collect_changed_files(repo_dir, target_branch)
+                if changed_files and any(
+                    Path(changed).name == raw for changed in changed_files
+                ):
+                    continue
             missing.append(raw)
         elif file_path.is_dir():
             # A directory is never named in ``--name-only`` output, so the
