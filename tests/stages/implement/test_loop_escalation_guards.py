@@ -101,7 +101,7 @@ def test_feedback_injected_after_review_bounce(ctx_factory, tmp_path):
     review→ready re-spawn — the reviewer's corrective comments must
     reach the next implement prompt (b92d spec item a)."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true")
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
     t = _ticket(ctx)
     ctx.service.set_review_rounds(t.id, 1)
     c = ctx.service.add_comment(
@@ -129,7 +129,7 @@ def test_changelog_only_review_respawn_blocks_in_preflight(
     the reviewer's gap list in the note — no spawn consumed."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="10",
@@ -182,7 +182,7 @@ def test_changelog_tip_over_real_code_not_blocked(ctx_factory, tmp_path, monkeyp
     that added one .feature.md)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="10",
@@ -239,7 +239,7 @@ def test_operator_note_alone_does_not_arm_changelog_guard(
     guard it was meant to clear."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="10",
@@ -280,7 +280,7 @@ def test_resume_blocked_note_releases_changelog_guard_once(
     was granted for, and the guard re-arms once HEAD moves."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="10",
@@ -341,7 +341,7 @@ def test_real_code_respawn_not_blocked_by_changelog_guard(
     passes preflight — the guard only fires on changelog-only diffs."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="10",

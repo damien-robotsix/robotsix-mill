@@ -172,8 +172,8 @@ def test_clone_token_uses_gitlab_token_for_gitlab_repo(monkeypatch):
     )
 
     s = Settings(
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/owner/repo.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/owner/repo.git",
     )
     assert _clone_token(s, _gitlab_repo_config()) == "glpat_fake"
 
@@ -195,8 +195,8 @@ def test_clone_token_uses_github_token_for_github_repo(monkeypatch):
     )
 
     s = Settings(
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/owner/repo.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/owner/repo.git",
     )
     assert _clone_token(s, _github_repo_config()) == "ghp_fake"
 
@@ -213,8 +213,8 @@ def test_clone_token_gitlab_missing_token_returns_none(monkeypatch):
     )
 
     s = Settings(
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/owner/repo.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/owner/repo.git",
     )
     assert _clone_token(s, _gitlab_repo_config()) is None
 
@@ -255,8 +255,8 @@ def test_run_periodic_pass_clone_failure_sets_repo_dir_none(tmp_path, monkeypatc
     passed to run_agent_pass and a valid result dataclass is returned."""
     settings = _make_settings(
         tmp_path,
-        FORGE_REMOTE_URL="https://example.test/r.git",
-        FORGE_TARGET_BRANCH="main",
+        forge_remote_url="https://example.test/r.git",
+        forge_target_branch="main",
     )
 
     def fake_clone(url, dest, branch, token, **kwargs):
@@ -302,8 +302,8 @@ def test_run_periodic_pass_clone_failure_logs_warning(tmp_path, monkeypatch, cap
     """Clone failure emits a warning-level log with 'clone failed'."""
     settings = _make_settings(
         tmp_path,
-        FORGE_REMOTE_URL="https://example.test/r.git",
-        FORGE_TARGET_BRANCH="main",
+        forge_remote_url="https://example.test/r.git",
+        forge_target_branch="main",
     )
 
     def fake_clone(url, dest, branch, token, **kwargs):
@@ -333,8 +333,8 @@ def test_run_periodic_pass_uses_clone_token_fn_when_configured(tmp_path, monkeyp
     is called (not _forge_token). Uses audit config as the test subject."""
     settings = _make_settings(
         tmp_path,
-        FORGE_REMOTE_URL="https://example.test/r.git",
-        FORGE_TARGET_BRANCH="main",
+        forge_remote_url="https://example.test/r.git",
+        forge_target_branch="main",
     )
 
     def fake_clone(url, dest, branch, token, **kwargs):
@@ -377,8 +377,8 @@ def test_run_periodic_pass_uses_forge_token_when_clone_token_fn_none(
     _forge_token is called (which delegates to get_secrets)."""
     settings = _make_settings(
         tmp_path,
-        FORGE_REMOTE_URL="https://example.test/r.git",
-        FORGE_TARGET_BRANCH="main",
+        forge_remote_url="https://example.test/r.git",
+        forge_target_branch="main",
     )
 
     def fake_clone(url, dest, branch, token, **kwargs):
@@ -538,7 +538,7 @@ def test_run_periodic_pass_imports_agent_module_lazily(tmp_path, monkeypatch):
 def test_run_periodic_pass_no_forge_remote_skips_clone(tmp_path, monkeypatch):
     """When no forge_remote_url is configured, repo_dir=None and no clone
     is attempted."""
-    settings = _make_settings(tmp_path)  # no FORGE_REMOTE_URL
+    settings = _make_settings(tmp_path)  # no forge_remote_url
 
     clone_attempted = []
 
@@ -579,8 +579,8 @@ def test_run_periodic_pass_requires_repo_short_circuits_on_clone_failure(
     no-op result (empty drafts, correct session_id) is returned."""
     settings = _make_settings(
         tmp_path,
-        FORGE_REMOTE_URL="https://example.test/r.git",
-        FORGE_TARGET_BRANCH="main",
+        forge_remote_url="https://example.test/r.git",
+        forge_target_branch="main",
     )
 
     def fake_clone(url, dest, branch, token, **kwargs):
@@ -621,8 +621,8 @@ def test_run_periodic_pass_requires_repo_short_circuit_logs_warning(
     """The module_curator short-circuit logs a warning naming the pass."""
     settings = _make_settings(
         tmp_path,
-        FORGE_REMOTE_URL="https://example.test/r.git",
-        FORGE_TARGET_BRANCH="main",
+        forge_remote_url="https://example.test/r.git",
+        forge_target_branch="main",
     )
 
     def fake_clone(url, dest, branch, token, **kwargs):

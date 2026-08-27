@@ -68,7 +68,7 @@ part: the sandbox is a **sibling** container, not a nested one.
 │  │  mounts:                                                    │  │
 │  │    ./.data              → /data       (tickets + clones)    │  │
 │  │    /var/run/docker.sock → talks to the HOST daemon          │  │
-│  │  implement stage: git clone <FORGE_REMOTE_URL>              │  │
+│  │  implement stage: git clone <forge_remote_url>              │  │
 │  │     → /data/workspaces/<id>/repo   (a SEPARATE copy)        │  │
 │  │                                                             │  │
 │  │  to run any command it asks the HOST daemon (via socket):   │  │
@@ -108,7 +108,7 @@ part: the sandbox is a **sibling** container, not a nested one.
    - **mill image code**: baked in at build (`COPY . /app`); runs the
      orchestrator only.
    - **Per-ticket clone** (`./.data/workspaces/<id>/repo`): a fresh
-     `git clone` of `FORGE_REMOTE_URL`; the *only* code the agent edits.
+     `git clone` of `forge_remote_url`; the *only* code the agent edits.
      It is the same bytes as host `./.data/workspaces/<id>/repo`, so you
      can inspect it directly.
 

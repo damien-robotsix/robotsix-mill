@@ -118,8 +118,8 @@ def test_detects_new_failure_and_creates_draft(tmp_path, monkeypatch):
     """One failing run not in dedup state → service.create called with source='ci'."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     _make_fake_forge(
@@ -183,8 +183,8 @@ def test_dedup_skips_already_seen_failure(tmp_path, monkeypatch):
     """State file already has (workflow_id, head_sha) → no draft created."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     _make_fake_forge(
@@ -236,8 +236,8 @@ def test_dedup_key_is_workflow_id_and_head_sha(tmp_path, monkeypatch):
     """Different head_sha with same workflow_id → treated as new failure."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     _make_fake_forge(
@@ -289,8 +289,8 @@ def test_prunes_old_entries_from_state(tmp_path, monkeypatch):
     """Entries older than 30 days are removed on poll."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     _make_fake_forge(monkeypatch, runs=[])
@@ -338,8 +338,8 @@ def test_successful_run_not_filed(tmp_path, monkeypatch):
     """conclusion == 'success' → no draft."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     _make_fake_forge(
@@ -389,8 +389,8 @@ def test_pending_run_not_filed(tmp_path, monkeypatch):
     """conclusion == None (in progress) → no draft."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     _make_fake_forge(
@@ -440,8 +440,8 @@ def test_includes_job_logs_in_draft_body(tmp_path, monkeypatch):
     """Draft body contains the fetched job log text."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     _make_fake_forge(
@@ -503,8 +503,8 @@ def test_monitor_skips_when_disabled_per_repo(tmp_path, monkeypatch):
             ci_monitor_enabled=False,
             ci_monitor_interval_seconds=86400,
         ),
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     # CI monitor is not enabled for any repo — start() should not
@@ -533,9 +533,9 @@ def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
 
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
+        forge_kind="github",
         FORGE_TOKEN="t",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_remote_url="https://github.com/o/r.git",
     )
     # check_status returns failure.
     monkeypatch.setattr(
@@ -682,8 +682,8 @@ def test_consolidates_recurrence_into_renamed_canonical(tmp_path, monkeypatch):
     """A new-commit recurrence folds into a renamed canonical via a comment."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     target = target_branch_for(ctx.settings, ctx.repo_config)
@@ -740,8 +740,8 @@ def test_aged_canonical_still_consolidates(tmp_path, monkeypatch):
     boundary."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     target = target_branch_for(ctx.settings, ctx.repo_config)
@@ -797,8 +797,8 @@ def test_comment_refreshes_window_across_recurrences(tmp_path, monkeypatch):
     """
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     target = target_branch_for(ctx.settings, ctx.repo_config)
@@ -866,8 +866,8 @@ def test_content_dedup_same_fingerprint_consolidates(tmp_path, monkeypatch):
     fingerprint but different workflow → label match consolidates."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     forge = _make_fake_forge(monkeypatch, logs="error: division by zero\n")
@@ -929,8 +929,8 @@ def test_content_dedup_different_fingerprint_new_ticket(tmp_path, monkeypatch):
     different error content (fingerprint B) creates a second ticket."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     forge = _make_fake_forge(monkeypatch, logs="error: division by zero\n")
@@ -1020,8 +1020,8 @@ def test_log_fetch_error_defers_then_files_with_error_note(tmp_path, monkeypatch
 
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     forge = _make_fake_forge(
@@ -1085,8 +1085,8 @@ def test_ci_monitor_skips_repo_when_skip_ci_true(tmp_path, monkeypatch):
     the CI monitor skips it entirely — no poll, no tickets filed."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     forge = _make_fake_forge(
@@ -1149,8 +1149,8 @@ def test_ci_monitor_polls_repo_when_skip_ci_false(tmp_path, monkeypatch):
     """When a repo has skip_ci=False, the CI monitor polls it normally."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     _make_fake_forge(
@@ -1211,8 +1211,8 @@ def test_ci_monitor_polls_repo_when_no_config_clone(tmp_path, monkeypatch):
     load_repo_skip_ci returns False and the repo is polled normally."""
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     _make_fake_forge(
@@ -1273,8 +1273,8 @@ def test_list_fetch_outage_is_clean_skip(tmp_path, monkeypatch, caplog):
 
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     _make_fake_forge(
@@ -1318,8 +1318,8 @@ def test_transient_log_fetch_does_not_consume_deferral_budget(tmp_path, monkeypa
 
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     forge = _make_fake_forge(
@@ -1379,8 +1379,8 @@ def test_recovery_re_verifies_live(tmp_path, monkeypatch):
 
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     forge = _make_fake_forge(
@@ -1432,8 +1432,8 @@ def test_backoff_is_jittered_and_capped(tmp_path, monkeypatch):
 
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     # Use a genuine (non-network) error so retries happen.
@@ -1516,8 +1516,8 @@ def test_is_network_down_error_called_from_monitor(tmp_path, monkeypatch):
 
     ctx = _ctx(
         tmp_path,
-        FORGE_KIND="github",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
         FORGE_TOKEN="tok",
     )
     _make_fake_forge(

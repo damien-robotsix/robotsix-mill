@@ -24,7 +24,7 @@ def _ctx(tmp_path: Path, **env_overrides):
         "data_dir": str(tmp_path / "data"),
         "require_approval": False,
         "retrospect_spawn_drafts": False,
-        "FORGE_KIND": "none",
+        "forge_kind": "none",
     }
     env.update(env_overrides)
     s = Settings(**env)

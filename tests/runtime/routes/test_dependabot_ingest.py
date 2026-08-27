@@ -20,8 +20,8 @@ def _ctx(tmp_path, **env):
     db.reset_engine()
     env.setdefault("data_dir", str(tmp_path / "data"))
     env.setdefault("require_approval", "false")
-    env.setdefault("FORGE_KIND", "github")
-    env.setdefault("FORGE_REMOTE_URL", "https://github.com/o/r.git")
+    env.setdefault("forge_kind", "github")
+    env.setdefault("forge_remote_url", "https://github.com/o/r.git")
     env.setdefault("FORGE_TOKEN", "tok")
     ft = env.pop("FORGE_TOKEN", None)
 

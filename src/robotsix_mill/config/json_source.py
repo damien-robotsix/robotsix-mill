@@ -35,18 +35,38 @@ class JsonSettingsSource(PydanticBaseSettingsSource):
     def __call__(self) -> dict[str, Any]:
         """Return a flat dict of settings values keyed by field alias.
 
-        Only keys matching a model field (by alias or by name) are returned.
+        Only keys matching a model field (by alias, validation_alias, or by
+        name) are returned.  ``load_settings_block()`` already renames legacy
+        UPPERCASE config keys to lowercase, so the primary lookup is by
+        field name; the alias/validation_alias fallback catches env-var-style
+        keys that slipped through (e.g. from tests or manual config edits).
         """
+        from pydantic import AliasChoices
+
         from .loader import load_settings_block
 
         settings_data = load_settings_block()
         result: dict[str, Any] = {}
-        for field_name, field_info in self.settings_cls.model_fields.items():
-            key = field_info.alias if field_info.alias is not None else field_name
-            if key in settings_data:
-                result[key] = settings_data[key]
-            elif field_name != key and field_name in settings_data:
-                # Present under the field name; promote to the alias so
-                # populate_by_name isn't required.
-                result[key] = settings_data[field_name]
+
+        # Build a reverse lookup: every known key variant (alias,
+        # validation_alias choices, field_name) → canonical field_name.
+        known: dict[str, str] = {}
+        for fname, finfo in self.settings_cls.model_fields.items():
+            known[fname] = fname
+            if finfo.alias:
+                known[finfo.alias] = fname
+            va = finfo.validation_alias
+            if isinstance(va, AliasChoices):
+                for choice in va.choices:
+                    known[str(choice)] = fname
+            elif va is not None:
+                known[str(va)] = fname
+
+        for key, value in settings_data.items():
+            canonical = known.get(key)
+            if canonical is not None:
+                # Later values win if the canonical field wasn't set yet,
+                # or if the key IS the canonical name.
+                result[canonical] = value
+
         return result

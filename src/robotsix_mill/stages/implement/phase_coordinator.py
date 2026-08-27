@@ -162,7 +162,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             else:
                 remote_url = _resolve_remote_url(s, ctx.repo_config)
             if not remote_url:
-                return Outcome(State.BLOCKED, "FORGE_REMOTE_URL not configured")
+                return Outcome(State.BLOCKED, "forge_remote_url not configured")
 
             # Phase 1: clone and branch (or resume)
             result = self._clone_and_branch(ctx, ticket, s)

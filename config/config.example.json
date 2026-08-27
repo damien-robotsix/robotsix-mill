@@ -24,10 +24,10 @@
         "sandbox_push_token": "SECRET"
     },
     "settings": {
-        "FORGE_AUTH": "token",
-        "FORGE_KIND": "none",
-        "FORGE_REMOTE_URL": null,
-        "FORGE_TARGET_BRANCH": "main",
+        "forge_auth": "token",
+        "forge_kind": "none",
+        "forge_remote_url": null,
+        "forge_target_branch": "main",
         "agent_check_interval_seconds": 604800,
         "allow_runtime_repo_registration": false,
         "api_host": "0.0.0.0",

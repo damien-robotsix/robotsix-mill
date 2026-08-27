@@ -75,9 +75,9 @@ def _gh(tmp_path, **extra):
         extra["repo_auto_merge_enabled"] = True
     return _ctx(
         tmp_path,
-        FORGE_KIND="github",
+        forge_kind="github",
         FORGE_TOKEN="t",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_remote_url="https://github.com/o/r.git",
         **extra,
     )
 

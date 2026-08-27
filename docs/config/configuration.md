@@ -114,9 +114,9 @@ Put deployment values directly in `config/config.json` (or point
   "settings": {
     "MILL_MAX_GLOBAL_CONCURRENCY": 2,
     "MILL_MAX_SPEND_USD_PER_TICKET": 5.0,
-    "FORGE_KIND": "github",
-    "FORGE_REMOTE_URL": "https://github.com/your-org/your-repo",
-    "FORGE_TARGET_BRANCH": "main",
+    "forge_kind": "github",
+    "forge_remote_url": "https://github.com/your-org/your-repo",
+    "forge_target_branch": "main",
     "MILL_TEST_COMMAND": "pytest -q --timeout=300"
   }
 }
@@ -510,10 +510,10 @@ the `claude` CLI in the container). These knobs govern that path:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
-| `forge.kind` | `FORGE_KIND` | `none` | Forge platform: `github`, `gitlab`, `auto`, or `none`. `auto` detects the kind from the remote URL hostname (`github.com` → GitHub, `gitlab.com` → GitLab); custom domains raise an error and require an explicit setting. |
-| `forge.remote_url` | `FORGE_REMOTE_URL` | `None` | Remote URL for clone + push |
-| `forge.target_branch` | `FORGE_TARGET_BRANCH` | `main` | Target branch for PRs |
-| `forge.auth_mode` | `FORGE_AUTH` | `token` | Auth mode: `token` (PAT) or `app` (GitHub App). Under `app` mode, `github_push_token()` mints a fresh `contents: write`-scoped installation token per push — no PAT is stored or reused for git push operations. |
+| `forge.kind` | `MILL_FORGE_KIND` | `none` | Forge platform: `github`, `gitlab`, `auto`, or `none`. `auto` detects the kind from the remote URL hostname (`github.com` → GitHub, `gitlab.com` → GitLab); custom domains raise an error and require an explicit setting. Legacy env var `FORGE_KIND` is still accepted. |
+| `forge.remote_url` | `MILL_FORGE_REMOTE_URL` | `None` | Remote URL for clone + push. Legacy env var `FORGE_REMOTE_URL` is still accepted. |
+| `forge.target_branch` | `MILL_FORGE_TARGET_BRANCH` | `main` | Target branch for PRs. Legacy env var `FORGE_TARGET_BRANCH` is still accepted. |
+| `forge.auth_mode` | `MILL_FORGE_AUTH` | `token` | Auth mode: `token` (PAT) or `app` (GitHub App). Under `app` mode, `github_push_token()` mints a fresh `contents: write`-scoped installation token per push — no PAT is stored or reused for git push operations. Legacy env var `FORGE_AUTH` is still accepted. |
 | `forge.github_api_url` | `MILL_GITHUB_API_URL` | `https://api.github.com` | GitHub API base URL (override for GitHub Enterprise) |
 | `forge.gitlab_api_url` | `MILL_GITLAB_API_URL` | `https://gitlab.com/api/v4` | GitLab API base URL (override for self-hosted GitLab) |
 | `core.enable_repo_creation` | `MILL_ENABLE_REPO_CREATION` | `false` | Allow the new-repo meta flow to create repositories via the forge API |
@@ -1030,7 +1030,7 @@ unset.
 | `openrouter_management_key` | — | OpenRouter management API key for credit balance checks (`GET /api/v1/activity`). Separate from the inference key; leave blank to skip OpenRouter-side fetching. |
 | `forge_token` | `FORGE_TOKEN` | PAT for forge authentication |
 | `forge_repo_create_token` | — | Fine-grained PAT used ONLY for repo creation. Falls back to `forge_token` if unset. |
-| `github_app_id` | `GITHUB_APP_ID` | GitHub App ID (when `FORGE_AUTH=app`) |
+| `github_app_id` | `GITHUB_APP_ID` | GitHub App ID (when `forge_auth=app`) |
 | `github_app_private_key` | `GITHUB_APP_PRIVATE_KEY` | GitHub App private key (inline PEM, newlines as `\n`) |
 | `github_app_private_key_path` | `GITHUB_APP_PRIVATE_KEY_PATH` | Alternative: host path to GitHub App private-key `.pem` file |
 | `langfuse_public_key`¹ | — | Langfuse public key (configured via the `secrets:` block of `config/config.json`; read by `Secrets` model and stamped onto every `RepoConfig` at startup) |
@@ -1138,7 +1138,7 @@ in `config/config.example.json`.
 | YAML key (in repos:) | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `repos.<id>.board_id` | yes | — | Board identifier for per-repo board isolation |
-| `repos.<id>.forge_remote_url` | no | `FORGE_REMOTE_URL` | Per-repo forge remote URL for push/PR/merge operations |
+| `repos.<id>.forge_remote_url` | no | `forge_remote_url` | Per-repo forge remote URL for push/PR/merge operations |
 | `repos.<id>.working_branch` | no | — | Per-repo target branch for clone/baseline/deliver operations. When set, overrides the global `forge_target_branch`. Use this for repos whose default branch is not `main` (e.g. `rolling`, `lyrical`, `develop`). Automatically populated by member-sync from the manifest `version` field. |
 
 

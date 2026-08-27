@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import AliasChoices, BaseModel, Field, SecretStr
 
 
 class _CoreSettings(BaseModel):
@@ -755,17 +755,17 @@ class _CoreSettings(BaseModel):
     # --- forge delivery (only used by the deliver stage) ---
     forge_kind: Literal["github", "gitlab", "none", "auto"] = Field(
         default="none",
-        alias="FORGE_KIND",
+        validation_alias=AliasChoices("forge_kind", "FORGE_KIND"),
         description="Forge backend: github, gitlab, none, or auto (detected from remote URL).",
     )
     forge_remote_url: str | None = Field(
         default=None,
-        alias="FORGE_REMOTE_URL",
+        validation_alias=AliasChoices("forge_remote_url", "FORGE_REMOTE_URL"),
         description="Git remote URL of the forge repository.",
     )
     forge_target_branch: str = Field(
         default="main",
-        alias="FORGE_TARGET_BRANCH",
+        validation_alias=AliasChoices("forge_target_branch", "FORGE_TARGET_BRANCH"),
         description="Default target branch for PRs.",
     )
     # token  = use forge_token from secrets block (PAT) directly.
@@ -773,7 +773,7 @@ class _CoreSettings(BaseModel):
     #          bot identity (<app-slug>[bot]) authors the PR.
     forge_auth: Literal["token", "app"] = Field(
         default="token",
-        alias="FORGE_AUTH",
+        validation_alias=AliasChoices("forge_auth", "FORGE_AUTH"),
         description="Forge authentication method: token (PAT) or app (GitHub App installation token).",
     )
     # GitHub API base (override for GitHub Enterprise).

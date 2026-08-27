@@ -65,9 +65,9 @@ def _implement_complete(ctx):
 def _gh(tmp_path, **extra):
     return _ctx(
         tmp_path,
-        FORGE_KIND="github",
+        forge_kind="github",
         FORGE_TOKEN="t",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_remote_url="https://github.com/o/r.git",
         **extra,
     )
 

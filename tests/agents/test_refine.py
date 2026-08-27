@@ -254,7 +254,7 @@ def test_empty_spec_and_empty_draft_gated_still_blocks(
 
 async def test_chains_draft_to_implement(ctx, service, monkeypatch):
     """Full wiring: emit -> refine -> ready -> implement. Implement is
-    real but no FORGE_REMOTE_URL, so the chain halts at BLOCKED there —
+    real but no forge_remote_url, so the chain halts at BLOCKED there —
     proving draft never needs a manual transition."""
     monkeypatch.setattr(
         refining, "run_refine_agent", lambda **_: _single("## Problem\nspec\n")
@@ -267,7 +267,7 @@ async def test_chains_draft_to_implement(ctx, service, monkeypatch):
     assert reloaded.state is State.BLOCKED
     states = [e.state for e in service.history(t.id)]
     assert State.READY in states  # refine ran and advanced it
-    assert "FORGE_REMOTE_URL" in service.history(t.id)[-1].note
+    assert "forge_remote_url" in service.history(t.id)[-1].note
 
 
 # --- approval gate tests ---

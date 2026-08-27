@@ -94,7 +94,7 @@ def get_forge(settings: Settings, repo_config: RepoConfig | None = None) -> Forg
         return GitHubForge(settings, repo_config=repo_config)
     if kind == "gitlab":
         return GitLabForge(settings, repo_config=repo_config)
-    raise RuntimeError(f"no forge configured (FORGE_KIND={kind!r}); cannot deliver")
+    raise RuntimeError(f"no forge configured (forge_kind={kind!r}); cannot deliver")
 ```
 
 When `repo_config` is provided, the adapter uses its
@@ -329,12 +329,12 @@ GitLab uses the `PRIVATE-TOKEN` header (not `Authorization: Bearer`).
 
 ### 4.1 Two modes
 
-| Mode | `FORGE_AUTH` value | Behaviour |
+| Mode | `forge_auth` value | Behaviour |
 |------|-------------------|-----------|
 | **Static token** | `token` (default) | Reads `Secrets.forge_token` directly.  Works for both GitHub (PAT) and GitLab (personal/project access token). |
 | **GitHub App** | `app` | Mints a short-lived GitHub App installation token via JWT → installation lookup → access token.  **GitHub-only** — GitLab has no App concept. |
 
-### 4.2 Static token (`FORGE_AUTH=token`)
+### 4.2 Static token (`forge_auth=token`)
 
 ```
 Settings.forge_auth = "token"
@@ -351,7 +351,7 @@ env var) exists in the Settings model but is **not** the runtime source
 
 If `forge_token` is empty, `github_token()` raises `RuntimeError`.
 
-### 4.3 GitHub App (`FORGE_AUTH=app`)
+### 4.3 GitHub App (`forge_auth=app`)
 
 ```
 Settings.forge_auth = "app"
@@ -449,9 +449,9 @@ All fields are in `src/robotsix_mill/config.py`, class `Settings`.
 
 | Field | Type | Default | Env/YAML alias | Purpose |
 |-------|------|---------|----------------|---------|
-| `forge_kind` | `Literal["github","gitlab","auto","none"]` | `"none"` | `FORGE_KIND` | Which forge adapter to use. `"none"` disables forge delivery entirely. `"auto"` detects the forge kind from the remote URL hostname (see §5.3). |
-| `forge_remote_url` | `str \| None` | `None` | `FORGE_REMOTE_URL` | Remote URL of the target repository (used for clone, push, and API calls). |
-| `forge_target_branch` | `str` | `"main"` | `FORGE_TARGET_BRANCH` | Target branch for PRs/MRs. |
+| `forge_kind` | `Literal["github","gitlab","auto","none"]` | `"none"` | `forge_kind` | Which forge adapter to use. `"none"` disables forge delivery entirely. `"auto"` detects the forge kind from the remote URL hostname (see §5.3). |
+| `forge_remote_url` | `str \| None` | `None` | `forge_remote_url` | Remote URL of the target repository (used for clone, push, and API calls). |
+| `forge_target_branch` | `str` | `"main"` | `forge_target_branch` | Target branch for PRs/MRs. |
 | `forge_auth` | `Literal["token","app"]` | `"token"` | `FORGE_AUTH` | Auth mode: `"token"` for static PAT, `"app"` for GitHub App JWT flow. |
 | `forge_token` | `str \| None` | `None` | `FORGE_TOKEN` | Static forge token (env-var override; runtime source is `Secrets.forge_token`). |
 | `github_app_id` | `str \| None` | `None` | `GITHUB_APP_ID` | GitHub App ID (env-var override; runtime source is `Secrets.github_app_id`). |
@@ -477,7 +477,7 @@ Singleton, accessed via `get_secrets()`.
 |-------|------|---------|---------|
 | `forge_token` | `str \| None` | `None` | Static forge access token (PAT for GitHub, personal/project token for GitLab). |
 | `forge_repo_create_token` | `str \| None` | `None` | Separate PAT for `create_repo()` when the main token lacks sufficient scope. |
-| `github_app_id` | `str \| None` | `None` | GitHub App ID (needed for `FORGE_AUTH=app`). |
+| `github_app_id` | `str \| None` | `None` | GitHub App ID (needed for `forge_auth=app`). |
 | `github_app_private_key` | `str \| None` | `None` | GitHub App private key PEM text. |
 | `github_app_private_key_path` | `str \| None` | `None` | Path to the private key `.pem` file (may be in secrets or YAML). |
 
@@ -496,13 +496,13 @@ hostname to decide which forge adapter to use.
 - Host `github.com` → `"github"` (covers `https://github.com/...` and `git@github.com:...`)
 - Host `gitlab.com` → `"gitlab"` (covers `https://gitlab.com/...` and `git@gitlab.com:...`)
 - Any other host (GitHub Enterprise Server, self-hosted GitLab, etc.) → raises
-  `RuntimeError` with a message instructing the operator to set `FORGE_KIND`
+  `RuntimeError` with a message instructing the operator to set `forge_kind`
   explicitly.
 
 **Error case:** Custom domains are ambiguous — there is no way to
 distinguish a GitHub Enterprise Server instance from a self-hosted
 GitLab instance by hostname alone. The operator must set
-`FORGE_KIND=github` or `FORGE_KIND=gitlab` explicitly.
+`forge_kind=github` or `forge_kind=gitlab` explicitly.
 
 ### 5.4 `RepoConfig` field
 

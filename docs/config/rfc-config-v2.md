@@ -40,7 +40,7 @@ concrete problems:
    access control, no audit trail.
 
 3. **No semantic validation** — pydantic-settings provides type coercion only.
-   `MILL_MAX_CONCURRENCY=0` or `=-1` passes silently.  `FORGE_AUTH=app` with
+   `MILL_MAX_CONCURRENCY=0` or `=-1` passes silently.  `forge_auth=app` with
    `GITHUB_APP_ID=None` fails deep in `forge/auth.py` at runtime, not at
    startup.  No range checks, no cross-field consistency, no format
    validation.
@@ -197,10 +197,10 @@ marked `→ secrets` are loaded from `config/secrets.yaml` into a separate
 
 | Env var | YAML key | Default | Note |
 |---|---|---|---|
-| `FORGE_KIND` | `forge.kind` | `none` | `github`, `gitlab`, or `none` |
-| `FORGE_REMOTE_URL` | `forge.remote_url` | `null` | |
-| `FORGE_TARGET_BRANCH` | `forge.target_branch` | `main` | |
-| `FORGE_AUTH` | `forge.auth_mode` | `token` | `token` or `app` |
+| `forge_kind` | `forge.kind` | `none` | `github`, `gitlab`, or `none` |
+| `forge_remote_url` | `forge.remote_url` | `null` | |
+| `forge_target_branch` | `forge.target_branch` | `main` | |
+| `forge_auth` | `forge.auth_mode` | `token` | `token` or `app` |
 | `MILL_GITHUB_API_URL` | `forge.github_api_url` | `https://api.github.com` | GitHub Enterprise override |
 | `MILL_GITLAB_API_URL` | `forge.gitlab_api_url` | `https://gitlab.com/api/v4` | Self-hosted GitLab override |
 | `GITHUB_APP_PRIVATE_KEY_PATH` | `forge.github_app_private_key_path` | `null` | Path (not secret); host-mounted `.pem` |
@@ -514,7 +514,7 @@ def forge_auth_requires_credentials(self) -> "Settings":
     if self.forge_auth == "app":
         if not self.forge_github_app_id and not self.forge_github_app_private_key_path:
             raise ValueError(
-                "FORGE_AUTH=app requires GITHUB_APP_ID and "
+                "forge_auth=app requires GITHUB_APP_ID and "
                 "GITHUB_APP_PRIVATE_KEY_PATH (or _PRIVATE_KEY in secrets)"
             )
     return self
@@ -523,7 +523,7 @@ def forge_auth_requires_credentials(self) -> "Settings":
 @model_validator(mode="after")
 def forge_remote_required(self) -> "Settings":
     if self.forge_kind in ("github", "gitlab") and not self.forge_remote_url:
-        raise ValueError(f"FORGE_KIND={self.forge_kind} requires FORGE_REMOTE_URL")
+        raise ValueError(f"forge_kind={self.forge_kind} requires forge_remote_url")
     return self
 ```
 

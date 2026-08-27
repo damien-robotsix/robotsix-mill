@@ -1,7 +1,7 @@
 """Deliver stage: DELIVERABLE -> IMPLEMENT_COMPLETE.
 
 Push the ticket's branch to the configured forge and open a PR/MR
-against ``FORGE_TARGET_BRANCH``. The forge adapter only does the API
+against ``forge_target_branch``. The forge adapter only does the API
 call; this stage owns the git push (it has the workspace clone).
 
 When ``MILL_PR_SUMMARY_ENABLED`` is true, the stage generates a
@@ -320,7 +320,7 @@ class DeliverStage(Stage):
         """Push the implemented branch to the remote forge and open (or update) a pull/merge request, transitioning the ticket toward review."""
         s = ctx.settings
         if s.forge_kind == "none":
-            return Outcome(State.BLOCKED, "FORGE_KIND not configured")
+            return Outcome(State.BLOCKED, "forge_kind not configured")
 
         # Global remote/token gate: in the multi-repo branch each repo
         # is re-resolved per entry, but we still need a valid forge
@@ -329,7 +329,7 @@ class DeliverStage(Stage):
         # single-repo error messages are unchanged.
         remote_url = _resolve_remote_url(s, ctx.repo_config)
         if not remote_url:
-            return Outcome(State.BLOCKED, "FORGE_REMOTE_URL not configured")
+            return Outcome(State.BLOCKED, "forge_remote_url not configured")
         try:
             github_token(
                 s, repo_config=ctx.repo_config

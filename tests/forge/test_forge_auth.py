@@ -53,8 +53,8 @@ def test_app_mode_requires_app_config(tmp_path):
     # has a chance to raise RuntimeError.
     from pydantic import ValidationError
 
-    with pytest.raises(ValidationError, match="FORGE_AUTH=app requires"):
-        S(tmp_path, FORGE_AUTH="app")
+    with pytest.raises(ValidationError, match="forge_auth=app requires"):
+        S(tmp_path, forge_auth="app")
 
 
 def test_app_mode_mints_and_caches(tmp_path, monkeypatch):
@@ -69,10 +69,10 @@ def test_app_mode_mints_and_caches(tmp_path, monkeypatch):
     monkeypatch.setattr(rga, "github_token", fake_github_token)
     s = S(
         tmp_path,
-        FORGE_AUTH="app",
+        forge_auth="app",
         GITHUB_APP_ID="123",
         GITHUB_APP_PRIVATE_KEY="KEY",
-        FORGE_REMOTE_URL="https://github.com/o/r.git",
+        forge_remote_url="https://github.com/o/r.git",
     )
     assert auth.github_token(s) == "ghs_minted"
     # Caching is handled by the library internally; the mill layer
@@ -177,10 +177,10 @@ def test_invalidate_github_token_clears_cache(tmp_path, monkeypatch):
 
     s = S(
         tmp_path,
-        FORGE_AUTH="app",
+        forge_auth="app",
         GITHUB_APP_ID="111",
         GITHUB_APP_PRIVATE_KEY="K1",
-        FORGE_REMOTE_URL="https://github.com/o1/r1.git",
+        forge_remote_url="https://github.com/o1/r1.git",
     )
     auth.invalidate_github_token(s)
     assert len(clear_calls) == 1

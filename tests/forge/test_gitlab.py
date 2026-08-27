@@ -30,8 +30,8 @@ def _set_secrets(**kw):
 
 def _settings(tmp_path, **kw):
     kw.setdefault("data_dir", str(tmp_path))
-    kw.setdefault("FORGE_KIND", "gitlab")
-    kw.setdefault("FORGE_REMOTE_URL", "https://gitlab.com/ns/project.git")
+    kw.setdefault("forge_kind", "gitlab")
+    kw.setdefault("forge_remote_url", "https://gitlab.com/ns/project.git")
     kw.setdefault("FORGE_TOKEN", "glpat-token")
     # Mirror forge_token into Secrets so get_secrets() works
     ft = kw.get("FORGE_TOKEN")

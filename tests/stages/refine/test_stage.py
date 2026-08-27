@@ -670,7 +670,7 @@ def test_clone_failure_escalates_to_blocked_with_history_note(ctx_factory, monke
     _handle_stage_error classifies the error and either retries
     (transient) or blocks (fatal). The stage itself no longer catches
     CalledProcessError — the worker owns the retry/block decision."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///nonexistent", require_approval="false")
+    ctx = ctx_factory(forge_remote_url="file:///nonexistent", require_approval="false")
     t = _ticket(ctx, body="Add endpoint")
 
     _apply_default_mocks(
@@ -749,7 +749,7 @@ def test_gitignored_file_map_blocks(ctx_factory, monkeypatch):
     ctx = ctx_factory(
         require_approval="false",
         refine_triage_enabled="false",
-        FORGE_REMOTE_URL="file:///fake-remote",
+        forge_remote_url="file:///fake-remote",
     )
     t = _ticket(ctx, title="Add Status.msg", body="Add a Status message interface")
 
@@ -775,7 +775,7 @@ def test_tracked_file_map_reaches_ready(ctx_factory, monkeypatch):
     ctx = ctx_factory(
         require_approval="false",
         refine_triage_enabled="false",
-        FORGE_REMOTE_URL="file:///fake-remote",
+        forge_remote_url="file:///fake-remote",
     )
     t = _ticket(ctx, title="Edit foo", body="Edit a normal source file")
 
@@ -2903,7 +2903,7 @@ def test_prepare_hook_failure_blocks_before_freshness_gate(
         _spy_freshness,
     )
     # Force a clone to exist so the prepare hook runs (when there's no
-    # FORGE_REMOTE_URL, _clone_or_resume returns None and the hook is
+    # forge_remote_url, _clone_or_resume returns None and the hook is
     # skipped — by design, tickets with no remote have nothing to clone).
     monkeypatch.setattr(
         refine_module.RefineStage,
@@ -3032,7 +3032,7 @@ def test_clone_failure_transient_reraises_for_worker_retry(ctx_factory, monkeypa
     """A TRANSIENT clone failure (DNS outage / forge 5xx) must escape the
     stage so the worker's retry / outage-parking handles it — blocking
     here is what mass-parked tickets in the 2026-06-12 network shutdown."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///nonexistent", require_approval="false")
+    ctx = ctx_factory(forge_remote_url="file:///nonexistent", require_approval="false")
     t = _ticket(ctx, body="Add endpoint")
 
     _apply_default_mocks(
@@ -3058,7 +3058,7 @@ def test_clone_failure_note_redacts_credentials(ctx_factory, monkeypatch):
     _handle_stage_error creates a note from str(error), which for
     CalledProcessError does NOT include stderr — so credentials in
     stderr are never leaked into the transition note."""
-    ctx = ctx_factory(FORGE_REMOTE_URL="file:///nonexistent", require_approval="false")
+    ctx = ctx_factory(forge_remote_url="file:///nonexistent", require_approval="false")
     t = _ticket(ctx, body="Add endpoint")
 
     _apply_default_mocks(
@@ -3128,7 +3128,7 @@ def test_clone_target_re_resolved_from_ticket_board_id_after_migration(
 
     # Build a StageContext whose repo_config is board A (the creation-time
     # board), but the ticket's board_id is board B (post-migration).
-    s = Settings(data_dir=str(tmp_path / "data"), FORGE_REMOTE_URL="")
+    s = Settings(data_dir=str(tmp_path / "data"), forge_remote_url="")
     _db.init_db(s, board_id="board-a")
     svc = TicketService(s, board_id="board-a")
     ctx = StageContext(
@@ -3197,7 +3197,7 @@ def test_clone_workspace_path_derived_from_migrated_board_not_stale_ws(
     monkeypatch.setattr("robotsix_mill.config.get_repos_config", lambda: registry)
 
     # Build ws while ticket.board_id is STILL "board-a" (pre-migration state).
-    s = Settings(data_dir=str(tmp_path / "data"), FORGE_REMOTE_URL="")
+    s = Settings(data_dir=str(tmp_path / "data"), forge_remote_url="")
     _db.init_db(s, board_id="board-a")
     svc = TicketService(s, board_id="board-a")
     t = svc.create("Migrated ticket", "body")
@@ -3269,7 +3269,7 @@ def test_clone_or_resume_cross_repo_target_uses_fork_url_and_base_branch(
     registry = ReposRegistry(repos={"cross-repo": repo})
     monkeypatch.setattr("robotsix_mill.config.get_repos_config", lambda: registry)
 
-    s = Settings(data_dir=str(tmp_path / "data"), FORGE_REMOTE_URL="")
+    s = Settings(data_dir=str(tmp_path / "data"), forge_remote_url="")
     _db.init_db(s, board_id="board-cross")
     svc = TicketService(s, board_id="board-cross")
     ctx = StageContext(

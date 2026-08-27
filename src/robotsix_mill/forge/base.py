@@ -505,7 +505,7 @@ def _detect_forge_kind(remote_url: str) -> Literal["github", "gitlab"]:
     - ``gitlab.com`` host → ``"gitlab"``
 
     Custom domains (GHE, self-hosted GitLab, etc.) raise ``RuntimeError``
-    because they are ambiguous — the operator must set ``FORGE_KIND``
+    because they are ambiguous — the operator must set ``forge_kind``
     explicitly.
     """
     # Strip an optional "https://" prefix and any trailing "/" + ".git".
@@ -535,7 +535,7 @@ def _detect_forge_kind(remote_url: str) -> Literal["github", "gitlab"]:
 
     raise RuntimeError(
         f"cannot auto-detect forge kind from {remote_url!r}; "
-        "set FORGE_KIND explicitly (github or gitlab)"
+        "set forge_kind explicitly (github or gitlab)"
     )
 
 
@@ -581,4 +581,4 @@ def get_forge(settings: Settings, repo_config: RepoConfig | None = None) -> Forg
         from .gitlab import GitLabForge
 
         return GitLabForge(settings, repo_config=repo_config)
-    raise RuntimeError(f"no forge configured (FORGE_KIND={kind!r}); cannot deliver")
+    raise RuntimeError(f"no forge configured (forge_kind={kind!r}); cannot deliver")

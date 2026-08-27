@@ -163,7 +163,7 @@ class Settings(
         # Disable .env file loading — env vars only.
         env_file=None,
         # All non-aliased fields get MILL_ prefix (e.g. MILL_BC_CHECK_PERIODIC).
-        # Fields with explicit aliases (FORGE_AUTH, OPENROUTER_API_KEY, etc.)
+        # Fields with explicit aliases (forge_auth, OPENROUTER_API_KEY, etc.)
         # use their alias instead, unaffected by this prefix.
         env_prefix="MILL_",
     )
@@ -430,8 +430,8 @@ class Settings(
         # credential complaint.
         if self.forge_auth == "app" and self.forge_kind == "gitlab":
             raise ValueError(
-                "FORGE_AUTH=app is not supported with FORGE_KIND=gitlab; "
-                "use FORGE_AUTH=token and set FORGE_TOKEN to a GitLab PAT"
+                "forge_auth=app is not supported with forge_kind=gitlab; "
+                "use forge_auth=token and set FORGE_TOKEN to a GitLab PAT"
             )
 
         # forge_auth=app requires GitHub App credentials (from secrets block)
@@ -443,7 +443,7 @@ class Settings(
             has_key_path = bool(secrets.github_app_private_key_path)
             if not has_app_id and not has_key_path:
                 raise ValueError(
-                    "FORGE_AUTH=app requires at least one of github_app_id "
+                    "forge_auth=app requires at least one of github_app_id "
                     "or github_app_private_key_path to be set in secrets"
                 )
 

@@ -288,11 +288,11 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- forge ---
     (
         "forge_remote_url",
-        "FORGE_REMOTE_URL",
+        "forge_remote_url",
         "https://example.com/repo.git",
         "https://example.com/repo.git",
     ),
-    ("forge_target_branch", "FORGE_TARGET_BRANCH", "develop", "develop"),
+    ("forge_target_branch", "forge_target_branch", "develop", "develop"),
     (
         "github_api_url",
         "MILL_GITHUB_API_URL",

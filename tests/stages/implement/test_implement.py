@@ -246,7 +246,7 @@ def test_blocked_without_remote(ctx_factory):
     ctx = ctx_factory(test_command="true")
     out = ImplementStage().run(_ticket(ctx), ctx)
     assert out.next_state is State.BLOCKED
-    assert "FORGE_REMOTE_URL" in out.note
+    assert "forge_remote_url" in out.note
 
 
 def test_meta_ticket_builds_multi_repo_workspace(ctx_factory, tmp_path, monkeypatch):
@@ -364,7 +364,7 @@ def test_meta_ticket_blocks_when_triage_fails(ctx_factory, monkeypatch):
 def test_success_to_deliverable(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
     monkeypatch.setattr(
         coding, "run_implement_agent", _fake_agent({"feature.txt": "x"})
@@ -396,7 +396,7 @@ def test_no_changes_terminates_done_when_already_satisfied(
     BLOCKED (ticket 0976)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
     monkeypatch.setattr(coding, "run_implement_agent", _fake_agent(None))
     t = _ticket(ctx)
@@ -412,7 +412,7 @@ def test_spec_mandate_blocks_empty_diff_done(ctx_factory, tmp_path, monkeypatch)
     (regression for the empty-draft fast-path false positive)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
     monkeypatch.setattr(coding, "run_implement_agent", _fake_agent(None))
     t = _ticket(
@@ -435,7 +435,7 @@ def test_failing_gate_blocks_resumable(ctx_factory, tmp_path, monkeypatch):
     committed."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="false",  # gate always fails
         max_fix_iterations="2",  # keep the loop short
     )
@@ -501,7 +501,7 @@ def test_smoke_gate_runs_after_tests_pass_when_paths_match(
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",  # unit gate passes
         smoke_command="scripts/smoke.sh",  # smoke gate enabled
         review_enabled="false",
@@ -538,7 +538,7 @@ def test_smoke_gate_skipped_when_paths_do_not_match(ctx_factory, tmp_path, monke
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         smoke_command="scripts/smoke.sh",
         review_enabled="false",
@@ -578,7 +578,7 @@ def test_smoke_gate_lifts_board_screenshot_into_artifacts(
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         smoke_command="scripts/smoke.sh",  # smoke gate enabled (paths empty ⇒ runs)
         review_enabled="false",
@@ -635,7 +635,7 @@ def test_env_error_short_circuits_within_two_cycles(ctx_factory, tmp_path, monke
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="yamllint --strict .",
         max_fix_iterations="8",  # high → prove the breaker fires early
     )
@@ -677,7 +677,7 @@ def test_identical_diagnosis_three_cycles_short_circuits(
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="false",
         max_fix_iterations="8",
     )
@@ -714,7 +714,7 @@ def _commits(repo):
 def test_budget_error_blocks_resumable_with_wip(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
 
     def _run(
@@ -765,7 +765,7 @@ def test_resume_reruns_coordinator_without_reclone(ctx_factory, tmp_path, monkey
     crucially do NOT re-clone — the prior WIP branch is reused."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
     n = {"i": 0}
 
@@ -880,7 +880,7 @@ def test_fresh_clone_rebases_onto_new_remote_commit(ctx_factory, tmp_path, monke
     fname = _add_commit_to_bare_remote(remote, tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -936,7 +936,7 @@ def test_resume_rebases_onto_new_remote_commit(ctx_factory, tmp_path, monkeypatc
     sees the new file."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -1005,7 +1005,7 @@ def test_rebase_conflict_blocks_on_resume(ctx_factory, tmp_path, monkeypatch):
     rebase failure. The workspace is left intact for operator inspection."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -1073,7 +1073,7 @@ def test_rebase_failure_on_fresh_clone_blocks(ctx_factory, tmp_path, monkeypatch
     the stage returns REBASING with a note about rebase failure."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -1134,7 +1134,7 @@ def test_unmet_dep_noops_at_ready(ctx_factory, tmp_path, monkeypatch):
     """Implement stage returns READY (no-op) when deps are unmet."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
 
     # Create the dependency ticket (in DRAFT — not terminal)
@@ -1187,7 +1187,7 @@ def test_dep_satisfied_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
     """Implement stage proceeds to DELIVERABLE when dep is CLOSED."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
 
     # Create and close the dependency
@@ -1219,7 +1219,7 @@ def test_missing_dep_id_implement_proceeds(ctx_factory, tmp_path, monkeypatch):
     """Implement stage proceeds when a dep ID doesn't exist (treated satisfied)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
 
     t = ctx.service.create(
@@ -1243,7 +1243,7 @@ def test_no_deps_implement_proceeds_normally(ctx_factory, tmp_path, monkeypatch)
     """Tickets without depends_on have zero behavioral change."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
 
     t = _ticket(ctx)  # creates ticket without depends_on
@@ -1263,7 +1263,7 @@ def test_success_to_code_review_when_review_enabled(ctx_factory, tmp_path, monke
     """Pipeline flip: implement routes to CODE_REVIEW when review_enabled is true."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="true",
     )
@@ -1286,7 +1286,7 @@ def test_epic_context_prepended_to_spec(ctx_factory, tmp_path, monkeypatch):
     run_implement_agent starts with the epic context wrapper."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",  # this test asserts the no-review path
     )
@@ -1349,7 +1349,7 @@ def test_epic_context_not_injected_without_epic_parent(
     """Ticket without a parent: no epic context in spec."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
 
     t = _ticket(ctx, title="Standalone", body="Just a task")
@@ -1394,7 +1394,7 @@ def test_epic_context_not_injected_for_non_epic_parent(
     """Ticket with a parent that is NOT an epic: no epic context."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
 
     # Create a regular task parent (kind=TicketKind.TASK)
@@ -1448,7 +1448,7 @@ def test_epic_context_not_injected_for_empty_epic_description(
     """Epic with empty description: no injection."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
 
     epic = ctx.service.create("Empty Epic", "", kind=TicketKind.EPIC)
@@ -1504,7 +1504,7 @@ def test_post_edit_reference_files_persisted(ctx_factory, tmp_path, monkeypatch)
     to artifacts_dir."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -1580,7 +1580,7 @@ def test_reference_files_reloaded_on_retry(ctx_factory, tmp_path, monkeypatch):
     (paths-only, reloaded from disk)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="false",
         review_enabled="false",
         max_fix_iterations="2",
@@ -1638,7 +1638,7 @@ def test_summary_included_in_retry_feedback(ctx_factory, tmp_path, monkeypatch):
     the agent alongside the test failure diagnosis as feedback."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="false",
         review_enabled="false",
         max_fix_iterations="2",
@@ -1703,7 +1703,7 @@ def test_persistence_without_file_map_still_writes(ctx_factory, tmp_path, monkey
     summary are still persisted — no crash."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -1769,7 +1769,7 @@ def test_no_change_needed_with_rationale_transitions_to_done(
     bypass for tickets where the work was already landed by a sibling
     (e.g. bc-check dead-code cleanups)."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true")
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
 
     def _run(*, repo_dir, **_kwargs):
         # Touch nothing; the codebase is already correct.
@@ -1811,7 +1811,7 @@ def test_no_change_needed_empty_rationale_terminates_done(
     rather than looping in BLOCKED (ticket 0976). Nothing was produced,
     so no real work can be lost."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true")
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
 
     def _run(*, repo_dir, **_kwargs):
         del repo_dir
@@ -1843,7 +1843,7 @@ def test_no_change_needed_ignored_when_branch_ahead_of_main(
     to DONE here strands the work in the workspace forever. Proceed
     normally so deliver picks up the existing commits."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true")
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
 
     def _run(*, repo_dir, **_kwargs):
         # Pre-commit a "previous-iteration" change on the workspace
@@ -1887,7 +1887,7 @@ def test_no_change_needed_on_resume_still_routes_to_done(
     ``not resuming`` and silently skipped that path, so the empty
     branch leaked downstream to deliver and got re-BLOCKED there."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true")
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
 
     def _run(*, repo_dir, **_kwargs):
         del repo_dir
@@ -1942,7 +1942,7 @@ def test_resume_with_ahead_branch_and_clean_tree_proceeds_to_review(
     """
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="true",
     )
@@ -1995,7 +1995,7 @@ def test_run_scope_guardrail_triage_disabled_blocks(ctx_factory, tmp_path, monke
     """scope_triage_enabled=False: any out-of-scope file → BLOCKED outcome."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         scope_triage_enabled="false",
     )
@@ -2052,7 +2052,7 @@ def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
     a comment (scope-triage no longer comments)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
     )
     t = _ticket(ctx)
@@ -2135,7 +2135,7 @@ def test_run_scope_guardrail_reject_cleans_tracked_and_untracked(
     a newly-added tracked file, and an untracked file are all absent from
     the diff vs origin afterwards, while the in-scope change survives."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true")
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, "a.txt")
 
@@ -2192,7 +2192,7 @@ def test_run_scope_guardrail_reject_cleans_resumed_wip_history(
     committed history (no unstaged edit). REJECT must scrub it from the
     committed diff vs origin/main, not just the working tree."""
     remote = make_bare_repo(tmp_path)
-    ctx = ctx_factory(FORGE_REMOTE_URL=remote, test_command="true")
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
     t = _ticket(ctx)
     _write_file_map(ctx, t, "a.txt")
 
@@ -2251,7 +2251,7 @@ def test_binary_artifact_auto_cleanup_skips_triage(ctx_factory, tmp_path, monkey
     is skip_iteration (ticket continues to test gate)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
     )
     t = _ticket(ctx)
@@ -2323,7 +2323,7 @@ def test_binary_artifact_cleanup_with_text_files_still_calls_triage(
     the scope-triage LLM (called exactly once, with only the text file)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
     )
     t = _ticket(ctx)
@@ -2409,7 +2409,7 @@ def test_binary_artifact_git_numstat_fallback(ctx_factory, tmp_path, monkeypatch
     as binary is still auto-cleaned."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
     )
     t = _ticket(ctx)
@@ -2462,7 +2462,7 @@ def test_binary_artifact_untracked_file_cleanup(ctx_factory, tmp_path, monkeypat
     is still detected and cleaned by os.unlink after git checkout is a no-op."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
     )
     t = _ticket(ctx)
@@ -2525,7 +2525,7 @@ def test_scope_triage_flood_guard_blocks(ctx_factory, tmp_path, monkeypatch):
     flood-guard step event with a truncated sample is recorded."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         scope_triage_max_files=5,
     )
@@ -2592,7 +2592,7 @@ def test_scope_triage_flood_guard_truncates_sample(ctx_factory, tmp_path, monkey
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         scope_triage_max_files=5,
     )
@@ -2645,7 +2645,7 @@ def test_scope_triage_flood_guard_below_cap_calls_llm(
     scope-triage LLM is still invoked normally."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         scope_triage_max_files=5,
     )
@@ -2709,7 +2709,7 @@ def test_modules_yaml_repath_in_scope_auto_expands(ctx_factory, tmp_path, monkey
     is auto-EXPANDed — no LLM invoked, file_map gains the file."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
     )
     t = _ticket(ctx)
@@ -2798,7 +2798,7 @@ def test_modules_yaml_new_unrelated_module_still_flagged(
     the LLM (or blocks when triage is disabled)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
     )
     t = _ticket(ctx)
@@ -2977,7 +2977,7 @@ def test_baseline_check_blocks_on_failure(ctx_factory, tmp_path, monkeypatch):
     """AC1: pre-existing base-branch test failures block before the loop."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -3034,7 +3034,7 @@ def test_baseline_check_skipped_for_baseline_fix_ticket(
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -3091,7 +3091,7 @@ def test_baseline_checks_out_remote_base_sha_not_local_branch(
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
 
     calls: list[str] = []
@@ -3128,7 +3128,7 @@ def test_baseline_check_proceeds_on_pass(ctx_factory, tmp_path, monkeypatch):
     """AC2: passing baseline → loop proceeds normally."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -3178,7 +3178,7 @@ def test_baseline_check_no_test_command(ctx_factory, tmp_path, monkeypatch):
     """AC3: no test_command → baseline passes trivially → loop proceeds."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="",  # empty → run_test_agent returns (True, ...)
         review_enabled="false",
     )
@@ -3234,7 +3234,7 @@ def test_baseline_check_cached_on_retry(ctx_factory, tmp_path, monkeypatch):
     """AC4: cached baseline failure is reused on retry — no re-execution."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -3272,7 +3272,7 @@ def test_baseline_check_sha_invalidation(ctx_factory, tmp_path, monkeypatch):
     """AC5: cached failure with old SHA → re-runs when base advances."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -3331,7 +3331,7 @@ def test_baseline_check_sandbox_unavailable(ctx_factory, tmp_path, monkeypatch):
     """AC6: sandbox unavailable → BLOCKED with diagnostic."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -3371,7 +3371,7 @@ def test_baseline_gate_proceeds_when_dependency_fix_done(
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -3428,7 +3428,7 @@ def test_baseline_gate_spawns_when_dependency_fix_for_different_sha(
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -3509,7 +3509,7 @@ def test_prereq_gate_disabled_never_checks(ctx_factory, tmp_path, monkeypatch):
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         prerequisite_gate_enabled="false",
@@ -3541,7 +3541,7 @@ def test_prereq_gate_unmet_blocks_without_agent(ctx_factory, tmp_path, monkeypat
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         prerequisite_gate_enabled="true",
@@ -3579,7 +3579,7 @@ def test_prereq_gate_default_activation_blocks_without_agent(
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -3615,7 +3615,7 @@ def test_prereq_gate_met_proceeds(ctx_factory, tmp_path, monkeypatch):
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         prerequisite_gate_enabled="true",
@@ -3642,7 +3642,7 @@ def test_prereq_gate_best_effort_on_error(ctx_factory, tmp_path, monkeypatch):
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         prerequisite_gate_enabled="true",
@@ -3678,7 +3678,7 @@ def test_prepare_hook_failure_blocks_before_prerequisite_gate(
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         prerequisite_gate_enabled="true",
@@ -3795,7 +3795,7 @@ def test_scope_triage_new_file_summary_shows_content(
     summarized empty). The summary must fall back to the file head."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         max_fix_iterations="3",
@@ -3853,7 +3853,7 @@ def test_convergence_backstop_halts_at_cycle_cap(ctx_factory, tmp_path, monkeypa
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         max_implement_review_cycles="2",
@@ -3886,7 +3886,7 @@ def test_convergence_empty_diff_after_review_terminates_done(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="true",
         max_implement_review_cycles="10",
@@ -3948,7 +3948,7 @@ def test_empty_spec_blocks_before_agent(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -3977,7 +3977,7 @@ def test_whitespace_only_spec_blocks_before_agent(ctx_factory, tmp_path, monkeyp
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -4005,7 +4005,7 @@ def test_non_empty_spec_proceeds_normally(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -4040,7 +4040,7 @@ def test_spawn_counter_blocks_after_limit(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="1",
@@ -4071,7 +4071,7 @@ def test_spawn_counter_increments_each_run(ctx_factory, tmp_path, monkeypatch):
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="5",
@@ -4145,7 +4145,7 @@ def test_spawn_counter_disabled_when_set_to_zero(ctx_factory, tmp_path, monkeypa
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="0",
@@ -4188,7 +4188,7 @@ def test_spawn_counter_blocked_note_includes_summary_tail(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="1",
@@ -4225,7 +4225,7 @@ def test_spawn_counter_blocked_note_no_summary_when_file_missing(ctx_factory, tm
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="1",
@@ -4255,7 +4255,7 @@ def test_spawn_limit_exhausted_emits_diagnostic_event(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="1",
@@ -4295,7 +4295,7 @@ def test_recurring_spawn_exhaustion_emits_recurring_event(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="1",
@@ -4339,7 +4339,7 @@ def test_first_spawn_exhaustion_emits_plain_event(ctx_factory, tmp_path, monkeyp
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="1",
@@ -4375,7 +4375,7 @@ def test_spawn_exhaustion_captures_tool_outputs_before_clearing_state(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="1",
@@ -4441,7 +4441,7 @@ def test_spawn_exhaustion_no_conversation_state_is_harmless(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="1",
@@ -4476,7 +4476,7 @@ def test_killed_inflight_spawn_is_absorbed_not_counted(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="1",
@@ -4523,7 +4523,7 @@ def test_killed_inflight_spawn_block_note_carries_evidence(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="1",
@@ -4558,7 +4558,7 @@ def test_uncounted_killed_spawn_does_not_decrement_counter(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="3",
@@ -4606,7 +4606,7 @@ def test_inflight_marker_cleared_after_run_completes(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="3",
@@ -4644,7 +4644,7 @@ def test_inflight_marker_cleared_after_run_raises(ctx_factory, tmp_path, monkeyp
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="3",
@@ -4683,7 +4683,7 @@ def test_resume_blocked_clears_spawn_state_and_aborts(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
         implement_max_spawns_per_ticket="1",
@@ -4725,7 +4725,7 @@ def test_preflight_epic_context_allows_empty_direct_spec(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -4750,7 +4750,7 @@ def test_preflight_blocks_when_both_spec_and_epic_empty(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -4775,7 +4775,7 @@ def test_stale_respawn_guard_blocks_unchanged_spec(ctx_factory, tmp_path, monkey
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -4834,7 +4834,7 @@ def test_stale_respawn_guard_allows_changed_spec(ctx_factory, tmp_path, monkeypa
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -4866,7 +4866,7 @@ def test_stale_respawn_guard_skips_when_passed(ctx_factory, tmp_path, monkeypatc
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -4900,7 +4900,7 @@ def test_stale_respawn_guard_skips_without_implement_md(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -4921,7 +4921,7 @@ def test_transient_header_skips_fingerprint_guard(ctx_factory, tmp_path, monkeyp
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -4952,7 +4952,7 @@ def test_spec_determined_blocked_persists_fingerprint_and_guards(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -5018,7 +5018,7 @@ def test_resume_blocked_with_note_allows_implement_after_fingerprint_match(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -5108,7 +5108,7 @@ def test_resume_blocked_without_note_does_not_clear_fingerprint_guard(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -5158,7 +5158,7 @@ def test_transition_blocked_to_ready_with_note_clears_fingerprint_guard(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -5213,7 +5213,7 @@ def test_answer_pending_question_clears_fingerprint_guard(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -5292,7 +5292,7 @@ def test_automatic_fingerprint_refusal_message_includes_force_retry_remedy(
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote,
+        forge_remote_url=remote,
         test_command="true",
         review_enabled="false",
     )
@@ -5367,7 +5367,7 @@ def test_resume_with_ahead_missing_claimed_edit_does_not_block(
     """
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="true"
+        forge_remote_url=remote, test_command="true", review_enabled="true"
     )
     t = _ticket(ctx)
     _write_file_map(ctx, t, "feature.txt")
@@ -5415,7 +5415,7 @@ def test_resume_empty_branch_missing_claimed_edit_still_blocks(
     """
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="true"
+        forge_remote_url=remote, test_command="true", review_enabled="true"
     )
     t = _ticket(ctx)
     _write_file_map(ctx, t, "feature.txt")

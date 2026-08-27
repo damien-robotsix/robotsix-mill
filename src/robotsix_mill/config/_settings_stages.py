@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 from robotsix_mill._resources import (
     language_instructions_dir as _resources_language_instructions_dir,
@@ -691,7 +691,7 @@ class _StagesSettings(BaseModel):
         description="Per-docker-exec timeout (seconds) for individual sandbox operations. 0 disables.",
         default=300,
         ge=0,
-        alias="MILL_SANDBOX_OP_TIMEOUT",
+        validation_alias=AliasChoices("sandbox_op_timeout", "MILL_SANDBOX_OP_TIMEOUT"),
         json_schema_extra={"advanced": True},
     )
     implement_pass_timeout: int = Field(
@@ -702,7 +702,9 @@ class _StagesSettings(BaseModel):
         "coordinator_timeout_seconds cap.",
         default=300,
         ge=0,
-        alias="MILL_IMPLEMENT_PASS_TIMEOUT",
+        validation_alias=AliasChoices(
+            "implement_pass_timeout", "MILL_IMPLEMENT_PASS_TIMEOUT"
+        ),
         json_schema_extra={"advanced": True},
     )
     # Lines of file context around each changed region preloaded in the

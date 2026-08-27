@@ -39,8 +39,8 @@ def _set_secrets(**kw):
 
 def _settings(tmp_path, **kw):
     kw.setdefault("data_dir", str(tmp_path))
-    kw.setdefault("FORGE_KIND", "github")
-    kw.setdefault("FORGE_REMOTE_URL", "https://github.com/o/r.git")
+    kw.setdefault("forge_kind", "github")
+    kw.setdefault("forge_remote_url", "https://github.com/o/r.git")
     kw.setdefault("FORGE_TOKEN", "tok")
     # Mirror forge_token into Secrets so get_secrets() works
     ft = kw.get("FORGE_TOKEN")
@@ -282,7 +282,7 @@ def test_create_pr_post_payload_shape(tmp_path, monkeypatch):
 
     payload = captured["post_payload"]
     assert payload["head"] == "feature/x"
-    assert payload["base"] == "main"  # default FORGE_TARGET_BRANCH
+    assert payload["base"] == "main"  # default forge_target_branch
     assert payload["title"] == "My Title"
     assert payload["body"] == "My Body"
     # All expected keys present and no extras
@@ -2707,7 +2707,7 @@ def test_head_owner_is_fork_owner_for_cross_repo_target(tmp_path):
 
     # No repo_config: _head_owner falls back to global remote owner.
     forge_no_rc = GitHubForge(_settings(tmp_path))
-    assert forge_no_rc._head_owner == "o"  # from default FORGE_REMOTE_URL
+    assert forge_no_rc._head_owner == "o"  # from default forge_remote_url
 
 
 def test_get_pr_cross_repo_uses_fork_owner_in_head_filter(tmp_path, monkeypatch):
@@ -2913,7 +2913,7 @@ def _app_settings(tmp_path, **kw):
     import robotsix_mill.config as _cfg
 
     # Secrets must be populated *before* Settings() so the cross-field
-    # validator (FORGE_AUTH=app requires github_app_id / private_key)
+    # validator (forge_auth=app requires github_app_id / private_key)
     # can see them.
     _reset_secrets()
     _cfg._secrets = Secrets(
@@ -2921,9 +2921,9 @@ def _app_settings(tmp_path, **kw):
         github_app_private_key=kw.get("GITHUB_APP_PRIVATE_KEY", "KEY"),
     )
     kw.setdefault("data_dir", str(tmp_path))
-    kw.setdefault("FORGE_KIND", "github")
-    kw.setdefault("FORGE_AUTH", "app")
-    kw.setdefault("FORGE_REMOTE_URL", "https://github.com/o/r.git")
+    kw.setdefault("forge_kind", "github")
+    kw.setdefault("forge_auth", "app")
+    kw.setdefault("forge_remote_url", "https://github.com/o/r.git")
     # github_app_id and github_app_private_key are now Secrets-only fields;
     # pop before Settings()
     kw.pop("GITHUB_APP_ID", None)

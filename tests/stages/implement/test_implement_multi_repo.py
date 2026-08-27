@@ -265,7 +265,7 @@ def test_non_meta_ticket_no_touched_repos_json(ctx_factory, tmp_path, monkeypatc
     touched_repos.json produced, commit only primary repo_dir."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
-        FORGE_REMOTE_URL=remote, test_command="true", review_enabled="false"
+        forge_remote_url=remote, test_command="true", review_enabled="false"
     )
     monkeypatch.setattr(
         coding, "run_implement_agent", _fake_agent({"feature.txt": "x"})
