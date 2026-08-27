@@ -802,7 +802,7 @@
         },
         "ci_fix_max_iterations": {
           "advanced": true,
-          "default": 5,
+          "default": 3,
           "description": "Maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
           "minimum": 0,
           "title": "Ci Fix Max Iterations",
