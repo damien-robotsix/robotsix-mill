@@ -461,9 +461,18 @@ async def ws_board(websocket: WebSocket) -> None:
         set() if show_closed else {State.CLOSED, State.EPIC_CLOSED, State.ANSWERED}
     )
     tickets = svc.list(exclude_states=exclude)
+    # Same repo_config requirement as the /tickets list endpoint: the cost
+    # cache is keyed on the repo-qualified session id, so reading it back
+    # with None misses every row and the socket streams cost_usd: 0.0.
+    rc_by_board = {rc.board_id: rc for rc in websocket.app.state.repos.repos.values()}
     initial = [
         enrich_ticket_read(
-            t, settings, svc, blocking_cost=False, fetch_pr_url=False
+            t,
+            settings,
+            svc,
+            blocking_cost=False,
+            fetch_pr_url=False,
+            repo_config=rc_by_board.get(t.board_id),
         ).model_dump(mode="json")
         for t in tickets
     ]
