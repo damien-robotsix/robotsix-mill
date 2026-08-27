@@ -115,6 +115,7 @@
         "dependabot_ingest_max_drafts_per_pass": 5,
         "deploy_api_url": null,
         "diagnostic_ci_failure_threshold": 3,
+        "diagnostic_events_max_age_days": 90,
         "diagnostic_events_path": null,
         "diagnostic_interval_seconds": 0,
         "diagnostic_monitored_repo_ids": [],

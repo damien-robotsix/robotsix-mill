@@ -951,6 +951,7 @@ and as environment variables:
 | `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
 | `MILL_CONFIG_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between config-sync passes (1 day). Set to `0` to disable. |
 | `MILL_DIAGNOSTIC_EVENTS_PATH` | `None` | Explicit file path for the diagnostic event store JSONL file |
+| `MILL_DIAGNOSTIC_EVENTS_MAX_AGE_DAYS` | `90` | Days after which diagnostic events are considered stale and excluded from recurring-failure counts. Set to `0` to disable aging (keep events indefinitely) |
 | `MILL_FRONTEND_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between frontend-sync passes. Set to `0` to disable. |
 | `MILL_MEMBER_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between member-sync passes. Set to `0` to disable. |
 | `MILL_PIN_BUMP_INTERVAL_SECONDS` | `86400` | Seconds between pin-bump passes. Set to `0` to disable. |

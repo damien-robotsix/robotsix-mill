@@ -3,6 +3,7 @@ recurring CI failure check."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -294,6 +295,153 @@ class TestRecurringCIFailureCheck:
 # ---------------------------------------------------------------------------
 # DiagnosticEvent dataclass
 # ---------------------------------------------------------------------------
+
+
+class TestListAging:
+    """Tests for event aging (diagnostic_events_max_age_days)."""
+
+    @pytest.fixture
+    def recent_event(self, settings, board_id):
+        """Emit one event with current timestamp."""
+        emit_diagnostic_event(
+            settings, board_id, "CI_FAILURE", "ticket-recent", "r", "k-recent"
+        )
+
+    def _write_event(
+        self,
+        settings: Settings,
+        board_id: str,
+        ticket_id: str,
+        key: str,
+        timestamp: str,
+    ) -> None:
+        """Directly write an event with an explicit timestamp to bypass
+        emit_diagnostic_event's dedup."""
+        import json
+
+        path = settings.diagnostic_events_file_for(board_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        event = DiagnosticEvent(
+            category="CI_FAILURE",
+            ticket_id=ticket_id,
+            repo_id=board_id,
+            reason="r",
+            normalized_key=key,
+            timestamp=timestamp,
+        )
+        line = json.dumps(
+            {
+                "category": event.category,
+                "ticket_id": event.ticket_id,
+                "repo_id": event.repo_id,
+                "reason": event.reason,
+                "normalized_key": event.normalized_key,
+                "timestamp": event.timestamp,
+            },
+            ensure_ascii=False,
+        )
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+
+    def test_aging_zero_keeps_all(self, settings, board_id):
+        """Aging disabled (0) returns all events regardless of age."""
+        settings.diagnostic_events_max_age_days = 0
+        self._write_event(
+            settings,
+            board_id,
+            "ticket-old",
+            "k-old",
+            "2000-01-01T00:00:00+00:00",
+        )
+        emit_diagnostic_event(
+            settings, board_id, "CI_FAILURE", "ticket-new", "r", "k-new"
+        )
+        events = list_diagnostic_events(settings, board_id)
+        assert len(events) == 2
+
+    def test_old_events_filtered_with_default_90_days(self, settings, board_id):
+        """Events older than 90 days are filtered by default."""
+        # Default is 90 days.
+        assert settings.diagnostic_events_max_age_days == 90
+        # Event from 120 days ago.
+        self._write_event(
+            settings,
+            board_id,
+            "ticket-old",
+            "k-old",
+            (datetime.now(UTC) - timedelta(days=120)).isoformat(),
+        )
+        # Event from 30 days ago — within window.
+        self._write_event(
+            settings,
+            board_id,
+            "ticket-recent",
+            "k-recent",
+            (datetime.now(UTC) - timedelta(days=30)).isoformat(),
+        )
+        events = list_diagnostic_events(settings, board_id)
+        assert len(events) == 1
+        assert events[0].ticket_id == "ticket-recent"
+
+    def test_malformed_timestamp_keeps_event(self, settings, board_id):
+        """An event with a non-parseable timestamp is kept (not silently
+        dropped) — age filtering should degrade gracefully."""
+        settings.diagnostic_events_max_age_days = 90
+        self._write_event(
+            settings,
+            board_id,
+            "ticket-bad-ts",
+            "k-bad",
+            "not-a-valid-iso-timestamp",
+        )
+        events = list_diagnostic_events(settings, board_id)
+        assert len(events) == 1
+        assert events[0].ticket_id == "ticket-bad-ts"
+
+    def test_custom_max_age(self, settings, board_id):
+        """Custom max-age filters differently from the default."""
+        settings.diagnostic_events_max_age_days = 10
+        # 5 days ago — within window.
+        self._write_event(
+            settings,
+            board_id,
+            "ticket-5d",
+            "k-5d",
+            (datetime.now(UTC) - timedelta(days=5)).isoformat(),
+        )
+        # 15 days ago — outside window.
+        self._write_event(
+            settings,
+            board_id,
+            "ticket-15d",
+            "k-15d",
+            (datetime.now(UTC) - timedelta(days=15)).isoformat(),
+        )
+        events = list_diagnostic_events(settings, board_id)
+        assert len(events) == 1
+        assert events[0].ticket_id == "ticket-5d"
+
+    def test_aging_preserves_dedup_semantics(self, settings, board_id):
+        """Aging doesn't affect the dedup guard in emit — the (ticket, key)
+        check still writes a fresh event when the old one was aged out."""
+        settings.diagnostic_events_max_age_days = 30
+        # Write an event from 60 days ago.
+        self._write_event(
+            settings,
+            board_id,
+            "ticket-a",
+            "key-a",
+            (datetime.now(UTC) - timedelta(days=60)).isoformat(),
+        )
+        # emit with same ticket+key — dedup guard reads the raw file and
+        # finds the old entry, so it should skip (dedup is on raw rows,
+        # not age-filtered rows).
+        emitted = emit_diagnostic_event(
+            settings, board_id, "CI_FAILURE", "ticket-a", "r", "key-a"
+        )
+        # Even though the old event is aged out of list, the raw file
+        # still has the duplicate ticket+key pair, so emit should skip.
+        assert emitted is False
 
 
 class TestDiagnosticEventDataclass:

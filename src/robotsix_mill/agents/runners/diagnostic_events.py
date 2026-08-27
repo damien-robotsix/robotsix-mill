@@ -15,8 +15,9 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from ...config import Settings
 
@@ -121,6 +122,38 @@ def emit_diagnostic_event(
         return False
 
 
+def _parse_event_line(obj: dict[str, Any]) -> DiagnosticEvent | None:
+    """Parse a JSONL object into a :class:`DiagnosticEvent`.
+
+    Returns ``None`` if required keys are missing or values are invalid.
+    """
+    try:
+        return DiagnosticEvent(
+            category=str(obj["category"]),
+            ticket_id=str(obj["ticket_id"]),
+            repo_id=str(obj.get("repo_id", "")),
+            reason=str(obj.get("reason", "")),
+            normalized_key=str(obj["normalized_key"]),
+            timestamp=str(obj.get("timestamp", "")),
+        )
+    except KeyError, TypeError, ValueError:
+        return None
+
+
+def _is_stale(ev: DiagnosticEvent, cutoff: datetime) -> bool:
+    """Return ``True`` if *ev*'s timestamp is older than *cutoff*.
+
+    A malformed timestamp is *not* considered stale — we'd rather
+    surface a suspicious event than silently drop it.
+    """
+    if not ev.timestamp:
+        return False
+    try:
+        return datetime.fromisoformat(ev.timestamp) < cutoff
+    except ValueError:
+        return False
+
+
 def list_diagnostic_events(
     settings: Settings,
     board_id: str,
@@ -132,6 +165,10 @@ def list_diagnostic_events(
     Reads the JSONL file line by line; silently skips malformed lines
     and returns an empty list when the file does not exist.
 
+    Events older than ``settings.diagnostic_events_max_age_days`` days
+    are silently dropped (aging).  A setting of 0 disables aging and
+    returns all events (original behaviour).
+
     Args:
         settings: Resolved settings for path derivation.
         board_id: The repo/board whose events to list.
@@ -141,6 +178,11 @@ def list_diagnostic_events(
         path = _events_file_path(settings, board_id)
         if not path.is_file():
             return []
+        max_age_days = settings.diagnostic_events_max_age_days
+        now = datetime.now(UTC)
+        cutoff: datetime | None = (
+            now - timedelta(days=max_age_days) if max_age_days > 0 else None
+        )
         events: list[DiagnosticEvent] = []
         for line in path.read_text("utf-8").splitlines():
             line = line.strip()
@@ -151,17 +193,12 @@ def list_diagnostic_events(
             except json.JSONDecodeError:
                 log.warning("diagnostic_events: skipping malformed line in %s", path)
                 continue
-            try:
-                ev = DiagnosticEvent(
-                    category=str(obj["category"]),
-                    ticket_id=str(obj["ticket_id"]),
-                    repo_id=str(obj.get("repo_id", "")),
-                    reason=str(obj.get("reason", "")),
-                    normalized_key=str(obj["normalized_key"]),
-                    timestamp=str(obj.get("timestamp", "")),
-                )
-            except KeyError, TypeError, ValueError:
+            ev = _parse_event_line(obj)
+            if ev is None:
                 log.warning("diagnostic_events: skipping invalid entry in %s", path)
+                continue
+            # Age-filter: drop events whose timestamp is older than the cutoff.
+            if cutoff is not None and _is_stale(ev, cutoff):
                 continue
             if category is not None and ev.category != category:
                 continue
