@@ -343,6 +343,11 @@ def test_unexpected_model_behavior_fallback_also_fails(
     assert "primary=" in str(e)
     assert "fallback=" in str(e)
     assert e.messages == []
+    # Both failures stay typed so the stage can classify them: the
+    # fallback's exception as ``cause``, the primary's via ``__cause__``.
+    assert isinstance(e.cause, ValueError)
+    assert str(e.cause) == "fallback crashed"
+    assert isinstance(e.__cause__, _FakeUnexpectedModelBehavior)
     # __cause__ is the primary UnexpectedModelBehavior
     assert isinstance(e.__cause__, _FakeUnexpectedModelBehavior)
 

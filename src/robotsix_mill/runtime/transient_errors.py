@@ -115,6 +115,59 @@ _TRANSIENT_MESSAGE_RE = [
 ]
 
 
+# LLM provider / model-configuration failures that are NOT a property of
+# the ticket's spec: the model never produced an answer, so the attempt
+# says nothing about whether the spec is implementable.  They are still
+# blocking (a bad baked model id does not fix itself between retries), but
+# the implement stage must not record a spec fingerprint for them — that
+# fingerprint turns the next resume into a free "spec unchanged" re-block,
+# pinning the ticket until a human edits the description.  Seen live on
+# 2026-08-25/27 across 10 tickets when llmio shipped an unroutable
+# level-1 slug and a level-2 cap smaller than its own reasoning budget.
+_PROVIDER_FAILURE_RE = re.compile(
+    r"(is not a valid model ID"
+    r"|not a valid model"
+    r"|[Mm]odel token limit \(\d+\) exceeded"
+    r"|exceeded before any response was generated"
+    r"|output retries exhausted"
+    r"|[Ee]xceeded max(imum)? output retries"
+    r"|[Ii]nvalid response from openrouter"
+    r"|finish_reason=.error"
+    r"|status_code: 4\d\d, model_name:)",
+)
+
+
+def _matches_provider_failure(exc: BaseException) -> bool:
+    return bool(_PROVIDER_FAILURE_RE.search(str(exc)))
+
+
+def is_provider_failure(exc: BaseException) -> bool:
+    """True when *exc* (or its cause chain) is an LLM provider/model failure.
+
+    Distinct from :func:`classify_stage_error`'s "transient": a transient
+    error is retried by the worker; a provider failure may well be
+    permanent for this deployment (wrong model id, cap below the reasoning
+    budget) and blocks — but it is never *spec-determined*, so callers
+    must not persist a spec fingerprint for it.  Walks the cause chain
+    like :func:`classify_stage_error`.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    for _ in range(_MAX_CHAIN_WALK):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        if _matches_provider_failure(current):
+            return True
+        if current.__cause__ is not None and id(current.__cause__) not in seen:
+            current = current.__cause__
+        elif current.__context__ is not None and id(current.__context__) not in seen:
+            current = current.__context__
+        else:
+            break
+    return False
+
+
 def _is_transient_message(exc: BaseException) -> bool:
     """Return True when *exc*'s string representation matches a
     known transient-error pattern not covered by type checks.

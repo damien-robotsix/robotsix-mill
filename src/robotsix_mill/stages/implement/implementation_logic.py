@@ -424,24 +424,41 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             # set_retry_state.  Do NOT call _finalize first — that
             # would persist a spec fingerprint and poison the next
             # pass with a false "spec unchanged" block.
-            if e.cause is not None:
-                from ...runtime.transient_errors import (
-                    classify_stage_error,
-                    is_insufficient_credit,
-                    parse_credit_shortfall,
-                )
+            #
+            # Classify the AgentRunError ITSELF as well as its typed
+            # cause: ``coding.run_implement_agent`` did not always attach
+            # one (the dual primary+fallback failure raised with a bare
+            # string), and an unclassified error fell straight through to
+            # the spec-determined path below — recording a fingerprint for
+            # what was a provider outage.
+            from ...runtime.transient_errors import (
+                classify_stage_error,
+                is_insufficient_credit,
+                is_provider_failure,
+                parse_credit_shortfall,
+            )
 
-                if is_insufficient_credit(e.cause):
+            candidates: list[BaseException] = [e]
+            if e.cause is not None:
+                candidates.insert(0, e.cause)
+
+            for cand in candidates:
+                if is_insufficient_credit(cand):
                     from ...runtime.credit_status import record_low_credit
 
-                    detail = parse_credit_shortfall(e.cause)
+                    detail = parse_credit_shortfall(cand)
                     record_low_credit(detail=detail)
+                    break
 
-                if classify_stage_error(e.cause) == "transient":
-                    raise e.cause from e
-            # Non-transient agent error — record the outcome (spec-
-            # determined dead-end) so the fingerprint guard can block
-            # a re-spawn with an unchanged spec.
+            if any(classify_stage_error(c) == "transient" for c in candidates):
+                raise (e.cause if e.cause is not None else e) from e
+
+            # A provider / model-configuration failure (invalid model id,
+            # token cap hit before any output, output retries exhausted)
+            # is not a spec-determined outcome: the model never answered.
+            # Block, but WITHOUT a spec fingerprint, so resume-blocked
+            # actually re-runs the attempt once the provider is fixed.
+            provider_failure = any(is_provider_failure(c) for c in candidates)
             cls._finalize(
                 ctx,
                 ticket,
@@ -450,14 +467,19 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                 f"agent error: {e}",
                 ok=False,
                 extra_roots=extra_roots,
+                transient=provider_failure,
             )
+            note = f"agent error — resumable: {e}"
+            if provider_failure:
+                note += (
+                    " [provider/model failure — no spec fingerprint recorded; "
+                    "resume-blocked re-runs the attempt once the model "
+                    "configuration is fixed]"
+                )
             return _AgentRunOutcome(
                 failure=_SinglePassResult(
                     next_action="return",
-                    outcome=Outcome(
-                        State.BLOCKED,
-                        f"agent error — resumable: {e}",
-                    ),
+                    outcome=Outcome(State.BLOCKED, note),
                 )
             )
         return _AgentRunOutcome(success=result)

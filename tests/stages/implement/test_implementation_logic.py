@@ -472,6 +472,88 @@ class TestInvokeImplementAgent:
         assert outcome.failure.outcome.next_state is State.BLOCKED
         assert "agent error" in outcome.failure.outcome.note.lower()
 
+    @staticmethod
+    def _run_agent_error(monkeypatch, err):
+        """Drive ``_invoke_implement_agent`` into its AgentRunError handler
+        and capture the ``_finalize`` kwargs it used."""
+        finalize_calls: list[dict] = []
+        monkeypatch.setattr(
+            "robotsix_mill.agents.coding.run_implement_agent",
+            lambda **kw: (_ for _ in ()).throw(err),
+        )
+        monkeypatch.setattr(
+            _Stage,
+            "_finalize",
+            lambda *a, **kw: finalize_calls.append(kw),
+        )
+        outcome = _Stage._invoke_implement_agent(
+            ctx=_stage_ctx(),
+            ticket=FakeTicket(),
+            repo_dir=_DUMMY_PATH,
+            branch="main",
+            settings=_simple_namespace(),
+            ic=_ic(),
+            language_instructions="",
+            agent_level=None,
+            resume_history=None,
+            extra_roots=None,
+            memory_board_id="mb",
+        )
+        return outcome, finalize_calls
+
+    def test_provider_failure_without_cause_records_no_fingerprint(self, monkeypatch):
+        """The live cd92 shape: dual primary+fallback failure raised with NO
+        typed cause.  It must block but must NOT be treated as
+        spec-determined — ``_finalize(transient=True)`` skips the spec
+        fingerprint so resume-blocked actually re-runs the attempt."""
+        err = AgentRunError(
+            "output retries exhausted on primary + fallback models: "
+            "primary=Model token limit (32768) exceeded before any response "
+            "was generated., fallback=status_code: 400, model_name: "
+            "deepseek/deepseek-v4-flash-latest, body: {'message': "
+            "'deepseek/deepseek-v4-flash-latest is not a valid model ID'}",
+            [],
+        )
+        outcome, finalize_calls = self._run_agent_error(monkeypatch, err)
+
+        assert outcome.failure is not None
+        assert outcome.failure.outcome.next_state is State.BLOCKED
+        assert "no spec fingerprint recorded" in outcome.failure.outcome.note
+        assert len(finalize_calls) == 1
+        assert finalize_calls[0]["ok"] is False
+        assert finalize_calls[0]["transient"] is True
+
+    def test_provider_failure_via_typed_cause_records_no_fingerprint(self, monkeypatch):
+        err = AgentRunError(
+            "agent error",
+            [],
+            cause=RuntimeError("deepseek/x is not a valid model ID"),
+        )
+        outcome, finalize_calls = self._run_agent_error(monkeypatch, err)
+        assert outcome.failure.outcome.next_state is State.BLOCKED
+        assert finalize_calls[0]["transient"] is True
+
+    def test_agent_behaviour_failure_without_cause_stays_spec_determined(
+        self, monkeypatch
+    ):
+        """An agent that loops on tool validation IS a verdict on this spec:
+        the fingerprint guard must still arm (no regression)."""
+        err = AgentRunError("Tool 'verify_diff' exceeded max retries count of 2", [])
+        outcome, finalize_calls = self._run_agent_error(monkeypatch, err)
+        assert outcome.failure.outcome.next_state is State.BLOCKED
+        assert "no spec fingerprint" not in outcome.failure.outcome.note
+        assert finalize_calls[0]["transient"] is False
+
+    def test_transient_message_without_cause_re_raises(self, monkeypatch):
+        """No typed cause, but the message itself is a known transient
+        pattern → re-raise for the worker's retry-with-backoff, and never
+        write implement.md."""
+        err = AgentRunError(
+            "Invalid response from openrouter chat completions endpoint", []
+        )
+        with pytest.raises(AgentRunError):
+            self._run_agent_error(monkeypatch, err)
+
     def test_agent_error_transient_cause_re_raises(self, monkeypatch):
         """AgentRunError with transient cause re-raises the original cause."""
         original_cause = ConnectionError("timeout")
