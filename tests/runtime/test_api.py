@@ -366,10 +366,14 @@ def test_get_ticket_detail_includes_cost_usd(client, service, monkeypatch):
 def test_get_tickets_list_is_cache_only_for_cost(client, service, monkeypatch):
     """GET /tickets (the polled list) builds its RESPONSE cache-only — never
     blocking on Langfuse session_cost during the request (that would cost N
-    serial HTTP roundtrips on cold cache and stall the board poll). The cost
-    comes from session_cost_cached (no network), so it's 0.0 for an unseeded
-    cache. Warming then happens in a BACKGROUND task after the response is
-    sent (replaces the old cost_warmer daemon)."""
+    serial HTTP roundtrips on cold cache and stall the board poll).
+
+    Note this test stubs ``session_cost`` itself, i.e. *at* the cache
+    boundary, so nothing is ever written to ``_cost_cache`` and the
+    cache-only read is 0.0 by construction. That makes it a guard on the
+    non-blocking path and on the warmer being invoked — and blind to
+    whether the warmed value is readable afterwards. See
+    ``test_get_tickets_list_reports_warmed_cost`` for that half."""
     t = service.create("Cache-only test")
     called = []
     monkeypatch.setattr(
@@ -388,6 +392,42 @@ def test_get_tickets_list_is_cache_only_for_cost(client, service, monkeypatch):
     # after the response — TestClient executes background tasks before
     # returning), so the next poll shows the real value.
     assert t.id in called
+
+
+def test_get_tickets_list_reports_warmed_cost(client, service, monkeypatch):
+    """The list endpoint must READ the cost its own warmer just wrote.
+
+    Regression guard for the defect behind ticket …-e4a6: GET /tickets
+    returned ``cost_usd: 0.0`` for effectively every ticket while
+    GET /tickets/{id} returned real values. The warmer seeded the cache
+    under the *repo-qualified* session id (``"<repo> · <ticket-id>"``,
+    because the warm call passes a ``repo_config``) while enrichment read
+    it back with ``repo_config=None`` — a different key, so a guaranteed
+    miss on every row. ``session_cost_cached``'s own docstring warns about
+    exactly this.
+
+    Unlike the test above, this one stubs ``session_total_cost`` — the layer
+    BELOW the cache — so the real ``session_cost`` runs and populates
+    ``_cost_cache``. Stubbing at the cache boundary is what let the bug
+    ship: the cache is where the two keys have to agree.
+    """
+    from robotsix_mill.langfuse import client as lf_client
+
+    t = service.create("Warmed cost test")
+    monkeypatch.setattr(
+        lf_client, "session_total_cost", lambda settings, sid, **kw: 0.4242
+    )
+    lf_client._cost_cache.clear()
+    try:
+        rows = client.get("/tickets").json()
+    finally:
+        lf_client._cost_cache.clear()
+
+    found = [x for x in rows if x["id"] == t.id]
+    assert len(found) == 1
+    assert found[0]["cost_usd"] == pytest.approx(0.4242), (
+        "the list endpoint read a different cache key than its warmer wrote"
+    )
 
 
 def test_get_ticket_includes_pending_question_when_paused(client, service):

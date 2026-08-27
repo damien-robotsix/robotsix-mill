@@ -1,0 +1,1 @@
+Fix `GET /tickets` (and the board WebSocket's initial payload) reporting `cost_usd: 0.0` for every ticket: the cost cache is keyed on the repo-qualified session id, and enrichment read it back with `repo_config=None` — a different key than the warmer had just written.

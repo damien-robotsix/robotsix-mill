@@ -376,7 +376,20 @@ def _list_tickets_compute(
         try:
             enriched.append(
                 enrich_ticket_read(
-                    t, settings, svc, blocking_cost=False, fetch_pr_url=False
+                    t,
+                    settings,
+                    svc,
+                    blocking_cost=False,
+                    fetch_pr_url=False,
+                    # MUST be the same repo_config the warmer above used, or
+                    # the cache-only read looks up a different key. The cost
+                    # cache is keyed on the *repo-qualified* session id
+                    # ("<repo> · <ticket-id>"), so warming with a repo_config
+                    # and then reading with None misses every single time and
+                    # the whole list reports 0.0 -- which is exactly what it
+                    # did until 2026-08-27, while the per-ticket GET (which
+                    # does pass repo_config) returned real values.
+                    repo_config=rc_by_board.get(t.board_id),
                 )
             )
         except Exception:
