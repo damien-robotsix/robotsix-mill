@@ -34,6 +34,7 @@ from ...config import Settings
 # imported these directly, so the registry was empty everywhere else.
 from . import (  # noqa: F401  (imported for register_check side-effect)
     diagnostic_check_errors,
+    diagnostic_check_priority_stall,
     diagnostic_check_recurring_ci,
 )
 from .diagnostic_checks import (
