@@ -550,10 +550,13 @@ def _normalize_ci_failure_reason(
     idx = failing_summary.find(marker)
     core = failing_summary[:idx].rstrip() if idx != -1 else failing_summary[:2000]
 
-    # Strip annotation-level file-path and line-number detail — those are
-    # inherently per-ticket and prevent clustering.
-    core = re.sub(r"\n\s*- \[.*?\] .*?:\d+: .*", "", core)
-    core = re.sub(r"\[.*?\] .*?:\d+: .*", "", core)
+    # Strip per-ticket transient detail from annotations — file paths and
+    # line numbers — while preserving the error message, so that genuinely
+    # different root causes (e.g. mypy "Incompatible types" vs "unused
+    # variable") produce distinct keys.  The annotation messages are the
+    # diagnostic signal; the file:line prefix is the noise.
+    core = re.sub(r"\n\s*- \[.*?\] .*?:\d+: ", "\n- ", core)
+    core = re.sub(r"\[.*?\] .*?:\d+: ", "", core)
     # Strip ISO-8601 timestamps and run IDs (e.g. "run 1234567890").
     core = re.sub(
         r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?",

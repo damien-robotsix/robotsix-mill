@@ -5,12 +5,15 @@ _format_code_scanning_alerts, _format_labelled_alerts, _format_alert_refs,
 _alert_loc, _write_text, and _FailingContext.
 """
 
+import pytest
+
 from robotsix_mill.stages.ci_fix_helpers import (
     _alert_loc,
     _FailingContext,
     _format_alert_refs,
     _format_code_scanning_alerts,
     _format_labelled_alerts,
+    _normalize_ci_failure_reason,
     _write_text,
 )
 
@@ -592,3 +595,118 @@ class _FakeForge:
         if callable(self._ccc):
             return self._ccc(sha=sha)
         return self._ccc
+
+
+# ---------------------------------------------------------------------------
+# _normalize_ci_failure_reason
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeCiFailureReason:
+    """Ensure the normalized key clusters genuine recurrences but
+    separates distinct root causes (the 'c0dff799' 31-ticket bucket
+    problem)."""
+
+    def _ann(self, message: str, path: str = "src/foo.py", line: int = 10) -> dict:
+        return {"level": "error", "path": path, "start_line": line, "message": message}
+
+    def _failing(self, annotations: list | None = None) -> list[dict]:
+        chk: dict = {"name": "ci / Tests"}
+        if annotations is not None:
+            chk["annotations"] = annotations
+        return [chk]
+
+    @staticmethod
+    def _summary(failing: list[dict]) -> str:
+        """Build a realistic failing-summary matching CI output format."""
+        from robotsix_mill.stages.ci_fix_helpers import _build_failing_summary
+
+        return _build_failing_summary(failing)
+
+    def test_distinct_annotation_messages_yield_distinct_keys(self) -> None:
+        f1 = self._failing([self._ann("Incompatible types in expression")])
+        f2 = self._failing([self._ann("unused variable F841")])
+        k1 = _normalize_ci_failure_reason(f1, self._summary(f1))
+        k2 = _normalize_ci_failure_reason(f2, self._summary(f2))
+        assert k1 != k2
+
+    @pytest.mark.parametrize(
+        ("msg_a", "msg_b"),
+        [
+            ("Incompatible types in expression", "Missing return statement"),
+            ("Name 'x' is not defined", "Cannot assign to 'None'"),
+            ("AssertionError: assert 1 == 2", "ruff rule F841"),
+        ],
+        ids=["mypy-types-vs-return", "name-vs-assign", "assert-vs-ruff"],
+    )
+    def test_various_root_causes_produce_distinct_keys(
+        self, msg_a: str, msg_b: str
+    ) -> None:
+        """Different annotation message root causes must not collide."""
+        f1 = self._failing([self._ann(msg_a)])
+        f2 = self._failing([self._ann(msg_b)])
+        k_a = _normalize_ci_failure_reason(f1, self._summary(f1))
+        k_b = _normalize_ci_failure_reason(f2, self._summary(f2))
+        assert k_a != k_b
+
+    def test_same_message_different_paths_yields_same_key(self) -> None:
+        """Identical error messages should cluster regardless of
+        which file/line raised them."""
+        f1 = self._failing([self._ann("Incompatible types", "src/foo.py", 10)])
+        f2 = self._failing([self._ann("Incompatible types", "src/bar.py", 99)])
+        assert _normalize_ci_failure_reason(
+            f1, self._summary(f1)
+        ) == _normalize_ci_failure_reason(f2, self._summary(f2))
+
+    def test_same_check_no_annotations_yields_stable_key(self) -> None:
+        """A bare 'ci / Tests' failure with no annotations must yield
+        a deterministic (not random) key."""
+        f = self._failing()
+        s = "## ❌ ci / Tests\n\n**Job logs:**\nlog"
+        k1 = _normalize_ci_failure_reason(f, s)
+        k2 = _normalize_ci_failure_reason(f, s)
+        assert k1 == k2
+
+    def test_job_log_text_does_not_affect_key(self) -> None:
+        """Transient log noise (varies per run) must not change the key."""
+        f = self._failing([self._ann("mypy error")])
+        prefix = "## ❌ ci / Tests\n\n- mypy error\n"
+        k_short = _normalize_ci_failure_reason(f, prefix + "\n**Job logs:**\nshort\n")
+        k_long = _normalize_ci_failure_reason(
+            f, prefix + "\n**Job logs:**\n" + "x" * 10000 + "\n"
+        )
+        assert k_short == k_long
+
+    def test_key_is_16_hex_chars(self) -> None:
+        f = self._failing([self._ann("some error")])
+        key = _normalize_ci_failure_reason(f, self._summary(f))
+        assert len(key) == 16
+        assert all(c in "0123456789abcdef" for c in key)
+
+    def test_two_check_names_produce_different_key(self) -> None:
+        """When a second check (e.g. mill-specific) also fails, the key
+        must differ from the single-check case."""
+        f_single = self._failing([self._ann("error msg")])
+        f_double = [{"name": "ci / Tests"}, {"name": "mill-specific"}]
+        summary_double = "## ❌ ci / Tests\n\n## ❌ mill-specific\n\n**Job logs:**\nlog"
+        k1 = _normalize_ci_failure_reason(f_single, self._summary(f_single))
+        k2 = _normalize_ci_failure_reason(f_double, summary_double)
+        assert k1 != k2
+
+    def test_annotation_messages_in_summary_are_preserved(self) -> None:
+        """When annotations are absent from the failing list but present
+        in the summary text, those messages still influence the key."""
+        f = self._failing()
+        s1 = (
+            "## ❌ ci / Tests\n\n**Annotations:**\n"
+            "- [error] src/a.py:1: Incompatible types\n"
+            "\n**Job logs:**\nlog"
+        )
+        s2 = (
+            "## ❌ ci / Tests\n\n**Annotations:**\n"
+            "- [error] src/a.py:1: unused variable F841\n"
+            "\n**Job logs:**\nlog"
+        )
+        k1 = _normalize_ci_failure_reason(f, s1)
+        k2 = _normalize_ci_failure_reason(f, s2)
+        assert k1 != k2
