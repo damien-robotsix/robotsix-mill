@@ -78,7 +78,7 @@ Key points for a periodic agent:
 | `category` | Must be `"periodic"` for periodic agents. |
 | `interval` | Human-readable (`1d`, `2h30m`, `1w`). |
 | `enabled` | `true` or `false`; can be overridden per-repo. |
-| `model` | Literal (`openai/gpt-4o-mini`) or env-var (`${MILL_HEALTH_MODEL}`). |
+| `model` | Literal model name or env-var (`${MILL_HEALTH_MODEL}`). |
 | `output_type` | The Pydantic model class name from your Python module. |
 | `module` | The Python module under `src/robotsix_mill/agents/`. |
 | `tools` | Usually `explore`, `read_file`, `list_dir` for read-only agents. |
@@ -240,14 +240,14 @@ Edit `config/config.example.yaml`.  You need two entries:
    identifier that the `${MILL_<NAME>_MODEL}` env-var reference
    resolves to:
    ```yaml
-   health: deepseek/deepseek-v4-flash
+   health: ${MILL_HEALTH_MODEL}
    ```
 
 2. **Per-agent block** — add a dedicated section with enabled flag and
    interval.  Example (from `bc_check`):
    ```yaml
    health:
-     model: deepseek/deepseek-v4-flash
+     model: ${MILL_HEALTH_MODEL}
      enabled: true
      interval_seconds: 86400
    ```

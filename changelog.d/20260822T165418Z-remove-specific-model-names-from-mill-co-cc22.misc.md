@@ -1,1 +1,1 @@
-Remove specific model names from mill — consumers pick a level, llmio owns the binding
+Remove remaining specific model names from config example and documentation — `config/config.example.json` now defaults `web_knowledge_model` to `""` (empty string, resolved dynamically to the llmio tier-1 model at use time), and docs reference capability levels instead of concrete model slugs.

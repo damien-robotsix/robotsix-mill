@@ -223,7 +223,7 @@ makes the requested code changes, runs local tests, and commits.
 |---|---|---|
 | `MILL_REVIEW_FEEDBACK_ENABLED` | `false` | Enable autonomous review-revision agent (opt-in). |
 | `MILL_REVIEW_REVISION_MAX_ATTEMPTS` | `2` | Max review-revision LLM invocations per ticket before escalating to BLOCKED. |
-| `MILL_REVIEW_REVISION_MODEL` | `deepseek/deepseek-v4-pro` | Model for the review-revision agent. |
+| `MILL_REVIEW_REVISION_MODEL` | *(level 2)* | Model for the review-revision agent. |
 
 The review-revision agent uses the same sandboxed shell + file tools as
 the implement agent, scoped to the ticket's clone. It never pushes,

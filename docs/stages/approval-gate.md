@@ -36,7 +36,7 @@ conservative**: when unsure whether a genuine design decision exists,
 it defers to the human.
 
 The model used for triage is controlled by `MILL_AUTO_APPROVE_MODEL`
-(default: `openai/gpt-4o-mini`). Only the refined spec text is
+(default: level 1). Only the refined spec text is
 inspected — no git diff, no repo exploration.
 
 Auto-approved tickets record `"auto-approved: <reason>"` in their

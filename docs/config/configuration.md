@@ -360,12 +360,16 @@ Per-agent model selection is declared in each **agent definition's**
 is no per-agent model config in the JSON config file and no global backend
 toggle. The level *is* the backend choice.
 
-| Level | Transport | Model | Intent |
-|-------|-----------|-------|--------|
-| 1 | `openrouter[deepseek]` | `deepseek/deepseek-v4-flash` | cheap, repetitive (triage, audit, dedup, periodic scanners, …) |
-| 2 | `openrouter[deepseek]` | `deepseek/deepseek-v4-pro` | intermediate — implement, ci_fix, review, test, … |
-| 3 | `claude-sdk` | `opus` | high-level planning — refine, meta_triage |
-| 4 | `claude-sdk` | `fable-5` | intermediate planning — epic_breakdown |
+| Level | Transport | Intent |
+|-------|-----------|--------|
+| 1 | `openrouter` | cheap, repetitive (triage, audit, dedup, periodic scanners, …) |
+| 2 | `openrouter` | intermediate — implement, ci_fix, review, test, … |
+| 3 | `claude-sdk` | high-level planning — refine, meta_triage |
+| 4 | `claude-sdk` | intermediate planning — epic_breakdown |
+
+> **Note:** The concrete model behind each level is owned by robotsix-llmio's
+> tier defaults and may change without notice in mill.  To see or override the
+> current binding, consult llmio's tier configuration.
 
 Level-3 agents run on the Claude Agent SDK (subscription auth; needs Node +
 the `claude` CLI in the container). These knobs govern that path:
