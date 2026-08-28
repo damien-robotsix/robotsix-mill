@@ -1,0 +1,2 @@
+Add `PATCH /tickets/{id}/dependencies` to replace or clear a ticket's own `depends_on` edges. The endpoint validates the resulting graph is acyclic (rejecting cycles with a 400 that names the offending IDs), records the operator justification in the ticket history, and unparks a BLOCKED ticket back to its originating state when clearing the edges leaves no unmet dependencies — removing the need for a follow-up `resume-blocked`.</summary>
+<parameter name="kind">feature

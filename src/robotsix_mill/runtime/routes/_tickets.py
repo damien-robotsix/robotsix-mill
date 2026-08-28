@@ -766,6 +766,41 @@ def set_unblocks(
     return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
 
 
+@router.patch("/tickets/{ticket_id}/dependencies", response_model=TicketRead)
+def edit_dependencies(
+    ticket_id: str,
+    body: dict[str, Any] = Body(...),
+    request: Request = None,
+    svc=Depends(get_service),
+    worker=Depends(get_worker),
+    settings=Depends(get_settings),
+) -> TicketRead:
+    """Replace or clear a ticket's own ``depends_on`` edges.
+
+    Body: ``{"depends_on": [...], "reason": "..."}``. Validates the
+    resulting dependency graph is acyclic — rejecting with 400 and
+    naming the offending IDs otherwise — records the justification in
+    ``GET /tickets/{id}/history``, and (when the ticket is BLOCKED and
+    clearing the edges leaves no unmet dependencies) unparks it back to
+    its originating state so a follow-up ``resume-blocked`` is
+    unnecessary. Returns the updated ticket.
+    """
+    ticket_id = resolve_ticket_id(ticket_id, svc)
+    raw = body.get("depends_on", [])
+    if not isinstance(raw, list) or not all(isinstance(x, str) for x in raw):
+        raise HTTPException(400, "depends_on must be a list of strings")
+    reason = str(body.get("reason", "") or "")
+    try:
+        ticket = svc.edit_dependencies(ticket_id, raw, reason=reason)
+    except KeyError:
+        raise HTTPException(404, "ticket not found") from None
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    maybe_enqueue(ticket, worker)
+    repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
+    return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
+
+
 @router.post("/tickets/{ticket_id}/approve", response_model=TicketRead)
 def approve_ticket(
     ticket_id: str,
