@@ -66,4 +66,4 @@ def run_ops_classify_agent(
         prompt=user_prompt,
         what="ops-classify",
     )
-    return result.output
+    return OpsClassifyVerdict.model_validate(result.output)
