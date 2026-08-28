@@ -57,9 +57,7 @@ def run_ops_classify_agent(
     """
     from .yaml_loader import load_and_run_agent
 
-    user_prompt = (
-        section("title", title) + "\n\n" + section("body", body)
-    )
+    user_prompt = section("title", title) + "\n\n" + section("body", body)
 
     result = load_and_run_agent(
         settings=settings,

@@ -187,7 +187,11 @@ def _create_ticket_guarded(
                 content=IngestResult(ticket_id=dup_id, deduped=True).model_dump(),
             )
         return _create_ticket(
-            body, board_id, board_svc, worker, settings,
+            body,
+            board_id,
+            board_svc,
+            worker,
+            settings,
             classification=classification,
         )
 
@@ -265,8 +269,7 @@ def ingest_ticket(
     ops_verdict = _run_ops_classify(body, board_id, settings)
     if ops_verdict is not None and ops_verdict.classification == "OPERATIONAL":
         logger.info(
-            "ingest rejected as operational-maintenance: %s — %s",
-            body.title,
+            "ingest rejected as operational-maintenance: %s",
             ops_verdict.reason,
         )
         return JSONResponse(
@@ -302,7 +305,11 @@ def ingest_ticket(
 
     if not candidates:
         return _create_ticket_guarded(
-            body, board_id, board_svc, worker, settings,
+            body,
+            board_id,
+            board_svc,
+            worker,
+            settings,
             classification=classification_label,
         )
 
@@ -374,7 +381,8 @@ def _run_ops_classify(
         )
     except Exception as exc:
         logger.warning(
-            "ingest ops-classify failed, proceeding as code (fail-open): %s", exc,
+            "ingest ops-classify failed, proceeding as code (fail-open): %s",
+            exc,
         )
         return None
 

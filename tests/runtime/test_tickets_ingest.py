@@ -479,15 +479,18 @@ def test_ingest_rejects_operational_report(client, service):
     reason and no ticket is created."""
     from robotsix_mill.agents.ops_classify import OpsClassifyVerdict
 
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
-        return_value=OpsClassifyVerdict(
-            classification="OPERATIONAL",
-            reason="Manual credential rotation — no code change needed.",
+    with (
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
+            return_value=OpsClassifyVerdict(
+                classification="OPERATIONAL",
+                reason="Manual credential rotation — no code change needed.",
+            ),
         ),
-    ), patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
-        return_value=True,
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
+            return_value=True,
+        ),
     ):
         r = client.post(
             "/tickets/ingest",
@@ -515,15 +518,18 @@ def test_ingest_rejects_redeploy_report(client, service):
     """A service redeploy report classified as OPERATIONAL is rejected."""
     from robotsix_mill.agents.ops_classify import OpsClassifyVerdict
 
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
-        return_value=OpsClassifyVerdict(
-            classification="OPERATIONAL",
-            reason="Service redeploy — no code change required.",
+    with (
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
+            return_value=OpsClassifyVerdict(
+                classification="OPERATIONAL",
+                reason="Service redeploy — no code change required.",
+            ),
         ),
-    ), patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
-        return_value=True,
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
+            return_value=True,
+        ),
     ):
         r = client.post(
             "/tickets/ingest",
@@ -547,18 +553,21 @@ def test_ingest_allows_code_ticket_mentioning_deploy(client, service):
     is classified as CODE and proceeds normally."""
     from robotsix_mill.agents.ops_classify import OpsClassifyVerdict
 
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
-        return_value=OpsClassifyVerdict(
-            classification="CODE",
-            reason=(
-                "Report describes a code defect in the deploy script "
-                "that must be fixed in the repository."
+    with (
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
+            return_value=OpsClassifyVerdict(
+                classification="CODE",
+                reason=(
+                    "Report describes a code defect in the deploy script "
+                    "that must be fixed in the repository."
+                ),
             ),
         ),
-    ), patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
-        return_value=True,
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
+            return_value=True,
+        ),
     ):
         r = client.post(
             "/tickets/ingest",
@@ -611,15 +620,18 @@ def test_ingest_ops_classify_emits_diagnostic_event(client, service):
         emitted_events.append(kwargs)
         return True
 
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
-        return_value=OpsClassifyVerdict(
-            classification="OPERATIONAL",
-            reason="Token rotation.",
+    with (
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
+            return_value=OpsClassifyVerdict(
+                classification="OPERATIONAL",
+                reason="Token rotation.",
+            ),
         ),
-    ), patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
-        side_effect=_capture_emit,
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
+            side_effect=_capture_emit,
+        ),
     ):
         r = client.post(
             "/tickets/ingest",
@@ -643,7 +655,7 @@ def test_ingest_ops_classify_runs_before_dedup(client, service):
     from robotsix_mill.agents.ops_classify import OpsClassifyVerdict
 
     # Create an existing ticket with similar title.
-    existing = service.create(
+    service.create(
         "Rotate GHCR pull token",
         "Manual rotation needed.",
         source="monitor-1",
@@ -651,18 +663,22 @@ def test_ingest_ops_classify_runs_before_dedup(client, service):
         board_id="test-board",
     )
 
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
-        return_value=OpsClassifyVerdict(
-            classification="OPERATIONAL",
-            reason="Manual credential rotation.",
+    with (
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
+            return_value=OpsClassifyVerdict(
+                classification="OPERATIONAL",
+                reason="Manual credential rotation.",
+            ),
         ),
-    ), patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
-        return_value=True,
-    ), patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
-    ) as mock_dedup:
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
+            return_value=True,
+        ),
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
+        ) as mock_dedup,
+    ):
         r = client.post(
             "/tickets/ingest",
             json=_ingest_payload(
