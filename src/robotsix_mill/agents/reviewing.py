@@ -456,7 +456,7 @@ def run_review_agent(
         build_agent_from_definition,
         claude_sdk_supports_inline_image,
     )
-    from .yaml_loader import load_agent_definition
+    from .yaml_loader import load_agent_definition, resolve_agent_level
 
     definition = load_agent_definition(agent_definitions_dir() / "review.yaml")
 
@@ -500,7 +500,9 @@ def run_review_agent(
             repo_dir=repo_dir,
             screenshot_path=screenshot_path,
             agent=agent,
-            level=level if level is not None else definition.level,
+            level=level
+            if level is not None
+            else resolve_agent_level(settings, definition),
             settings=settings,
             limits=limits,
             claude_sdk_supports_inline_image=claude_sdk_supports_inline_image,

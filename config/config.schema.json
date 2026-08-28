@@ -591,6 +591,15 @@
           "title": "Agent Check Interval Seconds",
           "type": "integer"
         },
+        "agent_levels": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "advanced": true,
+          "description": "Per-stage llmio capability level (1-4) keyed by agent definition name; unset stages keep their YAML default.",
+          "title": "Agent Levels",
+          "type": "object"
+        },
         "allow_runtime_repo_registration": {
           "default": false,
           "description": "When true, allow POST /repos to hot-register repos at runtime. When false, only operator-configured repos are accepted.",

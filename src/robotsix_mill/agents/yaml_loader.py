@@ -191,6 +191,24 @@ def _resolve_includes(
     return "\n".join(result)
 
 
+def resolve_agent_level(settings: Settings | None, definition: AgentDefinition) -> int:
+    """Return the capability level a stage should run at.
+
+    ``settings.agent_levels[definition.name]`` wins when set (the operator's
+    per-stage L1..L4 choice); otherwise the level declared in the YAML
+    definition is the default.  Call sites that pick a cheaper level for a
+    specific ticket (config-only implement/review, the refine trivial route)
+    apply their choice on top of this resolution.
+    """
+    overrides = getattr(settings, "agent_levels", None) or {}
+    # ``getattr`` rather than attribute access: some callers/tests hand in a
+    # minimal stub carrying only ``level``.
+    level = overrides.get(getattr(definition, "name", None))
+    if level is None:
+        return int(definition.level)
+    return int(level)
+
+
 def load_agent_definition(path: Path) -> AgentDefinition:
     """Parse and validate an agent YAML definition.
 
@@ -285,7 +303,8 @@ def load_and_run_agent(
         definition_name: YAML file name under ``agent_definitions/``,
             e.g. ``"scope_triage"`` or ``"periodic/module_curator"``.
         tools: Tool list for the agent (default ``[]``).
-        level: Override capability level (default ``definition.level``).
+        level: Override capability level (default: ``settings.agent_levels``
+            for this definition's name, else ``definition.level``).
         prompt: The user prompt passed to ``h.run_sync(prompt, **run_kwargs)``.
         what: Human-readable label for retry log messages.
         repo_dir: Optional repo clone directory (passed through to
@@ -324,7 +343,9 @@ def load_and_run_agent(
         build_overrides["system_prompt"] = definition.system_prompt.format(
             **system_prompt_format_kwargs
         )
-    start_level = level if level is not None else definition.level
+    start_level = (
+        level if level is not None else resolve_agent_level(settings, definition)
+    )
 
     # A tier can be unavailable for reasons that have nothing to do with this
     # agent — a provider outage, or a Claude subscription whose usage credits

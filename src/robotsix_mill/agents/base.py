@@ -195,10 +195,12 @@ def build_agent_from_definition(
     else:
         resolved_output_type = str
 
+    from .yaml_loader import resolve_agent_level
+
     kwargs: dict[str, Any] = {
         "name": definition.name,
         "system_prompt": definition.system_prompt,
-        "level": definition.level,
+        "level": resolve_agent_level(settings, definition),
         "web_knowledge": definition.web_knowledge,
         "report_issue": definition.report_issue,
         "read_ticket": definition.read_ticket,
