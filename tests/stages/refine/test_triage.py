@@ -748,6 +748,33 @@ def test_triage_skip_triage_refine_exception_short_circuits(ctx_factory, tmp_pat
     assert "triage classifier failed" in (result.note or "")
 
 
+def test_triage_skip_usage_limit_falls_through_to_refine(ctx_factory, tmp_path):
+    """A classifier that runs out of request budget is not "model unavailable".
+
+    Regression for 2026-08-28: large operator-filed drafts exhausted
+    ``triage_request_limit`` and were parked at human approval with a
+    misleading note; they must fall through to refine instead.
+    """
+    from pydantic_ai import UsageLimitExceeded
+
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+
+    with patch.object(
+        _triage.refining,
+        "triage_refine",
+        side_effect=UsageLimitExceeded(
+            "The next request would exceed the request_limit of 16"
+        ),
+    ):
+        result = _triage.triage_skip(
+            ctx, t, "draft", None, None, t.title, ws, ctx.settings, None
+        )
+
+    assert result is None
+
+
 def test_triage_skip_no_change_decision(ctx_factory, tmp_path):
     """NO_CHANGE decision routes to implement (TASK without branch)."""
     ctx = ctx_factory()
