@@ -97,8 +97,8 @@ def _file_infra_ticket(
 
     now = _time.monotonic()
     key = title.casefold()
-    last = _INFRA_TICKET_LAST.get(key, 0.0)
-    if now - last < _INFRA_TICKET_COOLDOWN:
+    last = _INFRA_TICKET_LAST.get(key)
+    if last is not None and now - last < _INFRA_TICKET_COOLDOWN:
         return
     _INFRA_TICKET_LAST[key] = now
 
