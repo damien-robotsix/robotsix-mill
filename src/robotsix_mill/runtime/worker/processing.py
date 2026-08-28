@@ -80,7 +80,6 @@ def _file_infra_ticket(
     ctx: StageContext,
     title: str,
     body: str,
-    category: str = "error",
 ) -> None:
     """File a draft ticket for a server-level infrastructure issue, with cooldown.
 
