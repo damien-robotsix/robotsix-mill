@@ -201,9 +201,11 @@ def resolve_agent_level(settings: Settings | None, definition: AgentDefinition) 
     apply their choice on top of this resolution.
     """
     overrides = getattr(settings, "agent_levels", None) or {}
-    level = overrides.get(definition.name)
+    # ``getattr`` rather than attribute access: some callers/tests hand in a
+    # minimal stub carrying only ``level``.
+    level = overrides.get(getattr(definition, "name", None))
     if level is None:
-        return definition.level
+        return int(definition.level)
     return int(level)
 
 
