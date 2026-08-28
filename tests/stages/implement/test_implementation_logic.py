@@ -654,6 +654,7 @@ class TestEvaluateTestResults:
             _simple_namespace(
                 detect_edit_claim_contradiction=lambda **kw: [],
                 detect_missing_claimed_files=lambda **kw: [],
+                cited_fix_unverified=lambda *a, **kw: None,
             ),
         )
         monkeypatch.setattr(
@@ -830,6 +831,7 @@ class TestEvaluateTestResults:
                     "edit_file",
                 ],
                 detect_missing_claimed_files=lambda **kw: [],
+                cited_fix_unverified=lambda *a, **kw: None,
             ),
         )
 

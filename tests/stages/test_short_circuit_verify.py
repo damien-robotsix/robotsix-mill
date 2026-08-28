@@ -633,3 +633,82 @@ def test_malformed_payload_fails_closed():
         )
         is False
     )
+
+
+# --- cited_fix_unverified ----------------------------------------------------
+
+
+def _git(repo, *args):
+    import subprocess
+
+    return subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _init_repo(repo):
+    repo.mkdir(parents=True, exist_ok=True)
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "Test")
+
+
+def _commit(repo, name, content):
+    (repo / name).write_text(content)
+    _git(repo, "add", name)
+    _git(repo, "commit", "-q", "-m", f"add {name}")
+    return _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+
+def test_cited_fix_no_repo_dir():
+    assert scv.cited_fix_unverified(None, "already fixed in deadbeef1") is None
+
+
+def test_cited_fix_no_external_claim(tmp_path):
+    # A rationale with a hex-like token but NO external-fix claim must not
+    # trigger verification (avoids false blocks on legitimate no-change runs).
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    assert scv.cited_fix_unverified(repo, "the value deadbeef1 is a constant") is None
+
+
+def test_cited_fix_claim_without_sha(tmp_path):
+    # External-fix claim but no commit cited → nothing to verify → allow close.
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    assert scv.cited_fix_unverified(repo, "already fixed elsewhere") is None
+
+
+def test_cited_fix_verified_ancestor_allows_close(tmp_path):
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    sha = _commit(repo, "a.txt", "hello")
+    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    assert scv.cited_fix_unverified(repo, f"already fixed in commit {sha}") is None
+
+
+def test_cited_fix_unknown_sha_blocks(tmp_path):
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _commit(repo, "a.txt", "hello")
+    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    diag = scv.cited_fix_unverified(repo, "already fixed in commit e09b8958")
+    assert diag is not None
+    assert "e09b8958" in diag
+    assert "NOT present at origin/main" in diag
+
+
+def test_cited_fix_not_ancestor_blocks(tmp_path):
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    base = _commit(repo, "a.txt", "hello")
+    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    # A later commit that is NOT reachable from origin/main.
+    later = _commit(repo, "b.txt", "world")
+    assert later != base
+    diag = scv.cited_fix_unverified(repo, f"already merged in {later}")
+    assert diag is not None
+    assert later in diag
