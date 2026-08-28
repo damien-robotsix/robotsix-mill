@@ -126,6 +126,135 @@ def test_pending_then_success_is_passed():
     assert tool("mill/x").startswith("CI_PASSED")
 
 
+def test_stuck_after_consecutive_pending():
+    """After max_consecutive_pending returns CI_STILL_PENDING, the next
+    call returns CI_STUCK without burning a full timeout_s window."""
+    call_count = 0
+
+    def status(attempt):
+        nonlocal call_count
+        call_count += 1
+        return ("pending", "")
+
+    clock = {"t": 0.0}
+
+    def fake_monotonic():
+        clock["t"] += 600.0
+        return clock["t"]
+
+    tool = build_ci_wait_tool(
+        branch="mill/x",
+        ci_status_fn=status,
+        max_consecutive_pending=2,
+        timeout_s=1000.0,
+        poll_interval_s=1.0,
+        sleep=_no_sleep,
+        monotonic=fake_monotonic,
+    )
+    # 1st call: polls, times out → CI_STILL_PENDING (consecutive=1)
+    out1 = tool("mill/x")
+    assert out1.startswith("CI_STILL_PENDING")
+    # 2nd call: polls, times out → CI_STILL_PENDING (consecutive=2)
+    out2 = tool("mill/x")
+    assert out2.startswith("CI_STILL_PENDING")
+    # 3rd call: CI_STUCK immediately, no polling needed
+    out3 = tool("mill/x")
+    assert out3.startswith("CI_STUCK")
+    assert "2 consecutive" in out3
+
+    # Only a subset of calls hit ci_status_fn (the 3rd was short-circuited)
+    assert (
+        call_count < 10
+    )  # should be ~4 (2 calls × 2 polls each), not the 3rd call's worth
+
+
+def test_stuck_counter_resets_on_failure():
+    """A CI_FAILING response clears the consecutive_pending counter."""
+    # With max_consecutive_pending=3, after 2 CI_STILL_PENDING results
+    # (consecutive=2, which is < 3) the 3rd call still polls. If that
+    # poll returns "failure", the counter is reset and no CI_STUCK.
+    call_log: list[str] = []
+
+    def status(attempt):
+        # 1st call (2 polls, both pending) → timeout → CI_STILL_PENDING
+        # 2nd call (1 poll → failure) → CI_FAILING
+        if len(call_log) < 3:
+            call_log.append(f"poll_{attempt}")
+            return ("pending", "")
+        call_log.append(f"failure_{attempt}")
+        return ("failure", "ruff check failed")
+
+    clock = {"t": 0.0}
+
+    def fake_monotonic():
+        clock["t"] += 600.0
+        return clock["t"]
+
+    tool = build_ci_wait_tool(
+        branch="mill/x",
+        ci_status_fn=status,
+        max_consecutive_pending=3,
+        timeout_s=1000.0,
+        poll_interval_s=1.0,
+        sleep=_no_sleep,
+        monotonic=fake_monotonic,
+    )
+    # 1st call: polls pending × 2, deadline → CI_STILL_PENDING (consecutive=1)
+    out1 = tool("mill/x")
+    assert out1.startswith("CI_STILL_PENDING")
+    # 2nd call: first poll returns failure → CI_FAILING (consecutive reset to 0)
+    out2 = tool("mill/x")
+    assert out2.startswith("CI_FAILING")
+    # 3rd call: should work normally (not CI_STUCK — counter was reset)
+    out3 = tool("mill/x")
+    assert out3.startswith("CI_FAILING")
+
+
+def test_stuck_counter_resets_on_success():
+    """A CI_PASSED clears the consecutive_pending counter."""
+    tool = build_ci_wait_tool(
+        branch="mill/x",
+        ci_status_fn=lambda attempt: ("success", ""),
+        max_consecutive_pending=2,
+        timeout_s=1000.0,
+        poll_interval_s=1.0,
+        sleep=_no_sleep,
+    )
+    out = tool("mill/x")
+    assert out.startswith("CI_PASSED")
+
+
+def test_ci_stuck_short_circuits_without_calling_status_fn():
+    """CI_STUCK should be returned without calling ci_status_fn at all
+    (no polling, no burning timeout_s)."""
+    status_calls = []
+
+    def status(attempt):
+        status_calls.append(attempt)
+        return ("pending", "")
+
+    clock = {"t": 0.0}
+
+    def fake_monotonic():
+        clock["t"] += 600.0
+        return clock["t"]
+
+    tool = build_ci_wait_tool(
+        branch="mill/x",
+        ci_status_fn=status,
+        max_consecutive_pending=2,
+        timeout_s=1000.0,
+        poll_interval_s=1.0,
+        sleep=_no_sleep,
+        monotonic=fake_monotonic,
+    )
+    tool("mill/x")  # CI_STILL_PENDING (polls, timeouts)
+    tool("mill/x")  # CI_STILL_PENDING (polls, timeouts)
+    status_calls_before = len(status_calls)
+    tool("mill/x")  # CI_STUCK (short-circuits)
+    assert len(status_calls) == status_calls_before  # no extra call
+
+
 # --- trace_stage child-span test ----------------------------------------
 
 

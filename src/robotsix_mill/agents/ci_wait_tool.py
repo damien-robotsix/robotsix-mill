@@ -34,11 +34,57 @@ from ..runtime.tracing import trace_stage
 CiStatusFn = Callable[[int], "tuple[str, str]"]
 
 
+def _poll_ci(
+    *,
+    state: dict[str, int],
+    attempt: int,
+    max_iterations: int,
+    ci_status_fn: CiStatusFn,
+    deadline: float,
+    timeout_s: float,
+    poll_interval_s: float,
+    sleep: Callable[[float], None],
+    monotonic: Callable[[], float],
+) -> str:
+    """Poll CI status until a terminal verdict or deadline.
+
+    Updates *state["consecutive_pending"]* on timeout and clears it on any
+    terminal verdict.  Extracted from ``build_ci_wait_tool`` to keep the
+    enclosing function's cyclomatic complexity within lint bounds.
+    """
+    while True:
+        conclusion, summary = ci_status_fn(attempt)
+        if conclusion == "success":
+            state["consecutive_pending"] = 0
+            sha_note = f" ({summary})" if summary else ""
+            return f"CI_PASSED: all checks are green{sha_note} — report DONE."
+        if conclusion == "failure":
+            state["consecutive_pending"] = 0
+            return f"CI_FAILING (attempt {attempt}/{max_iterations}):\n\n{summary}"
+        if conclusion == "gone":
+            state["consecutive_pending"] = 0
+            return (
+                "CI_GONE: the PR/branch is no longer visible on the forge "
+                "— report FAILED."
+            )
+        # conclusion == "pending" (or anything unexpected) — keep waiting.
+        if monotonic() >= deadline:
+            state["consecutive_pending"] += 1
+            return (
+                f"CI_STILL_PENDING: checks have not finished after "
+                f"{int(timeout_s)}s (attempt {attempt}/{max_iterations}). "
+                f"Call wait_for_ci again to keep waiting, or report FAILED "
+                f"if CI appears stuck."
+            )
+        sleep(poll_interval_s)
+
+
 def build_ci_wait_tool(
     *,
     branch: str,
     ci_status_fn: CiStatusFn | None,
     max_iterations: int = 5,
+    max_consecutive_pending: int = 2,
     poll_interval_s: float = 30.0,
     timeout_s: float = 1500.0,
     sleep: Callable[[float], None] = time.sleep,
@@ -56,6 +102,13 @@ def build_ci_wait_tool(
     *poll_interval_s* seconds up to *timeout_s* before returning a
     still-pending signal.  *sleep* / *monotonic* are injectable for tests.
 
+    *max_consecutive_pending* is the early-bail threshold: when the tool
+    returns ``CI_STILL_PENDING`` this many times in a row (each burning a
+    full *timeout_s* wait), subsequent calls return ``CI_STUCK`` immediately
+    so the agent can report FAILED rather than draining the remaining
+    iteration budget on a stuck CI run.  The stuck signal frees the agent to
+    focus on environment-mismatch diagnosis or escalate to a human.
+
     When *ci_status_fn* is ``None`` (e.g. the multi-repo merge path, which
     runs its own external re-check loop), the tool is still wired so the
     prompt's call directive resolves, but every call returns
@@ -63,7 +116,7 @@ def build_ci_wait_tool(
     DONE, and the caller re-checks CI.
     """
     # Mutable call counter captured in the closure (the iteration budget).
-    state = {"calls": 0}
+    state = {"calls": 0, "consecutive_pending": 0}
 
     def wait_for_ci(branch_name: str) -> str:
         """Block until the latest CI run on the ticket branch finishes, then
@@ -88,6 +141,11 @@ def build_ci_wait_tool(
         - ``CI_STILL_PENDING`` — checks did not finish within the wait window.
           Call wait_for_ci again to keep waiting, or report FAILED if CI looks
           stuck.
+        - ``CI_STUCK`` — CI has been pending for multiple consecutive calls
+          with no progress. The CI run is likely stuck (infrastructure issue,
+          or the sandbox environment cannot reproduce the remote CI failure).
+          Report FAILED and explain that CI never reported a result despite
+          multiple waits.
         - ``CI_ITERATION_CAP_REACHED`` — you have used your entire CI
           verification budget. Stop and report FAILED with what remains broken.
         - ``CI_GONE`` — the PR/branch vanished from the forge. Report FAILED.
@@ -116,31 +174,32 @@ def build_ci_wait_tool(
                     f"report FAILED with a brief summary of what is still broken."
                 )
 
+            # Early bail-out: if we've already hit the consecutive-pending
+            # ceiling on a prior call, return CI_STUCK immediately without
+            # burning another full timeout_s window.  The stuck flag is
+            # cleared below when CI returns a terminal verdict (success,
+            # failure, or gone), so a later real CI response is not blocked.
             attempt = state["calls"]
-            deadline = monotonic() + timeout_s
-            while True:
-                conclusion, summary = ci_status_fn(attempt)
-                if conclusion == "success":
-                    sha_note = f" ({summary})" if summary else ""
-                    return f"CI_PASSED: all checks are green{sha_note} — report DONE."
-                if conclusion == "failure":
-                    return (
-                        f"CI_FAILING (attempt {attempt}/{max_iterations}):\n\n{summary}"
-                    )
-                if conclusion == "gone":
-                    return (
-                        "CI_GONE: the PR/branch is no longer visible on the forge "
-                        "— report FAILED."
-                    )
-                # conclusion == "pending" (or anything unexpected) — keep waiting.
-                if monotonic() >= deadline:
-                    return (
-                        f"CI_STILL_PENDING: checks have not finished after "
-                        f"{int(timeout_s)}s (attempt {attempt}/{max_iterations}). "
-                        f"Call wait_for_ci again to keep waiting, or report FAILED "
-                        f"if CI appears stuck."
-                    )
-                sleep(poll_interval_s)
+            if state["consecutive_pending"] >= max_consecutive_pending:
+                return (
+                    f"CI_STUCK: CI has been pending for "
+                    f"{state['consecutive_pending']} consecutive waits without "
+                    f"reporting a result (attempt {attempt}/{max_iterations}). "
+                    f"The CI run is likely stuck — report FAILED and explain "
+                    f"that CI never reported a result despite multiple waits."
+                )
+
+            return _poll_ci(
+                state=state,
+                attempt=attempt,
+                max_iterations=max_iterations,
+                ci_status_fn=ci_status_fn,
+                deadline=monotonic() + timeout_s,
+                timeout_s=timeout_s,
+                poll_interval_s=poll_interval_s,
+                sleep=sleep,
+                monotonic=monotonic,
+            )
 
     return wait_for_ci
 
@@ -155,8 +214,9 @@ ToolRegistry.register(
         description=(
             "Block until the latest CI run on the ticket branch finishes and "
             "return its verdict (CI_PASSED / CI_FAILING / CI_STILL_PENDING / "
-            "CI_ITERATION_CAP_REACHED / CI_GONE). Call after pushing a fix. "
-            "Iteration-capped and guardrailed to the ticket branch."
+            "CI_STUCK / CI_ITERATION_CAP_REACHED / CI_GONE). Call after "
+            "pushing a fix. Iteration-capped and guardrailed to the ticket "
+            "branch."
         ),
         category="git",
         parameters={"branch_name": "str"},

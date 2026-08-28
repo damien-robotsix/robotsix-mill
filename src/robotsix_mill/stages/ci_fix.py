@@ -952,6 +952,9 @@ class CIFixStage(Stage):
                         token_cache_clear=_token_cache_clear,
                         ci_status_fn=self._make_ci_status_fn(ticket, ctx, branch),
                         ci_log_fetch_fn=self._make_ci_log_fetch_fn(ctx, branch),
+                        sandbox_image=ctx.repo_config.sandbox_image
+                        if ctx.repo_config
+                        else None,
                     )
 
                 if timeout_s > 0:

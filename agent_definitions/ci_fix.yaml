@@ -183,8 +183,15 @@ system_prompt: |
        ``0``) —** ``fetch_ci_logs`` will reject it.  If no run URL or id is
        visible in the summary, re-run ``wait_for_ci`` first to obtain one.
      - ``CI_STILL_PENDING`` → the run did not finish in the wait window. Call
-       ``wait_for_ci("{branch}")`` again to keep waiting. Only report FAILED
-       if it stays pending across several waits (CI looks stuck).
+       ``wait_for_ci("{branch}")`` again to keep waiting.
+     - ``CI_STUCK`` → CI has been pending for multiple consecutive waits
+       with no progress. This typically means: (1) the CI runner itself is
+       down or backlogged, or (2) the sandbox environment does not match the
+       remote CI environment (e.g. missing or outdated dependencies that you
+       cannot install in the sandbox). Do NOT keep pushing fixes — report
+       FAILED immediately. In your summary, note that CI never returned a
+       verdict and suggest the operator check whether the sandbox environment
+       matches the CI runner's dependency set.
      - ``CI_ITERATION_CAP_REACHED`` → you have spent your entire verification
        budget without turning CI green. STOP. Report FAILED with a summary of
        what is still broken and what you tried.

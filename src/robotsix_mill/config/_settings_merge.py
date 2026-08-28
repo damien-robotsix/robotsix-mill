@@ -175,6 +175,23 @@ class _MergeSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+    # Early bail-out when CI is stuck.  When wait_for_ci returns
+    # CI_STILL_PENDING this many times in a row (each burning a full
+    # ci_fix_wait_timeout_s window), the next call returns CI_STUCK
+    # immediately without polling — the agent can then report FAILED
+    # rather than draining the remaining iteration budget on a CI run
+    # that is never going to report.  Set to 0 to disable (never
+    # short-circuit on consecutive pending).
+    ci_fix_max_consecutive_pending: int = Field(
+        description=(
+            "Early bail-out threshold: return CI_STUCK after this many "
+            "consecutive CI_STILL_PENDING results. 0 disables."
+        ),
+        default=2,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
+
     # Maximum number of automatic CI re-runs for transient/infrastructure
     # failures (network flakes, runner shutdowns, buildkit boot timeouts,
     # etc.) before escalating to a blocking ci_fix_dependency ticket.
