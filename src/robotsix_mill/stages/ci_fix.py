@@ -297,6 +297,7 @@ class CIFixStage(Stage):
             alerts,
             changed_paths,
             head_sha,
+            failing_run_urls=_failing_run_urls,
         )
 
     def _resolve_clone_and_status(
@@ -730,6 +731,7 @@ class CIFixStage(Stage):
         alerts: list[dict[str, Any]],
         changed_paths: set[str],
         head_sha: str = "",
+        failing_run_urls: list[str] | None = None,
     ) -> Outcome:
         """Reconcile, run the agent (which owns the loop), and route its verdict.
 
@@ -790,9 +792,11 @@ class CIFixStage(Stage):
         # "timed out after 2400s" from the worker.
         if result is None and self._last_agent_timed_out:
             check_names = _extract_check_names(failing_summary)
+            timeout_log_url = failing_run_urls[0] if failing_run_urls else None
+            url_part = f" Log: {timeout_log_url}" if timeout_log_url else ""
             timeout_note = (
                 f"ci-fix agent timed out after {self._last_agent_timeout_elapsed:.0f}s "
-                f"while working on: {check_names}. "
+                f"while working on: {check_names}.{url_part} "
                 "The agent did not produce a result before its wall-clock budget "
                 "was exhausted — it may be stuck in an analysis loop or the CI "
                 "failure requires a more complex fix than the agent can apply "
@@ -819,11 +823,24 @@ class CIFixStage(Stage):
         if codeql_note is not None:
             return Outcome(State.BLOCKED, codeql_note)
 
+        check_names = _extract_check_names(failing_summary)
+        budget_log_url = failing_run_urls[0] if failing_run_urls else None
+        verdict_part = ""
+        if result is not None and result.summary:
+            verdict_part = f" Agent verdict: {result.summary}"
+        url_part = f" Log: {budget_log_url}" if budget_log_url else ""
+        artifact_path = ctx.service.workspace(ticket).artifacts_dir / "ci_fix.md"
+        artifact_part = (
+            f" See {artifact_path} for the agent's last cycle detail."
+            if artifact_path.exists()
+            else ""
+        )
         return Outcome(
             State.BLOCKED,
-            "ci fix agent could not turn CI green within its iteration budget "
-            "— manual intervention required. "
-            "Resume-blocked to retry from human_mr_approval.",
+            f"ci fix agent could not turn CI green within its iteration budget "
+            f"on: {check_names}.{url_part}{verdict_part}{artifact_part} "
+            "Manual intervention required — resume-blocked to retry from "
+            "human_mr_approval.",
         )
 
     def _write_ci_fix_artifact(

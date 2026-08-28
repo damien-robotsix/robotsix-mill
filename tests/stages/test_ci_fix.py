@@ -3389,10 +3389,10 @@ def test_agent_timeout_unknown_check_fallback(tmp_path, monkeypatch):
     assert "(unknown)" in out.note
 
 
-def test_agent_crash_without_timeout_uses_generic_note(tmp_path, monkeypatch):
+def test_agent_crash_without_timeout_uses_budget_note(tmp_path, monkeypatch):
     """When _invoke_agent returns None but _last_agent_timed_out is False
-    (agent crashed, not timed out), the generic budget-exhausted note is
-    used instead of the timeout diagnostic."""
+    (agent crashed, not timed out), the budget-exhausted note is used
+    instead of the timeout diagnostic — and it names the failing check."""
     ctx = _gh(tmp_path, ci_fix_agent_timeout_seconds="1800")
     _failing_check_status(monkeypatch)
 
@@ -3412,9 +3412,71 @@ def test_agent_crash_without_timeout_uses_generic_note(tmp_path, monkeypatch):
     out = stage.run(t, ctx)
 
     assert out.next_state is State.BLOCKED
-    # The generic budget note, not the timeout diagnostic.
+    # The budget note names the failing check.
+    assert "lint" in out.note
     assert "iteration budget" in out.note
     assert "timed out" not in out.note
+
+
+def test_budget_exhaustion_note_includes_check_and_url(tmp_path, monkeypatch):
+    """A ticket blocked by budget exhaustion has a note naming at least one
+    failing check and a log URL when run URLs are available."""
+    ctx = _gh(tmp_path, ci_fix_agent_timeout_seconds="1800")
+    _failing_check_status(monkeypatch)
+
+    # Provide a failing workflow run with a URL so the note includes it.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, head_sha=None, branch=None: [
+            {
+                "id": 99,
+                "conclusion": "failure",
+                "name": "CI",
+                "html_url": "https://github.com/o/r/actions/runs/99",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "fetch_workflow_job_logs",
+        lambda self, *, run_id, full_log=False: "error log",
+    )
+    # No code-scanning alerts.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_code_scanning_alerts",
+        lambda self, *, source_branch, require_checks=False: [],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch, require_checks=False: [],
+    )
+
+    def fake_invoke(self, ticket, ctx, repo_dir, branch, failing_summary):
+        return CiFixResult(status="FAILED", summary="could not fix ruff")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.CIFixStage._invoke_agent",
+        fake_invoke,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    stage = CIFixStage()
+    out = stage.run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    # Names the failing check.
+    assert "lint" in out.note
+    # Includes the log URL.
+    assert "https://github.com/o/r/actions/runs/99" in out.note
+    # Includes the agent's verdict summary.
+    assert "could not fix ruff" in out.note
+    # Not the generic bare message.
+    assert "manual intervention required" in out.note.lower()
 
 
 # ---------------------------------------------------------------------------
