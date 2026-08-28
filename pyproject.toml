@@ -72,16 +72,20 @@ exclude-newer = "7d"
 exclude-newer-package = { pypdf = "2026-08-07T00:00:00Z" }
 # robotsix-github-auth pins robotsix-http to an older rev (4cf79993) while
 # robotsix-llmio pins ba90d55ea.  The two transitive exact-rev pins are
-# otherwise irreconcilable; both are ancestors of 13e6e9ab, so unifying on
-# it is safe.  The override replaces every robotsix-http requirement in the
-# graph with this one source.  13e6e9ab carries the POST-retry fix; it is a
-# no-op for this graph (github-auth and llmio use call_with_retry, not the
-# method-gated RetryClient the fix touches) and is pinned here to keep the
-# fleet on one rev.
-override-dependencies = ["robotsix-http @ git+https://github.com/damien-robotsix/robotsix-http.git@13e6e9ab330f9be3b8b1e7bc2694210f7d9e5848"]
+# otherwise irreconcilable; both are ancestors of the rev below, so
+# unifying on it is safe.  The override replaces every robotsix-http
+# requirement in the graph with this one source.  This rev carries the
+# `_drive_sync` running-loop fix, which github-auth NEEDS: its sync
+# `call_with_retry` reached `asyncio.run()` from the async agent tool
+# bridge and raised, surfacing as a *permanent* `TokenMintError` that
+# deterministically blocked every bridged push/fetch/CI-log call.
+# Keep it >= 0.3.2 in step with the robotsix-llmio pin below: that release
+# renamed `_compute_backoff` to the public `compute_backoff`, and only
+# llmio 13a53e48 onward imports the new name.
+override-dependencies = ["robotsix-http @ git+https://github.com/damien-robotsix/robotsix-http.git@cdfd4d1c42679fef73081439562872792e202dc4"]
 
 [tool.uv.sources]
-robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "f369b361dc5f5df1ee060f97004979e335abeed9" }
+robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "13a53e48f2df7944c7bf565bbf4b1ecd3cefc7e1" }
 robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "214eba160408b3d9e9d5775bc84d1531a2063d4f" }
 robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
 robotsix-config = { git = "https://github.com/damien-robotsix/robotsix-config", rev = "d29de204db62910f062456e5055fc2fe232e04a9" }
