@@ -328,6 +328,33 @@ POST /tickets/<ticket-id>/resume-blocked
 
 Resumes a `blocked` ticket back to its originating state, or clears retry metadata from a retrying ticket.  Request body is optional: `{"note": "..."}`.  For a `blocked` ticket the note is recorded as a comment and, when resuming back into `ready`, also clears the implement stage's stale-spec guard — supply a justification note instead of re-blocking immediately when you want to force a retry on an unchanged spec.  Returns 409 if the ticket is not blocked or retrying.
 
+### POST /tickets/{id}/reset-fingerprint — clear the stale-spec guard
+
+```
+POST /tickets/<ticket-id>/reset-fingerprint
+```
+
+Deletes the ticket workspace's `artifacts/implement.md` so the next
+implement pass is not refused by the stale-respawn guard, and clears the
+spec-fingerprint override marker so a later `resume-blocked` does not
+silently suppress the guard as well.  No request body.  The ticket state
+is NOT changed — pair it with `resume-blocked` (or a `transition`) to
+actually re-run the stage.
+
+Use it when a ticket is stuck in a resume loop because a *previous*
+implement attempt died on a transient or environmental failure: the
+guard sees an unchanged spec, concludes the retry would repeat itself,
+and re-blocks. That is the guard working as designed on a wrong premise
+— the spec is unchanged because nothing ever ran, not because the work
+is already done.
+
+Do **not** reach for it when the spec genuinely is unchanged and the
+prior attempt genuinely completed: there the guard is right, and the fix
+is a revised spec (`PUT /tickets/{id}/description`) or `redraft`.
+
+Returns the enriched `TicketRead`.  Raises 404 if the ticket does not
+exist, 500 if the artifact cannot be removed.
+
 ### POST /tickets/{id}/answer — answer a pending question
 
 ```

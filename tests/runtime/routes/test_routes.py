@@ -1707,7 +1707,6 @@ _CHAT_SKILL_UNDOCUMENTED_BASELINE = {
     "/migrate",
     "/unblocks",
     "/redraft",
-    "/reset-fingerprint",
     "/abandon-epic",
     "/generate-children",
 }
