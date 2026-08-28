@@ -35,6 +35,58 @@ def _capture_build_agent_kwargs(monkeypatch):
     return captured
 
 
+# ── agent_levels override ─────────────────────────────────────────────
+
+
+def test_agent_levels_setting_overrides_yaml_level(monkeypatch):
+    """``settings.agent_levels[name]`` wins over the definition's YAML level."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition(name="implement", level=2)
+    settings = Settings(agent_levels={"implement": 3, "ci_fix": 3})
+
+    build_agent_from_definition(settings, definition, tools=[])
+    assert captured[0]["level"] == 3
+
+
+def test_agent_levels_setting_leaves_other_stages_on_yaml_level(monkeypatch):
+    """A stage without an entry keeps its YAML level."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition(name="review", level=2)
+    settings = Settings(agent_levels={"implement": 3})
+
+    build_agent_from_definition(settings, definition, tools=[])
+    assert captured[0]["level"] == 2
+
+
+def test_explicit_level_override_beats_agent_levels(monkeypatch):
+    """A call-site ``level=`` (cheap routes) still wins over the setting."""
+    from robotsix_mill.agents.base import build_agent_from_definition
+    from robotsix_mill.config import Settings
+
+    captured = _capture_build_agent_kwargs(monkeypatch)
+    definition = _make_definition(name="implement", level=2)
+    settings = Settings(agent_levels={"implement": 3})
+
+    build_agent_from_definition(settings, definition, tools=[], level=1)
+    assert captured[0]["level"] == 1
+
+
+def test_resolve_agent_level_helper():
+    from robotsix_mill.agents.yaml_loader import resolve_agent_level
+    from robotsix_mill.config import Settings
+
+    d = _make_definition(name="ci_fix", level=2)
+    assert resolve_agent_level(Settings(), d) == 2
+    assert resolve_agent_level(Settings(agent_levels={"ci_fix": 3}), d) == 3
+    assert resolve_agent_level(None, d) == 2
+
+
 # ── happy path ───────────────────────────────────────────────────────
 
 

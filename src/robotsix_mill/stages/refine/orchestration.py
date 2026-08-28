@@ -542,7 +542,18 @@ class RefineAgentMixin:
                     _cheap_route = True
                     set_current_span_attribute("refine.forced_cheap_re_refine", True)
 
-            resolved_level = refine_level if refine_level is not None else 3
+            if refine_level is not None:
+                resolved_level = refine_level
+            else:
+                from robotsix_mill._resources import agent_definitions_dir
+                from robotsix_mill.agents.yaml_loader import (
+                    load_agent_definition,
+                    resolve_agent_level,
+                )
+
+                resolved_level = resolve_agent_level(
+                    s, load_agent_definition(agent_definitions_dir() / "refine.yaml")
+                )
             set_current_span_attribute("refine.model_level", resolved_level)
             set_current_span_attribute("refine.routed_trivial", _trivial)
 

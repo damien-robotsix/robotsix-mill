@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 from robotsix_mill._resources import (
     language_instructions_dir as _resources_language_instructions_dir,
@@ -265,6 +265,33 @@ class _StagesSettings(BaseModel):
     )
     # Model tier for the trace inspector.  Level 1 (cheapest flash), the default;
     # raising it costs more and is opt-in only.
+    # Per-stage capability level, following llmio's L1..L4 convention:
+    # 1 = cheap (OpenRouter flash), 2 = intermediate (OpenRouter pro),
+    # 3 = Claude subscription (opus), 4 = frontier (Claude fable).  Keyed by
+    # the agent definition ``name`` (``implement``, ``ci_fix``, ``review``,
+    # ``refine``, ``rebase``, ``retrospect``, ``document``, …); an absent key
+    # keeps the level declared in ``agent_definitions/<name>.yaml``.  This is
+    # THE knob for moving a stage between pay-per-token and flat-rate tiers —
+    # e.g. ``{"implement": 3, "ci_fix": 3}`` runs both on the subscription.
+    # Call-site cheap routes (config-only implement/review → level 1, the
+    # refine trivial route) still apply on top.
+    agent_levels: dict[str, int] = Field(
+        description=(
+            "Per-stage llmio capability level (1-4) keyed by agent definition "
+            "name; unset stages keep their YAML default."
+        ),
+        default_factory=dict,
+        json_schema_extra={"advanced": True},
+    )
+
+    @field_validator("agent_levels")
+    @classmethod
+    def _validate_agent_levels(cls, value: dict[str, int]) -> dict[str, int]:
+        bad = {k: v for k, v in value.items() if not (1 <= int(v) <= 4)}
+        if bad:
+            raise ValueError(f"agent_levels values must be 1..4, got {bad}")
+        return {k: int(v) for k, v in value.items()}
+
     trace_review_model_level: int = Field(
         description="Model tier for the trace inspector (1=flash, 2=pro, 3=opus).",
         default=1,

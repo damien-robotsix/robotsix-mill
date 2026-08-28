@@ -564,7 +564,7 @@ def run_refine_agent(
         level_uses_claude,
     )
     from .retry import _is_claude_sdk_degenerate_result, run_agent
-    from .yaml_loader import load_agent_definition
+    from .yaml_loader import load_agent_definition, resolve_agent_level
 
     definition = load_agent_definition(agent_definitions_dir() / "refine.yaml")
 
@@ -702,7 +702,11 @@ def run_refine_agent(
 
     # Right-size the level-3 Claude model (subscription transport unchanged).
     # Skip when downgraded to an OpenRouter level (1/2), which ignores `model`.
-    resolved_level = refine_level if refine_level is not None else 3
+    resolved_level = (
+        refine_level
+        if refine_level is not None
+        else resolve_agent_level(settings, definition)
+    )
     if resolved_level == 3 and refine_model is not None:
         overrides["model"] = refine_model
 
