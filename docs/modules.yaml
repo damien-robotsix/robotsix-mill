@@ -577,6 +577,7 @@ modules:
       - tests/dev-tooling/test_emit_config_schema.py
       - tests/dev-tooling/test_modules_yaml_paths.py
       - tests/dev-tooling/test_resolve_docker_digest.py
+      - tests/dev-tooling/test_check_wheel_contents.py
       - tests/dev-tooling/autoupdate/**/*.py
       - alembic.ini
       - alembic/env.py
