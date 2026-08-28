@@ -87,6 +87,7 @@ def test_sourcekind_member_count():
         "MODULE_SIZE",
         "CONFIG_STANDARD",
         "MYPY_BASELINE",
+        "INFRASTRUCTURE",
     }
     assert set(SourceKind.__members__) == expected
 

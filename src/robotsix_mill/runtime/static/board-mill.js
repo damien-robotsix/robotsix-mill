@@ -115,6 +115,7 @@
     repo_description_sync: "repo-description-sync",
     orphaned_pr_check: "orphaned-pr-check",
     mypy_baseline: "mypy-baseline",
+    infrastructure: "infrastructure",
   };
 
   const STATE_ARTIFACT = {

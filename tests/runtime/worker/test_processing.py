@@ -13,6 +13,7 @@ from robotsix_mill.core.states import State
 from robotsix_mill.runtime.worker.processing import (
     _TERMINAL,
     _block_ticket_and_notify,
+    _file_infra_ticket,
     _handle_stage_error,
     _maybe_reevaluate_epic,
     _post_trace_event,
@@ -205,6 +206,27 @@ class TestHandleStageError:
             "robotsix_mill.runtime.transient_errors.classify_stage_error",
             lambda e: classification,
         )
+
+    @staticmethod
+    def _patch_disk(monkeypatch, is_full=False):
+        # is_disk_full_error is imported locally inside _handle_stage_error
+        # via ``from ..transient_errors import ...`` — patch at the source
+        # module, like _patch_model_outage does.
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.transient_errors.is_disk_full_error",
+            lambda e: is_full,
+        )
+        # first_full_path is imported at module level in processing.py.
+        if is_full:
+            monkeypatch.setattr(
+                "robotsix_mill.runtime.worker.processing.first_full_path",
+                lambda paths, min_free_mb: paths[0] if paths else None,
+            )
+        else:
+            monkeypatch.setattr(
+                "robotsix_mill.runtime.worker.processing.first_full_path",
+                lambda paths, min_free_mb: None,
+            )
 
     @staticmethod
     def _patch_network(monkeypatch, is_down=False, available=True):
@@ -446,6 +468,44 @@ class TestHandleStageError:
         assert kwargs["retry_attempt"] == 3  # preserved, not reset
 
     @pytest.mark.asyncio
+    async def test_disk_full_parks_and_files_infra_ticket(self, ctx, monkeypatch):
+        """Disk-full error parks the ticket and files an infra ticket."""
+        self._patch_classify(monkeypatch, "transient")
+        self._patch_network(monkeypatch)
+        self._patch_model_outage(monkeypatch, is_outage=False)
+        self._patch_disk(monkeypatch, is_full=True)
+        self._patch_retry(monkeypatch)
+        self._patch_tracing(monkeypatch)
+        self._patch_post_trace(monkeypatch)
+        self._patch_block_and_notify(monkeypatch)
+        self._patch_reap(monkeypatch)
+
+        t = _fake_ticket(retry_attempt=0)
+        ctx.service.get = MagicMock(return_value=t)
+        ctx.service.set_retry_state = MagicMock()
+
+        infra_mock = MagicMock()
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.worker.processing._file_infra_ticket",
+            infra_mock,
+        )
+
+        await _handle_stage_error(
+            "ticket-1", ctx, "implement", OSError("No space left on device"), "tr-1"
+        )
+
+        # Must park (not consume retry).
+        ctx.service.set_retry_state.assert_called_once()
+        kwargs = ctx.service.set_retry_state.call_args[1]
+        assert kwargs["retry_attempt"] == 1  # max(ticket.retry_attempt, 1)
+        assert "data volume full" in kwargs["last_transient_error"]
+        # Must file infra ticket.
+        infra_mock.assert_called_once()
+        call_args = infra_mock.call_args
+        assert call_args[0][0] is ctx
+        assert "disk space low" in call_args[0][1].lower()
+
+    @pytest.mark.asyncio
     async def test_model_outage_parks_without_consuming_retry(self, ctx, monkeypatch):
         """Model outage → parked (park count tracked via retry_attempt)."""
         self._patch_classify(monkeypatch, "transient")
@@ -630,6 +690,108 @@ class TestHandleStageError:
 # ===================================================================
 # _maybe_reevaluate_epic
 # ===================================================================
+
+
+class TestFileInfraTicket:
+    """Tests for _file_infra_ticket — auto-files infrastructure blocker tickets."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_cooldown(self):
+        """Clear the cooldown dict between tests."""
+        from robotsix_mill.runtime.worker.processing import _INFRA_TICKET_LAST
+
+        _INFRA_TICKET_LAST.clear()
+        yield
+        _INFRA_TICKET_LAST.clear()
+
+    def test_files_ticket_on_first_call(self, ctx, monkeypatch):
+        """First call files a ticket with source=infrastructure and priority."""
+        mock_service = MagicMock()
+        mock_service.list.return_value = []
+        mock_service.create.return_value = MagicMock(id="t-infra-1")
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.worker.processing.TicketService",
+            lambda settings, board_id="": mock_service,
+        )
+        ctx.service.board_id = "test-board"
+
+        _file_infra_ticket(ctx, "Disk space low", "disk is full")
+
+        mock_service.create.assert_called_once()
+        call_kwargs = mock_service.create.call_args
+        assert call_kwargs[0][0] == "Disk space low"
+        assert "Automatically filed" in call_kwargs[0][1]
+        assert call_kwargs[1]["source"] == "infrastructure"
+        assert call_kwargs[1]["priority"] is True
+
+    def test_cooldown_suppresses_repeat(self, ctx, monkeypatch):
+        """Second call within cooldown window is suppressed."""
+        mock_service = MagicMock()
+        mock_service.list.return_value = []
+        mock_service.create.return_value = MagicMock(id="t-infra-1")
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.worker.processing.TicketService",
+            lambda settings, board_id="": mock_service,
+        )
+        ctx.service.board_id = "test-board"
+
+        _file_infra_ticket(ctx, "Disk space low", "disk is full")
+        _file_infra_ticket(ctx, "Disk space low", "disk is full")
+
+        assert mock_service.create.call_count == 1
+
+    def test_dedup_skips_existing_open_ticket(self, ctx, monkeypatch):
+        """When a non-terminal ticket with same title exists, skip."""
+        from robotsix_mill.core.states import State
+
+        existing = MagicMock()
+        existing.title = "Disk space low"
+        existing.state = State.DRAFT
+        mock_service = MagicMock()
+        mock_service.list.return_value = [existing]
+        mock_service.create.return_value = MagicMock(id="t-infra-1")
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.worker.processing.TicketService",
+            lambda settings, board_id="": mock_service,
+        )
+        ctx.service.board_id = "test-board"
+
+        _file_infra_ticket(ctx, "Disk space low", "disk is full")
+
+        mock_service.create.assert_not_called()
+
+    def test_existing_closed_ticket_does_not_block(self, ctx, monkeypatch):
+        """A CLOSED ticket with same title does not suppress filing."""
+        from robotsix_mill.core.states import State
+
+        existing = MagicMock()
+        existing.title = "Disk space low"
+        existing.state = State.CLOSED
+        mock_service = MagicMock()
+        mock_service.list.return_value = [existing]
+        mock_service.create.return_value = MagicMock(id="t-infra-2")
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.worker.processing.TicketService",
+            lambda settings, board_id="": mock_service,
+        )
+        ctx.service.board_id = "test-board"
+
+        _file_infra_ticket(ctx, "Disk space low", "disk is full")
+
+        mock_service.create.assert_called_once()
+
+    def test_exception_does_not_propagate(self, ctx, monkeypatch):
+        """Service creation failure is caught and logged, not raised."""
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.worker.processing.TicketService",
+            lambda settings, board_id="": (_ for _ in ()).throw(
+                RuntimeError("db down")
+            ),
+        )
+        ctx.service.board_id = "test-board"
+
+        # Must not raise.
+        _file_infra_ticket(ctx, "Disk space low", "disk is full")
 
 
 class TestMaybeReevaluateEpic:

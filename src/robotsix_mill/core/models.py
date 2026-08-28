@@ -59,6 +59,7 @@ class SourceKind(StrEnum):
     ORPHANED_PR_CHECK = "orphaned_pr_check"
     REPO_DESCRIPTION_SYNC = "repo_description_sync"
     CONFIG_STANDARD = "config_standard"
+    INFRASTRUCTURE = "infrastructure"
 
 
 class TicketKind(StrEnum):
