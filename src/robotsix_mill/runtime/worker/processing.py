@@ -17,7 +17,8 @@ from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
 
-from ...core.models import Ticket, TicketKind
+from ...core.models import SourceKind, Ticket, TicketKind
+from ...core.service import TicketService
 from ...core.service._helpers import TransitionError
 from ...core.service._transition_mixin import _TERMINAL_STATES
 from ...core.states import STAGE_FOR_STATE, State
@@ -69,6 +70,60 @@ def _post_trace_event(
             stage_name,
             exc_info=True,
         )
+
+
+_INFRA_TICKET_COOLDOWN = 3600  # seconds — one file attempt per infra issue per hour
+_INFRA_TICKET_LAST: dict[str, float] = {}  # dedup key -> last file timestamp
+
+
+def _file_infra_ticket(
+    ctx: StageContext,
+    title: str,
+    body: str,
+    category: str = "error",
+) -> None:
+    """File a draft ticket for a server-level infrastructure issue, with cooldown.
+
+    Called when the worker parks a ticket due to disk-full or similar
+    global conditions so that the operator sees an actionable item on the
+    board.  Cooldown prevents spamming the board if the condition persists
+    across many park cycles.
+
+    The dedup key is the normalised title — the ``report_issue`` tool's
+    own duplicate check (``_check_duplicate``) provides a second guard,
+    but the cooldown avoids the overhead of a ``service.list()`` scan on
+    every park tick.
+    """
+    import time as _time
+
+    now = _time.monotonic()
+    key = title.casefold()
+    last = _INFRA_TICKET_LAST.get(key, 0.0)
+    if now - last < _INFRA_TICKET_COOLDOWN:
+        return
+    _INFRA_TICKET_LAST[key] = now
+
+    try:
+        service = TicketService(ctx.settings, board_id=ctx.service.board_id)
+        # Dedup: refuse if a non-terminal ticket with the same title exists.
+        norm = title.casefold()
+        for t in service.list():
+            if t.title.strip().casefold() == norm and t.state not in _TERMINAL:
+                return
+        full_body = (
+            f"**Automatically filed by the mill worker**\n"
+            f"(source: infrastructure)\n\n"
+            f"{body}\n"
+        )
+        service.create(
+            title,
+            full_body,
+            source=SourceKind.INFRASTRUCTURE,
+            priority=True,
+        )
+        log.info("Filed infrastructure ticket: %s", title)
+    except Exception:
+        log.warning("Failed to file infrastructure ticket", exc_info=True)
 
 
 # DONE is NOT terminal — retrospect owns it (done -> closed). Only
@@ -268,6 +323,17 @@ async def _handle_stage_error(
                 ctx.settings.data_dir,
                 ctx.settings.disk_min_free_mb,
                 disk_delay,
+            )
+            _file_infra_ticket(
+                ctx,
+                "Infrastructure: disk space low — pipeline parked",
+                (
+                    f"The worker detected low disk space and parked all "
+                    f"ticket processing. Path: {ctx.settings.data_dir}, "
+                    f"threshold: {ctx.settings.disk_min_free_mb} MB free. "
+                    f"The data-dir GC may clear space automatically; if "
+                    f"not, operator intervention is required."
+                ),
             )
             _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             return
@@ -546,6 +612,18 @@ async def _process_ticket_inner(
                 full_path,
                 ctx.settings.disk_min_free_mb,
                 ctx.settings.disk_full_retry_seconds,
+            )
+            _file_infra_ticket(
+                ctx,
+                "Infrastructure: disk space low — pipeline parked",
+                (
+                    f"The worker detected low disk space before dispatching "
+                    f"a stage and parked all ticket processing. "
+                    f"Path: {full_path}, "
+                    f"threshold: {ctx.settings.disk_min_free_mb} MB free. "
+                    f"The data-dir GC may clear space automatically; if "
+                    f"not, operator intervention is required."
+                ),
             )
             return
         stage = get_stage(stage_name)
