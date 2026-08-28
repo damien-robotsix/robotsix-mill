@@ -330,9 +330,10 @@ class _MetadataMixin(_ServiceBase):
             note += f" — {reason}"
         self.add_history_note(ticket_id, note)
         ticket = self.get(ticket_id)
+        if ticket is None:  # pragma: no cover - re-read of just-updated ticket
+            raise KeyError(ticket_id)
         if (
-            ticket is not None
-            and ticket.state is State.BLOCKED
+            ticket.state is State.BLOCKED
             and ticket.blocked_from
             and not self.unmet_dependencies(ticket)
         ):

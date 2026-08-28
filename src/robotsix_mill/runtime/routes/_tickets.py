@@ -769,11 +769,11 @@ def set_unblocks(
 @router.patch("/tickets/{ticket_id}/dependencies", response_model=TicketRead)
 def edit_dependencies(
     ticket_id: str,
+    request: Request,
     body: dict[str, Any] = Body(...),
-    request: Request = None,
-    svc=Depends(get_service),
-    worker=Depends(get_worker),
-    settings=Depends(get_settings),
+    svc: TicketService = Depends(get_service),
+    worker: Worker = Depends(get_worker),
+    settings: Settings = Depends(get_settings),
 ) -> TicketRead:
     """Replace or clear a ticket's own ``depends_on`` edges.
 

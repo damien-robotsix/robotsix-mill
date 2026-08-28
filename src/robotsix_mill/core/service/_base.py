@@ -90,6 +90,16 @@ class _ServiceBase:
         def close_tracker(self, ticket_id: str, note: str = ...) -> Ticket:
             pass
 
+        # Cross-mixin calls introduced by the dependency-edit endpoint.
+        def _parse_depends_on(self, ticket: Ticket) -> list[str]:
+            pass
+
+        def unmet_dependencies(self, ticket: Ticket) -> list[str]:
+            pass
+
+        def resume_blocked(self, ticket_id: str, note: str = ...) -> Ticket:
+            pass
+
     # --- board discovery ---
 
     def _collect_candidate_boards(
