@@ -262,6 +262,87 @@ class _MetadataMixin(_ServiceBase):
             s.add(ticket)
             s.commit()
 
+    def _detect_dependency_cycle(
+        self, ticket_id: str, proposed: list[str]
+    ) -> list[str] | None:
+        """Return the cycle path if setting *ticket_id*'s ``depends_on``
+        to *proposed* would introduce a cycle, else ``None``.
+
+        Only edges out of *ticket_id* change, so any new cycle must pass
+        through it: we walk the ``depends_on`` graph from *ticket_id*
+        (using *proposed* as its outgoing edges) and report the first
+        path that returns to *ticket_id*. Cross-board safe — each hop is
+        resolved via :meth:`get`.
+        """
+
+        def _edges(tid: str) -> list[str]:
+            if tid == ticket_id:
+                return proposed
+            dep = self.get(tid)
+            return self._parse_depends_on(dep) if dep else []
+
+        seen: set[str] = set()
+
+        def _walk(node: str, path: list[str]) -> list[str] | None:
+            for nxt in _edges(node):
+                if nxt == ticket_id:
+                    return [*path, nxt]
+                if nxt not in seen:
+                    seen.add(nxt)
+                    found = _walk(nxt, [*path, nxt])
+                    if found:
+                        return found
+            return None
+
+        return _walk(ticket_id, [ticket_id])
+
+    def edit_dependencies(
+        self, ticket_id: str, depends_on_ids: list[str], reason: str = ""
+    ) -> Ticket:
+        """Replace or clear *ticket_id*'s ``depends_on`` edges.
+
+        Validates the resulting dependency graph is acyclic before
+        committing and records a history note carrying the
+        operator-supplied *reason* so the edit is auditable next to the
+        block reasons. When the ticket is BLOCKED and clearing the edges
+        leaves no unmet dependencies, it is unparked (transitioned back
+        to its ``blocked_from`` state) so a follow-up ``resume-blocked``
+        is unnecessary.
+
+        Raises ``KeyError`` if *ticket_id* is unknown and ``ValueError``
+        for a self-dependency or a cycle (naming the offending IDs).
+        Returns the updated ticket.
+        """
+        cleaned = [t for t in dict.fromkeys(depends_on_ids) if t]
+        if ticket_id in cleaned:
+            raise ValueError(f"Ticket cannot depend on itself: {ticket_id}")
+        ticket = self.get(ticket_id)
+        if ticket is None:
+            raise KeyError(ticket_id)
+        cycle = self._detect_dependency_cycle(ticket_id, cleaned)
+        if cycle:
+            raise ValueError(
+                "dependency edit would create a cycle: " + " -> ".join(cycle)
+            )
+        self.set_depends_on(ticket_id, cleaned)
+        note = f"dependencies set to {cleaned or '[]'}"
+        if reason:
+            note += f" — {reason}"
+        self.add_history_note(ticket_id, note)
+        ticket = self.get(ticket_id)
+        if ticket is None:  # pragma: no cover - re-read of just-updated ticket
+            raise KeyError(ticket_id)
+        if (
+            ticket.state is State.BLOCKED
+            and ticket.blocked_from
+            and not self.unmet_dependencies(ticket)
+        ):
+            with contextlib.suppress(TransitionError):
+                ticket = self.resume_blocked(
+                    ticket_id, note=reason or "dependencies edited"
+                )
+        return ticket
+
     # ------------------------------------------------------------------
     # update_description — spec amendment for fingerprint-guard recovery
     # ------------------------------------------------------------------

@@ -74,6 +74,97 @@ def test_get_ticket_includes_depends_on_and_unmet_deps(client):
     assert data["unmet_deps"] == []
 
 
+# --- PATCH /tickets/{id}/dependencies ----------------------------------
+
+
+def test_edit_dependencies_clears_and_unparks_blocked(client, service):
+    """Clearing a BLOCKED ticket's depends_on unparks it back to its
+    originating state without a separate resume-blocked call, and it
+    does not re-block (no unmet deps remain)."""
+    blocker = service.create("Blocker")
+    t = service.create("Parked", depends_on=f'["{blocker.id}"]')
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="waiting on blocker")
+    assert service.get(t.id).state is State.BLOCKED
+    assert service.get(t.id).blocked_from == State.READY.value
+
+    r = client.patch(
+        f"/tickets/{t.id}/dependencies",
+        json={"depends_on": [], "reason": "break circular deadlock"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["state"] == State.READY
+    assert data["depends_on"] is None
+    assert data["unmet_deps"] == []
+    # Gate re-evaluation: the cleared ticket has no unmet dependencies.
+    assert service.unmet_dependencies(service.get(t.id)) == []
+
+
+def test_edit_dependencies_rejects_cycle(client):
+    """Introducing a cycle is rejected with 400 naming the offending ids."""
+    a = client.post("/tickets", json={"title": "A"}).json()["id"]
+    b = client.post("/tickets", json={"title": "B", "depends_on": f'["{a}"]'}).json()[
+        "id"
+    ]
+
+    # B already depends on A; making A depend on B closes a cycle A→B→A.
+    r = client.patch(
+        f"/tickets/{a}/dependencies",
+        json={"depends_on": [b], "reason": "oops"},
+    )
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert a in detail and b in detail
+
+
+def test_edit_dependencies_rejects_self_dependency(client):
+    """A ticket cannot depend on itself."""
+    a = client.post("/tickets", json={"title": "Self"}).json()["id"]
+    r = client.patch(
+        f"/tickets/{a}/dependencies",
+        json={"depends_on": [a]},
+    )
+    assert r.status_code == 400
+
+
+def test_edit_dependencies_records_justification_in_history(client):
+    """The edit appears in GET /tickets/{id}/history with its reason."""
+    a = client.post(
+        "/tickets", json={"title": "Has dep", "depends_on": '["ghost"]'}
+    ).json()["id"]
+
+    r = client.patch(
+        f"/tickets/{a}/dependencies",
+        json={"depends_on": [], "reason": "prereq no longer required"},
+    )
+    assert r.status_code == 200
+
+    hist = client.get(f"/tickets/{a}/history")
+    assert hist.status_code == 200
+    notes = [e.get("note") or "" for e in hist.json()]
+    assert any("prereq no longer required" in n for n in notes)
+
+
+def test_edit_dependencies_unknown_ticket_404(client):
+    """Editing dependencies of a missing ticket returns 404."""
+    r = client.patch(
+        "/tickets/does-not-exist/dependencies",
+        json={"depends_on": []},
+    )
+    assert r.status_code == 404
+
+
+def test_edit_dependencies_rejects_non_list_body(client):
+    """A non-list depends_on body is a 400."""
+    a = client.post("/tickets", json={"title": "Bad body"}).json()["id"]
+    r = client.patch(
+        f"/tickets/{a}/dependencies",
+        json={"depends_on": "not-a-list"},
+    )
+    assert r.status_code == 400
+
+
 def test_list_tickets_includes_depends_on_and_unmet_deps(client):
     """GET /tickets includes depends_on and unmet_deps for all tickets."""
     r = client.post(
