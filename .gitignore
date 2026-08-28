@@ -51,3 +51,6 @@ actionlint
 # image creation, never committed.
 src/robotsix_mill/runtime/static/robotsix-ui-vanilla.js
 src/robotsix_mill/runtime/static/robotsix-ui.css
+
+# uv project environment when CI sets UV_PROJECT_ENVIRONMENT=system
+/system/
