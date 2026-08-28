@@ -28,6 +28,8 @@ from ...agents.dedup import (
     rank_candidates_by_similarity,
     run_dedup_check,
 )
+from ...agents.ops_classify import OpsClassifyVerdict, run_ops_classify_agent
+from ...agents.runners.diagnostic_events import emit_diagnostic_event
 from ...config import RepoConfig, ReposRegistry, Settings
 from ...core.models import Ticket, TicketKind
 from ...core.service import TicketService
@@ -156,6 +158,8 @@ def _create_ticket_guarded(
     board_svc: TicketService,
     worker: Worker,
     settings: Settings,
+    *,
+    classification: str | None = None,
 ) -> JSONResponse:
     """Create the ticket, re-checking the title fingerprint under a lock.
 
@@ -182,7 +186,14 @@ def _create_ticket_guarded(
                 status_code=200,
                 content=IngestResult(ticket_id=dup_id, deduped=True).model_dump(),
             )
-        return _create_ticket(body, board_id, board_svc, worker, settings)
+        return _create_ticket(
+            body,
+            board_id,
+            board_svc,
+            worker,
+            settings,
+            classification=classification,
+        )
 
 
 def _check_repo_workable(
@@ -217,6 +228,7 @@ class IngestResult(BaseModel):
 
     ticket_id: str
     deduped: bool
+    classified: str | None = None
 
 
 @router.post("/tickets/ingest")
@@ -251,7 +263,31 @@ def ingest_ticket(
 
     board_id = repo_config.board_id
 
-    # 2. Candidate selection — scope to the target board.
+    # 2b. Operational-maintenance classification — reject reports
+    #     that describe manual operational actions (credential rotation,
+    #     redeploy, infra console changes) rather than code work.
+    ops_verdict = _run_ops_classify(body, board_id, settings)
+    if ops_verdict is not None and ops_verdict.classification == "OPERATIONAL":
+        logger.info(
+            "ingest rejected as operational-maintenance: %s",
+            ops_verdict.reason,
+        )
+        return JSONResponse(
+            status_code=200,
+            content={
+                "filed": False,
+                "reason": "operational-maintenance",
+                "classification": "OPERATIONAL",
+                "guidance": ops_verdict.reason,
+            },
+        )
+
+    # Classification label for CODE reports (None if classifier failed).
+    classification_label: str | None = (
+        ops_verdict.classification if ops_verdict is not None else None
+    )
+
+    # 3. Candidate selection — scope to the target board.
     board_svc = TicketService(settings, board_id=board_id)
     all_tickets = board_svc.list()
 
@@ -268,9 +304,16 @@ def ingest_ticket(
     ]
 
     if not candidates:
-        return _create_ticket_guarded(body, board_id, board_svc, worker, settings)
+        return _create_ticket_guarded(
+            body,
+            board_id,
+            board_svc,
+            worker,
+            settings,
+            classification=classification_label,
+        )
 
-    # 3. Normalized-title fingerprint dedup — fast, deterministic,
+    # 4. Normalized-title fingerprint dedup — fast, deterministic,
     #    catches same-symptom reports across runs (e.g. "mail-ingester
     #    unhealthy on 2026-07-31" vs "mail-ingester unhealthy on
     #    2026-07-30").
@@ -316,6 +359,50 @@ def ingest_ticket(
 
     # already_done is deliberately not acted on — fall through to create.
     return _create_ticket_guarded(body, board_id, board_svc, worker, settings)
+
+
+def _run_ops_classify(
+    body: TicketIngest,
+    board_id: str,
+    settings: Settings,
+) -> OpsClassifyVerdict | None:
+    """Run the operational-maintenance classifier on the ingest body.
+
+    Returns an :class:`OpsClassifyVerdict` on success, or ``None``
+    when the LLM call fails (fail-open: a missed ops rejection is
+    cheaper than a lost incident report).  Emits a diagnostic event
+    so false-positives and false-negatives can be audited.
+    """
+    try:
+        verdict = run_ops_classify_agent(
+            settings=settings,
+            title=body.title,
+            body=body.body,
+        )
+    except Exception as exc:
+        logger.warning(
+            "ingest ops-classify failed, proceeding as code (fail-open): %s",
+            exc,
+        )
+        return None
+
+    # Record the classification decision for auditability.
+    try:
+        emit_diagnostic_event(
+            settings=settings,
+            board_id=board_id,
+            category="OPS_CLASSIFY",
+            ticket_id="",
+            reason=(
+                f"classification={verdict.classification} "
+                f"title={body.title!r} reason={verdict.reason!r}"
+            ),
+            normalized_key=_normalize_title(body.title),
+        )
+    except Exception:
+        logger.debug("ops-classify diagnostic event emission failed", exc_info=True)
+
+    return verdict
 
 
 def _run_llm_dedup(
@@ -431,6 +518,8 @@ def _create_ticket(
     board_svc: TicketService,
     worker: Worker,
     settings: Settings,
+    *,
+    classification: str | None = None,
 ) -> JSONResponse:
     """Create a new draft ticket and enqueue it.  Shared between the
     dedup-miss path and the fail-open path.
@@ -467,5 +556,9 @@ def _create_ticket(
     maybe_enqueue(ticket, worker)
     return JSONResponse(
         status_code=201,
-        content=IngestResult(ticket_id=ticket.id, deduped=False).model_dump(),
+        content=IngestResult(
+            ticket_id=ticket.id,
+            deduped=False,
+            classified=classification,
+        ).model_dump(),
     )

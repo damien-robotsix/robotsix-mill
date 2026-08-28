@@ -469,3 +469,227 @@ def test_ingest_concurrent_identical_reports_create_one_ticket(client, service):
         t for t in service.list() if t.title == "Wallet value shows cash, not equity"
     ]
     assert len(matching) == 1
+
+
+# ---------------------------------------------------------------------------
+# Operational-maintenance classification
+# ---------------------------------------------------------------------------
+def test_ingest_rejects_operational_report(client, service):
+    """A report classified as OPERATIONAL is rejected with structured
+    reason and no ticket is created."""
+    from robotsix_mill.agents.ops_classify import OpsClassifyVerdict
+
+    with (
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
+            return_value=OpsClassifyVerdict(
+                classification="OPERATIONAL",
+                reason="Manual credential rotation — no code change needed.",
+            ),
+        ),
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
+            return_value=True,
+        ),
+    ):
+        r = client.post(
+            "/tickets/ingest",
+            json=_ingest_payload(
+                title="Rotate GHCR pull token due to cleartext transmission",
+                body=(
+                    "The GHCR pull token was transmitted in cleartext. "
+                    "Rotate it manually via GitHub settings."
+                ),
+            ),
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["filed"] is False
+    assert body["reason"] == "operational-maintenance"
+    assert body["classification"] == "OPERATIONAL"
+    assert "Manual credential rotation" in body["guidance"]
+
+    # No ticket created.
+    assert len(service.list()) == 0
+
+
+def test_ingest_rejects_redeploy_report(client, service):
+    """A service redeploy report classified as OPERATIONAL is rejected."""
+    from robotsix_mill.agents.ops_classify import OpsClassifyVerdict
+
+    with (
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
+            return_value=OpsClassifyVerdict(
+                classification="OPERATIONAL",
+                reason="Service redeploy — no code change required.",
+            ),
+        ),
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
+            return_value=True,
+        ),
+    ):
+        r = client.post(
+            "/tickets/ingest",
+            json=_ingest_payload(
+                title="Redeploy file-hub to activate llmio enrichment",
+                body=(
+                    "Redeploy file-hub to pick up the latest llmio enrichment "
+                    "and Langfuse tracing."
+                ),
+            ),
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["filed"] is False
+    assert body["reason"] == "operational-maintenance"
+
+
+def test_ingest_allows_code_ticket_mentioning_deploy(client, service):
+    """A ticket that mentions deploy/rotation but requires code changes
+    is classified as CODE and proceeds normally."""
+    from robotsix_mill.agents.ops_classify import OpsClassifyVerdict
+
+    with (
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
+            return_value=OpsClassifyVerdict(
+                classification="CODE",
+                reason=(
+                    "Report describes a code defect in the deploy script "
+                    "that must be fixed in the repository."
+                ),
+            ),
+        ),
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
+            return_value=True,
+        ),
+    ):
+        r = client.post(
+            "/tickets/ingest",
+            json=_ingest_payload(
+                title="Fix deploy script that fails to rotate tokens",
+                body=(
+                    "The deploy script crashes when trying to rotate "
+                    "the GHCR token. Fix the rotation logic in "
+                    "scripts/deploy.py."
+                ),
+            ),
+        )
+
+    assert r.status_code == 201
+    body = r.json()
+    assert body["deduped"] is False
+    assert body["classified"] == "CODE"
+
+    # Ticket was created.
+    ticket = service.get(body["ticket_id"])
+    assert ticket is not None
+    assert "Fix deploy script" in ticket.title
+
+
+def test_ingest_ops_classify_fail_open(client, service):
+    """When the ops-classify LLM call fails, the report proceeds
+    through normally (fail-open)."""
+    with patch(
+        "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
+        side_effect=RuntimeError("LLM timeout"),
+    ):
+        r = client.post("/tickets/ingest", json=_ingest_payload())
+
+    # Fail-open: ticket is created.
+    assert r.status_code == 201
+    body = r.json()
+    assert body["deduped"] is False
+
+    ticket = service.get(body["ticket_id"])
+    assert ticket is not None
+
+
+def test_ingest_ops_classify_emits_diagnostic_event(client, service):
+    """The ops-classify decision is recorded as a diagnostic event."""
+    from robotsix_mill.agents.ops_classify import OpsClassifyVerdict
+
+    emitted_events: list[dict] = []
+
+    def _capture_emit(**kwargs):
+        emitted_events.append(kwargs)
+        return True
+
+    with (
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
+            return_value=OpsClassifyVerdict(
+                classification="OPERATIONAL",
+                reason="Token rotation.",
+            ),
+        ),
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
+            side_effect=_capture_emit,
+        ),
+    ):
+        r = client.post(
+            "/tickets/ingest",
+            json=_ingest_payload(
+                title="Rotate PAT token",
+                body="Rotate the PAT token.",
+            ),
+        )
+
+    assert r.status_code == 200
+    assert len(emitted_events) == 1
+    event = emitted_events[0]
+    assert event["category"] == "OPS_CLASSIFY"
+    assert "OPERATIONAL" in event["reason"]
+
+
+def test_ingest_ops_classify_runs_before_dedup(client, service):
+    """The ops-classification step runs before dedup, so an
+    operational report that matches an existing ticket is still
+    rejected without being deduped."""
+    from robotsix_mill.agents.ops_classify import OpsClassifyVerdict
+
+    # Create an existing ticket with similar title.
+    service.create(
+        "Rotate GHCR pull token",
+        "Manual rotation needed.",
+        source="monitor-1",
+        kind=TicketKind.TASK,
+        board_id="test-board",
+    )
+
+    with (
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
+            return_value=OpsClassifyVerdict(
+                classification="OPERATIONAL",
+                reason="Manual credential rotation.",
+            ),
+        ),
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
+            return_value=True,
+        ),
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
+        ) as mock_dedup,
+    ):
+        r = client.post(
+            "/tickets/ingest",
+            json=_ingest_payload(
+                title="Rotate GHCR pull token",
+                body="Rotate the GHCR pull token.",
+            ),
+        )
+
+    # Rejected as ops — dedup LLM was never called.
+    assert r.status_code == 200
+    body = r.json()
+    assert body["filed"] is False
+    assert body["reason"] == "operational-maintenance"
+    mock_dedup.assert_not_called()
