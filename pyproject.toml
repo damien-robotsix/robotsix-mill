@@ -95,6 +95,19 @@ robotsix-github-auth = { git = "https://github.com/damien-robotsix/robotsix-gith
 robotsix-mill = "robotsix_mill.cli:main"
 robotsix-autoupdate = "robotsix_mill.dev_tooling.autoupdate:main"
 
+[tool.hatch.build.targets.sdist]
+# CI installs with `UV_PROJECT_ENVIRONMENT: system`, which does NOT mean
+# "install into the system interpreter" — it puts the project venv in a
+# directory literally named `system/` at the repo root.  Hatchling would pack
+# that into the sdist, and because `uv build` builds the wheel *from* the
+# sdist, unpacking then fails:
+#   failed to unpack `robotsix_mill-0.11.0/system/bin/python`
+#   symlink path `/opt/hostedtoolcache/Python/3.14.7/x64/bin/python3.14` is
+#   absolute, but external symlinks are not allowed
+# Exclude local environment directories so the sdist is reproducible whatever
+# the working tree happens to contain.
+exclude = ["/system", "/.venv", "/venv", "/dist"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/robotsix_mill"]
 
