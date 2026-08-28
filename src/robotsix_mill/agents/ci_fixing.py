@@ -57,6 +57,7 @@ def run_ci_fix_agent(
     token_cache_clear: Callable[[], None] | None = None,
     ci_status_fn: Callable[[int], tuple[str, str]] | None = None,
     ci_log_fetch_fn: Callable[[int, bool], str] | None = None,
+    sandbox_image: str | None = None,
 ) -> CiFixResult:
     """Run the CI-fix agent, which OWNS the fix→push→verify loop.
 
@@ -115,7 +116,7 @@ def run_ci_fix_agent(
         patterns_text = "(no prior patterns for this failure)"
 
     # Build sandboxed fs tools confined to the ticket's own clone.
-    tools = build_fs_tools(Path(repo_dir), settings)
+    tools = build_fs_tools(Path(repo_dir), settings, sandbox_image=sandbox_image)
 
     # Build bridged git tools (host-side, with per-repo token) so the
     # agent can drive fetch + push without ever seeing credentials.
@@ -149,6 +150,7 @@ def run_ci_fix_agent(
             branch=branch,
             ci_status_fn=ci_status_fn,
             max_iterations=settings.ci_fix_max_iterations,
+            max_consecutive_pending=settings.ci_fix_max_consecutive_pending,
             poll_interval_s=settings.ci_fix_wait_poll_interval_s,
             timeout_s=settings.ci_fix_wait_timeout_s,
         )

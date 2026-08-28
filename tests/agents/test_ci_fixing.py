@@ -131,7 +131,7 @@ def test_out_of_scope_skips_pattern_persistence(tmp_path, monkeypatch):
 
     from robotsix_mill.agents import ci_patterns, fs_tools
 
-    monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s: [])
+    monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s, **kw: [])
 
     calls = []
     monkeypatch.setattr(ci_patterns, "load_patterns", lambda path: [])
@@ -191,7 +191,7 @@ def test_uses_build_fs_tools(tmp_path, monkeypatch):
     # so monkeypatch at the source module.
     from robotsix_mill.agents import fs_tools
 
-    def fake_build_fs_tools(repo_dir, settings):
+    def fake_build_fs_tools(repo_dir, settings, **kwargs):
         seen_calls["repo_dir"] = str(repo_dir)
         return []
 
@@ -233,7 +233,7 @@ def test_agent_prompt_forbids_push_and_branch_switching(tmp_path, monkeypatch):
 
     from robotsix_mill.agents import fs_tools
 
-    monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s: [])
+    monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s, **kw: [])
 
     run_ci_fix_agent(
         settings=s,
@@ -278,7 +278,7 @@ def test_patterns_injected_into_prompt(tmp_path, monkeypatch):
 
     from robotsix_mill.agents import ci_patterns, fs_tools
 
-    monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s: [])
+    monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s, **kw: [])
     monkeypatch.setattr(
         ci_patterns,
         "load_patterns",
@@ -338,7 +338,7 @@ def test_no_patterns_shows_placeholder(tmp_path, monkeypatch):
 
     from robotsix_mill.agents import ci_patterns, fs_tools
 
-    monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s: [])
+    monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s, **kw: [])
     monkeypatch.setattr(ci_patterns, "load_patterns", lambda path: [])
 
     run_ci_fix_agent(
@@ -392,7 +392,7 @@ def test_pattern_saved_after_fix(tmp_path, monkeypatch):
 
     from robotsix_mill.agents import ci_patterns, fs_tools
 
-    monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s: [])
+    monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s, **kw: [])
 
     saved_entries: list = []
 
@@ -454,7 +454,7 @@ def test_no_pattern_saved_when_signature_empty(tmp_path, monkeypatch):
 
     from robotsix_mill.agents import ci_patterns, fs_tools
 
-    monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s: [])
+    monkeypatch.setattr(fs_tools, "build_fs_tools", lambda rd, s, **kw: [])
 
     calls = []
 

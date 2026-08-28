@@ -784,6 +784,14 @@
           "title": "Ci Fix Max Attempts",
           "type": "integer"
         },
+        "ci_fix_max_consecutive_pending": {
+          "advanced": true,
+          "default": 2,
+          "description": "Early bail-out threshold: return CI_STUCK after this many consecutive CI_STILL_PENDING results. 0 disables.",
+          "minimum": 0,
+          "title": "Ci Fix Max Consecutive Pending",
+          "type": "integer"
+        },
         "ci_fix_max_cycles": {
           "advanced": true,
           "default": 3,
