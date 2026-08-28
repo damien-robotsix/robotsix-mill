@@ -1,1 +1,0 @@
-Add CI_STUCK early bail-out to wait_for_ci tool: when CI remains pending for multiple consecutive waits (configurable via ci_fix_max_consecutive_pending, default 2), the tool returns CI_STUCK immediately instead of burning through the remaining iteration budget. Also pass sandbox_image through to the CI-fix agent so it uses the repo-configured image.
