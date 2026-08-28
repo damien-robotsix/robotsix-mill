@@ -259,7 +259,7 @@ def test_empty_title_and_draft_blocks(ctx_factory):
 # ---------------------------------------------------------------------------
 
 
-def test_unmet_dependencies_noop(ctx_factory, monkeypatch):
+def test_unmet_dependencies_short_circuits_to_done(ctx_factory, monkeypatch):
     ctx = ctx_factory()
     dep = ctx.service.create("Dep ticket", "Blocking change")
     t = ctx.service.create("Depender", "Please fix", depends_on=f'["{dep.id}"]')
@@ -271,7 +271,9 @@ def test_unmet_dependencies_noop(ctx_factory, monkeypatch):
 
     out = RefineStage().run(t, ctx)
 
-    assert out.next_state is State.DRAFT
+    assert out.next_state is State.DONE
+    assert "dependency gate" in out.note
+    assert dep.id in out.note
     assert len(agent_called) == 0
 
 

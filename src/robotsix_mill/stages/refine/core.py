@@ -10,7 +10,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...config import target_branch_for
-from ...core.constants import NON_IMPLEMENTATION_CLOSE_PREFIXES
+from ...core.constants import (
+    DEPENDENCY_BLOCKED_PREFIX,
+    NON_IMPLEMENTATION_CLOSE_PREFIXES,
+)
 from ...core.models import Ticket, TicketKind
 from ...core.states import State
 from ...core.workspace import Workspace
@@ -38,16 +41,28 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             return Outcome(State.BLOCKED, "empty title and draft — nothing to refine")
 
         # --- dependency gate: refuse to refine until all deps are
-        # terminal (CLOSED/DONE). Same-state no-op → the reconcile
-        # sweep re-enqueues this ticket each poll cycle.
-        unmet = ctx.service.unmet_dependencies(ticket)
+        # terminal (CLOSED/DONE).  Short-circuit to DONE with a clear
+        # "blocked on prerequisite" note so the ticket does not burn
+        # LLM budget on an unsatisfiable refine.
+        unmet: list[str] = ctx.service.unmet_dependencies(ticket)
         if unmet:
-            log.debug(
-                "%s: unmet dependencies — deferring refine: %s",
+            log.info(
+                "%s: unmet dependencies — short-circuiting to DONE: %s",
                 ticket.id,
                 unmet,
             )
-            return Outcome(State.DRAFT)
+            dep_states = []
+            for dep_id in unmet:
+                dep_ticket = ctx.service.get(dep_id)
+                dep_states.append(
+                    f"{dep_id} ({dep_ticket.state.value})" if dep_ticket else dep_id
+                )
+            state_detail = "; ".join(dep_states)
+            return Outcome(
+                State.DONE,
+                f"{DEPENDENCY_BLOCKED_PREFIX} blocked on prerequisite(s): "
+                f"{state_detail}",
+            )
 
         s = ctx.settings
 
