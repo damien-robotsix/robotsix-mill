@@ -430,7 +430,7 @@ convention = "google"
 "src/robotsix_mill/runtime/routes/_repos.py" = ["C901"]
 "src/robotsix_mill/stages/ci_fix.py" = ["C901", "S110", "TRY002", "TRY401"]
 "src/robotsix_mill/stages/ci_fix_codeql.py" = ["C901"]
-"src/robotsix_mill/stages/short_circuit_verify.py" = ["C901"]
+"src/robotsix_mill/stages/short_circuit_verify.py" = ["C901", "S603", "S607"]
 
 # --- ruff 0.16.0: new enabled-by-default rule suppressions -----------------
 # DTZ011 (no-tz-date) — pre-existing date.today() patterns.

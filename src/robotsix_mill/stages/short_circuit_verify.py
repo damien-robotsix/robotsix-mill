@@ -26,6 +26,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
+import subprocess
+from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -558,3 +561,88 @@ def detect_edit_claim_contradiction(
     if has_changes:
         return []
     return sorted(set(run_invoked_edit_tools(new_messages)))
+
+
+# Commit-SHA-like token (7-40 hex chars). Deliberately identical to the refine
+# stage's ``_COMMIT_SHA_RE`` so both stages recognise the same citations.
+_COMMIT_SHA_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
+
+
+def cited_fix_unverified(repo_dir: Path | str | None, text: str | None) -> str | None:
+    """Return a diagnostic when a closure rationale claims an already-shipped
+    fix citing a commit that is NOT present at ``origin/main``, else ``None``.
+
+    The empty-diff → DONE short-circuit trusts the agent's "already fixed
+    elsewhere" rationale. When that rationale cites a commit SHA, verify it
+    against the live tree before closing: the commit must be a real object AND
+    an ancestor of ``origin/main`` (``git cat-file -t`` reports ``commit`` and
+    ``git merge-base --is-ancestor <sha> origin/main`` exits 0). A cited SHA
+    that is missing or not an ancestor is an unverified merge/completion claim
+    — the work was never actually merged, so the caller MUST route the ticket
+    back for the real fix instead of closing it DONE.
+
+    Only fires when the rationale actually claims an external fix (reusing the
+    refine stage's ``_rationale_claims_external_fix`` detector) so a stray
+    hex-like token in a legitimate no-change rationale never triggers a false
+    block, and only when at least one cited SHA fails verification. Any git
+    error is treated as "not verified" so a transient failure never lets a
+    false close through. Returns ``None`` when there is no external-fix claim,
+    no cited SHA, or every cited SHA is verified.
+    """
+    # Lazy import: keeps the heavy refine module out of the implement-stage
+    # import path and avoids any theoretical cross-stage import cycle.
+    from .refine.helpers import _rationale_claims_external_fix
+
+    if repo_dir is None:
+        return None
+    rationale = text or ""
+    if not _rationale_claims_external_fix(rationale):
+        return None
+    shas = list(dict.fromkeys(_COMMIT_SHA_RE.findall(rationale.lower())))
+    if not shas:
+        return None
+
+    unverified: list[str] = []
+    for sha in shas:
+        try:
+            type_check = subprocess.run(
+                ["git", "-C", str(repo_dir), "cat-file", "-t", sha],
+                capture_output=True,
+                text=True,
+            )
+            if type_check.returncode != 0 or type_check.stdout.strip() != "commit":
+                unverified.append(sha)
+                continue
+            anc = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "merge-base",
+                    "--is-ancestor",
+                    sha,
+                    "origin/main",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if anc.returncode != 0:
+                unverified.append(sha)
+        except Exception:
+            log.warning(
+                "cited-fix verification failed for %s — treating as unverified",
+                sha,
+                exc_info=True,
+            )
+            unverified.append(sha)
+
+    if not unverified:
+        return None
+    return (
+        "closure rationale claims an already-shipped fix citing commit(s) "
+        + ", ".join(unverified)
+        + " that are NOT present at origin/main (not a valid commit object, or "
+        "not an ancestor of origin/main). This is an unverified "
+        "merge/completion claim — the work was not actually done. Routing back "
+        "for the real fix instead of closing as done."
+    )

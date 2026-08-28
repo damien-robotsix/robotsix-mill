@@ -135,6 +135,32 @@ def _run_no_change_contradiction_check(
                         "spec demands code change but diff is empty (no_change_needed)",
                     ),
                 )
+            # Guard: rationale claims an already-shipped fix citing a commit
+            # that is NOT present at origin/main — an unverified
+            # merge/completion claim. Closing DONE would falsely complete a
+            # ticket whose gap is still live, so route back for the real fix.
+            cited_diag = short_circuit_verify.cited_fix_unverified(
+                repo_dir, f"{no_change_rationale}\n{summary}"
+            )
+            if cited_diag:
+                diag = f"{no_change_rationale.strip() or summary}\n\n[Diagnostic] {cited_diag}"
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    diag,
+                    ok=False,
+                    reference_files=ref_files,
+                    extra_roots=extra_roots,
+                )
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(
+                        State.BLOCKED,
+                        "unverified 'already fixed' claim (cited commit not at origin/main)",
+                    ),
+                )
             # No contradiction — close DONE.
             rationale = no_change_rationale.strip()
             short = rationale[:400] + ("…" if len(rationale) > 400 else "")
@@ -267,6 +293,32 @@ def _run_no_change_contradiction_check(
                     outcome=Outcome(
                         State.BLOCKED,
                         "spec demands code change but diff is empty (fresh run)",
+                    ),
+                )
+            # Guard: the summary claims an already-shipped fix citing a commit
+            # that is NOT present at origin/main — an unverified
+            # merge/completion claim. Route back for the real fix rather than
+            # closing DONE on a gap that is still live.
+            cited_diag = short_circuit_verify.cited_fix_unverified(
+                repo_dir, no_change_summary
+            )
+            if cited_diag:
+                diag = f"{no_change_summary}\n\n[Diagnostic] {cited_diag}"
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    diag,
+                    ok=False,
+                    reference_files=ref_files,
+                    extra_roots=extra_roots,
+                )
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(
+                        State.BLOCKED,
+                        "unverified 'already fixed' claim (cited commit not at origin/main)",
                     ),
                 )
             # Genuine no-op: clean working tree, no commits beyond the
