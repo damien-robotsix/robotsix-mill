@@ -839,6 +839,13 @@ class ValidationMixin(_ImplementStageBase):
                 verdict.justification,
             )
             git_ops.restore_paths(repo_dir, target, out_of_scope)
+            # A REJECT is a send-back, not a spec-determined dead end: the
+            # next pass gets the rejection as new feedback, so it is NOT
+            # "the same attempt again". Persisting a spec fingerprint here
+            # made preflight block the very re-run this send-back asks
+            # for ("spec unchanged since last spec-determined implement
+            # attempt", b346 2026-08-29). The ping-pong risk is already
+            # bounded by the duplicate-REJECT guard above.
             cls._finalize(
                 ctx,
                 ticket,
@@ -848,6 +855,7 @@ class ValidationMixin(_ImplementStageBase):
                 ok=False,
                 reference_files=ref_files,
                 extra_roots=None,
+                write_spec_fingerprint=False,
             )
             file_list = ", ".join(f"`{f}`" for f in out_of_scope)
             return _ScopeGuardrailResult(

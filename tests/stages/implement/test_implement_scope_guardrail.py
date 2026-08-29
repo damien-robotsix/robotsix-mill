@@ -205,6 +205,12 @@ def test_run_scope_guardrail_reject_cleans_tracked_and_untracked(
     assert not (repo / "stray.txt").exists()
     # In-scope work preserved.
     assert "a.txt" in changed
+    # A REJECT is a send-back with new feedback, not a spec-determined dead
+    # end: no spec fingerprint may be persisted, or preflight blocks the
+    # very re-run the READY outcome asks for ("spec unchanged since last
+    # spec-determined implement attempt").
+    implement_md = (ws.artifacts_dir / "implement.md").read_text(encoding="utf-8")
+    assert "spec-fingerprint:" not in implement_md
 
 
 def test_run_scope_guardrail_reject_cleans_resumed_wip_history(
