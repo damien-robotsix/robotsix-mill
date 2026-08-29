@@ -1013,6 +1013,22 @@ cap.
 env-var names: `"board_hygiene_periodic"`, `"board_hygiene_draft_ttl_days"`,
 `"board_hygiene_max_open_tickets"`.
 
+**Ingest scope gate (auto-epic).** On every genuinely-new (non-duplicate)
+`POST /tickets/ingest` report, a cheap small-tier scope classifier decides
+whether the report is a single focused task or multi-concern work that
+should become an epic. When it returns `EPIC` with confidence at or above
+the threshold, the ticket is created as an epic, the decision + rationale
+are recorded in its history, and the existing epic-breakdown machinery
+spawns dependency-ordered child tickets. The gate runs past all dedup
+checks, so a re-ingest of the same report is deduped upstream and never
+re-classified. It is conservative by design: borderline reports stay
+single tasks.
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `MILL_AUTO_EPIC_ENABLED` | `true` | When true, ingest promotes clearly multi-concern reports to an auto-decomposed epic. Set to `false` to disable the scope gate (all reports proceed as single tasks) |
+| `MILL_AUTO_EPIC_MIN_CONFIDENCE` | `0.7` | Minimum scope-classifier confidence (`0.0`–`1.0`) required to auto-promote an ingested report to an epic. Below this, the report stays a single task |
+
 ### 13. Skills & language instructions
 
 | YAML path | Env var | Default | Description |

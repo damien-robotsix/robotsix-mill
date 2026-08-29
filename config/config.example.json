@@ -35,6 +35,8 @@
         "api_url": "http://127.0.0.1:8077",
         "audit_interval_seconds": 1209600,
         "audit_request_limit": 80,
+        "auto_epic_enabled": true,
+        "auto_epic_min_confidence": 0.7,
         "auto_fix_max_cycles": 6,
         "auto_merge_enabled": true,
         "auto_merge_infra_denylist": [

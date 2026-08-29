@@ -718,6 +718,26 @@ class _CoreSettings(BaseModel):
         description="Character cap on each candidate body fed to the dedup prompt.",
         json_schema_extra={"advanced": True},
     )
+    # When True, the ingest path runs a cheap scope classifier on every
+    # genuinely-new (non-duplicate) report and, when it clearly bundles
+    # several independent deliverables, promotes it to an epic and
+    # invokes epic-breakdown to spawn dependency-ordered child tickets.
+    auto_epic_enabled: bool = Field(
+        default=True,
+        description="When true, ingest promotes clearly multi-concern reports to an auto-decomposed epic.",
+        json_schema_extra={"advanced": True},
+    )
+    # Minimum classifier confidence required to promote an ingested
+    # report to an epic. Borderline reports (below this threshold) stay
+    # single tasks — the conservative default avoids fragmenting
+    # genuinely small tickets.
+    auto_epic_min_confidence: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum scope-classifier confidence required to auto-promote an ingested report to an epic.",
+        json_schema_extra={"advanced": True},
+    )
     # Local-dev default: ``.data`` — the same path the docker-compose
     # volume mounts at /data, so host CLI invocations and the container
     # share state instead of leaking a separate sibling tree. The

@@ -30,6 +30,7 @@ from ...agents.dedup import (
 )
 from ...agents.ops_classify import OpsClassifyVerdict, run_ops_classify_agent
 from ...agents.runners.diagnostic_events import emit_diagnostic_event
+from ...agents.scope_classify import ScopeVerdict, run_scope_classify_agent
 from ...config import RepoConfig, ReposRegistry, Settings
 from ...core.models import Ticket, TicketKind
 from ...core.service import TicketService
@@ -405,6 +406,182 @@ def _run_ops_classify(
     return verdict
 
 
+def _run_scope_classify(
+    body: TicketIngest,
+    board_id: str,
+    settings: Settings,
+) -> ScopeVerdict | None:
+    """Run the scope-breadth classifier on the ingest body.
+
+    Returns a :class:`ScopeVerdict` on success, or ``None`` when the
+    feature is disabled or the LLM call fails (fail-open: a missed epic
+    promotion is cheaper than a lost report — the ticket is created as a
+    single task and refine can still promote it later).  Emits a
+    diagnostic event so promotion decisions are auditable.
+    """
+    if not settings.auto_epic_enabled:
+        return None
+    try:
+        verdict = run_scope_classify_agent(
+            settings=settings,
+            title=body.title,
+            body=body.body,
+        )
+    except Exception as exc:
+        logger.warning(
+            "ingest scope-classify failed, proceeding as task (fail-open): %s",
+            exc,
+        )
+        return None
+
+    try:
+        emit_diagnostic_event(
+            settings=settings,
+            board_id=board_id,
+            category="SCOPE_CLASSIFY",
+            ticket_id="",
+            reason=(
+                f"classification={verdict.classification} "
+                f"confidence={verdict.confidence:.2f} "
+                f"title={body.title!r} reason={verdict.reason!r}"
+            ),
+            normalized_key=_normalize_title(body.title),
+        )
+    except Exception:
+        logger.debug("scope-classify diagnostic event emission failed", exc_info=True)
+
+    return verdict
+
+
+def _maybe_promote_to_epic(
+    body: TicketIngest,
+    board_id: str,
+    board_svc: TicketService,
+    worker: Worker,
+    settings: Settings,
+) -> JSONResponse | None:
+    """Promote a clearly multi-concern report to an auto-decomposed epic.
+
+    Runs the scope classifier and, when it returns ``EPIC`` with
+    confidence at or above ``auto_epic_min_confidence``, creates the
+    ticket as an epic, records the decision + rationale in its history,
+    and invokes the existing epic-breakdown machinery to spawn
+    dependency-ordered child tickets.  Returns the ``201`` response for
+    the created epic, or ``None`` when the report should proceed as a
+    single task (disabled, classifier failure, ``TASK`` verdict, or a
+    borderline ``EPIC`` below the confidence threshold).
+    """
+    verdict = _run_scope_classify(body, board_id, settings)
+    if verdict is None or verdict.classification != "EPIC":
+        return None
+    if verdict.confidence < settings.auto_epic_min_confidence:
+        logger.info(
+            "ingest scope-classify EPIC below threshold "
+            "(%.2f < %.2f); staying a single task: %s",
+            verdict.confidence,
+            settings.auto_epic_min_confidence,
+            verdict.reason,
+        )
+        return None
+
+    epic = board_svc.create(
+        title=body.title,
+        description=body.body,
+        source=body.source_tag,
+        kind=TicketKind.EPIC,
+        board_id=board_id,
+    )
+    board_svc.add_history_note(
+        epic.id,
+        f"auto-classified as epic at ingest (scope gate, confidence "
+        f"{verdict.confidence:.2f}): {verdict.reason}",
+    )
+    logger.info(
+        "ingest promoted %s to epic (confidence %.2f)",
+        epic.id,
+        verdict.confidence,
+    )
+    try:
+        _decompose_epic(epic, body, board_id, board_svc, worker, settings)
+    except Exception:
+        logger.exception(
+            "%s: epic-breakdown after ingest promotion failed — epic body "
+            "is in place, children left for /generate-children",
+            epic.id,
+        )
+    return JSONResponse(
+        status_code=201,
+        content=IngestResult(
+            ticket_id=epic.id,
+            deduped=False,
+            classified="EPIC",
+        ).model_dump(),
+    )
+
+
+def _decompose_epic(
+    epic: Ticket,
+    body: TicketIngest,
+    board_id: str,
+    board_svc: TicketService,
+    worker: Worker,
+    settings: Settings,
+) -> None:
+    """Break *epic* into dependency-ordered child tickets.
+
+    Reuses the shared ``run_epic_breakdown_agent`` +
+    ``plan_child_dependencies`` machinery (the same path the refine
+    stage's ``promote_to_epic`` mode uses).  Children are created as
+    DRAFT tasks parented to *epic*, chained in dependency order, and
+    enqueued so they flow into refine on their own cycles.
+    """
+    from ...agents.epic_breakdown import (
+        plan_child_dependencies,
+        run_epic_breakdown_agent,
+    )
+
+    breakdown = run_epic_breakdown_agent(
+        settings=settings,
+        epic_title=epic.title,
+        epic_description=body.body,
+    )
+    created_children: list[tuple[str, str, str]] = []
+    for child_title, child_body in zip(
+        breakdown.child_titles,
+        breakdown.child_bodies,
+        strict=True,
+    ):
+        child = board_svc.create(
+            title=child_title,
+            description=child_body,
+            source=body.source_tag,
+            kind=TicketKind.TASK,
+            parent_id=epic.id,
+            board_id=board_id,
+        )
+        created_children.append((child.id, child_title, child_body))
+
+    for child_id, deps in plan_child_dependencies(created_children).items():
+        board_svc.set_depends_on(child_id, deps)
+
+    # Adopt the breakdown agent's revised epic body when it reworked one.
+    if breakdown.epic_body and breakdown.epic_body.strip():
+        new_hash = board_svc.workspace(epic).write_description(
+            breakdown.epic_body.strip()
+        )
+        board_svc.set_content_hash(epic.id, new_hash)
+
+    for child_id, _t, _b in created_children:
+        created = board_svc.get(child_id)
+        if created is not None:
+            maybe_enqueue(created, worker)
+
+    board_svc.add_history_note(
+        epic.id,
+        f"epic-breakdown spawned {len(created_children)} child ticket(s)",
+    )
+
+
 def _run_llm_dedup(
     body: TicketIngest,
     candidates: list[Ticket],
@@ -545,6 +722,15 @@ def _create_ticket(
                 status_code=200,
                 content=IngestResult(ticket_id=rollup_id, deduped=False).model_dump(),
             )
+
+    # Scope gate: promote clearly multi-concern reports to an
+    # auto-decomposed epic before creating a single task.  This runs
+    # past every dedup check, so a re-ingest of the same report is
+    # deduped upstream and never reaches here — preserving idempotency
+    # (no double-classification / double-decomposition).
+    epic_response = _maybe_promote_to_epic(body, board_id, board_svc, worker, settings)
+    if epic_response is not None:
+        return epic_response
 
     ticket = board_svc.create(
         title=body.title,

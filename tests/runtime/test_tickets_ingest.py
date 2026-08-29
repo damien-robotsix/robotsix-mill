@@ -693,3 +693,183 @@ def test_ingest_ops_classify_runs_before_dedup(client, service):
     assert body["filed"] is False
     assert body["reason"] == "operational-maintenance"
     mock_dedup.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Scope classification / auto-epic promotion
+# ---------------------------------------------------------------------------
+def _scope_verdict(classification: str, confidence: float, reason: str = "r"):
+    from robotsix_mill.agents.scope_classify import ScopeVerdict
+
+    return ScopeVerdict(
+        classification=classification, confidence=confidence, reason=reason
+    )
+
+
+def _broad_payload() -> dict:
+    return _ingest_payload(
+        title="Build the whole notifications subsystem",
+        body=(
+            "Add email, SMS, and webhook delivery channels plus a "
+            "user preferences UI and a retry/backoff scheduler."
+        ),
+    )
+
+
+def test_ingest_promotes_broad_report_to_epic(client, service):
+    """A report classified EPIC (above threshold) is created as an epic
+    and decomposed into dependency-ordered child tickets."""
+    from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+
+    breakdown = EpicBreakdownResult(
+        child_titles=[
+            "Add email delivery channel",
+            "Add SMS delivery channel",
+            "Add webhook delivery channel",
+        ],
+        child_bodies=["Email body.", "SMS body.", "Webhook body."],
+    )
+    with (
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_scope_classify_agent",
+            return_value=_scope_verdict("EPIC", 0.9, "Three independent channels."),
+        ),
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
+            return_value=True,
+        ),
+        patch(
+            "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
+            return_value=breakdown,
+        ),
+    ):
+        r = client.post("/tickets/ingest", json=_broad_payload())
+
+    assert r.status_code == 201
+    body = r.json()
+    assert body["deduped"] is False
+    assert body["classified"] == "EPIC"
+
+    epic = service.get(body["ticket_id"])
+    assert epic is not None
+    assert epic.kind == TicketKind.EPIC
+
+    children = service.list_children(epic.id)
+    assert len(children) == 3
+    assert all(c.kind == TicketKind.TASK for c in children)
+    assert all(c.parent_id == epic.id for c in children)
+
+    # Dependency ordering: at least one child depends on a sibling
+    # (the linear C0 -> C1 -> C2 chain).
+    assert any(c.depends_on for c in children)
+
+    # Decision + rationale recorded in history.
+    history = service.history(epic.id)
+    notes = " ".join(e.note for e in history if e.note)
+    assert "auto-classified as epic" in notes
+    assert "Three independent channels" in notes
+
+
+def test_ingest_narrow_report_stays_task(client, service):
+    """A report classified TASK proceeds unchanged as a single task."""
+    with (
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_scope_classify_agent",
+            return_value=_scope_verdict("TASK", 0.1, "One focused fix."),
+        ),
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
+            return_value=True,
+        ),
+    ):
+        r = client.post("/tickets/ingest", json=_ingest_payload())
+
+    assert r.status_code == 201
+    body = r.json()
+    assert body["deduped"] is False
+
+    ticket = service.get(body["ticket_id"])
+    assert ticket is not None
+    assert ticket.kind == TicketKind.TASK
+    # No epic was created — the single task is the only ticket.
+    assert all(t.kind == TicketKind.TASK for t in service.list())
+
+
+def test_ingest_borderline_epic_below_threshold_stays_task(client, service):
+    """An EPIC verdict below the confidence threshold stays a single
+    task (conservative promotion)."""
+    with (
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_scope_classify_agent",
+            return_value=_scope_verdict("EPIC", 0.5, "Borderline."),
+        ),
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
+            return_value=True,
+        ),
+    ):
+        r = client.post("/tickets/ingest", json=_broad_payload())
+
+    assert r.status_code == 201
+    ticket = service.get(r.json()["ticket_id"])
+    assert ticket is not None
+    assert ticket.kind == TicketKind.TASK
+
+
+def test_ingest_scope_classify_disabled(client, service, settings):
+    """When auto_epic_enabled is False, the classifier is never called
+    and the report proceeds as a single task."""
+    settings.auto_epic_enabled = False
+    with patch(
+        "robotsix_mill.runtime.routes._tickets_ingest.run_scope_classify_agent",
+    ) as mock_scope:
+        r = client.post("/tickets/ingest", json=_broad_payload())
+
+    assert r.status_code == 201
+    mock_scope.assert_not_called()
+    ticket = service.get(r.json()["ticket_id"])
+    assert ticket is not None
+    assert ticket.kind == TicketKind.TASK
+
+
+def test_ingest_reingest_epic_is_idempotent(client, service):
+    """Re-ingesting the same broad report is deduped by the title
+    fingerprint — the scope classifier is not re-run and no new
+    children are created (idempotency preserved)."""
+    from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+
+    breakdown = EpicBreakdownResult(
+        child_titles=["Child A", "Child B"],
+        child_bodies=["A body.", "B body."],
+    )
+    with (
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.run_scope_classify_agent",
+            return_value=_scope_verdict("EPIC", 0.9, "Broad."),
+        ) as mock_scope,
+        patch(
+            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
+            return_value=True,
+        ),
+        patch(
+            "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
+            return_value=breakdown,
+        ) as mock_breakdown,
+    ):
+        r1 = client.post("/tickets/ingest", json=_broad_payload())
+        assert r1.status_code == 201
+        epic_id = r1.json()["ticket_id"]
+
+        # Second identical ingest.
+        r2 = client.post("/tickets/ingest", json=_broad_payload())
+
+    assert r2.status_code == 200
+    assert r2.json()["deduped"] is True
+    assert r2.json()["ticket_id"] == epic_id
+
+    # Classifier + breakdown each ran exactly once (first ingest only).
+    assert mock_scope.call_count == 1
+    assert mock_breakdown.call_count == 1
+
+    # Still exactly two children — no double decomposition.
+    assert len(service.list_children(epic_id)) == 2
