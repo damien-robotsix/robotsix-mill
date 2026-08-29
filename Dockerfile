@@ -3,7 +3,7 @@
 # The package is distributed from git; alpine has no git so install it.
 # =============================================================================
 FROM node:22-alpine AS ui
-ARG ROBOTSIX_UI_VERSION=289f5a06f7025f2726b414c0fe9d75edf1bbcf97  # tag v0.1.6
+ARG ROBOTSIX_UI_VERSION=dae969d9b69fd58aea014cd23082bf1d17430c8f  # tag v0.1.41
 # WORKDIR matters: with no working directory the install ran in `/`, which
 # newer npm refuses with `npm error Tracker "idealTree" already exists`.
 # Nothing in this repo changed to trigger that — `node:22-alpine` is a
