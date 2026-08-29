@@ -259,7 +259,50 @@ def build_agent_from_definition(
         if lang_block:
             kwargs["system_prompt"] += "\n\n## Language conventions\n\n" + lang_block
 
-    return build_agent(settings, **kwargs)
+    handle = build_agent(settings, **kwargs)
+
+    # Remember how to rebuild this agent at another capability level so
+    # :func:`~robotsix_mill.agents.retry.run_agent` can switch tiers when the
+    # one it was built for is unavailable (Claude subscription session limit,
+    # dead OAuth credential). Every definition-built agent gets this — the
+    # implement/retrospect/refine/review paths call ``run_agent`` directly and
+    # were blocking their ticket instead of falling back to OpenRouter
+    # (observed 2026-08-29: 6 tickets BLOCKED "agent error — resumable: You've
+    # hit your session limit" while level 3 was perfectly healthy).
+    rebuild_overrides = {k: v for k, v in overrides.items() if k != "level"}
+
+    def _tier_rebuild(new_level: int) -> AgentHandle:
+        return build_agent_from_definition(
+            settings,
+            definition,
+            tools=tools,
+            repo_dir=repo_dir,
+            current_ticket_id=current_ticket_id,
+            web_knowledge_block_reason=web_knowledge_block_reason,
+            level=new_level,
+            **rebuild_overrides,
+        )
+
+    try:
+        handle._tier_level = kwargs["level"]
+        handle._tier_rebuild = _tier_rebuild
+    except AttributeError, TypeError:
+        pass
+    return handle
+
+
+def tier_fallback_levels(level: int) -> list[int]:
+    """Levels to try when *level* is unavailable, nearest non-Claude first.
+
+    Claude-backed levels share ONE subscription and ONE credential, so when one
+    of them reports usage exhaustion or an auth failure the others are dead
+    too — only the OpenRouter-backed levels can serve. Ties prefer the lower
+    (cheaper) level.
+    """
+    return sorted(
+        (n for n in (1, 2, 3, 4, 5) if n != level and not level_uses_claude(n)),
+        key=lambda n: (abs(n - level), n),
+    )
 
 
 def claude_sdk_supports_inline_image(settings: Settings) -> bool:
