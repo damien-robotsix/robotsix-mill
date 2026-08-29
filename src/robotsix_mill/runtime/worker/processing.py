@@ -175,6 +175,30 @@ async def _block_ticket_and_notify(
         send_notification(ticket, State.BLOCKED, note[:200], ctx.settings)
 
 
+async def _close_after_retrospect_failure(
+    ticket_id: str,
+    ctx: StageContext,
+    note: str,
+    trace_id: str | None,
+) -> None:
+    """Close a DONE ticket whose retrospect stage could not complete.
+
+    Retrospect is post-merge analysis: the ticket's work is already on
+    main, so a failing retrospect has nothing left to protect and nothing
+    an operator can "unblock".  Escalating it to BLOCKED (observed
+    2026-08-29: five merged tickets flipped to BLOCKED with "Transient:
+    UnexpectedModelBehavior persisted after 5 attempts — Exceeded maximum
+    output retries") only creates operator work and a phantom failure on
+    the board.  Mirror what the stage itself does when it catches its own
+    agent error (``Outcome(State.CLOSED, "retrospect failed — …")``).
+    """
+    _post_trace_event(ctx, ticket_id, trace_id, "retrospect")
+    ctx.service.transition(
+        ticket_id, State.CLOSED, note=f"retrospect failed — {note}"[:200]
+    )
+    log.warning("retrospect: %s closed without a retrospect — %s", ticket_id, note)
+
+
 async def _handle_stage_error(
     ticket_id: str,
     ctx: StageContext,
@@ -421,18 +445,25 @@ async def _handle_stage_error(
             )
             _post_trace_event(ctx, ticket_id, trace_id, stage_name)
             return
-        # Retries exhausted — block.
+        # Retries exhausted — block (or, for retrospect, close: the work is
+        # already merged and there is nothing to unblock).
         note = (
             f"Transient: {type(error).__name__} persisted after "
             f"{max_attempts} attempts — last: {error}"
         )[:200]
         tracing.set_current_span_attribute("retry.exhausted", True)
         tracing.set_current_span_attribute("retry.attempt", attempt)
+        if stage_name == "retrospect":
+            await _close_after_retrospect_failure(ticket_id, ctx, note, trace_id)
+            return
         await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, trace_id)
     else:
-        # FATAL — block immediately.
+        # FATAL — block immediately (retrospect: close, see above).
         note = f"Fatal: {type(error).__name__}: {error}"[:200]
         tracing.set_current_span_attribute("error.fatal", True)
+        if stage_name == "retrospect":
+            await _close_after_retrospect_failure(ticket_id, ctx, note, trace_id)
+            return
         await _block_ticket_and_notify(ticket_id, ctx, stage_name, note, trace_id)
 
 

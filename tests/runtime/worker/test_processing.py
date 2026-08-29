@@ -394,6 +394,71 @@ class TestHandleStageError:
         assert "persisted" in call_args[0][3]  # note
 
     @pytest.mark.asyncio
+    async def test_retrospect_exhausted_retries_closes_instead_of_blocking(
+        self, ctx, monkeypatch
+    ):
+        """A retrospect that keeps failing closes the (already merged) ticket.
+
+        Regression for 2026-08-29: five DONE tickets flipped to BLOCKED because
+        the level-1 retrospect agent exhausted its structured-output retries.
+        """
+        from robotsix_mill.core.states import State
+
+        self._patch_classify(monkeypatch, "transient")
+        self._patch_network(monkeypatch)
+        self._patch_retry(monkeypatch)
+        self._patch_tracing(monkeypatch)
+        self._patch_post_trace(monkeypatch)
+        self._patch_reap(monkeypatch)
+        block_mock = self._patch_block_and_notify(monkeypatch)
+        max_attempts = ctx.settings.stage_retry_max_attempts
+        t = _fake_ticket(retry_attempt=max_attempts)
+        ctx.service.get = MagicMock(return_value=t)
+        ctx.service.set_retry_state = MagicMock()
+        ctx.service.transition = MagicMock()
+
+        await _handle_stage_error(
+            "ticket-1",
+            ctx,
+            "retrospect",
+            RuntimeError("Exceeded maximum output retries"),
+            "tr-1",
+        )
+
+        block_mock.assert_not_called()
+        ctx.service.transition.assert_called_once()
+        args, kwargs = ctx.service.transition.call_args
+        assert args[0] == "ticket-1"
+        assert args[1] is State.CLOSED
+        assert "retrospect failed" in kwargs["note"]
+
+    @pytest.mark.asyncio
+    async def test_retrospect_fatal_error_closes_instead_of_blocking(
+        self, ctx, monkeypatch
+    ):
+        """Same for a fatal classification on the retrospect stage."""
+        from robotsix_mill.core.states import State
+
+        self._patch_classify(monkeypatch, "fatal")
+        self._patch_network(monkeypatch)
+        self._patch_retry(monkeypatch)
+        self._patch_tracing(monkeypatch)
+        self._patch_post_trace(monkeypatch)
+        self._patch_reap(monkeypatch)
+        block_mock = self._patch_block_and_notify(monkeypatch)
+        t = _fake_ticket(retry_attempt=0)
+        ctx.service.get = MagicMock(return_value=t)
+        ctx.service.set_retry_state = MagicMock()
+        ctx.service.transition = MagicMock()
+
+        await _handle_stage_error(
+            "ticket-1", ctx, "retrospect", ValueError("fatal error"), "tr-1"
+        )
+
+        block_mock.assert_not_called()
+        assert ctx.service.transition.call_args[0][1] is State.CLOSED
+
+    @pytest.mark.asyncio
     async def test_fatal_error_blocks_immediately(self, ctx, monkeypatch):
         """Fatal classification → _block_ticket_and_notify without retry."""
         self._patch_classify(monkeypatch, "fatal")
