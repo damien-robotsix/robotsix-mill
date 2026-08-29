@@ -77,7 +77,7 @@ _CLAUDE_SDK_PROVIDER = "claudeSDK"
 
 
 def level_uses_claude(level: int) -> bool:
-    """Whether *level* routes to the Claude SDK provider (L3 by default)."""
+    """Whether *level* routes to the Claude SDK provider (L2/L4/L5 by default)."""
     from robotsix_llmio.core.factory import default_tier_config
 
     tlc = default_tier_config().for_level(level)
@@ -85,24 +85,30 @@ def level_uses_claude(level: int) -> bool:
 
 
 def new_openrouter_model(model_name: str, level: int):
-    """Build an OpenRouter ``(model, http_client)`` via llmio.
+    """Build a direct ``(model, http_client)`` for *level* via llmio.
 
     llmio's ``get_provider_for_level`` resolves the provider from the baked tier
-    defaults (L1/L2 → OpenRouter providers). Cost recording, the provider pin,
+    defaults (L1/L3 → OpenRouter providers; L2/L4/L5 → keyless Claude SDK). Cost recording, the provider pin,
     and the per-level reasoning policy (level 1 → reasoning off, else xhigh)
     are all baked into the provider. The caller owns closing the returned
     client (pair with :func:`_aclose_async_client`).
     """
-    if not get_secrets().openrouter_api_key:
-        raise RuntimeError("OPENROUTER_API_KEY is not set")
     from robotsix_llmio import get_provider_for_level
 
+    if level_uses_claude(level):
+        # Keyless Claude SDK tier (level 2 haiku, 4 opus, 5 fable): no
+        # OpenRouter key, no ``api_key`` kwarg (the provider rejects it), and
+        # ``http_client`` comes back ``None`` (the CLI is the transport).
+        provider = get_provider_for_level(level)
+        return provider.new_model(model=model_name, level=level)
+    if not get_secrets().openrouter_api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is not set")
     provider = get_provider_for_level(level, api_key=get_secrets().openrouter_api_key)
     return provider.new_model(model=model_name, level=level)
 
 
 def build_openrouter_model(level: int | str = 1, *, online: bool = False):
-    """``(model, http_client)`` for an OpenRouter (L1/L2) agent built directly
+    """``(model, http_client)`` for a direct (non-``build_agent``) model
     (web_research, web_knowledge, trace_inspector, consult_expert).
 
     When *level* is an int, resolves the concrete model via llmio's tier
@@ -119,7 +125,9 @@ def build_openrouter_model(level: int | str = 1, *, online: bool = False):
 
         model_name = default_tier_config().for_level(level).model_name
         level_int = level
-    if online:
+    if online and not level_uses_claude(level_int):
+        # ``:online`` is an OpenRouter routing suffix; Claude tiers have no
+        # equivalent and would reject the model name.
         model_name = f"{model_name}:online"
     return new_openrouter_model(model_name, level_int)
 
@@ -453,7 +461,7 @@ def build_agent(
     close_thread: bool = True,
     list_threads: bool = True,
     ask_user: bool = True,
-    level: int = 2,
+    level: int = 3,
     model: str | None = None,
     name: str | None = None,
     retries: int = 2,
@@ -465,7 +473,7 @@ def build_agent(
     repo_dir: Path | None = None,
     web_knowledge_block_reason: str | None = None,
 ):
-    """Construct a pydantic-ai Agent for a capability ``level`` (1/2/3/4).
+    """Construct a pydantic-ai Agent for a capability ``level`` (1/2/3/4/5).
 
     The level resolves to ``(transport, model)`` via llmio's baked tier
     defaults (see llmio tier config for current mapping).

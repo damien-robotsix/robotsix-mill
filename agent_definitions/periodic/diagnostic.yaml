@@ -18,8 +18,7 @@ category: periodic
 interval: 14d
 enabled: true
 
-level: 2
-
+level: 3
 system_prompt: |
   Deterministic diagnostic orchestrator — no LLM. The pass is driven by
   run_diagnostic_pass(), which iterates the registered diagnostic checks.

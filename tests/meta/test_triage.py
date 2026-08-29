@@ -161,4 +161,4 @@ def test_meta_triage_model_defaults_to_capable_tier():
         / "pipeline"
         / "meta_triage.yaml"
     )
-    assert defn.level == 3
+    assert defn.level == 4

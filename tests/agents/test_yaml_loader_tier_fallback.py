@@ -43,7 +43,7 @@ def _spy_build(levels: list[int]):
 
 
 def test_falls_back_to_next_tier_when_the_starting_tier_fails(monkeypatch):
-    """Level 4 fails → the agent is rebuilt at level 3 and the run returns."""
+    """Level 5 fails → the agent is rebuilt at level 4 and the run returns."""
     levels: list[int] = []
     monkeypatch.setattr(
         "robotsix_mill.agents.base.build_agent_from_definition",
@@ -51,7 +51,7 @@ def test_falls_back_to_next_tier_when_the_starting_tier_fails(monkeypatch):
     )
 
     def _run_agent(agent, make_run, *, what="model call", sleep=None):
-        if agent.level == 4:
+        if agent.level == 5:
             raise RuntimeError("You're out of usage credits")
         return f"ran-at-level-{agent.level}"
 
@@ -59,15 +59,15 @@ def test_falls_back_to_next_tier_when_the_starting_tier_fails(monkeypatch):
 
     out = load_and_run_agent(
         settings=object(),
-        definition_name="epic_breakdown",  # level: 4
+        definition_name="epic_breakdown",  # level: 5
         prompt="break this down",
         what="epic-breakdown",
     )
 
-    assert out == "ran-at-level-3"
-    # Rebuilt per tier: the level selects the provider, so the level-3
-    # attempt cannot reuse the level-4 agent.
-    assert levels == [4, 3]
+    assert out == "ran-at-level-4"
+    # Rebuilt per tier: the level selects the provider, so the level-4
+    # attempt cannot reuse the level-5 agent.
+    assert levels == [5, 4]
 
 
 def test_validate_failure_is_treated_as_a_tier_failure(monkeypatch):
@@ -86,8 +86,8 @@ def test_validate_failure_is_treated_as_a_tier_failure(monkeypatch):
         lambda agent, make_run, *, what="model call", sleep=None: agent.level,
     )
 
-    def _reject_level_4(result) -> None:
-        if result == 4:
+    def _reject_level_5(result) -> None:
+        if result == 5:
             raise ValueError("returned zero children")
 
     out = load_and_run_agent(
@@ -95,11 +95,11 @@ def test_validate_failure_is_treated_as_a_tier_failure(monkeypatch):
         definition_name="epic_breakdown",
         prompt="break this down",
         what="epic-breakdown",
-        validate=_reject_level_4,
+        validate=_reject_level_5,
     )
 
-    assert out == 3
-    assert levels == [4, 3]
+    assert out == 4
+    assert levels == [5, 4]
 
 
 def test_no_fallback_when_the_first_tier_succeeds(monkeypatch):
@@ -122,4 +122,4 @@ def test_no_fallback_when_the_first_tier_succeeds(monkeypatch):
     )
 
     assert out == "ok"
-    assert levels == [4]
+    assert levels == [5]

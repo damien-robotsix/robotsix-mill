@@ -120,7 +120,7 @@ def test_safe_close_swallows_exceptions_from_close():
 def test_default_tier_config_maps_levels():
     """Each capability level maps to the backend family mill's code assumes:
     L1 → DeepSeek flash on OpenRouter, L2 → Xiaomi MiMo pro on OpenRouter,
-    L3 → Claude SDK opus.
+    L2 → Claude SDK haiku, L3 → OpenRouter mimo, L4 → Claude SDK opus.
 
     Asserts the *provider* exactly and the model *family* by prefix, not the
     full slug. The exact slug is llmio's to choose — it re-pins the DeepSeek
@@ -138,21 +138,29 @@ def test_default_tier_config_maps_levels():
     assert parsed1.model_name.startswith("deepseek/deepseek-v4-flash")
 
     parsed2 = parse_model_identifier(default_tier_config().for_level(2).model)
-    assert parsed2.provider == "openrouter"
-    assert parsed2.model_name.startswith("xiaomi/mimo-v2.5-pro")
+    assert parsed2.provider == "claudeSDK"
 
     parsed3 = parse_model_identifier(default_tier_config().for_level(3).model)
-    assert parsed3.provider == "claudeSDK"
-    assert parsed3.model_name == "opus"
+    assert parsed3.provider == "openrouter"
+    assert parsed3.model_name.startswith("xiaomi/mimo-v2.5-pro")
+
+    parsed4 = parse_model_identifier(default_tier_config().for_level(4).model)
+    assert parsed4.provider == "claudeSDK"
+
+    parsed5 = parse_model_identifier(default_tier_config().for_level(5).model)
+    assert parsed5.provider == "claudeSDK"
+    assert parsed4.model_name == "opus"
 
 
-def test_level_uses_claude_only_for_level_3():
-    """level_uses_claude is True only for the Claude-SDK transport (L3)."""
+def test_level_uses_claude_only_for_claude_sdk_levels():
+    """level_uses_claude is True only for the Claude-SDK tiers (L2/L4/L5)."""
     from robotsix_mill.agents.base import level_uses_claude
 
-    assert level_uses_claude(3) is True
+    assert level_uses_claude(2) is True
+    assert level_uses_claude(4) is True
+    assert level_uses_claude(5) is True
     assert level_uses_claude(1) is False
-    assert level_uses_claude(2) is False
+    assert level_uses_claude(3) is False
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +318,7 @@ def test_build_agent_resolves_level_1_to_flash(monkeypatch, settings, level1_mod
     assert captured_kwargs[0]["effective_model"] == level1_model
 
 
-def test_build_agent_resolves_level_2_to_pro(monkeypatch, settings):
+def test_build_agent_resolves_level_3_to_pro(monkeypatch, settings):
     """build_agent level 2 (the default) resolves to the concrete pro model."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
@@ -334,7 +342,7 @@ def test_build_agent_resolves_level_2_to_pro(monkeypatch, settings):
     bmod.build_agent(
         settings,
         system_prompt="Test.",
-        level=2,
+        level=3,
         tools=[],
     )
 
@@ -555,7 +563,7 @@ def test_build_agent_claude_sdk_path(monkeypatch):
     result = bmod.build_agent(
         s,
         system_prompt="Test prompt.",
-        level=3,  # level 3 resolves to the Claude SDK transport
+        level=4,  # level 4 resolves to the Claude SDK transport
         name="claude-agent",
         tools=[],
     )
@@ -564,7 +572,7 @@ def test_build_agent_claude_sdk_path(monkeypatch):
     assert result is fake_claude_handle
     # build_agent was called on the provider with level=3.
     fake_provider.build_agent.assert_called_once()
-    assert fake_provider.build_agent.call_args.kwargs["level"] == 3
+    assert fake_provider.build_agent.call_args.kwargs["level"] == 4
     assert fake_provider.build_agent.call_args.kwargs["system_prompt"] == "test prompt"
 
 

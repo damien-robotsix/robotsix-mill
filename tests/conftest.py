@@ -75,6 +75,29 @@ def _no_real_http(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_claude_cli(monkeypatch):
+    """Same guarantee for the keyless Claude SDK tiers (L2/L4/L5).
+
+    Those levels need no API key, so the ``OPENROUTER_API_KEY`` strip in
+    ``_no_dotenv`` does not stop them: an unmocked Claude-level agent
+    would spawn the real ``claude`` CLI and burn subscription quota (and
+    minutes of wall-clock per test). Fail loudly at the transport instead,
+    with the same ``RuntimeError`` class the OpenRouter levels raise when
+    their key is missing, so call sites treat both the same way."""
+    from robotsix_llmio.claude_sdk import _model as _claude_model
+
+    async def _blocked(self, *a, **k):
+        raise RuntimeError(
+            "Blocked real Claude CLI invocation during tests. Tests must "
+            "mock the model/agent seam — they must never spawn `claude` "
+            "or consume subscription quota."
+        )
+
+    monkeypatch.setattr(_claude_model.ClaudeSDKModel, "request", _blocked)
+    monkeypatch.setattr(_claude_model.ClaudeSDKModel, "_invoke", _blocked)
+
+
+@pytest.fixture(autouse=True)
 def _no_dotenv(monkeypatch, tmp_path):
     """Hermeticity: never let the developer's ambient env vars leak into
     tests.  Settings is now loaded ONLY from a single JSON config file

@@ -2,7 +2,7 @@
 
 Parses ``agent_definitions/<name>.yaml``, validates the result against the
 ``AgentDefinition`` Pydantic model, and returns a structured object. Each
-definition declares a capability ``level`` (1/2/3/4) that ``build_agent``
+definition declares a capability ``level`` (1/2/3/4/5) that ``build_agent``
 resolves to a ``(transport, model)`` via llmio's tier defaults.
 
 This module is independent of the agent runtime (``build_agent``,
@@ -43,10 +43,10 @@ class AgentDefinition(BaseModel):
     name: str
     description: str | None = None
     category: str | None = None
-    # Capability level (1/2/3/4) → resolved to (transport, model) by build_agent
+    # Capability level (1/2/3/4/5) → resolved to (transport, model) by build_agent
     # via llmio's tier defaults (see llmio tier config for current mapping).
     # Replaces the old provider-specific ``model`` field.
-    level: int = Field(ge=1, le=4)
+    level: int = Field(ge=1, le=5)
     system_prompt: str
     tools: list[str] = []
     # Single web/library knowledge gateway. When True the agent gets
@@ -358,7 +358,7 @@ def load_and_run_agent(
     # the provider, so a new tier needs a new agent and a new HTTP client.
     tier_config = default_tier_config()
     level_by_model: dict[str, int] = {}
-    for n in (1, 2, 3, 4):
+    for n in (1, 2, 3, 4, 5):
         level_by_model.setdefault(getattr(tier_config, f"level{n}").model, n)
 
     def _tier_factory(tlc: TierLevelConfig) -> Callable[[], Any]:

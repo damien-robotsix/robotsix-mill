@@ -11,8 +11,7 @@ description: >-
 
 category: pipeline
 
-level: 3
-
+level: 4
 # Read-only tools for codebase exploration (conditional on repo_dir).
 # The refine stage provides a local clone; tools let the agent ground
 # the spec in real file paths, patterns, and constraints.

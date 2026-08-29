@@ -59,13 +59,13 @@ def settings() -> Settings:
 
 def test_agent_levels_default_empty_and_validated():
     """agent_levels defaults to {} (YAML levels apply) and rejects values
-    outside llmio's L1..L4 range."""
+    outside llmio's L1..L5 range."""
     import pytest
 
     assert Settings().agent_levels == {}
     assert Settings(agent_levels={"implement": 3}).agent_levels == {"implement": 3}
-    with pytest.raises(ValueError, match=r"1\.\.4"):
-        Settings(agent_levels={"implement": 5})
+    with pytest.raises(ValueError, match=r"1\.\.5"):
+        Settings(agent_levels={"implement": 6})
 
 
 def test_default_coordinator_max_tool_calls():

@@ -135,11 +135,11 @@ def test_config_default_and_validation():
 
 
 def test_build_agent_wraps_claude_handle_with_the_bound(monkeypatch):
-    """build_agent routes a Claude-SDK agent (level 3) through the concurrency
+    """build_agent routes a Claude-SDK agent (level 4) through the concurrency
     wrapper, sized from settings.claude_max_concurrency."""
     from unittest.mock import MagicMock, patch
 
-    # An agent runs on the Claude SDK iff its level is 3 — there is no separate
+    # An agent runs on the Claude SDK iff its level is 2, 4 or 5 — there is no separate
     # backend toggle. build_agent returns the bound handle directly.
     s = _settings(claude_max_concurrency=3)
 
@@ -154,7 +154,7 @@ def test_build_agent_wraps_claude_handle_with_the_bound(monkeypatch):
             s,
             system_prompt="sys",
             name="refine",
-            level=3,
+            level=4,
             report_issue=False,
             reply_to_thread=False,
             close_thread=False,
@@ -186,7 +186,7 @@ def test_live_bound_serializes_real_claude_runs():
         s,
         system_prompt="You are terse. Answer with a single word.",
         name="livecheck",
-        level=3,  # → Claude SDK transport
+        level=4,  # → Claude SDK transport
         report_issue=False,
         reply_to_thread=False,
         close_thread=False,

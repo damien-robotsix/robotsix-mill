@@ -654,7 +654,7 @@ refinement pass.
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `gates.refine_trivial_routing_enabled` | `MILL_REFINE_TRIVIAL_ROUTING_ENABLED` | `true` | Route trivial-scope tickets to a cheaper model instead of the full refinement model |
-| `gates.refine_trivial_model_level` | `MILL_REFINE_TRIVIAL_MODEL_LEVEL` | `2` | Model level for trivial-scope refines (2 = pay-per-token DeepSeek Pro, cheap enough for straightforward gap-fill tickets; 1 = flash cheapest; 3 = flat-cost Claude subscription). Code default is `2`; config.example.json overrides to `3` for flat-cost Claude subscription. |
+| `gates.refine_trivial_model_level` | `MILL_REFINE_TRIVIAL_MODEL_LEVEL` | `3` | Model level for trivial-scope refines (3 = pay-per-token OpenRouter mimo, cheap enough for straightforward gap-fill tickets; 1 = flash cheapest; 2 = flat-cost Claude haiku; 4 = flat-cost Claude opus). Code default is `3`; config.example.json overrides to `4` for flat-cost Claude subscription. |
 | `gates.refine_trivial_subscription_model` | `MILL_REFINE_TRIVIAL_SUBSCRIPTION_MODEL` | `sonnet` | Claude alias for trivial/forced-cheap refines routed to the level-3 subscription |
 | `gates.refine_subscription_tier_routing_enabled` | `MILL_REFINE_SUBSCRIPTION_TIER_ROUTING_ENABLED` | `true` | Complexity-gated Claude alias routing for level-3 refines (set `false` for Opus-always rollback) |
 | `gates.refine_subscription_model_default` | `MILL_REFINE_SUBSCRIPTION_MODEL_DEFAULT` | `sonnet` | Claude alias for non-escalated (simple) level-3 refines |

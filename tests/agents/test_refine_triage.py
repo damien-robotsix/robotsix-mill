@@ -90,7 +90,7 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
     assert seen_kwargs["tools"] == []
     assert seen_kwargs["web_knowledge"] is False
     assert seen_kwargs["report_issue"] is False
-    assert seen_kwargs["level"] == 2  # triage.yaml level (promoted per #1692)
+    assert seen_kwargs["level"] == 3  # triage.yaml level (promoted per #1692)
     assert seen_kwargs["name"] == "triage"
     assert seen_kwargs["ask_user"] is False
 

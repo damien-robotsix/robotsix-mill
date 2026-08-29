@@ -370,7 +370,7 @@ def run_meta_agent(
         # No per-agent model decision: cross-repo synthesis runs on the
         # normal/default model (llmio resolves the tier per backend), not the
         # cheap flash tier the audit_model override used to force.
-        level=2,
+        level=3,
         name="meta",
     )
 
