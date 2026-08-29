@@ -206,6 +206,28 @@ def tracked_paths_at(repo: Path, ref: str) -> set[str]:
     return {line for line in out.split("\n") if line} if out else set()
 
 
+def _pre_rebase_base_blobs(
+    repo: Path, target_branch: str, paths: list[str]
+) -> dict[str, str] | None:
+    """Blob ids of *paths* at the merge-base of the PRE-rebase branch head
+    (``ORIG_HEAD``) and ``origin/<target>``.
+
+    Paths absent from the result were ADDED by the branch. Returns ``None``
+    when ``ORIG_HEAD`` or the merge-base cannot be resolved (no rebase ran in
+    this clone), so callers withhold the added-file excuse rather than guess.
+    """
+    try:
+        base = _get_git_ops()._git(
+            repo, "merge-base", f"origin/{target_branch}", "ORIG_HEAD"
+        )
+    except subprocess.CalledProcessError:
+        return None
+    base = base.strip()
+    if not base:
+        return None
+    return file_blobs(repo, paths, ref=base)
+
+
 def file_blobs(repo: Path, paths: list[str], ref: str = "HEAD") -> dict[str, str]:
     """Map each of *paths* to its blob object id at *ref*.
 
@@ -306,24 +328,58 @@ def check_rebase_diff_integrity(
     }
     post_set = set(post_files)
     candidates = sorted(pre_set - post_set)
-    if not pre_rebase_blobs:
-        return (len(candidates) == 0, candidates, [])
+    if not candidates:
+        return (True, [], [])
 
     target_blobs = file_blobs(repo, candidates, ref=f"origin/{target_branch}")
+    pre_blobs = dict(pre_rebase_blobs or {})
+    # The caller's pre-rebase snapshot is the primary evidence, but it is
+    # plumbing that can arrive empty (live 2026-08-29, robotsix-browser bd94:
+    # a sibling PR had landed the branch's new ``deploy/docker-compose.yml``
+    # byte-for-byte, the snapshot was empty, and the ticket blocked as a
+    # silent drop). git itself keeps the pre-rebase HEAD as ``ORIG_HEAD`` —
+    # use it to fill any path the snapshot lacks, so the identical-blob
+    # excuse below does not depend on the snapshot having been threaded
+    # through correctly.
+    missing = [f for f in candidates if f not in pre_blobs]
+    if missing:
+        for f, blob in file_blobs(repo, missing, ref="ORIG_HEAD").items():
+            pre_blobs[f] = blob
+            log.info(
+                "rebase integrity: %s pre-rebase blob recovered from ORIG_HEAD "
+                "(snapshot lacked it)",
+                f,
+            )
+    if not pre_blobs:
+        return (len(candidates) == 0, candidates, [])
+
+    # Paths the branch ADDED (absent at its pre-rebase merge-base with the
+    # target). When the target now carries such a path, a sibling PR delivered
+    # its own version of the same new file and the rebase agent kept the
+    # target's. The delta is superseded, not dropped — a discarded addition
+    # would leave the target WITHOUT the file. Blocking here dead-ended
+    # robotsix-browser bd94 (2026-08-29) although its intent (the compose file
+    # exists on main) was fully met and the rest of its diff was mergeable.
+    base_blobs = _pre_rebase_base_blobs(repo, target_branch, candidates)
+
     dropped: list[str] = []
     sibling_likely: list[str] = []
     for f in candidates:
         # Excused only when the target's content for this path is byte-for-byte
         # what the branch was trying to deliver. A discarded change leaves the
         # target on its ORIGINAL content, which never matches.
-        if f in pre_rebase_blobs and target_blobs.get(f) == pre_rebase_blobs[f]:
+        if f in pre_blobs and target_blobs.get(f) == pre_blobs[f]:
             continue
-
-        # Sibling-modified: the target's content for this file changed during
-        # the rebase window (a sibling PR landed between our pre-rebase
-        # snapshot and now). The agent correctly took the sibling's version;
-        # our specific delta is superseded — but we do NOT auto-excuse because
-        # semantic equivalence can only be judged by a human.
+        if f in target_blobs and base_blobs is not None and f not in base_blobs:
+            log.warning(
+                "rebase integrity: %s superseded — the branch added it and the "
+                "target already carries its own version (branch blob %s, target "
+                "blob %s); the rebase kept the target's",
+                f,
+                pre_blobs.get(f, "?")[:12],
+                target_blobs[f][:12],
+            )
+            continue
         if (
             target_pre_blobs
             and f in target_pre_blobs

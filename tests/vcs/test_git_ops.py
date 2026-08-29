@@ -2911,6 +2911,113 @@ def test_change_already_landed_upstream_is_not_a_drop(tmp_path):
     assert dropped == []
 
 
+def test_added_file_landed_upstream_is_excused_without_pre_rebase_blobs(tmp_path):
+    """The identical-blob excuse must not hinge on the pre-rebase snapshot.
+
+    Live (robotsix-browser bd94, 2026-08-29): the snapshot reached the guard
+    empty, a sibling PR had already landed the branch's new
+    ``deploy/docker-compose.yml`` byte-for-byte, and the guard blocked the
+    ticket as a silent drop. git's ``ORIG_HEAD`` still holds the pre-rebase
+    content, so the guard recovers the blob from there.
+    """
+    repo, run = _init_repo_with_target(tmp_path)
+    branch = run("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    (repo / "deploy").mkdir()
+    (repo / "deploy" / "docker-compose.yml").write_text("services: {}\n")
+    (repo / "README.md").write_text("docs\n")
+    run("add", "-A")
+    run("commit", "-qm", "add compose + docs")
+    # A sibling PR lands the identical compose file on main, on its own
+    # lineage (absent at the merge-base), before this branch is rebased.
+    run("checkout", "-q", "-b", "sibling", "origin/main")
+    (repo / "deploy").mkdir(exist_ok=True)
+    (repo / "deploy" / "docker-compose.yml").write_text("services: {}\n")
+    run("add", "-A")
+    run("commit", "-qm", "sibling adds the same compose")
+    run("update-ref", "refs/remotes/origin/main", "HEAD")
+    run("checkout", "-q", branch)
+    # The rebase collapses the now-redundant compose delta; README survives.
+    run("rebase", "-q", "origin/main")
+
+    ok, dropped, sibling = git_ops.check_rebase_diff_integrity(
+        repo, "main", ["deploy/docker-compose.yml", "README.md"], None
+    )
+
+    assert (ok, dropped, sibling) == (True, [], [])
+
+
+def test_modified_file_without_pre_rebase_blobs_stays_conservative(tmp_path):
+    """Without a snapshot and without an ``ORIG_HEAD`` rebase marker, a file
+    that ends up agreeing with the target gets no excuse — that is exactly
+    what a discarded modification looks like."""
+    repo, run = _init_repo_with_target(tmp_path)
+    # Dockerfile exists at the merge-base (created by _init_repo_with_target
+    # fixtures? ensure it exists on main first).
+    (repo / "Dockerfile").write_text("FROM base:1.0\n")
+    run("add", "-A")
+    run("commit", "-qm", "baseline Dockerfile")
+    run("update-ref", "refs/remotes/origin/main", "HEAD")
+    (repo / "Dockerfile").write_text("FROM base:1.2.3\n")
+    run("add", "-A")
+    run("commit", "-qm", "pin base image")
+    # Rebase "discarded" the change: HEAD back on the target's content.
+    run("checkout", "-q", "origin/main", "--", "Dockerfile")
+    (repo / "keep.py").write_text("x = 1\n")
+    run("add", "-A")
+    run("commit", "-qm", "real work, Dockerfile change lost")
+
+    ok, dropped, _s = git_ops.check_rebase_diff_integrity(
+        repo, "main", ["Dockerfile", "keep.py"], None
+    )
+
+    assert ok is False
+    assert dropped == ["Dockerfile"]
+
+
+def test_added_file_superseded_by_a_different_target_version_is_excused(tmp_path):
+    """robotsix-browser bd94 (2026-08-29): the branch added
+    ``deploy/docker-compose.yml``, a sibling PR had landed a DIFFERENT compose
+    file on main first, and the rebase agent kept main's. The branch's intent
+    (the file exists on the target) is met, the rest of the diff is
+    mergeable — blocking as a silent drop dead-ended the ticket."""
+    repo, run = _init_repo_with_target(tmp_path)
+    branch = run("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    (repo / "deploy").mkdir()
+    (repo / "deploy" / "docker-compose.yml").write_text("services: {ours: 1}\n")
+    (repo / "README.md").write_text("docs\n")
+    run("add", "-A")
+    run("commit", "-qm", "add compose + docs")
+    pre_files = ["deploy/docker-compose.yml", "README.md"]
+    pre_blobs = git_ops.file_blobs(repo, pre_files)
+
+    run("checkout", "-q", "-b", "sibling", "origin/main")
+    (repo / "deploy").mkdir(exist_ok=True)
+    (repo / "deploy" / "docker-compose.yml").write_text("services: {theirs: 2}\n")
+    run("add", "-A")
+    run("commit", "-qm", "sibling adds its own compose")
+    run("update-ref", "refs/remotes/origin/main", "HEAD")
+    run("checkout", "-q", branch)
+    # The agent resolves the add/add conflict by taking the target's version
+    # (during a rebase the target is the "ours" side).
+    import subprocess as _sp
+
+    try:
+        run("rebase", "-q", "origin/main")
+    except _sp.CalledProcessError:
+        run("checkout", "--ours", "deploy/docker-compose.yml")
+        run("add", "deploy/docker-compose.yml")
+        run("-c", "core.editor=true", "rebase", "--continue")
+    assert (
+        repo / "deploy" / "docker-compose.yml"
+    ).read_text() == "services: {theirs: 2}\n"
+
+    ok, dropped, sibling = git_ops.check_rebase_diff_integrity(
+        repo, "main", pre_files, pre_blobs
+    )
+
+    assert (ok, dropped, sibling) == (True, [], [])
+
+
 def test_discarded_change_is_still_reported_as_a_drop(tmp_path):
     """A rebase that threw the branch's work away must still block.
 
