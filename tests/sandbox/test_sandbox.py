@@ -932,6 +932,9 @@ def test_maybe_install_prefix_uv_path(tmp_path):
 
     prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
     assert "uv sync --frozen --no-dev --quiet" in prefix
+    # uv's OSV malware scan is disabled for the offline sandbox install
+    # so it doesn't fail on the unreachable api.osv.dev endpoint.
+    assert "UV_MALWARE_CHECK=0 uv sync --frozen --no-dev --quiet" in prefix
     assert "command -v uv" in prefix
     assert "WARNING: uv not found, falling back to pip" in prefix
     assert "rm -rf build src/*.egg-info" in prefix
@@ -966,6 +969,9 @@ def test_maybe_install_prefix_pep508_git_dep(tmp_path):
 
     prefix = sandbox._maybe_install_prefix("pytest -q", repo, s)
     assert "uv sync --frozen --no-dev --quiet" in prefix
+    # uv's OSV malware scan is disabled for the offline sandbox install
+    # so it doesn't fail on the unreachable api.osv.dev endpoint.
+    assert "UV_MALWARE_CHECK=0 uv sync --frozen --no-dev --quiet" in prefix
     assert "command -v uv" in prefix
     assert "WARNING: uv not found, falling back to pip" in prefix
     assert "rm -rf build src/*.egg-info" in prefix

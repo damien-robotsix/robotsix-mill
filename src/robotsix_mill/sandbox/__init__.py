@@ -494,7 +494,17 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
     )
 
     if _has_uv_sources(repo_dir) and (repo_dir / "uv.lock").exists():
-        uv = "uv sync --frozen --no-dev --quiet 2>&1"
+        # UV_MALWARE_CHECK=0 disables uv's OSV malware scan for this
+        # install.  The sandbox is network-isolated, so the scan's HTTPS
+        # call to api.osv.dev always fails ("tunnel error: unsuccessful")
+        # after 3 retries — turning a would-be-successful `--frozen`
+        # install (which resolves entirely from the vetted lockfile plus
+        # the local cache, fetching nothing new to scan) into a
+        # guaranteed failure that floods every run_command result with
+        # the OSV error and the "image deps only" banner.  The real
+        # supply-chain gate lives in CI (UV_MALWARE_CHECK=1 in the
+        # workflows), which is untouched.
+        uv = "UV_MALWARE_CHECK=0 uv sync --frozen --no-dev --quiet 2>&1"
         # When the repo declares [tool.uv.sources] AND a uv.lock exists,
         # prefer `uv sync --frozen --no-dev` over pip.  pip has no
         # [tool.uv.sources] equivalent and cannot resolve git-sourced
