@@ -497,6 +497,53 @@ def test_board_cards_pending_question_null_for_non_paused(client, service):
     assert found[0]["pending_question"] is None
 
 
+def test_board_cards_includes_repo_badge_and_board_id(client, service):
+    """GET /board/cards returns board_id and a repo badge in the badges array.
+
+    The repo badge (📁 prefix) is distinct from the source_badge (origin).
+    """
+    t = service.create("Repo badge test")
+
+    cards = client.get("/board/cards").json()
+    found = [c for c in cards if c["id"] == t.id]
+    assert len(found) == 1
+    card = found[0]
+    # board_id field present
+    assert "board_id" in card
+    assert card["board_id"]  # non-empty
+    # Repo badge prepended to badges array with 📁 prefix
+    assert len(card["badges"]) >= 1
+    assert card["badges"][0].startswith("📁 ")
+    # Repo badge shows the board_id
+    assert card["board_id"] in card["badges"][0]
+
+
+def test_board_cards_source_not_in_badges_array(client, service):
+    """Source (origin) appears only as source_badge, not in the badges array.
+
+    This prevents the duplicate "robotsix-chat" + "ROBOTSIX-CHAT" rendering.
+    """
+    t = service.create("Source dedup test")
+    # Simulate a ticket with a non-user source by setting it directly.
+    from robotsix_mill.core.db import session as db_session
+    from robotsix_mill.core.models import Ticket
+
+    with db_session(client.app.state.settings, "test-board") as s:
+        db_ticket = s.get(Ticket, t.id)
+        db_ticket.source = "robotsix-chat"
+        s.add(db_ticket)
+        s.commit()
+
+    cards = client.get("/board/cards").json()
+    found = [c for c in cards if c["id"] == t.id]
+    assert len(found) == 1
+    card = found[0]
+    # source_badge carries the origin
+    assert card["source_badge"] == "robotsix-chat"
+    # badges array does NOT contain the source string
+    assert "robotsix-chat" not in card["badges"]
+
+
 def test_board_renders_source_badge(client):
     """The mill-specific overlay CSS includes source badge styling classes,
     and the HTML shell references both the shared and mill CSS files."""

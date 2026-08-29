@@ -66,16 +66,17 @@ class MillBoardAdapter:
         return _ticket(card).title
 
     def card_badges(self, card: object) -> list[str]:
-        """Return badge labels: priority, kind, source, and blocked status."""
+        """Return badge labels: priority, kind, and blocked status.
+
+        Source is NOT included here — it is rendered separately as
+        ``source_badge`` in the card payload to avoid duplication.
+        """
         t = _ticket(card)
         badges: list[str] = []
         if t.priority:
             badges.append("★ priority")
         if t.kind not in (TicketKind.TASK, ""):
             badges.append(t.kind)
-        # Source badge
-        if t.source and t.source != "user":
-            badges.append(t.source)
         # Blocked-state badges: distinguish auto-unblock vs. human-needed.
         if t.state == State.BLOCKED:
             if t.unmet_deps:

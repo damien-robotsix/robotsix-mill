@@ -150,9 +150,10 @@ def test_card_badges_kind_empty_string_suppressed():
 
 
 def test_card_badges_source_not_user():
+    """Source is rendered separately as source_badge, not in card_badges."""
     adapter = MillBoardAdapter()
     ticket = _make_ticket(priority=False, kind=TicketKind.TASK, source="api")
-    assert adapter.card_badges(ticket) == ["api"]
+    assert adapter.card_badges(ticket) == []
 
 
 def test_card_badges_source_empty_string():
@@ -163,9 +164,10 @@ def test_card_badges_source_empty_string():
 
 
 def test_card_badges_all_three():
+    """Source is rendered separately as source_badge, not in card_badges."""
     adapter = MillBoardAdapter()
     ticket = _make_ticket(priority=True, kind=TicketKind.EPIC, source="api")
-    assert adapter.card_badges(ticket) == ["★ priority", "epic", "api"]
+    assert adapter.card_badges(ticket) == ["★ priority", "epic"]
 
 
 def test_card_badges_raises_typeerror_for_non_ticket():
@@ -198,7 +200,10 @@ def test_card_badges_blocked_needs_human():
 
 
 def test_card_badges_blocked_combined_with_existing_badges():
-    """Blocked badge composes correctly after priority/kind/source."""
+    """Blocked badge composes correctly after priority/kind.
+
+    Source is rendered separately as source_badge, not in card_badges.
+    """
     adapter = MillBoardAdapter()
     ticket = _make_ticket(
         priority=True,
@@ -210,7 +215,6 @@ def test_card_badges_blocked_combined_with_existing_badges():
     assert adapter.card_badges(ticket) == [
         "★ priority",
         "epic",
-        "api",
         adapter.BLOCKED_WAITING,
     ]
 
