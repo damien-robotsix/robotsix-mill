@@ -916,9 +916,9 @@ class TestRunCommand:
             return (0, "ok")
 
         monkeypatch.setattr(sandbox, "run", _capture)
-        result = tools["run_command"]("pytest tests/")
+        result = tools["run_command"]("pytest tests/test_x.py")
         assert result == "exit=0\nok"
-        assert cap["command"] == "pytest tests/"
+        assert cap["command"] == "pytest tests/test_x.py"
         assert cap["repo_dir"] == root
         assert cap["settings"] is settings
         # No sandbox_image passed to build_fs_tools → forwarded as None.
@@ -942,7 +942,7 @@ class TestRunCommand:
             return (0, "ok")
 
         monkeypatch.setattr(sandbox, "run", _capture)
-        tools["run_command"]("pytest tests/")
+        tools["run_command"]("pytest tests/test_x.py")
         assert cap["sandbox_image"] == "ros:rolling-ros-base"
 
     def test_empty_output_success(self, tmp_path, settings, fake_sandbox):
@@ -965,6 +965,64 @@ class TestRunCommand:
         monkeypatch.setattr(sandbox, "run", _empty_fail)
         result = tools["run_command"]("failing-command")
         assert result == "The command failed with exit code 2 and produced no output."
+
+    # -- run_command full-suite guard ---------------------------------------
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "pytest",
+            "pytest -q",
+            "pytest tests/",
+            "pytest tests -x -q",
+            "python -m pytest .",
+            "uv run pytest -q",
+            "uv run --frozen pytest tests/ --tb=short",
+            "uv run ruff check . && uv run pytest",
+            ".venv/bin/pytest -x",
+            "UV_MALWARE_CHECK=0 uv run pytest tests",
+        ],
+    )
+    def test_refuses_full_suite_pytest(self, tmp_path, settings, fake_sandbox, command):
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        result = tools["run_command"](command)
+        assert "REFUSED" in result
+        assert "WHOLE test suite" in result
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "pytest tests/agents/test_fs_tools.py -q",
+            "pytest tests/sandbox -x",
+            "pytest tests/x.py::TestY::test_z",
+            "uv run pytest -k full_suite -q",
+            "python -m pytest tests/foo -m 'not slow'",
+            "uv run pytest --lf",
+            "pytest --collect-only -q",
+            "uv run ruff check src && uv run pytest tests/agents -q",
+            "uv run mypy src/ --strict",
+            "git diff --stat",
+        ],
+    )
+    def test_allows_targeted_pytest_and_other_commands(
+        self, tmp_path, settings, fake_sandbox, command
+    ):
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        result = tools["run_command"](command)
+        assert "WHOLE test suite" not in result
+
+    def test_full_suite_guard_can_be_disabled(self, tmp_path, fake_sandbox):
+        from robotsix_mill.config import Settings
+
+        root = tmp_path / "repo"
+        root.mkdir()
+        s = Settings(data_dir=str(tmp_path), run_command_refuse_full_suite="false")
+        tools = _build(root, s)
+        assert "REFUSED" not in tools["run_command"]("pytest tests/")
 
     # -- run_command loop-detection tests ----------------------------------
 

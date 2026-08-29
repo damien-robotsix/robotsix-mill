@@ -2505,6 +2505,13 @@
           "title": "Roadmap Sync Interval Seconds",
           "type": "integer"
         },
+        "run_command_refuse_full_suite": {
+          "advanced": true,
+          "default": true,
+          "description": "Refuse agent run_command pytest invocations that would run the whole suite (no path below the suite root, no -k/-m/--lf); the stage gate owns the full run.",
+          "title": "Run Command Refuse Full Suite",
+          "type": "boolean"
+        },
         "run_health_interval_seconds": {
           "advanced": true,
           "default": 604800,
