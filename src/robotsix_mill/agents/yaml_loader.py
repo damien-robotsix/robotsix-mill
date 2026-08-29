@@ -297,6 +297,9 @@ def load_and_run_agent(
     provider. The definition's ``level`` is the starting tier; the chain
     prefers a higher tier, then lower ones. Local retry of transient errors
     still happens inside ``run_agent``; only what survives that escalates.
+    A Claude-backed start does NOT fall back unless
+    ``settings.claude_exhaustion_paid_fallback`` is on — the alternatives
+    are paid tiers, and the worker parks the ticket until the quota resets.
 
     Args:
         settings: Application configuration.
@@ -391,9 +394,28 @@ def load_and_run_agent(
 
         return _build_and_run
 
+    # llmio's loop walks "higher tier first, then lower" and cannot be told
+    # which tiers are acceptable. From a Claude-backed (subscription) start
+    # every alternative is either another Claude level — dead for the same
+    # reason when the cause is quota exhaustion — or a keyed OpenRouter
+    # level, i.e. real money per token for a quota that comes back by
+    # itself. So unless the operator opted into paying
+    # (``claude_exhaustion_paid_fallback``), a Claude start does not fall
+    # back at all: the failure propagates and the worker parks the ticket
+    # until the stated reset (see ``runtime.transient_errors``). Keyed
+    # starts keep the loop — their fallback lands on a free Claude level
+    # first, and they were paying anyway. Observed live 2026-08-29 22:28Z
+    # right after #3054: "auto-approve triage: level2 failed with
+    # ClaudeSDKUsageExhaustedError — falling back to level3" (mimo, paid).
+    from .base import level_uses_claude
+
+    paid_fallback = bool(getattr(settings, "claude_exhaustion_paid_fallback", False))
+    fallback_enabled = paid_fallback or not level_uses_claude(start_level)
+
     return call_with_tier_fallback(
         _tier_factory,
         tier_config=tier_config,
         level=TierLevel(f"level{start_level}"),
+        fallback_enabled=fallback_enabled,
         what=what,
     )
