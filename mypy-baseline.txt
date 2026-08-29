@@ -327,12 +327,9 @@ src/robotsix_mill/runtime/deps.py:0: error: Returning Any from function declared
 src/robotsix_mill/runtime/deps.py:0: error: Returning Any from function declared to return "BoardBroadcaster"  [no-any-return]
 src/robotsix_mill/runtime/deps.py:0: error: Returning Any from function declared to return "RunRegistry"  [no-any-return]
 src/robotsix_mill/runtime/deps.py:0: error: Returning Any from function declared to return "ReposRegistry"  [no-any-return]
-src/robotsix_mill/agents/runners/trace_review_runner.py:0: error: Invalid type comment or annotation  [valid-type]
 src/robotsix_mill/agents/runners/trace_review_runner.py:0: error: Argument 1 to "_median" has incompatible type "list[int]"; expected "list[float]"  [arg-type]
 src/robotsix_mill/agents/runners/trace_review_runner.py:0: note: "list" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
 src/robotsix_mill/agents/runners/trace_review_runner.py:0: note: Consider using "Sequence" instead, which is covariant
-src/robotsix_mill/agents/runners/trace_review_runner.py:0: error: Invalid type comment or annotation  [valid-type]
-src/robotsix_mill/agents/runners/trace_review_runner.py:0: error: Invalid type comment or annotation  [valid-type]
 src/robotsix_mill/runtime/routes/_traces.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/runtime/routes/_traces.py:0: error: Incompatible default for parameter "request" (default has type "None", parameter has type "Request[State]")  [assignment]
 src/robotsix_mill/runtime/routes/_traces.py:0: note: PEP 484 prohibits implicit Optional. Accordingly, mypy has changed its default to no_implicit_optional=True
