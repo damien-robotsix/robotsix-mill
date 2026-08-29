@@ -431,8 +431,9 @@ def test_triage_sendback_always_refines(ctx, service, monkeypatch):
 
 
 def test_triage_failure_falls_through_to_refine(ctx, service, monkeypatch):
-    """When triage_refine raises, the stage short-circuits to
-    HUMAN_ISSUE_APPROVAL instead of falling through to expensive refine."""
+    """When triage_refine raises, the stage falls through to the full refine
+    pass instead of parking the raw draft at HUMAN_ISSUE_APPROVAL (26/76 gate
+    entries in the week to 2026-08-29 were this note)."""
     refine_called = False
 
     def boom_triage(*, settings, title, draft):
@@ -462,9 +463,9 @@ def test_triage_failure_falls_through_to_refine(ctx, service, monkeypatch):
     t = service.create("Add X", "make x happen")
     out = RefineStage().run(t, ctx)
 
-    assert not refine_called
-    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
-    assert "triage classifier failed" in (out.note or "")
+    assert refine_called
+    assert out.next_state is not State.BLOCKED
+    assert "triage classifier failed" not in (out.note or "")
 
 
 # ---------------------------------------------------------------------------
@@ -578,6 +579,34 @@ def test_auto_approve_failure_falls_back_to_human(
 
     assert out.next_state is State.HUMAN_ISSUE_APPROVAL
     assert "auto-approve: triage failed — falling back to human approval" in out.note
+
+
+def test_auto_approve_model_outage_propagates_for_worker_park(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
+    """A model outage in the auto-approve classifier is infrastructure: it
+    must reach the worker (which parks the ticket) rather than park the
+    human at the approval gate."""
+    spec = "## Problem\nFix typo in README\n## Scope\n- README.md line 5\n## Acceptance criteria\n- [ ] typo is fixed\n"
+
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda **_: (_ for _ in ()).throw(
+            RuntimeError("model xiaomi/mimo-v2.5-pro is currently unavailable")
+        ),
+    )
+
+    gated = Settings(
+        data_dir=str(tmp_path),
+        require_approval="true",
+    )
+    gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
+
+    t = service.create("Fix typo", "fix a typo in README.md")
+    with pytest.raises(RuntimeError, match="currently unavailable"):
+        RefineStage().run(t, gated_ctx)
 
 
 def test_auto_approve_flag_off_never_called(

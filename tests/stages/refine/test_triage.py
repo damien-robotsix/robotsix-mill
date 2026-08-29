@@ -728,8 +728,9 @@ def test_triage_skip_prescriptive_spec_threshold_zero_disabled(ctx_factory, tmp_
     assert result is not None
 
 
-def test_triage_skip_triage_refine_exception_short_circuits(ctx_factory, tmp_path):
-    """When triage_refine raises, short-circuit to human approval."""
+def test_triage_skip_triage_refine_exception_falls_through(ctx_factory, tmp_path):
+    """When triage_refine raises, fall through to refine (None), never park
+    the raw draft at human approval."""
     ctx = ctx_factory()
     t = _ticket(ctx)
     ws = ctx.service.workspace(t)
@@ -743,9 +744,7 @@ def test_triage_skip_triage_refine_exception_short_circuits(ctx_factory, tmp_pat
             ctx, t, "draft", None, None, t.title, ws, ctx.settings, None
         )
 
-    assert result is not None
-    assert result.next_state is State.HUMAN_ISSUE_APPROVAL
-    assert "triage classifier failed" in (result.note or "")
+    assert result is None
 
 
 def test_triage_skip_usage_limit_falls_through_to_refine(ctx_factory, tmp_path):
