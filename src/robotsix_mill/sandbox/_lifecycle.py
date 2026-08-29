@@ -62,7 +62,12 @@ def run(
         ensure_sandbox_network(settings)
     # Load extra sandbox packages declared in the repo's config.
     extra_packages = load_extra_sandbox_packages(repo_dir)
-    extra_prefix, needs_write_access = _build_extra_packages_prefix(extra_packages)
+    # Resolved early so pip extras can be installed ONCE into the shared,
+    # disk-backed cache instead of per call into the container's tmpfs.
+    cache_argv = _cache_mount(settings)
+    extra_prefix, needs_write_access = _build_extra_packages_prefix(
+        extra_packages, cache_target=_CACHE_TARGET if cache_argv else None
+    )
     if extra_prefix:
         log.info("Installing extra sandbox packages: %s", extra_packages)
         if needs_write_access:
@@ -123,7 +128,6 @@ def run(
     # Keep the package caches OUT of the RAM-backed /tmp (see _cache_mount).
     # XDG_CACHE_HOME covers uv's default location and most other tools;
     # UV_CACHE_DIR/PIP_CACHE_DIR are set explicitly so neither depends on it.
-    cache_argv = _cache_mount(settings)
     if cache_argv:
         argv += cache_argv
         argv += [
