@@ -719,6 +719,51 @@
           "title": "Bespoke Discovery Interval Seconds",
           "type": "integer"
         },
+        "blocked_auto_resume_cooldown_seconds": {
+          "advanced": true,
+          "default": 1800,
+          "description": "Minimum seconds a ticket must have been BLOCKED before it is auto-resumed.",
+          "minimum": 0,
+          "title": "Blocked Auto Resume Cooldown Seconds",
+          "type": "integer"
+        },
+        "blocked_auto_resume_interval_seconds": {
+          "advanced": true,
+          "default": 600,
+          "description": "Seconds between blocked auto-resume passes (retry BLOCKED tickets whose block note is resumable, bounded per ticket). 0 = disabled.",
+          "title": "Blocked Auto Resume Interval Seconds",
+          "type": "integer"
+        },
+        "blocked_auto_resume_max_per_ticket": {
+          "advanced": true,
+          "default": 1,
+          "description": "Maximum automatic resumes per ticket (counted from its [auto-resume comments); after that a human is needed.",
+          "minimum": 0,
+          "title": "Blocked Auto Resume Max Per Ticket",
+          "type": "integer"
+        },
+        "blocked_auto_resume_patterns": {
+          "advanced": true,
+          "default": [
+            "agent error \u2014 resumable",
+            "\u2014 resumable",
+            "timed out",
+            "stage timeout",
+            "clone (is )?missing",
+            "pr_urls\\.json corrupted",
+            "unknown repo_id",
+            "could not turn CI green within its iteration budget",
+            "tests still failing after",
+            "review rounds exhausted",
+            "Infrastructure: LLM model outage"
+          ],
+          "description": "Regexes (case-insensitive) matched against the latest BLOCKED note; a match makes the block auto-resumable. Spec-fingerprint and upstream-CI parks are always excluded.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Blocked Auto Resume Patterns",
+          "type": "array"
+        },
         "board_hygiene_draft_ttl_days": {
           "default": 7,
           "description": "Maximum age (days) of an untouched draft before auto-close. 0 = disabled.",
