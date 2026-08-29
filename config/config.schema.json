@@ -908,6 +908,13 @@
           "title": "Ci Transient Max Retries",
           "type": "integer"
         },
+        "claude_exhaustion_paid_fallback": {
+          "advanced": true,
+          "default": false,
+          "description": "When a Claude-backed level reports usage exhaustion or an auth failure, rebuild the agent on the nearest keyed (paid) level instead of parking the ticket until the quota resets.",
+          "title": "Claude Exhaustion Paid Fallback",
+          "type": "boolean"
+        },
         "claude_max_concurrency": {
           "advanced": true,
           "default": 4,
@@ -922,6 +929,14 @@
           "description": "Enable inline-image (vision) input on the Claude SDK transport. Requires a robotsix-llmio pin bump with real image-input support.",
           "title": "Claude Sdk Vision Enabled",
           "type": "boolean"
+        },
+        "claude_usage_exhausted_retry_seconds": {
+          "advanced": true,
+          "default": 900,
+          "description": "Seconds to park a ticket after a Claude usage-exhaustion error whose message carries no reset time.",
+          "minimum": 60,
+          "title": "Claude Usage Exhausted Retry Seconds",
+          "type": "integer"
         },
         "codeql_fp_triage_enabled": {
           "advanced": true,

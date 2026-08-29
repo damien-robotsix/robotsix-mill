@@ -599,6 +599,79 @@ class TestHandleStageError:
         assert kwargs["next_retry_at"] is not None
 
     @pytest.mark.asyncio
+    async def test_claude_usage_exhaustion_parks_until_reset(self, ctx, monkeypatch):
+        """A session-limit error parks straight through to the stated reset."""
+        from datetime import UTC, datetime
+
+        self._patch_classify(monkeypatch, "transient")
+        self._patch_network(monkeypatch)
+        self._patch_model_outage(monkeypatch, is_outage=True)
+        self._patch_retry(monkeypatch)
+        self._patch_tracing(monkeypatch)
+        self._patch_post_trace(monkeypatch)
+        block = self._patch_block_and_notify(monkeypatch)
+        self._patch_reap(monkeypatch)
+
+        t = _fake_ticket(retry_attempt=0)
+        ctx.service.get = MagicMock(return_value=t)
+        ctx.service.set_retry_state = MagicMock()
+
+        before = datetime.now(UTC)
+        await _handle_stage_error(
+            "ticket-1",
+            ctx,
+            "implement",
+            RuntimeError("You've hit your session limit · resets 11:59pm (UTC)"),
+            "tr-1",
+        )
+
+        block.assert_not_called()
+        kwargs = ctx.service.set_retry_state.call_args[1]
+        assert kwargs["retry_attempt"] == 1
+        assert "Claude usage exhausted" in kwargs["last_transient_error"]
+        assert "parked until 23:59Z" in kwargs["last_transient_error"]
+        assert "model_outage" in kwargs["last_transient_error"]
+        # the park lands at (or just after) the reset, not model_outage_retry_seconds
+        delay = (kwargs["next_retry_at"] - before).total_seconds()
+        expected = (
+            before.replace(hour=23, minute=59, second=0, microsecond=0) - before
+        ).total_seconds()
+        assert delay >= expected
+
+    @pytest.mark.asyncio
+    async def test_claude_usage_exhaustion_without_reset_uses_setting(
+        self, ctx, monkeypatch
+    ):
+        self._patch_classify(monkeypatch, "transient")
+        self._patch_network(monkeypatch)
+        self._patch_model_outage(monkeypatch, is_outage=True)
+        self._patch_retry(monkeypatch)
+        self._patch_tracing(monkeypatch)
+        self._patch_post_trace(monkeypatch)
+        self._patch_block_and_notify(monkeypatch)
+        self._patch_reap(monkeypatch)
+        ctx.settings.claude_usage_exhausted_retry_seconds = 777
+        ctx.settings.model_outage_retry_seconds = 5
+
+        t = _fake_ticket(retry_attempt=0)
+        ctx.service.get = MagicMock(return_value=t)
+        ctx.service.set_retry_state = MagicMock()
+
+        from datetime import UTC, datetime
+
+        before = datetime.now(UTC)
+        await _handle_stage_error(
+            "ticket-1",
+            ctx,
+            "refine",
+            RuntimeError("You're out of usage credits"),
+            "tr-1",
+        )
+        kwargs = ctx.service.set_retry_state.call_args[1]
+        delay = (kwargs["next_retry_at"] - before).total_seconds()
+        assert 700 < delay <= 778
+
+    @pytest.mark.asyncio
     async def test_model_outage_increments_park_count(self, ctx, monkeypatch):
         """Model outage with existing retry_attempt → park count increments."""
         self._patch_classify(monkeypatch, "transient")
