@@ -261,6 +261,7 @@
         "retrospect_memory_path": null,
         "retrospect_spawn_agented_proposals": true,
         "retrospect_spawn_drafts": true,
+        "retrospect_skip_uneventful": true,
         "review_diff_context_lines": 1,
         "review_diff_max_chars": 200000,
         "review_enabled": false,

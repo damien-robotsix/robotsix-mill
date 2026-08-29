@@ -722,6 +722,7 @@ Additional fields:
 | `periodic.token_metrics_aggregation.interval_seconds` | `MILL_TOKEN_METRICS_AGGREGATION_INTERVAL_SECONDS` | `86400` | Seconds between token-metrics aggregation passes. Centralized (global-only) — one pass per interval, not per-repo. Set to `0` to disable. |
 | `periodic.token_metrics_aggregation.window_seconds` | `MILL_TOKEN_METRICS_AGGREGATION_WINDOW_SECONDS` | `86400` | Lookback window of Langfuse traces aggregated each token-metrics pass; per-call stage×model input/output-token percentiles (p50/p95/max) are written to `<data_dir>/token_metrics/<YYYY-MM-DD>.json`. |
 | `pipeline.retrospect_spawn_drafts` | `MILL_RETROSPECT_SPAWN_DRAFTS` | `true` | Allow retrospect to file improvement draft tickets |
+| `pipeline.retrospect_skip_uneventful` | `MILL_RETROSPECT_SKIP_UNEVENTFUL` | `true` | Skip the retrospect LLM pass for tickets that went through the pipeline first time with no review round, a single implement pass, no block/CI-fix/rebase history and no comments; they close directly. |
 | `pipeline.retrospect_spawn_agented_proposals` | `MILL_RETROSPECT_SPAWN_AGENTED_PROPOSALS` | `true` | When True, retrospect files a draft ticket per AGENT.md proposal on the originating repo's board. |
 | `pipeline.retrospect_memory_path` | `MILL_RETROSPECT_MEMORY_PATH` | `None` | Override path for retrospect memory |
 

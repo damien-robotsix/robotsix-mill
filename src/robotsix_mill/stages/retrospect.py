@@ -280,6 +280,29 @@ def _is_noop_draft(title: str | None) -> bool:
     return is_noop_report(title)
 
 
+_EVENTFUL_STATES = frozenset(
+    {
+        "blocked",
+        "errored",
+        "fixing_ci",
+        "rebasing",
+        "addressing_review",
+        "awaiting_user_reply",
+    }
+)
+
+
+def _eventful_states(history: Any) -> list[str]:
+    """State names in *history* that mark a ticket as worth a retrospect."""
+    seen: list[str] = []
+    for e in history:
+        st = getattr(e, "state", None)
+        name = str(getattr(st, "value", st) or "").lower()
+        if name in _EVENTFUL_STATES and name not in seen:
+            seen.append(name)
+    return seen
+
+
 class RetrospectStage(Stage):
     """Run a deep-analysis retrospective on completed tickets and optionally spawn follow-up draft tickets."""
 
@@ -647,14 +670,39 @@ class RetrospectStage(Stage):
                 )
 
         history = ctx.service.history(ticket.id)
+        comments = ctx.service.list_comments(ticket.id)
+        if s.retrospect_skip_uneventful:
+            eventful = _eventful_states(history)
+            uneventful = (
+                not eventful
+                and not comments
+                and int(getattr(ticket, "review_rounds", 0) or 0) == 0
+                and int(getattr(ticket, "implement_cycles", 0) or 0) <= 1
+            )
+            if uneventful:
+                # Nothing to learn from a first-time-green ticket: skip the
+                # LLM pass (and its Langfuse fetch, memory rewrite and draft
+                # spawning) and close directly.
+                (ws.artifacts_dir / "retrospect.md").write_text(
+                    "# Retrospect\nskipped — uneventful ticket (no review "
+                    "round, single implement pass, no block/CI-fix/rebase "
+                    "history, no comments)\n",
+                    encoding="utf-8",
+                )
+                if s.prune_clone_on_close:
+                    prune_clone(ws)
+                return Outcome(
+                    State.CLOSED,
+                    "retrospect skipped — uneventful ticket (first-time green, "
+                    "nothing to learn); set retrospect_skip_uneventful=false to "
+                    "always run it",
+                )
         history_text = "\n".join(
             f"{e.at:%Y-%m-%d %H:%M} {e.state} {e.note or ''}".rstrip() for e in history
         )
         # Cap to the most-recent tail — every state transition ever
         # recorded is otherwise fed in uncapped.
         history_text = _tail_truncate_log(history_text, s.retrospect_log_max_chars)
-        # Fetch comments
-        comments = ctx.service.list_comments(ticket.id)
         if comments:
             comments_text = "\n".join(
                 f"{c.created_at:%Y-%m-%d %H:%M} | {c.body}".rstrip() for c in comments
