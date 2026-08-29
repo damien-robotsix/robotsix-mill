@@ -730,7 +730,24 @@ def triage_skip(
                         ticket.id,
                         exc_info=True,
                     )
-    except Exception:
+    except Exception as exc:
+        from pydantic_ai import UsageLimitExceeded
+
+        if isinstance(exc, UsageLimitExceeded):
+            # The classifier ran out of its request budget on a draft that
+            # needed more exploration than ``triage_request_limit`` allows.
+            # That is a budget/size signal, not "the model is unavailable",
+            # and parking the ticket at human approval turned every large
+            # operator-filed draft into a manual step (observed 2026-08-28:
+            # 6 tickets parked with this note, all approved unchanged). Fall
+            # through to the full refine pass, which owns the real analysis.
+            log.warning(
+                "%s: triage classifier exhausted its request budget (%s) — "
+                "falling through to refine",
+                ticket.id,
+                exc,
+            )
+            return None
         log.warning(
             "%s: triage failed — short-circuiting to human approval "
             "instead of falling through to expensive refine",
