@@ -748,14 +748,20 @@ def triage_skip(
                 exc,
             )
             return None
+        # Any other classifier failure used to short-circuit the RAW draft
+        # into HUMAN_ISSUE_APPROVAL "instead of falling through to
+        # expensive refine". Live (7d to 2026-08-29) that note accounted
+        # for 26 of 76 approval-gate entries — a median 3.5 h of human wait
+        # each — for tickets the operator then approved unchanged, and it
+        # skipped the refine pass that makes the spec worth approving in
+        # the first place. The gate is the expensive path. Fall through:
+        # refine owns the analysis, and its own agent surfaces a genuine
+        # model outage to the worker's park/retry machinery.
         log.warning(
-            "%s: triage failed — short-circuiting to human approval "
-            "instead of falling through to expensive refine",
+            "%s: triage classifier failed (%s: %s) — falling through to refine",
             ticket.id,
-            exc_info=True,
+            type(exc).__name__,
+            str(exc)[:160],
         )
-        return Outcome(
-            State.HUMAN_ISSUE_APPROVAL,
-            "triage classifier failed (model unavailable) — routing to human approval",
-        )
+        return None
     return None

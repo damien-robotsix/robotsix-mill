@@ -1095,9 +1095,7 @@ def test_refine_triage_skip_no_paths_writes_empty_file_map(ctx_factory, monkeypa
 # ---------------------------------------------------------------------------
 
 
-def test_refine_triage_exception_short_circuits_to_human_issue_approval(
-    ctx_factory, monkeypatch
-):
+def test_refine_triage_exception_falls_through_to_refine(ctx_factory, monkeypatch):
     ctx = ctx_factory(require_approval="false", refine_triage_enabled="true")
     t = _ticket(ctx, body="Fix the thing")
 
@@ -1125,8 +1123,10 @@ def test_refine_triage_exception_short_circuits_to_human_issue_approval(
 
     out = RefineStage().run(t, ctx)
 
-    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
-    assert len(refine_called) == 0
+    # The classifier failing must not park the raw draft at the human gate;
+    # the full refine pass owns the analysis.
+    assert out.next_state is not State.HUMAN_ISSUE_APPROVAL
+    assert len(refine_called) == 1
 
 
 # ---------------------------------------------------------------------------

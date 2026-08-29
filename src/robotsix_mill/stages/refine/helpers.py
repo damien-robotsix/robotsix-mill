@@ -901,7 +901,18 @@ def _resolve_next_state(
             State.HUMAN_ISSUE_APPROVAL,
             f"auto-approve: NEEDS_APPROVAL — {result.reason}",
         )
-    except Exception:
+    except Exception as exc:
+        from ...runtime.transient_errors import is_model_unavailable_error
+
+        # A model outage (provider "unavailable"/overloaded, Claude quota
+        # exhaustion) is infrastructure: the same call succeeds once the
+        # model is back. Surface it so the worker PARKS the ticket (retry
+        # budget untouched) instead of parking the human — a refine re-run
+        # is served from the stage cache. Anything else (malformed
+        # structured output after retries, a genuine 4xx) still degrades
+        # to the gate, since no amount of waiting fixes it.
+        if is_model_unavailable_error(exc):
+            raise
         log.warning(
             "auto-approve triage failed, falling back to human approval",
             exc_info=True,
