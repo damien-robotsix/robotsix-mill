@@ -1203,6 +1203,39 @@ class TestRunDocAgent:
         assert result.user_facing is True
         assert result.summary == "updated README and docs/config.md"
 
+    # -- SDK-tool-loop result (no new_messages_json) -------------------
+
+    def test_sdk_tool_result_without_new_messages_json(
+        self, settings, repo_dir, monkeypatch
+    ):
+        """When ``run_agent`` returns an ``_SdkToolResult``-like object
+        (the Claude SDK tool loop) that lacks ``new_messages_json()``,
+        ``run_doc_agent`` falls back to ``None`` instead of raising an
+        ``AttributeError``."""
+
+        class _SdkLikeResult:
+            """Mirrors the Claude SDK ``_SdkToolResult``: exposes
+            ``.output`` but no ``new_messages_json()``."""
+
+            def __init__(self, output):
+                self.output = output
+
+        expected = DocResult(user_facing=False, summary="no changes")
+        fake_agent = _FakeAgent(expected)
+        fake_agent.run_sync = lambda *a, **kw: _SdkLikeResult(expected)
+        self._patch_dependencies(monkeypatch, fake_agent)
+
+        result, new_msgs = run_doc_agent(
+            settings=settings,
+            repo_dir=repo_dir,
+            diff=self.DIFF,
+            spec=self.SPEC,
+            board_id="test-board",
+        )
+        assert result is expected
+        assert new_msgs is None
+        assert fake_agent.closed is True
+
     # -- write_blocked_prefixes propagation ----------------------------
 
     def test_write_blocked_prefixes_propagates_to_build_fs_tools(
