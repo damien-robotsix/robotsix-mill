@@ -13,6 +13,7 @@ import socket
 import subprocess
 import time
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -124,6 +125,87 @@ _TRANSIENT_MESSAGE_RE = [
 # pinning the ticket until a human edits the description.  Seen live on
 # 2026-08-25/27 across 10 tickets when llmio shipped an unroutable
 # level-1 slug and a level-2 cap smaller than its own reasoning budget.
+# Claude subscription quota exhaustion. llmio raises
+# ``ClaudeSDKUsageExhaustedError`` carrying the assistant-visible text
+# ("You've hit your session limit · resets 9:20am (UTC)", "You're out of
+# usage credits", "You've hit your limit · resets 8pm (UTC)"). The quota
+# comes back by itself at the stated reset, so this is a PARK (model-outage
+# shaped: infrastructure, retry budget untouched), never a BLOCK — and,
+# per the operator's cost preference, never a silent fallback onto a paid
+# OpenRouter tier unless ``claude_exhaustion_paid_fallback`` is on. Seen
+# 2026-08-29: 6 tickets BLOCKED "agent error — resumable: You've hit your
+# session limit" needing a manual resume after the window reset.
+_CLAUDE_USAGE_EXHAUSTED_RE = re.compile(
+    r"(out of usage credits"
+    r"|hit your session limit"
+    r"|hit your limit"
+    r"|usage limit reached)",
+    re.IGNORECASE,
+)
+_CLAUDE_RESET_RE = re.compile(
+    r"resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*\(?UTC\)?",
+    re.IGNORECASE,
+)
+
+
+def _matches_claude_usage_exhausted(exc: BaseException) -> bool:
+    if type(exc).__name__ == "ClaudeSDKUsageExhaustedError":
+        return True
+    return bool(_CLAUDE_USAGE_EXHAUSTED_RE.search(str(exc)))
+
+
+def _walk_chain(exc: BaseException) -> list[BaseException]:
+    seen: set[int] = set()
+    out: list[BaseException] = []
+    current: BaseException | None = exc
+    for _ in range(_MAX_CHAIN_WALK):
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        out.append(current)
+        if current.__cause__ is not None and id(current.__cause__) not in seen:
+            current = current.__cause__
+        elif current.__context__ is not None and id(current.__context__) not in seen:
+            current = current.__context__
+        else:
+            break
+    return out
+
+
+def is_claude_usage_exhausted(exc: BaseException) -> bool:
+    """True when *exc* (or its cause chain) is a Claude subscription quota
+    exhaustion — a per-provider condition that clears at the stated reset.
+    """
+    return any(_matches_claude_usage_exhausted(c) for c in _walk_chain(exc))
+
+
+def claude_usage_reset_at(
+    exc: BaseException, *, now: datetime | None = None
+) -> datetime | None:
+    """Parse the ``resets <time> (UTC)`` hint out of a usage-exhaustion
+    message into the next such instant (UTC), or None when absent.
+    """
+    for c in _walk_chain(exc):
+        m = _CLAUDE_RESET_RE.search(str(c))
+        if not m:
+            continue
+        hour = int(m.group(1))
+        minute = int(m.group(2) or 0)
+        ampm = (m.group(3) or "").lower()
+        if ampm == "pm" and hour < 12:
+            hour += 12
+        elif ampm == "am" and hour == 12:
+            hour = 0
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            return None
+        base = now or datetime.now(UTC)
+        candidate = base.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if candidate <= base:
+            candidate += timedelta(days=1)
+        return candidate
+    return None
+
+
 _PROVIDER_FAILURE_RE = re.compile(
     r"(is not a valid model ID"
     r"|not a valid model"
@@ -138,7 +220,9 @@ _PROVIDER_FAILURE_RE = re.compile(
 
 
 def _matches_provider_failure(exc: BaseException) -> bool:
-    return bool(_PROVIDER_FAILURE_RE.search(str(exc)))
+    return bool(
+        _PROVIDER_FAILURE_RE.search(str(exc))
+    ) or _matches_claude_usage_exhausted(exc)
 
 
 def is_provider_failure(exc: BaseException) -> bool:
@@ -444,7 +528,9 @@ def is_model_unavailable_error(exc: BaseException) -> bool:
         if current is None or id(current) in seen:
             break
         seen.add(id(current))
-        if _matches_model_unavailable(current):
+        if _matches_model_unavailable(current) or _matches_claude_usage_exhausted(
+            current
+        ):
             return True
         if current.__cause__ is not None and id(current.__cause__) not in seen:
             current = current.__cause__
@@ -644,6 +730,11 @@ def _check_one_transient(exc: BaseException) -> bool:
     # Reaching "transient" here is what lets the model-outage PARK in the
     # worker fire — that branch lives inside the transient path.
     if _matches_model_unavailable(exc):
+        return True
+    # Claude quota exhaustion is the same shape: the tier is out until the
+    # quota resets, nothing about the ticket changed. "transient" here is
+    # what routes it into the worker's model-outage PARK.
+    if _matches_claude_usage_exhausted(exc):
         return True
     return bool(_is_transient_message(exc))
 

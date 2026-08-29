@@ -218,6 +218,8 @@ async def _handle_stage_error(
     from ..transient_errors import (
         MODEL_OUTAGE_MARKER,
         classify_stage_error,
+        claude_usage_reset_at,
+        is_claude_usage_exhausted,
         is_disk_full_error,
         is_model_unavailable_error,
         is_network_down_error,
@@ -390,6 +392,24 @@ async def _handle_stage_error(
                 )
                 return
             outage_delay = ctx.settings.model_outage_retry_seconds
+            outage_kind = "model outage"
+            if is_claude_usage_exhausted(error):
+                # The subscription quota returns at the stated reset; park
+                # straight through to it (plus a minute of slack) rather
+                # than re-polling a cap that cannot have moved. Without a
+                # reset hint, fall back to the configured usage-exhaustion
+                # interval — longer than a model blip, shorter than a window.
+                outage_kind = "Claude usage exhausted"
+                reset_at = claude_usage_reset_at(error)
+                if reset_at is not None:
+                    outage_delay = max(
+                        60,
+                        int((reset_at - datetime.now(UTC)).total_seconds()) + 60,
+                    )
+                    outage_kind += f" — parked until {reset_at:%H:%M}Z"
+                else:
+                    outage_delay = ctx.settings.claude_usage_exhausted_retry_seconds
+                tracing.set_current_span_attribute("retry.claude_usage_exhausted", True)
             next_at_dt = datetime.fromtimestamp(
                 datetime.now(UTC).timestamp() + outage_delay,
                 tz=UTC,
@@ -398,7 +418,7 @@ async def _handle_stage_error(
                 ticket_id,
                 retry_attempt=park_count,
                 last_transient_error=(
-                    f"model outage ({MODEL_OUTAGE_MARKER}, park {park_count}/"
+                    f"{outage_kind} ({MODEL_OUTAGE_MARKER}, park {park_count}/"
                     f"{ctx.settings.model_outage_max_parks}, "
                     f"retry budget untouched): " + repr(error)
                 )[:200],

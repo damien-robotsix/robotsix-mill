@@ -1013,3 +1013,89 @@ def test_invalid_model_id_is_fatal_not_transient():
         classify_stage_error(RuntimeError("deepseek/x is not a valid model ID"))
         == "fatal"
     )
+
+
+# --- Claude usage exhaustion → park, no fingerprint, no paid fallback -------
+
+
+class _FakeUsageExhausted(Exception):
+    pass
+
+
+_FakeUsageExhausted.__name__ = "ClaudeSDKUsageExhaustedError"
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "You've hit your session limit · resets 9:20am (UTC)",
+        "You're out of usage credits",
+        "You've hit your limit · resets 8pm (UTC)",
+        "Usage limit reached for this tier",
+    ],
+)
+def test_claude_usage_exhaustion_is_parkable_provider_failure(message):
+    from robotsix_mill.runtime.transient_errors import (
+        classify_stage_error,
+        is_claude_usage_exhausted,
+        is_model_unavailable_error,
+        is_provider_failure,
+    )
+
+    exc = RuntimeError(message)
+    assert is_claude_usage_exhausted(exc)
+    # routes into the worker's model-outage PARK branch …
+    assert classify_stage_error(exc) == "transient"
+    assert is_model_unavailable_error(exc)
+    # … and the implement stage must not record a spec fingerprint for it
+    assert is_provider_failure(exc)
+
+
+def test_claude_usage_exhaustion_matches_llmio_class_through_cause_chain():
+    from robotsix_mill.runtime.transient_errors import is_claude_usage_exhausted
+
+    inner = _FakeUsageExhausted("opaque text")
+    outer = RuntimeError("agent run failed")
+    outer.__cause__ = inner
+    assert is_claude_usage_exhausted(outer)
+    assert not is_claude_usage_exhausted(RuntimeError("tests failed: 3 errors"))
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("You've hit your session limit · resets 9:20am (UTC)", (9, 20)),
+        ("You've hit your limit · resets 8pm (UTC)", (20, 0)),
+        ("hit your session limit · resets 12am (UTC)", (0, 0)),
+        ("hit your session limit · resets 12:05pm (UTC)", (12, 5)),
+    ],
+)
+def test_claude_usage_reset_at_parses_next_reset(message, expected):
+    from datetime import UTC, datetime
+
+    from robotsix_mill.runtime.transient_errors import claude_usage_reset_at
+
+    now = datetime(2026, 8, 29, 8, 45, tzinfo=UTC)
+    got = claude_usage_reset_at(RuntimeError(message), now=now)
+    assert got is not None
+    assert (got.hour, got.minute) == expected
+    assert got > now
+    assert got.tzinfo is UTC
+
+
+def test_claude_usage_reset_at_rolls_to_tomorrow_when_already_past():
+    from datetime import UTC, datetime
+
+    from robotsix_mill.runtime.transient_errors import claude_usage_reset_at
+
+    now = datetime(2026, 8, 29, 10, 0, tzinfo=UTC)
+    got = claude_usage_reset_at(
+        RuntimeError("hit your session limit · resets 9:20am (UTC)"), now=now
+    )
+    assert got == datetime(2026, 8, 30, 9, 20, tzinfo=UTC)
+
+
+def test_claude_usage_reset_at_none_without_hint():
+    from robotsix_mill.runtime.transient_errors import claude_usage_reset_at
+
+    assert claude_usage_reset_at(RuntimeError("You're out of usage credits")) is None

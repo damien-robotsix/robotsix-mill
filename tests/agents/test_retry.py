@@ -847,9 +847,29 @@ def test_build_agent_from_definition_attaches_rebuild_hook(monkeypatch):
 
     monkeypatch.setattr(bmod, "build_agent", fake_build_agent)
     definition = AgentDefinition(name="implement", level=4, system_prompt="x")
-    handle = bmod.build_agent_from_definition(Settings(), definition, tools=[])
+    handle = bmod.build_agent_from_definition(
+        Settings(claude_exhaustion_paid_fallback=True), definition, tools=[]
+    )
 
     assert handle._tier_level == 4
     handle._tier_rebuild(3)
     assert [k["level"] for k in captured] == [4, 3]
     assert captured[1]["name"] == "implement"
+
+
+def test_build_agent_from_definition_no_paid_fallback_hook_by_default(monkeypatch):
+    """Default: a Claude quota exhaustion propagates (the worker parks until
+    the reset) instead of silently re-running on a paid OpenRouter level."""
+    from robotsix_mill.agents import base as bmod
+    from robotsix_mill.agents.yaml_loader import AgentDefinition
+    from robotsix_mill.config import Settings
+
+    class _Plain:
+        pass
+
+    monkeypatch.setattr(bmod, "build_agent", lambda settings, **kw: _Plain())
+    definition = AgentDefinition(name="implement", level=4, system_prompt="x")
+    handle = bmod.build_agent_from_definition(Settings(), definition, tools=[])
+
+    assert not hasattr(handle, "_tier_rebuild")
+    assert not hasattr(handle, "_tier_level")

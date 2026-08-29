@@ -416,6 +416,30 @@ class _CoreSettings(BaseModel):
         description="Maximum consecutive model-outage parks before escalating to BLOCKED.",
         json_schema_extra={"advanced": True},
     )
+    # Claude subscription quota exhaustion ("You've hit your session limit ·
+    # resets 9:20am (UTC)"). The quota comes back by itself, so the ticket
+    # PARKS (model-outage shaped, retry budget untouched) until the stated
+    # reset — or claude_usage_exhausted_retry_seconds when the message has
+    # no reset hint. Falling back onto a keyed OpenRouter level instead is
+    # real money per token; it is opt-in via claude_exhaustion_paid_fallback.
+    claude_usage_exhausted_retry_seconds: int = Field(
+        default=900,
+        ge=60,
+        description=(
+            "Seconds to park a ticket after a Claude usage-exhaustion error "
+            "whose message carries no reset time."
+        ),
+        json_schema_extra={"advanced": True},
+    )
+    claude_exhaustion_paid_fallback: bool = Field(
+        default=False,
+        description=(
+            "When a Claude-backed level reports usage exhaustion or an auth "
+            "failure, rebuild the agent on the nearest keyed (paid) level "
+            "instead of parking the ticket until the quota resets."
+        ),
+        json_schema_extra={"advanced": True},
+    )
     # Per-call cap for the read-only exploration sub-agent the
     # coordinator uses instead of reading the repo into its own context.
     # Per-call cap for the domain-expert consultation sub-agent the
