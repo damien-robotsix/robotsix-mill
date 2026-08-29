@@ -545,11 +545,59 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
     )
 
 
-def _build_extra_packages_prefix(extra_packages: list[str]) -> tuple[str, bool]:
+def _pip_extras_cached_install(pip_packages: list[str], cache_target: str) -> str:
+    """Shell snippet installing *pip_packages* ONCE into the shared cache.
+
+    ``pip install --user`` lands in ``HOME=/tmp`` — a tmpfs discarded with
+    the container — so every ``run_command`` re-resolved and re-installed
+    the same packages against PyPI through the egress proxy. Measured live
+    on 2026-08-29 (robotsix-mill's ``pip:pytest``/``pip:pytest-asyncio``):
+    ~7 s per call on top of a 0.7 s container; 16k trivial commands a
+    week = ~36 h of pure install overhead.
+
+    Instead: ``pip install --target`` into
+    ``<cache>/pip-extras/py<X.Y>/<hash>`` on the disk-backed cache volume,
+    guarded by a ``.mill-installed`` marker. The hash covers the sorted
+    package list; the interpreter minor version is resolved inside the
+    sandbox so an image bump to a new Python gets its own tree. Installs
+    go to a ``.tmp.$$`` dir and are ``mv``-ed into place, so two sandboxes
+    racing on a cold cache cannot corrupt each other (the loser deletes
+    its copy). The tree is exported on ``PYTHONPATH`` (appended — the
+    mounted ``src`` keeps shadowing) and its ``bin`` on ``PATH``.
+    """
+    import hashlib
+    import shlex
+
+    pkgs = sorted(pip_packages)
+    digest = hashlib.sha256(" ".join(pkgs).encode()).hexdigest()[:12]
+    quoted = " ".join(shlex.quote(p) for p in pkgs)
+    root = f"{cache_target}/pip-extras"
+    return (
+        "_mx_py=$(python3 -c 'import sys; print(\"%d.%d\" % sys.version_info[:2])' "
+        "2>/dev/null || echo unknown); "
+        f'_mx_t="{root}/py${{_mx_py}}/{digest}"; '
+        'if [ ! -f "$_mx_t/.mill-installed" ]; then '
+        '_mx_tmp="$_mx_t.tmp.$$"; rm -rf "$_mx_tmp"; '
+        'if mkdir -p "$_mx_tmp" && pip install --quiet --disable-pip-version-check '
+        f'--target "$_mx_tmp" {quoted} && touch "$_mx_tmp/.mill-installed"; then '
+        'mv -T "$_mx_tmp" "$_mx_t" 2>/dev/null || rm -rf "$_mx_tmp"; '
+        "else "
+        f'echo "WARNING: failed to install pip packages: {quoted}" >&2; '
+        'rm -rf "$_mx_tmp"; fi; fi; '
+        'if [ -d "$_mx_t" ]; then '
+        'export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$_mx_t" PATH="$_mx_t/bin:$PATH"; fi'
+    )
+
+
+def _build_extra_packages_prefix(
+    extra_packages: list[str], *, cache_target: str | None = None
+) -> tuple[str, bool]:
     """Build a shell command prefix that installs extra packages.
 
     Each entry can be:
-    - ``pip:<name>`` → install via ``pip install --user``
+    - ``pip:<name>`` → install via ``pip install`` (into the shared
+      cache when *cache_target* is set — see
+      :func:`_pip_extras_cached_install` — else ``--user`` per call)
     - ``apt:<name>`` → install via ``apt-get install -y``
     - bare ``<name>`` → defaults to apt (the sandbox is Debian-based)
 
@@ -584,7 +632,9 @@ def _build_extra_packages_prefix(extra_packages: list[str]) -> tuple[str, bool]:
             f'|| echo "WARNING: failed to install apt package: $pkg"; done'
         )
 
-    if pip_packages:
+    if pip_packages and cache_target:
+        parts.append(_pip_extras_cached_install(pip_packages, cache_target))
+    elif pip_packages:
         for pkg in pip_packages:
             parts.append(
                 f"pip install --user --quiet --disable-pip-version-check {pkg} "

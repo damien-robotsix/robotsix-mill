@@ -1103,9 +1103,71 @@ def test_extra_packages_integration_from_config_file(tmp_path, monkeypatch):
     cmd = seen["argv"][-1]
     assert "apt-get update" in cmd
     assert "colcon" in cmd
-    assert "pip install --user" in cmd
+    # package cache on (default) → cached --target install, not per-call --user
+    assert "pip install --quiet --disable-pip-version-check --target" in cmd
     assert "requests" in cmd
     assert cmd.endswith("pytest -q")
+
+
+def test_pip_extras_install_once_into_shared_cache():
+    """With a cache target, pip extras install ONCE behind a marker on the
+    disk-backed cache volume (was: ``pip install --user`` into the tmpfs
+    HOME on EVERY run_command — ~7 s per call live on 2026-08-29)."""
+    prefix, needs_write = sandbox._build_extra_packages_prefix(
+        ["pip:pytest-asyncio", "pip:pytest"], cache_target="/sbxcache"
+    )
+    assert needs_write is False
+    assert "pip install --user" not in prefix
+    assert '"/sbxcache/pip-extras/py${_mx_py}/' in prefix
+    assert '[ ! -f "$_mx_t/.mill-installed" ]' in prefix
+    assert '--target "$_mx_tmp" pytest pytest-asyncio' in prefix  # sorted
+    assert 'mv -T "$_mx_tmp" "$_mx_t"' in prefix
+    assert (
+        'export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$_mx_t" PATH="$_mx_t/bin:$PATH"'
+        in prefix
+    )
+    assert prefix.endswith("; ")
+    # same package set in any order → same cache key
+    again, _ = sandbox._build_extra_packages_prefix(
+        ["pip:pytest", "pip:pytest-asyncio"], cache_target="/sbxcache"
+    )
+    assert again == prefix
+    other, _ = sandbox._build_extra_packages_prefix(
+        ["pip:pytest"], cache_target="/sbxcache"
+    )
+    assert other != prefix
+
+
+def test_pip_extras_without_cache_keep_per_call_user_install():
+    prefix, _ = sandbox._build_extra_packages_prefix(["pip:requests"])
+    assert "pip install --user --quiet --disable-pip-version-check requests" in prefix
+    assert "--target" not in prefix
+
+
+def test_run_without_package_cache_uses_user_install(tmp_path, monkeypatch):
+    s = _settings(
+        tmp_path,
+        data_dir=str(tmp_path),
+        sandbox_proxy_url="",
+        sandbox_package_cache="false",
+    )
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        sandbox, "_repo_mount", lambda repo_dir, settings: ["--mount", "x"]
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox, "load_extra_sandbox_packages", lambda repo_dir: ["pip:requests"]
+    )
+    sandbox.run("true", repo_dir="/data/work/repo", settings=s)
+    cmd = seen["argv"][-1]
+    assert "pip install --user" in cmd
+    assert "/sbxcache" not in cmd
 
 
 # --- orphan sandbox reaper -------------------------------------------------
