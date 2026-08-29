@@ -640,6 +640,22 @@
           "title": "Audit Request Limit",
           "type": "integer"
         },
+        "auto_epic_enabled": {
+          "advanced": true,
+          "default": true,
+          "description": "When true, ingest promotes clearly multi-concern reports to an auto-decomposed epic.",
+          "title": "Auto Epic Enabled",
+          "type": "boolean"
+        },
+        "auto_epic_min_confidence": {
+          "advanced": true,
+          "default": 0.7,
+          "description": "Minimum scope-classifier confidence required to auto-promote an ingested report to an epic.",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Auto Epic Min Confidence",
+          "type": "number"
+        },
         "auto_fix_max_cycles": {
           "advanced": true,
           "default": 6,
