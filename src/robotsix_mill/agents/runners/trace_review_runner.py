@@ -104,19 +104,21 @@ def _median(values: list[float]) -> float:
 
 def _compute_baselines(
     traces: list[dict[str, Any]],
-    observations_per_trace: dict[str, Any][str, list[dict[str, Any]]],
+    obs_counts_per_trace: dict[str, int],
     settings: Settings,
 ) -> _Baselines:
     """Compute median × multiplier thresholds for cost and observation
     count across the entire *traces* batch. Returns ``None`` thresholds
     when the batch is too small to baseline (< 3 traces).
+
+    *obs_counts_per_trace* maps a trace id to its observation *count*
+    (not the observation payloads) so the whole batch can be baselined
+    without holding every trace's observation tree in memory at once.
     """
     if len(traces) < 3:
         return _Baselines(None, None, None, None)
     costs = [float(t.get("totalCost") or 0.0) for t in traces]
-    obs_counts = [
-        len(observations_per_trace.get(t.get("id") or "", [])) for t in traces
-    ]
+    obs_counts = [obs_counts_per_trace.get(t.get("id") or "", 0) for t in traces]
     cost_med = _median(costs)
     obs_med = _median(obs_counts)
     # Guard against zero medians (every trace cost $0): without a
@@ -735,29 +737,27 @@ def run_trace_review_pass(
     # intra-run duplicates — one draft per trace, ever.
     filed_gap_ids: set[str] = set()
 
-    # Pre-fetch every trace's full detail in one pass so we can compute
-    # batch-relative baselines (median cost, median observation count)
-    # before classifying any individual trace. Detail fetches are the
-    # main cost of the deterministic phase — they're already paid for
-    # by the classifier below, so caching them here is essentially
-    # free.
-    details_by_id: dict[str, Any][str, dict[str, Any]] = {}
-    observations_by_id: dict[str, Any][str, list[dict[str, Any]]] = {}
+    # Pass A (streaming): fetch each trace's detail only long enough to
+    # derive the one lightweight metric the batch baseline needs — the
+    # observation count — then let the payload go out of scope. Holding
+    # every trace's full observation tree (inputs/outputs) at once was
+    # the memory-growth root cause: a single pass over
+    # ``trace_review_max_traces_per_run`` traces retained hundreds of
+    # full payloads simultaneously and drove the process past the
+    # container memcg limit (OOM-kill → restart → re-scan loop). Only
+    # the small ``obs_counts_by_id`` mapping survives this loop.
+    obs_counts_by_id: dict[str, int] = {}
     for trace in traces:
         trace_id = trace.get("id")
         if not trace_id:
             continue
-        detail = fetch_trace_detail(
-            settings,
-            trace_id,
-            repo_config=repo_config,
-        )
+        detail = fetch_trace_detail(settings, trace_id, repo_config=repo_config)
         if detail is None:
             continue
-        details_by_id[trace_id] = detail
-        observations_by_id[trace_id] = detail.get("observations") or []
+        obs_counts_by_id[trace_id] = len(detail.get("observations") or [])
+        # ``detail`` is intentionally not retained past this iteration.
 
-    baselines = _compute_baselines(traces, observations_by_id, settings)
+    baselines = _compute_baselines(traces, obs_counts_by_id, settings)
     if baselines.cost_threshold is not None:
         log.info(
             "trace-review: cost baseline = $%.4f (median $%.4f × %.1f)",
@@ -772,14 +772,18 @@ def run_trace_review_pass(
             len(traces),
         )
 
-    # Phase 1: classify every trace and collect flagged ones.
-    flagged: list[tuple[dict[str, Any], _TraceFlags, dict[str, Any] | None]] = []
+    # Phase 1 (streaming): re-fetch each trace's detail, classify, and
+    # retain ONLY the lightweight ``_TraceFlags`` for flagged traces —
+    # never the payload. The full detail for the (bounded) inspection
+    # set is re-fetched on demand in phase 2 below, so at most one full
+    # trace payload is ever held in memory at a time.
+    flagged: list[tuple[dict[str, Any], _TraceFlags]] = []
     for trace in traces:
         trace_id = trace.get("id")
         if not trace_id:
             continue
-        detail = details_by_id.get(trace_id)
-        observations = observations_by_id.get(trace_id)
+        detail = fetch_trace_detail(settings, trace_id, repo_config=repo_config)
+        observations = detail.get("observations") if detail else None
         flags = _classify_trace(
             trace,
             settings,
@@ -789,7 +793,7 @@ def run_trace_review_pass(
         )
         if not flags.flagged:
             continue
-        flagged.append((trace, flags, detail))
+        flagged.append((trace, flags))
         log.info(
             "trace-review: trace %s flagged (%s) — queued for inspection",
             trace_id[:8],
@@ -808,7 +812,7 @@ def run_trace_review_pass(
         settings.trace_review_min_confidence, _CONFIDENCE_RANK["high"]
     )
 
-    for idx, (trace, flags, detail) in enumerate(flagged):
+    for idx, (trace, flags) in enumerate(flagged):
         if inspections_cap > 0 and idx >= inspections_cap:
             log.info(
                 "trace-review: inspection cap of %d reached — "
@@ -828,6 +832,13 @@ def run_trace_review_pass(
                 flags.trace_name,
             )
             continue
+
+        # Re-fetch the full detail on demand — only for the bounded set
+        # of traces actually inspected this run (capped by
+        # ``trace_review_max_inspections_per_run``), so at most one full
+        # trace payload is held in memory at a time rather than the whole
+        # batch.
+        detail = fetch_trace_detail(settings, trace_id, repo_config=repo_config)
 
         # Phase 2: LLM inspection on the cheap model.
         result = run_trace_inspector(
