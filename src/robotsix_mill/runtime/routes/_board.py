@@ -63,13 +63,21 @@ def _ticket_to_card(ticket, settings, svc):
     read = enrich_ticket_read(
         ticket, settings, svc, blocking_cost=False, fetch_pr_url=False
     )
+    badges = _adapter.card_badges(read)
+    # Prepend target-repo badge so the card shows which repo the ticket
+    # targets, distinct from the origin (source_badge).  The 📁 icon
+    # distinguishes it visually from the source pill.
+    repo_id = svc.board_id
+    if repo_id:
+        badges = [f"\U0001f4c1 {repo_id}", *badges]
     return {
         "id": _adapter.card_id(read),
         "title": _adapter.card_title(read),
         "status": read.state.value,
-        "badges": _adapter.card_badges(read),
+        "badges": badges,
         "timestamps": _adapter.card_timestamps(read),
         "source_badge": read.source if read.source and read.source != "user" else "",
+        "board_id": repo_id,
         "pending_question": read.pending_question,
     }
 
