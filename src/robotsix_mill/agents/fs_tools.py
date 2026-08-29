@@ -393,6 +393,106 @@ def _extract_pdf_text(p: Path) -> str:
     return "\n".join(texts)
 
 
+_PYTEST_TARGETED_FLAGS = frozenset(
+    {
+        "-k",
+        "-m",
+        "--lf",
+        "--last-failed",
+        "--ff",
+        "--failed-first",
+        "--deselect",
+        "--co",
+        "--collect-only",
+        "--version",
+        "--help",
+        "-h",
+        "--fixtures",
+        "--markers",
+    }
+)
+_PYTEST_SUITE_ROOTS = frozenset(
+    {".", "./", "tests", "tests/", "test", "test/", "src", "src/"}
+)
+
+
+def full_suite_pytest_segment(command: str) -> str | None:
+    """Return the shell segment of *command* that runs pytest over the WHOLE
+    suite, or ``None`` when every pytest invocation is targeted.
+
+    "Targeted" means at least one positional that is not a suite root
+    (``tests``, ``.``, …) — a file, a directory below the root, a node id —
+    or a selection flag (``-k``, ``-m``, ``--lf``, ``--deselect``,
+    ``--collect-only``…). Recognised launchers: ``pytest``, ``py.test``,
+    ``python -m pytest``, ``uv run [--frozen|--with X] pytest``,
+    ``.venv/bin/pytest``. Segments are split on ``&&``, ``||``, ``;`` and
+    ``|`` so ``uv run ruff check . && uv run pytest tests/x`` passes.
+    """
+    import shlex
+
+    for segment in re.split(r"&&|\|\||;|\|", command):
+        try:
+            tokens = shlex.split(segment, comments=False)
+        except ValueError:
+            continue
+        # strip leading env assignments and launchers
+        i = 0
+        while i < len(tokens) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tokens[i]):
+            i += 1
+        toks = tokens[i:]
+        if not toks:
+            continue
+        if toks[0] == "uv" and len(toks) >= 2 and toks[1] == "run":
+            j = 2
+            while j < len(toks) and toks[j].startswith("-"):
+                if toks[j] in ("--with", "--python", "-p") and j + 1 < len(toks):
+                    j += 1
+                j += 1
+            toks = toks[j:]
+        if not toks:
+            continue
+        prog = toks[0].rsplit("/", 1)[-1]
+        if prog.startswith("python") and len(toks) >= 3 and toks[1] == "-m":
+            prog = toks[2]
+            args = toks[3:]
+        elif prog in ("pytest", "py.test"):
+            args = toks[1:]
+        else:
+            continue
+        if prog not in ("pytest", "py.test"):
+            continue
+        targeted = False
+        k = 0
+        while k < len(args):
+            a = args[k]
+            if (
+                a in _PYTEST_TARGETED_FLAGS
+                or a.split("=", 1)[0] in _PYTEST_TARGETED_FLAGS
+            ):
+                targeted = True
+                break
+            if a.startswith("-"):
+                # flags taking a value we must not mistake for a path
+                if a in (
+                    "-p",
+                    "-o",
+                    "-c",
+                    "-W",
+                    "--rootdir",
+                    "--tb",
+                    "-n",
+                    "--maxfail",
+                ) and k + 1 < len(args):
+                    k += 1
+            elif a not in _PYTEST_SUITE_ROOTS:
+                targeted = True
+                break
+            k += 1
+        if not targeted:
+            return segment.strip()
+    return None
+
+
 def build_fs_tools(
     root: Path,
     settings: Settings,
@@ -1249,6 +1349,25 @@ def build_fs_tools(
         ``read_file`` loops — it finds the files that matter in one
         command so you can then ``read_file`` only those.
         """
+        # -- full-suite guard: the stage-owned gate runs the whole suite ----
+        # -- once the agent stops; inside the loop it is pure waste. Live   --
+        # -- (7d to 2026-08-29): 2,302 agent pytest runs = 91 h, single    --
+        # -- traces running `pytest tests/` at 231 s, 509 s and 927 s, and --
+        # -- every run > ~5 min expired the provider prompt cache so the   --
+        # -- next turn re-sent the whole context uncached (58 % of fresh   --
+        # -- input tokens on implement/ci_fix).                            --
+        if getattr(settings, "run_command_refuse_full_suite", True):
+            _full = full_suite_pytest_segment(command)
+            if _full is not None:
+                _command_history.append(command)
+                return (
+                    f"REFUSED (do NOT retry): {_full!r} runs the WHOLE test "
+                    f"suite. The pipeline runs the full suite for you once "
+                    f"you stop (and re-invokes you with a `test-failure` "
+                    f"block if it fails). Run only the test files/nodes your "
+                    f"diff touches (e.g. `pytest tests/<module>/test_x.py -q` "
+                    f"or `-k <expr>`), then stop."
+                )
         # -- loop guard: refuse exact duplicates and repeated grep on   --
         # -- the same file (the agent is spinning instead of answering). --
         if command in _command_history:

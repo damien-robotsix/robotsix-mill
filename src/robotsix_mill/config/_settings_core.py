@@ -431,6 +431,19 @@ class _CoreSettings(BaseModel):
         ),
         json_schema_extra={"advanced": True},
     )
+    # The agent's run_command refuses a pytest invocation with no target
+    # (bare `pytest`, `pytest tests/`, `python -m pytest .`): the stage gate
+    # runs the whole suite once the agent stops, and in-loop full runs were
+    # 91 h/week live plus the trigger for provider prompt-cache expiry.
+    run_command_refuse_full_suite: bool = Field(
+        default=True,
+        description=(
+            "Refuse agent run_command pytest invocations that would run the "
+            "whole suite (no path below the suite root, no -k/-m/--lf); the "
+            "stage gate owns the full run."
+        ),
+        json_schema_extra={"advanced": True},
+    )
     claude_exhaustion_paid_fallback: bool = Field(
         default=False,
         description=(
