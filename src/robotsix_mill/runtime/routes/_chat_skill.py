@@ -94,7 +94,7 @@ Returns a JSON array of `Comment` objects (id, body, author, parent_id, closed, 
 GET /board/cards?include_closed=<bool>&repo_id=<repo_id>
 ```
 
-Returns a flat JSON array of card objects for the board UI.  Each card has `id`, `title`, `status` (a `State` value like `draft`, `ready`, …), `badges`, `timestamps`, `source_badge`, and `pending_question`.
+Returns a flat JSON array of card objects for the board UI.  Each card has `id`, `title`, `status` (a `State` value like `draft`, `ready`, …), `badges`, `timestamps`, `source_badge`, `board_id`, and `pending_question`.
 
 ### GET /repos — registered repositories
 

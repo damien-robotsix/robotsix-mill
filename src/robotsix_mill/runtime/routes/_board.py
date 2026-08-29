@@ -58,6 +58,8 @@ def _ticket_to_card(ticket, settings, svc):
             merged: boolean,         // optional
             agent_badges: string[],  // optional
             source_badge: string,    // optional
+            board_id: string,        // optional — target repo/board id
+            pending_question: string,// optional — open ASK_USER question
         }
     """
     read = enrich_ticket_read(
