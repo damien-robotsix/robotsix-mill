@@ -752,9 +752,9 @@ class TestRunCoordinator:
         tmp_path,
     ):
         """When ``level`` is None, run_coordinator passes no override and
-        build_agent applies its default level (2)."""
+        build_agent applies its default level (3)."""
         self._run(settings, tmp_path, level=None)
-        assert self.captured["level"] == 2
+        assert self.captured["level"] == 3
 
     # -- fixed build_agent args ------------------------------------------
 

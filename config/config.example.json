@@ -238,7 +238,7 @@
         "refine_subscription_model_findings": "sonnet",
         "refine_subscription_tier_routing_enabled": true,
         "refine_triage_enabled": true,
-        "refine_trivial_model_level": 3,
+        "refine_trivial_model_level": 4,
         "refine_trivial_routing_enabled": true,
         "refine_trivial_subscription_model": "sonnet",
         "refine_usage_warning_threshold": 0.8,

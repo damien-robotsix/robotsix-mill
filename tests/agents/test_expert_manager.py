@@ -492,11 +492,11 @@ def test_level_default_field(monkeypatch):
     settings = Settings()
     mgr = ExpertManager(settings, Path("/tmp/test-repo"))
 
-    # Don't pass level — rely on ExpertDefinition default (2).
+    # Don't pass level — rely on ExpertDefinition default (3).
     definition = _make_definition()
     mgr.create_expert(definition)
 
-    assert state["captured"][0]["level"] == 2
+    assert state["captured"][0]["level"] == 3
 
 
 def test_level_explicit(monkeypatch):

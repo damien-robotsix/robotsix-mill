@@ -30,7 +30,7 @@ class _CoreSettings(BaseModel):
     # Each run spawns a ``claude`` CLI subprocess; spawning many simultaneously
     # (worker startup contention) can stall a run. A global semaphore (see
     # ``agents.claude_concurrency``) bounds concurrent runs to smooth the spawn
-    # storm. Applies to level-3 (Claude SDK) agents. Must be ≥ 1.
+    # storm. Applies to Claude SDK agents (levels 2/4/5). Must be ≥ 1.
     claude_max_concurrency: int = Field(
         default=4,
         ge=1,
@@ -892,7 +892,7 @@ class _CoreSettings(BaseModel):
     # disables the timeout for that stage.
     #
     # Built-in default: refine caps at 900 s (15 min).  A sampled
-    # legitimate refine run on model_level 3 (Claude SDK / Opus)
+    # legitimate refine run on model_level 4 (Claude SDK / Opus)
     # clocked 736 s (~12 min); 900 s leaves headroom while still
     # catching multi-hour runaway refine traces.  Operators can
     # override or disable (value 0) via the env var / JSON key.

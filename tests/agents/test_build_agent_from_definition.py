@@ -98,7 +98,7 @@ def test_happy_path_passes_all_fields(monkeypatch):
     captured = _capture_build_agent_kwargs(monkeypatch)
     definition = _make_definition(
         name="refine",
-        level=3,
+        level=4,
         system_prompt="Refine tickets.",
         web_knowledge=True,
         report_issue=True,
@@ -114,7 +114,7 @@ def test_happy_path_passes_all_fields(monkeypatch):
 
     assert kwargs["name"] == "refine"
     assert kwargs["system_prompt"] == "Refine tickets."
-    assert kwargs["level"] == 3
+    assert kwargs["level"] == 4
     assert kwargs["web_knowledge"] is True
     assert kwargs["report_issue"] is True
     assert kwargs["retries"] == 3
@@ -144,8 +144,8 @@ def test_real_refine_yaml_builds(monkeypatch):
 
     assert kwargs["name"] == "refine"
     assert kwargs["system_prompt"] == definition.system_prompt
-    # refine runs on capability level 3 (Claude SDK opus).
-    assert kwargs["level"] == definition.level == 3
+    # refine runs on capability level 4 (Claude SDK opus).
+    assert kwargs["level"] == definition.level == 4
     assert kwargs["web_knowledge"] is True
     assert kwargs["report_issue"] is True
     assert kwargs["retries"] == 2
@@ -346,7 +346,7 @@ def test_refine_yaml_end_to_end_tool_injection(monkeypatch):
     # may have registered ``parallel_explore`` in the global ToolRegistry.
     # This test validates tool *injection*, not prompt validation.
     # Force the DeepSeek (pydantic-ai) transport so we can inspect the
-    # function toolset; refine.yaml is level 3 (Claude SDK) by default,
+    # function toolset; refine.yaml is level 4 (Claude SDK) by default,
     # whose handle has no _function_toolset. Tool *injection* (what this
     # test validates) is transport-independent.
     agent = build_agent_from_definition(

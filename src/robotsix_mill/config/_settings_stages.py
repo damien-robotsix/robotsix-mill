@@ -265,19 +265,20 @@ class _StagesSettings(BaseModel):
     )
     # Model tier for the trace inspector.  Level 1 (cheapest flash), the default;
     # raising it costs more and is opt-in only.
-    # Per-stage capability level, following llmio's L1..L4 convention:
-    # 1 = cheap (OpenRouter flash), 2 = intermediate (OpenRouter pro),
-    # 3 = Claude subscription (opus), 4 = frontier (Claude fable).  Keyed by
+    # Per-stage capability level, following llmio's L1..L5 convention:
+    # 1 = cheap (OpenRouter flash), 2 = cheap flat-rate (Claude haiku),
+    # 3 = intermediate (OpenRouter mimo), 4 = Claude subscription (opus),
+    # 5 = frontier (Claude fable).  Keyed by
     # the agent definition ``name`` (``implement``, ``ci_fix``, ``review``,
     # ``refine``, ``rebase``, ``retrospect``, ``document``, …); an absent key
     # keeps the level declared in ``agent_definitions/<name>.yaml``.  This is
     # THE knob for moving a stage between pay-per-token and flat-rate tiers —
-    # e.g. ``{"implement": 3, "ci_fix": 3}`` runs both on the subscription.
+    # e.g. ``{"implement": 4, "ci_fix": 4}`` runs both on the subscription.
     # Call-site cheap routes (config-only implement/review → level 1, the
     # refine trivial route) still apply on top.
     agent_levels: dict[str, int] = Field(
         description=(
-            "Per-stage llmio capability level (1-4) keyed by agent definition "
+            "Per-stage llmio capability level (1-5) keyed by agent definition "
             "name; unset stages keep their YAML default."
         ),
         default_factory=dict,
@@ -287,67 +288,67 @@ class _StagesSettings(BaseModel):
     @field_validator("agent_levels")
     @classmethod
     def _validate_agent_levels(cls, value: dict[str, int]) -> dict[str, int]:
-        bad = {k: v for k, v in value.items() if not (1 <= int(v) <= 4)}
+        bad = {k: v for k, v in value.items() if not (1 <= int(v) <= 5)}
         if bad:
-            raise ValueError(f"agent_levels values must be 1..4, got {bad}")
+            raise ValueError(f"agent_levels values must be 1..5, got {bad}")
         return {k: int(v) for k, v in value.items()}
 
     trace_review_model_level: int = Field(
-        description="Model tier for the trace inspector (1=flash, 2=pro, 3=opus).",
+        description="Model tier for the trace inspector (1=flash, 2=haiku, 3=mimo, 4=opus).",
         default=1,
         ge=1,
-        le=3,
+        le=5,
         json_schema_extra={"advanced": True},
     )
     # When True (default), triage-trivial tickets are routed to
-    # ``refine_trivial_model_level`` instead of the YAML default (3 / Opus).
+    # ``refine_trivial_model_level`` instead of the YAML default (4 / Opus).
     # Set False to force all refines through the default level.
     refine_trivial_routing_enabled: bool = Field(
         description="When true, triage-trivial tickets route to refine_trivial_model_level instead of the YAML default.",
         default=True,
         json_schema_extra={"advanced": True},
     )
-    # Model level used for trivial-scope refines.  Default 2 =
-    # pay-per-token level-2 model (OpenRouter, ~$0.001+/run) — cheap
+    # Model level used for trivial-scope refines.  Default 3 =
+    # pay-per-token level-3 model (OpenRouter mimo, ~$0.001+/run) — cheap
     # enough for straightforward gap-fill tickets while still capable.
-    # Set to 3 for flat-cost Claude subscription (sonnet, marginal $0)
-    # or 1 for the cheapest flash model.
+    # Set to 4 for the flat-cost Claude subscription (sonnet, marginal $0),
+    # 2 for haiku, or 1 for the cheapest flash model.
     refine_trivial_model_level: int = Field(
-        description="Model level for trivial-scope refines (1=flash, 2=pro, 3=subscription).",
-        default=2,
+        description="Model level for trivial-scope refines (1=flash, 2=haiku, 3=mimo, 4=subscription).",
+        default=3,
         ge=1,
-        le=3,
+        le=5,
         json_schema_extra={"advanced": True},
     )
     # Claude model alias used when a trivial/forced-cheap refine routes to
-    # the level-3 subscription.  ``sonnet`` is the cheapest alias already
-    # trusted by the ``"simple"`` path.  Only the Claude-SDK branch (level 3)
-    # consumes this; OpenRouter levels 1/2 ignore it.
+    # the level-4 subscription.  ``sonnet`` is the cheapest alias already
+    # trusted by the ``"simple"`` path.  Only the Claude-SDK branch (level 4)
+    # consumes this; OpenRouter levels 1/3 ignore it.
     refine_trivial_subscription_model: str = Field(
         description="Claude model alias for trivial/forced-cheap refines on the subscription tier.",
         default="sonnet",
         json_schema_extra={"advanced": True},
     )
-    # When True (default), non-trivial level-3 refines route to a cheaper
+    # When True (default), non-trivial level-4 refines route to a cheaper
     # Claude alias (sonnet) for "simple" tickets and keep Opus only for
     # "needs-exploration" tickets — all on the same claudeSDK subscription
     # transport.  Set False for a clean rollback to Opus-always.
     refine_subscription_tier_routing_enabled: bool = Field(
-        description="When true, non-trivial level-3 refines route to sonnet for simple tickets, opus for complex.",
+        description="When true, non-trivial level-4 refines route to sonnet for simple tickets, opus for complex.",
         default=True,
         json_schema_extra={"advanced": True},
     )
-    # Claude model alias for non-escalated level-3 refines (complexity="simple").
-    # Only the Claude-SDK branch (level 3) consumes this; OpenRouter levels 1/2 ignore it.
+    # Claude model alias for non-escalated level-4 refines (complexity="simple").
+    # Only the Claude-SDK branch (level 4) consumes this; OpenRouter levels 1/3 ignore it.
     refine_subscription_model_default: str = Field(
-        description="Claude model alias for non-escalated level-3 refines (complexity=simple).",
+        description="Claude model alias for non-escalated level-4 refines (complexity=simple).",
         default="sonnet",
         json_schema_extra={"advanced": True},
     )
-    # Claude model alias for escalated level-3 refines (complexity="needs-exploration").
-    # Only the Claude-SDK branch (level 3) consumes this; OpenRouter levels 1/2 ignore it.
+    # Claude model alias for escalated level-4 refines (complexity="needs-exploration").
+    # Only the Claude-SDK branch (level 4) consumes this; OpenRouter levels 1/3 ignore it.
     refine_subscription_model_complex: str = Field(
-        description="Claude model alias for escalated level-3 refines (complexity=needs-exploration).",
+        description="Claude model alias for escalated level-4 refines (complexity=needs-exploration).",
         default="opus",
         json_schema_extra={"advanced": True},
     )
@@ -373,7 +374,7 @@ class _StagesSettings(BaseModel):
     )
     # Claude model alias used when the findings-present downgrade fires.
     # Defaults to sonnet (same tier the "simple" path already trusts). Only
-    # the Claude-SDK branch (level 3) consumes this; OpenRouter levels 1/2 ignore it.
+    # the Claude-SDK branch (level 4) consumes this; OpenRouter levels 1/3 ignore it.
     refine_subscription_model_findings: str = Field(
         description="Claude model alias used when the findings-present downgrade fires.",
         default="sonnet",

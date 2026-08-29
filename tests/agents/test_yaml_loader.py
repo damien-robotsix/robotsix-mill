@@ -92,12 +92,12 @@ system_prompt: Do one thing well.
 
 
 def test_level_out_of_range_rejected(tmp_path):
-    """level must be 1–4 — out-of-range values are rejected."""
+    """level must be 1–5 — out-of-range values are rejected."""
     p = _write_yaml(
         tmp_path,
         """\
 name: bad-level
-level: 5
+level: 6
 system_prompt: test
 """,
     )
@@ -845,7 +845,7 @@ def test_every_real_yaml_declares_a_valid_level(monkeypatch):
         monkeypatch.setenv(var, "mock/model")
 
     for yf, ad in _all_definitions():
-        assert ad.level in (1, 2, 3, 4), f"{yf.name}: level {ad.level} out of range"
+        assert ad.level in (1, 2, 3, 4, 5), f"{yf.name}: level {ad.level} out of range"
 
 
 # ── !include resolution ──────────────────────────────────────────────

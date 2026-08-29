@@ -74,7 +74,7 @@ def test_expert_definition_model_validation():
     assert ed.description is None
     assert ed.module_paths == ["src/**/*.py"]
     assert ed.system_prompt == "You are a test expert."
-    assert ed.level == 2
+    assert ed.level == 3
     assert isinstance(ed.memory, ExpertMemoryConfig)
     assert ed.memory.max_memory_chars == 8000
     assert ed.skills == []
@@ -179,7 +179,7 @@ system_prompt: Do one thing well in the docs domain.
     assert ed.module_paths == ["docs/**/*.md"]
     assert ed.system_prompt == "Do one thing well in the docs domain."
     assert ed.description is None
-    assert ed.level == 2
+    assert ed.level == 3
     assert isinstance(ed.memory, ExpertMemoryConfig)
     assert ed.memory.max_memory_chars == 8000
     assert ed.skills == []
@@ -227,8 +227,8 @@ memory:
     assert ed.memory.extras == {}  # default
 
 
-def test_level_defaults_to_2(tmp_path):
-    """When level is omitted, ExpertDefinition defaults to level 2."""
+def test_level_defaults_to_3(tmp_path):
+    """When level is omitted, ExpertDefinition defaults to level 3."""
     p = _write_yaml(
         tmp_path,
         """\
@@ -239,7 +239,7 @@ system_prompt: test
 """,
     )
     ed = load_expert_definition(p)
-    assert ed.level == 2
+    assert ed.level == 3
 
 
 def test_level_explicit_value(tmp_path):
