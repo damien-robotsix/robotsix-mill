@@ -415,6 +415,7 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
 
     s = _settings(
         tmp_path,
+        agent_levels={"run_tests": 3, "audit": 3},
         test_command="pytest",
     )
     monkeypatch.setattr(
@@ -596,7 +597,9 @@ def test_test_agent_normal_failure_still_distills(tmp_path, monkeypatch):
     must still flow to the distill agent — NOT the ENV-ERROR path."""
     from robotsix_mill import sandbox
 
-    s = _settings(tmp_path, test_command="pytest")
+    s = _settings(
+        tmp_path, test_command="pytest", agent_levels={"run_tests": 3, "audit": 3}
+    )
     monkeypatch.setattr(
         sandbox,
         "run",
@@ -791,7 +794,7 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
-    s = _settings(tmp_path)
+    s = _settings(tmp_path, agent_levels={"run_tests": 3, "audit": 3})
     auditing.run_audit_agent(settings=s, repo_dir=tmp_path, memory="")
 
     assert cap["tools"] == [
@@ -862,7 +865,9 @@ def test_test_agent_distill_injects_file_map_scope(tmp_path, monkeypatch):
     the in-scope file paths (soft hint)."""
     from robotsix_mill import sandbox
 
-    s = _settings(tmp_path, test_command="pytest")
+    s = _settings(
+        tmp_path, test_command="pytest", agent_levels={"run_tests": 3, "audit": 3}
+    )
 
     # Write file_map.json at repo_dir.parent / "artifacts" / "file_map.json"
     artifacts_dir = tmp_path.parent / "artifacts"
@@ -938,7 +943,9 @@ def test_test_agent_distill_no_file_map_unaffected(tmp_path, monkeypatch):
     if fp.exists():
         fp.unlink()
 
-    s = _settings(tmp_path, test_command="pytest")
+    s = _settings(
+        tmp_path, test_command="pytest", agent_levels={"run_tests": 3, "audit": 3}
+    )
 
     monkeypatch.setattr(
         sandbox,
@@ -982,7 +989,9 @@ def test_test_agent_distill_explicit_file_map_override(tmp_path, monkeypatch):
     list appears in the scope block regardless of artifacts/file_map.json."""
     from robotsix_mill import sandbox
 
-    s = _settings(tmp_path, test_command="pytest")
+    s = _settings(
+        tmp_path, test_command="pytest", agent_levels={"run_tests": 3, "audit": 3}
+    )
 
     # Write a DIFFERENT file_map.json (should be ignored when explicit passed)
     artifacts_dir = tmp_path.parent / "artifacts"

@@ -118,11 +118,12 @@ def test_agent_check_handles_filed_tickets_like_audit_not_memory():
 
 
 def test_agent_check_uses_normal_not_cheap_model():
-    """Per operator: agent_check runs on the normal (default) tier — level 3."""
+    """Per operator: agent_check runs on a Claude (subscription) tier, not a
+    keyed one — level 4 since the five-tier map made level 3 paid mimo."""
     from robotsix_mill.agents.yaml_loader import load_agent_definition
 
     d = load_agent_definition(Path("agent_definitions/periodic/agent_check.yaml"))
-    assert d.level == 3
+    assert d.level == 4
 
 
 def test_agent_check_result_model():

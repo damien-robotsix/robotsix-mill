@@ -13,7 +13,7 @@ category: periodic
 interval: 14d
 enabled: true
 
-level: 3
+level: 4
 tools:
   - read_ticket
 

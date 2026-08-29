@@ -295,7 +295,7 @@ class _StagesSettings(BaseModel):
 
     trace_review_model_level: int = Field(
         description="Model tier for the trace inspector (1=flash, 2=haiku, 3=mimo, 4=opus).",
-        default=1,
+        default=2,
         ge=1,
         le=5,
         json_schema_extra={"advanced": True},
@@ -315,7 +315,7 @@ class _StagesSettings(BaseModel):
     # 2 for haiku, or 1 for the cheapest flash model.
     refine_trivial_model_level: int = Field(
         description="Model level for trivial-scope refines (1=flash, 2=haiku, 3=mimo, 4=subscription).",
-        default=3,
+        default=4,
         ge=1,
         le=5,
         json_schema_extra={"advanced": True},

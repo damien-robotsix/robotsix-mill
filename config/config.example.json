@@ -349,7 +349,7 @@
         "trace_review_max_tool_calls": 100,
         "trace_review_max_traces_per_run": 300,
         "trace_review_min_confidence": "medium",
-        "trace_review_model_level": 1,
+        "trace_review_model_level": 2,
         "agent_levels": {},
         "trace_review_obs_multiplier": 3.0,
         "trace_review_per_obs_cost_threshold": 0.001,

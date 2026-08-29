@@ -349,14 +349,15 @@ class TestRunTraceInspector:
     # trace_review_model_level (AC1)
     # -----------------------------------------------------------------------
 
-    def test_model_level_defaults_to_1_and_is_configurable(self, monkeypatch):
-        """``trace_review_model_level`` defaults to 1 and the field is
+    def test_model_level_defaults_to_2_and_is_configurable(self, monkeypatch):
+        """``trace_review_model_level`` defaults to 2 (haiku, on the
+        subscription rather than a keyed tier) and the field is
         passed to ``build_openrouter_model`` — so a single Settings knob
         governs the inspector tier for both the automated pass and the
         ``langfuse_inspect_trace`` tool (AC1)."""
-        # Default settings → level 1
+        # Default settings → level 2
         s = _settings_with_api_key()
-        assert s.trace_review_model_level == 1
+        assert s.trace_review_model_level == 2
 
         # Override to level 2 and confirm the field propagates.
         s2 = _settings_with_api_key(trace_review_model_level=2)

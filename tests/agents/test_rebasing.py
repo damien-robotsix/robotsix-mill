@@ -23,6 +23,9 @@ def _s(tmp_path, **kw):
         _cfg._secrets = Secrets(openrouter_api_key=key)
     # OPENROUTER_API_KEY is now a Secrets-only field; pop before Settings()
     kw.pop("OPENROUTER_API_KEY", None)
+    # these tests fake the OpenRouter build seam; pin the keyed level so the
+    # YAML default (a Claude tier) does not route around the fake
+    kw.setdefault("agent_levels", {"rebase": 3})
     return Settings(**kw)
 
 

@@ -2248,7 +2248,7 @@
         },
         "refine_trivial_model_level": {
           "advanced": true,
-          "default": 3,
+          "default": 4,
           "description": "Model level for trivial-scope refines (1=flash, 2=haiku, 3=mimo, 4=subscription).",
           "maximum": 5,
           "minimum": 1,
@@ -3081,7 +3081,7 @@
         },
         "trace_review_model_level": {
           "advanced": true,
-          "default": 1,
+          "default": 2,
           "description": "Model tier for the trace inspector (1=flash, 2=haiku, 3=mimo, 4=opus).",
           "maximum": 5,
           "minimum": 1,

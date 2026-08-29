@@ -657,7 +657,7 @@ refinement pass.
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `gates.refine_trivial_routing_enabled` | `MILL_REFINE_TRIVIAL_ROUTING_ENABLED` | `true` | Route trivial-scope tickets to a cheaper model instead of the full refinement model |
-| `gates.refine_trivial_model_level` | `MILL_REFINE_TRIVIAL_MODEL_LEVEL` | `3` | Model level for trivial-scope refines (3 = pay-per-token OpenRouter mimo, cheap enough for straightforward gap-fill tickets; 1 = flash cheapest; 2 = flat-cost Claude haiku; 4 = flat-cost Claude opus). Code default is `3`; config.example.json overrides to `4` for flat-cost Claude subscription. |
+| `gates.refine_trivial_model_level` | `MILL_REFINE_TRIVIAL_MODEL_LEVEL` | `4` | Model level for trivial-scope refines (4 = Claude opus on the subscription — operator preference is subscription quota over pay-per-token OpenRouter tickets; 1 = flash cheapest; 2 = flat-cost Claude haiku; 4 = flat-cost Claude opus). Code default is `3`; config.example.json overrides to `4` for flat-cost Claude subscription. |
 | `gates.refine_trivial_subscription_model` | `MILL_REFINE_TRIVIAL_SUBSCRIPTION_MODEL` | `sonnet` | Claude alias for trivial/forced-cheap refines routed to the level-3 subscription |
 | `gates.refine_subscription_tier_routing_enabled` | `MILL_REFINE_SUBSCRIPTION_TIER_ROUTING_ENABLED` | `true` | Complexity-gated Claude alias routing for level-3 refines (set `false` for Opus-always rollback) |
 | `gates.refine_subscription_model_default` | `MILL_REFINE_SUBSCRIPTION_MODEL_DEFAULT` | `sonnet` | Claude alias for non-escalated (simple) level-3 refines |
@@ -742,7 +742,7 @@ variable and its dotted YAML path.
 | `periodic.trace_review.max_repeated_tool` | `MILL_TRACE_REVIEW_MAX_REPEATED_TOOL` | `50` | Absolute cap on repeated tool calls before flagging |
 | `periodic.trace_review.max_tool_calls` | `MILL_TRACE_REVIEW_MAX_TOOL_CALLS` | `100` | Hard cap on total tool calls per trace inspection |
 | `periodic.trace_review.max_errors` | `MILL_TRACE_REVIEW_MAX_ERRORS` | `20` | Hard cap on tool-call errors before auto-termination |
-| `periodic.trace_review.model_level` | `MILL_TRACE_REVIEW_MODEL_LEVEL` | `1` | Model tier for the trace inspector (1–3) |
+| `periodic.trace_review.model_level` | `MILL_TRACE_REVIEW_MODEL_LEVEL` | `2` | Model tier for the trace inspector (1–5; 2 = haiku on the subscription) |
 | `periodic.trace_review.inspector_min_requests` | `MILL_TRACE_REVIEW_INSPECTOR_MIN_REQUESTS` | `20` | Floor for the tools-on request budget |
 | `periodic.trace_review.inspector_max_requests` | `MILL_TRACE_REVIEW_INSPECTOR_MAX_REQUESTS` | `80` | Ceiling for the tools-on request budget |
 | `periodic.trace_review.inspector_requests_per_obs` | `MILL_TRACE_REVIEW_INSPECTOR_REQUESTS_PER_OBS` | `0.1` | Requests granted per observation before clamping |

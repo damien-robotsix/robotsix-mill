@@ -200,6 +200,8 @@ def test_audit_agent_omits_report_issue(settings, monkeypatch, secrets_set):
 
     # Call without a repo_dir to keep tools list minimal
     try:
+        # fake OpenRouter seam → pin the keyed level (YAML default is a Claude tier)
+        settings.agent_levels = {"audit": 3}
         run_audit_agent(settings=settings)
     except Exception:
         pass  # call_with_retry stubbed so we may hit None.output
