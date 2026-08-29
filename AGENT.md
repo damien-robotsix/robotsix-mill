@@ -343,3 +343,25 @@ filing a "stale paths" cleanup ticket after the fact.
   and `with httpx.Client(timeout=30) as c:` to talk to the API, exactly
   as the existing private helpers do (e.g. `_create_repo`,
   `_create_pr`, `_get_pr`).
+
+## Implement-agent notes specific to this repo
+
+- **Module registration check.** Before you stop, run
+  `uv run --frozen robotsix-modules check-registration docs/modules.yaml --root .`
+  and fix any unregistered file or stale glob (see "Module taxonomy"
+  above). Verify a path exists (`test -f`/`test -d`) before registering
+  it. When deleting a tracked file, `git rm` it first, then update
+  `docs/modules.yaml`, then re-run the check — otherwise `git ls-files`
+  still sees it and the check loops.
+- **Changelog fragments are tracked files.** A new `changelog.d/<id>.<kind>.md`
+  must also be added to `docs/modules.yaml` under the `core` module's
+  `paths`, alphabetically among the existing `changelog.d/` entries —
+  even when no Python file changed.
+- **Docker image digests.** To pin a base image to `@sha256:…`, run
+  `python3 scripts/resolve_docker_digest.py <image:tag> [--platform …]`
+  (Docker Hub + OCI registries, no auth). Never ask the operator for a
+  digest; if the egress proxy blocks the registry, `report_issue` the
+  capability gap.
+- **Experts.** The `python-backend` expert (`expert_definitions/`)
+  covers all Python under `src/robotsix_mill/`.
+

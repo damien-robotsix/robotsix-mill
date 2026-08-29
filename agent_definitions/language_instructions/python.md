@@ -41,3 +41,39 @@ network:
 - Do **not** `ask_user` or file a ticket for the inability to fetch
   packages — the operator expects the agent to note the required
   human step instead.
+
+## Running Python tooling in the sandbox
+
+- **Prefix Python tooling with `uv run`** (`uv run pytest tests/x -q`,
+  `uv run ruff check <files>`, `uv run mypy`). The base interpreter has
+  no project dependencies; a bare `pytest`/`ruff`/`mypy` fails with
+  `No module named …`. Emit `uv run <tool>` as your FIRST attempt, and
+  never re-run an identical command that failed for an environment
+  reason — fix the invocation instead.
+- **Batch related checks into one command** (`uv run ruff check <files>
+  && uv run ruff format --check <files>`): each sandbox command is a
+  fresh container. Lint only the `.py` files you changed — ruff rejects
+  non-Python files — and skip Python tooling entirely for doc-only or
+  config-only diffs.
+- Run lint/type checks **once**, fix what you introduced, move on. The
+  stage-owned gate runs the test suite; CI runs the full toolchain. When
+  a repo baseline-filters mypy, use `uv run mypy src/ --strict | uv run
+  --with mypy-baseline mypy-baseline filter` so only NEW errors show.
+- Do not bother checking whether the package imports from `src/` — the
+  sandbox puts the mounted `src/` first on `PYTHONPATH` for src-layout
+  repos.
+
+## Python ≥ 3.14 syntax (PEP 758)
+
+Fleet repos target Python ≥ 3.14, where `except A, B:` and
+`except* A, B:` WITHOUT parentheses are valid and are what `ruff format`
+emits. Do not "fix" them into a tuple, and do not comply with a review
+comment calling them a Python-2 SyntaxError — verify the target version
+first.
+
+## vulture in CI / pre-commit
+
+When a workflow or `.pre-commit-config.yaml` you write invokes `vulture`,
+include `--ignore-decorators "@field_validator,@model_validator"` so
+Pydantic validators are not reported as dead code.
+
