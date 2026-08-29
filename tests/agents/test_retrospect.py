@@ -14,6 +14,9 @@ from robotsix_mill.stages.retrospect import RetrospectStage
 def _ctx(tmp_path, **env):
     db.reset_engine()
     env.setdefault("data_dir", str(tmp_path / "data"))
+    # these tests exercise the agent path on minimal tickets; keep the
+    # uneventful-skip off unless a test opts in
+    env.setdefault("retrospect_skip_uneventful", "false")
     s = Settings(**env)
     db.init_db(s, board_id="test-board")
     from robotsix_mill.config import RepoConfig
