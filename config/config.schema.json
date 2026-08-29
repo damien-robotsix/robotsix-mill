@@ -596,7 +596,7 @@
             "type": "integer"
           },
           "advanced": true,
-          "description": "Per-stage llmio capability level (1-4) keyed by agent definition name; unset stages keep their YAML default.",
+          "description": "Per-stage llmio capability level (1-5) keyed by agent definition name; unset stages keep their YAML default.",
           "title": "Agent Levels",
           "type": "object"
         },
@@ -2184,14 +2184,14 @@
         "refine_subscription_model_complex": {
           "advanced": true,
           "default": "opus",
-          "description": "Claude model alias for escalated level-3 refines (complexity=needs-exploration).",
+          "description": "Claude model alias for escalated level-4 refines (complexity=needs-exploration).",
           "title": "Refine Subscription Model Complex",
           "type": "string"
         },
         "refine_subscription_model_default": {
           "advanced": true,
           "default": "sonnet",
-          "description": "Claude model alias for non-escalated level-3 refines (complexity=simple).",
+          "description": "Claude model alias for non-escalated level-4 refines (complexity=simple).",
           "title": "Refine Subscription Model Default",
           "type": "string"
         },
@@ -2205,7 +2205,7 @@
         "refine_subscription_tier_routing_enabled": {
           "advanced": true,
           "default": true,
-          "description": "When true, non-trivial level-3 refines route to sonnet for simple tickets, opus for complex.",
+          "description": "When true, non-trivial level-4 refines route to sonnet for simple tickets, opus for complex.",
           "title": "Refine Subscription Tier Routing Enabled",
           "type": "boolean"
         },
@@ -2217,9 +2217,9 @@
         },
         "refine_trivial_model_level": {
           "advanced": true,
-          "default": 2,
-          "description": "Model level for trivial-scope refines (1=flash, 2=pro, 3=subscription).",
-          "maximum": 3,
+          "default": 3,
+          "description": "Model level for trivial-scope refines (1=flash, 2=haiku, 3=mimo, 4=subscription).",
+          "maximum": 5,
           "minimum": 1,
           "title": "Refine Trivial Model Level",
           "type": "integer"
@@ -3044,8 +3044,8 @@
         "trace_review_model_level": {
           "advanced": true,
           "default": 1,
-          "description": "Model tier for the trace inspector (1=flash, 2=pro, 3=opus).",
-          "maximum": 3,
+          "description": "Model tier for the trace inspector (1=flash, 2=haiku, 3=mimo, 4=opus).",
+          "maximum": 5,
           "minimum": 1,
           "title": "Trace Review Model Level",
           "type": "integer"
