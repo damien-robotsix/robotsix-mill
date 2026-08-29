@@ -258,7 +258,15 @@ def run_doc_agent(
             what="document",
         )
         output: DocResult = result.output
-        new_msgs = result.new_messages_json()
+        try:
+            new_msgs = result.new_messages_json()
+        except AttributeError:
+            # The Claude SDK tool loop returns an ``_SdkToolResult`` that
+            # mirrors only part of pydantic-ai's ``AgentRunResult`` and has
+            # no ``new_messages_json()``.  Match the coordinating/refining
+            # agents: fall back to ``None`` so pause detection simply sees
+            # no new messages instead of raising.
+            new_msgs = None
         # Persist the agent's updated ledger; empty string = keep
         # existing memory unchanged.  Respect the board_id guard —
         # only persist when we actually have a ledger path.
