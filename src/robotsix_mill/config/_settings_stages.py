@@ -208,6 +208,21 @@ class _StagesSettings(BaseModel):
         description="When true, retrospect files draft tickets for AGENT.md proposals.",
         default=True,
     )
+    # Retrospect ran an LLM pass over EVERY done ticket (530 traces in the
+    # week to 2026-08-29 — the most numerous trace, 220 h of DONE dwell,
+    # p90 46 min) including tickets that went refine → implement → review
+    # → merge first time with nothing to learn from. Skip the agent for
+    # those: no review round, a single implement pass, no BLOCKED/ci_fix/
+    # rebase/review-revision history, no comments. Eventful tickets still
+    # get the full retrospect (memory ledger, draft spawning).
+    retrospect_skip_uneventful: bool = Field(
+        description=(
+            "Skip the retrospect LLM pass for tickets that went through the "
+            "pipeline first time with no review round, single implement "
+            "pass, no block/CI-fix/rebase history and no comments."
+        ),
+        default=True,
+    )
     # (Removed) retrospect_deep_analysis_frequency: deep-analysis mode
     # was retired — per-trace inspection is now owned by the periodical
     # pipeline (trace_health_runner + expensive-item detector).

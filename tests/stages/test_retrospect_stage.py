@@ -77,6 +77,9 @@ def ctx_factory(tmp_path, fake_sandbox):
 
     def make(**env):
         db.reset_engine()
+        # These tests exercise the agent path on a minimal (uneventful)
+        # ticket; keep the skip off unless a test opts in.
+        env.setdefault("retrospect_skip_uneventful", "false")
         s = Settings(data_dir=str(tmp_path / f"data{len(created)}"), **env)
         db.init_db(s, board_id="test-board")
         svc = TicketService(s, board_id="test-board")
@@ -2418,3 +2421,83 @@ def test_retrospect_log_cap_zero_disables(ctx_factory, monkeypatch):
     assert out.next_state is State.CLOSED
     assert "earlier lines omitted" not in captured["comments_text"]
     assert "earlier lines omitted" not in captured["history_text"]
+
+
+# ------------------------------------------------------------------
+# Uneventful-ticket skip
+# ------------------------------------------------------------------
+
+
+def _patch_agent_seams(monkeypatch, calls):
+    from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
+
+    def _agent(**kwargs):
+        calls.append(kwargs)
+        return _result(findings="Looked.", conclusion="done")
+
+    monkeypatch.setattr(retrospecting, "run_retrospect_agent", _agent)
+    monkeypatch.setattr(
+        langfuse_client,
+        "fetch_session_summary",
+        lambda settings, session_id, **kw: "session summary text",
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session", lambda: "sess-abc"
+    )
+    monkeypatch.setattr("robotsix_mill.stages.retrospect.prune_clone", lambda ws: None)
+    monkeypatch.setattr(
+        pass_runner,
+        "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+
+def test_uneventful_ticket_skips_the_agent_by_default(ctx_factory, monkeypatch):
+    """First-time-green ticket (no review round, one implement pass, no
+    blocks, no comments) → CLOSED without an LLM call; artifact says so."""
+    ctx = ctx_factory(retrospect_skip_uneventful="true")
+    calls: list = []
+    _patch_agent_seams(monkeypatch, calls)
+
+    t = _ticket(ctx)
+    out = RetrospectStage().run(t, ctx)
+
+    assert out.next_state is State.CLOSED
+    assert "retrospect skipped — uneventful" in (out.note or "")
+    assert calls == []
+    artifact = ctx.service.workspace(t).artifacts_dir / "retrospect.md"
+    assert "skipped — uneventful" in artifact.read_text()
+
+
+def test_ticket_with_comments_is_eventful_and_gets_the_agent(ctx_factory, monkeypatch):
+    ctx = ctx_factory(retrospect_skip_uneventful="true")
+    calls: list = []
+    _patch_agent_seams(monkeypatch, calls)
+
+    t = _ticket(ctx)
+    ctx.service.add_comment(t.id, "reviewer asked for a rename")
+    out = RetrospectStage().run(ctx.service.get(t.id), ctx)
+
+    assert out.next_state is State.CLOSED
+    assert len(calls) == 1
+    assert "skipped" not in (out.note or "")
+
+
+def test_blocked_history_is_eventful(ctx_factory, monkeypatch):
+    from robotsix_mill.stages.retrospect import _eventful_states
+
+    class _Ev:
+        def __init__(self, state):
+            self.state = state
+
+    assert _eventful_states([_Ev(State.READY), _Ev(State.DONE)]) == []
+    assert _eventful_states(
+        [_Ev(State.READY), _Ev(State.BLOCKED), _Ev(State.READY)]
+    ) == ["blocked"]
+    assert _eventful_states([_Ev("fixing_ci"), _Ev("FIXING_CI")]) == ["fixing_ci"]

@@ -2390,6 +2390,12 @@
           "description": "Path to the retrospect agent's Markdown memory ledger.",
           "title": "Retrospect Memory Path"
         },
+        "retrospect_skip_uneventful": {
+          "default": true,
+          "description": "Skip the retrospect LLM pass for tickets that went through the pipeline first time with no review round, single implement pass, no block/CI-fix/rebase history and no comments.",
+          "title": "Retrospect Skip Uneventful",
+          "type": "boolean"
+        },
         "retrospect_spawn_agented_proposals": {
           "default": true,
           "description": "When true, retrospect files draft tickets for AGENT.md proposals.",
