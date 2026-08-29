@@ -707,3 +707,149 @@ class TestClosingScratchLoop:
         finally:
             loop.close()
             asyncio.set_event_loop(None)
+
+
+# ---------------------------------------------------------------------------
+# run_agent tier fallback (Claude subscription exhausted / credential dead)
+# ---------------------------------------------------------------------------
+
+
+class _FakeHandle:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _hooked(level: int, rebuilt: list[int], fallback: _FakeHandle) -> _FakeHandle:
+    primary = _FakeHandle("primary")
+    primary._tier_level = level  # type: ignore[attr-defined]
+
+    def _rebuild(new_level: int) -> _FakeHandle:
+        rebuilt.append(new_level)
+        return fallback
+
+    primary._tier_rebuild = _rebuild  # type: ignore[attr-defined]
+    return primary
+
+
+def test_tier_fallback_levels_skip_every_claude_level():
+    from robotsix_mill.agents.base import tier_fallback_levels
+
+    assert tier_fallback_levels(4) == [3, 1]
+    assert tier_fallback_levels(5) == [3, 1]
+    assert tier_fallback_levels(2) == [1, 3]
+    assert tier_fallback_levels(3) == [1]
+
+
+def test_run_agent_falls_back_to_openrouter_when_claude_usage_exhausted():
+    """A session-limit failure on an opus agent reruns on level 3, not BLOCKED."""
+    from robotsix_llmio.claude_sdk._errors import ClaudeSDKUsageExhaustedError
+
+    from robotsix_mill.agents.retry import run_agent
+
+    rebuilt: list[int] = []
+    fallback = _FakeHandle("fallback")
+    primary = _hooked(4, rebuilt, fallback)
+    seen: list[str] = []
+
+    def make_run(h):
+        seen.append(h.name)
+        if h is primary:
+            raise ClaudeSDKUsageExhaustedError("You've hit your session limit")
+        return "ran-on-fallback"
+
+    assert run_agent(primary, make_run, what="implement", sleep=lambda _s: None) == (
+        "ran-on-fallback"
+    )
+    assert rebuilt == [3]
+    assert seen == ["primary", "fallback"]
+    assert fallback.closed is True
+    assert primary.closed is False  # the caller owns the primary handle
+
+
+def test_run_agent_auth_failure_also_switches_tier():
+    from robotsix_llmio.claude_sdk._errors import ClaudeSDKAuthError
+
+    from robotsix_mill.agents.retry import run_agent
+
+    rebuilt: list[int] = []
+    primary = _hooked(2, rebuilt, _FakeHandle("fallback"))
+
+    def make_run(h):
+        if h is primary:
+            raise ClaudeSDKAuthError("Failed to authenticate. API Error: 401")
+        return "ok"
+
+    assert run_agent(primary, make_run, sleep=lambda _s: None) == "ok"
+    assert rebuilt == [1]
+
+
+def test_run_agent_without_rebuild_hook_reraises_unchanged():
+    from robotsix_llmio.claude_sdk._errors import ClaudeSDKUsageExhaustedError
+
+    from robotsix_mill.agents.retry import run_agent
+
+    def make_run(_h):
+        raise ClaudeSDKUsageExhaustedError("You've hit your session limit")
+
+    with pytest.raises(ClaudeSDKUsageExhaustedError):
+        run_agent(_FakeHandle("plain"), make_run, sleep=lambda _s: None)
+
+
+def test_run_agent_other_errors_do_not_switch_tier():
+    from robotsix_mill.agents.retry import run_agent
+
+    rebuilt: list[int] = []
+    primary = _hooked(4, rebuilt, _FakeHandle("fallback"))
+
+    def make_run(_h):
+        raise ValueError("spec-determined failure")
+
+    with pytest.raises(ValueError):
+        run_agent(primary, make_run, sleep=lambda _s: None)
+    assert rebuilt == []
+
+
+def test_run_agent_all_fallback_tiers_failing_chains_the_original():
+    from robotsix_llmio.claude_sdk._errors import ClaudeSDKUsageExhaustedError
+
+    from robotsix_mill.agents.retry import run_agent
+
+    rebuilt: list[int] = []
+    primary = _hooked(4, rebuilt, _FakeHandle("fallback"))
+
+    def make_run(h):
+        if h is primary:
+            raise ClaudeSDKUsageExhaustedError("You've hit your session limit")
+        raise RuntimeError("openrouter down")
+
+    with pytest.raises(RuntimeError, match="openrouter down") as ei:
+        run_agent(primary, make_run, sleep=lambda _s: None)
+    assert isinstance(ei.value.__cause__, ClaudeSDKUsageExhaustedError)
+    assert rebuilt == [3, 1]
+
+
+def test_build_agent_from_definition_attaches_rebuild_hook(monkeypatch):
+    from unittest import mock
+
+    from robotsix_mill.agents import base as bmod
+    from robotsix_mill.agents.yaml_loader import AgentDefinition
+    from robotsix_mill.config import Settings
+
+    captured: list[dict] = []
+
+    def fake_build_agent(settings, **kwargs):
+        captured.append(kwargs)
+        return mock.MagicMock()
+
+    monkeypatch.setattr(bmod, "build_agent", fake_build_agent)
+    definition = AgentDefinition(name="implement", level=4, system_prompt="x")
+    handle = bmod.build_agent_from_definition(Settings(), definition, tools=[])
+
+    assert handle._tier_level == 4
+    handle._tier_rebuild(3)
+    assert [k["level"] for k in captured] == [4, 3]
+    assert captured[1]["name"] == "implement"

@@ -450,17 +450,108 @@ def run_agent[T](
         with closing_scratch_loop():
             return _call()
 
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        # No running loop — safe to run on this thread.
-        result = _call_closing()
-    else:
+    def _run_isolated(fn: Callable[[], T]) -> T:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop — safe to run on this thread.
+            return fn()
         # Running loop detected — delegate to a thread.
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-            result = ex.submit(_call_closing).result()
+            return ex.submit(fn).result()
+
+    try:
+        result = _run_isolated(_call_closing)
+    except Exception as exc:
+        if not is_tier_unavailable(exc):
+            raise
+        result = _run_at_fallback_tier(
+            agent, make_run, exc, what=what, sleep=sleep, run_isolated=_run_isolated
+        )
 
     # Record per-step usage as a span attribute when the result is a
     # pydantic-ai AgentRunResult (has .usage() and .all_messages()).
     _try_record_step_usage(result, retry_count, last_reason)
     return result
+
+
+def is_tier_unavailable(exc: BaseException) -> bool:
+    """Whether *exc* means the agent's whole tier is out of service.
+
+    Usage exhaustion (the subscription's session/weekly cap) and a dead OAuth
+    credential are per-provider, not per-request: re-running at the same tier
+    cannot help, and llmio deliberately never retries them (see
+    ``ClaudeSDKUsageExhaustedError`` / ``ClaudeSDKAuthError``). They are the
+    cases where the run should move to a *different* tier instead of failing.
+    """
+    from robotsix_llmio.claude_sdk._errors import (
+        ClaudeSDKAuthError,
+        ClaudeSDKUsageExhaustedError,
+    )
+
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if isinstance(cur, ClaudeSDKUsageExhaustedError | ClaudeSDKAuthError):
+            return True
+        cur = cur.__cause__ or cur.__context__
+    return False
+
+
+def _run_at_fallback_tier[T](
+    agent: Any,
+    make_run: Callable[[Any], T],
+    original: Exception,
+    *,
+    what: str,
+    sleep: Callable[[float], None],
+    run_isolated: Callable[[Callable[[], T]], T],
+) -> T:
+    """Rebuild *agent* at the nearest healthy non-Claude tier and run there.
+
+    Only agents built by ``build_agent_from_definition`` carry the
+    ``_tier_rebuild`` hook; anything else re-raises *original* unchanged. Each
+    fallback tier gets its own bounded retry session; the last failure is
+    chained onto *original* so the ticket note still names the real cause.
+    """
+    from .base import _safe_close, tier_fallback_levels
+
+    rebuild = getattr(agent, "_tier_rebuild", None)
+    level = getattr(agent, "_tier_level", None)
+    if not callable(rebuild) or not isinstance(level, int):
+        raise original
+
+    last: Exception = original
+    for next_level in tier_fallback_levels(level):
+        log.warning(
+            "%s: level%d unavailable (%s: %s) — falling back to level%d",
+            what,
+            level,
+            type(last).__name__,
+            str(last)[:160],
+            next_level,
+        )
+        try:
+            fallback_agent = rebuild(next_level)
+        except Exception as build_exc:
+            last = build_exc
+            continue
+
+        def _fallback_call(h: Any = fallback_agent, lvl: int = next_level) -> T:
+            with closing_scratch_loop():
+                return _lib_call_with_retry(
+                    lambda: make_run(h),
+                    what=f"{what} (level{lvl} fallback)",
+                    sleep=sleep,
+                    is_transient_fn=is_transient,
+                )
+
+        try:
+            return run_isolated(_fallback_call)
+        except Exception as run_exc:
+            last = run_exc
+            level = next_level
+        finally:
+            _safe_close(fallback_agent)
+    raise last from original
