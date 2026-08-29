@@ -86,6 +86,46 @@ class _PeriodicSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+    # --- blocked auto-resume (deterministic, no LLM) ---
+    # Retries BLOCKED tickets whose latest block note matches one of the
+    # resumable patterns, once per ticket after a cooldown. Live (7d to
+    # 2026-08-29): 77 blocks, 31 hand-resumed, notes overwhelmingly
+    # infrastructure/budget shaped. Set the interval to 0 to disable.
+    blocked_auto_resume_interval_seconds: int = Field(
+        default=600,
+        description="Seconds between blocked auto-resume passes (retry BLOCKED tickets whose block note is resumable, bounded per ticket). 0 = disabled.",
+        json_schema_extra={"advanced": True},
+    )
+    blocked_auto_resume_cooldown_seconds: int = Field(
+        default=1800,
+        ge=0,
+        description="Minimum seconds a ticket must have been BLOCKED before it is auto-resumed.",
+        json_schema_extra={"advanced": True},
+    )
+    blocked_auto_resume_max_per_ticket: int = Field(
+        default=1,
+        ge=0,
+        description="Maximum automatic resumes per ticket (counted from its [auto-resume comments); after that a human is needed.",
+        json_schema_extra={"advanced": True},
+    )
+    blocked_auto_resume_patterns: list[str] = Field(
+        default=[
+            r"agent error — resumable",
+            r"— resumable",
+            r"timed out",
+            r"stage timeout",
+            r"clone (is )?missing",
+            r"pr_urls\.json corrupted",
+            r"unknown repo_id",
+            r"could not turn CI green within its iteration budget",
+            r"tests still failing after",
+            r"review rounds exhausted",
+            r"Infrastructure: LLM model outage",
+        ],
+        description="Regexes (case-insensitive) matched against the latest BLOCKED note; a match makes the block auto-resumable. Spec-fingerprint and upstream-CI parks are always excluded.",
+        json_schema_extra={"advanced": True},
+    )
+
     # --- docstring-coverage agent (public-API documentation oversight) ---
     # Interval between periodic docstring-coverage passes (seconds).
     # Set to 0 to disable.

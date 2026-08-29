@@ -245,6 +245,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._token_metrics_aggregation_task: asyncio.Task[Any] | None = None
         self._timeout_escalation_task: asyncio.Task[Any] | None = None
         self._upstream_ci_recovery_task: asyncio.Task[Any] | None = None
+        self._blocked_auto_resume_task: asyncio.Task[Any] | None = None
         self._config_pin_drift_task: asyncio.Task[None] | None = None
         self._meta_task: asyncio.Task[Any] | None = None
         self._run_health_task: asyncio.Task[Any] | None = None
@@ -1029,6 +1030,17 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             "_upstream_ci_recovery_task",
             log_msg="Periodic upstream-CI recovery enabled: interval %ds",
             log_args=(self.ctx.settings.upstream_ci_recovery_interval_seconds,),
+        )
+        self._start_poll_loop_pass(
+            "blocked-auto-resume",
+            self._blocked_auto_resume_poll_loop,
+            "_blocked_auto_resume_task",
+            log_msg="Periodic blocked auto-resume enabled: interval %ds, cooldown %ds, max %d/ticket",
+            log_args=(
+                self.ctx.settings.blocked_auto_resume_interval_seconds,
+                self.ctx.settings.blocked_auto_resume_cooldown_seconds,
+                self.ctx.settings.blocked_auto_resume_max_per_ticket,
+            ),
         )
         self._start_poll_loop_pass(
             "config-pin-drift",

@@ -568,6 +568,37 @@ class PollLoopsMixin(_WorkerBase):
                 log.exception("upstream-ci-recovery poll failed")
             await asyncio.sleep(interval)
 
+    async def _blocked_auto_resume_poll_loop(self) -> None:
+        """Periodic blocked auto-resume: retries BLOCKED tickets whose latest
+        block note is resumable (provider failure, timeout, budget exhausted,
+        missing clone…), once per ticket after a cooldown.
+
+        Deterministic — history reads + ``resume_blocked`` — no AI agent, no
+        tracing.  Global pass across every board.
+        """
+        settings = self.ctx.settings
+        interval = max(60, settings.blocked_auto_resume_interval_seconds)
+        initial = self._initial_delay("blocked-auto-resume", interval)
+        await asyncio.sleep(initial)
+        while True:
+            try:
+                from ...agents.runners.blocked_auto_resume_runner import (
+                    run_blocked_auto_resume,
+                )
+
+                result = await asyncio.to_thread(run_blocked_auto_resume, settings)
+                log.info(
+                    "blocked-auto-resume: pass complete — resumed=%d cooling=%d "
+                    "budget_exhausted=%d not_matched=%d",
+                    result.get("resumed", 0),
+                    result.get("cooling", 0),
+                    result.get("budget_exhausted", 0),
+                    result.get("not_matched", 0),
+                )
+            except Exception:
+                log.exception("blocked-auto-resume poll failed")
+            await asyncio.sleep(interval)
+
     async def _config_pin_drift_poll_loop(self) -> None:
         """Periodic config pin-drift check: reports pinned settings that
         shadow a changed code default.
