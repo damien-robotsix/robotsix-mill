@@ -112,7 +112,7 @@ class TestMedian:
 class TestComputeBaselines:
     def test_small_batch_returns_none(self, settings):
         traces = [_trace(id="t1", totalCost=0.5)]
-        baselines = _compute_baselines(traces, {"t1": []}, settings)
+        baselines = _compute_baselines(traces, {"t1": 0}, settings)
         assert baselines.cost_threshold is None
         assert baselines.obs_threshold is None
 
@@ -126,11 +126,11 @@ class TestComputeBaselines:
         ]
         # Each trace has a different observation count.
         obs_by_id = {
-            "t1": [_obs("read_file") for _ in range(5)],
-            "t2": [_obs("read_file") for _ in range(10)],
-            "t3": [_obs("read_file") for _ in range(15)],
-            "t4": [_obs("read_file") for _ in range(20)],
-            "t5": [_obs("read_file") for _ in range(25)],
+            "t1": 5,
+            "t2": 10,
+            "t3": 15,
+            "t4": 20,
+            "t5": 25,
         }
         baselines = _compute_baselines(traces, obs_by_id, settings)
         # Median cost is 0.30, multiplier 3.0 → threshold 0.90.
@@ -1746,8 +1746,11 @@ class TestTraceReviewMemoryCap:
         run_trace_review_pass(session_id="sess-cap", repo_config=rc)
 
         # Only the NEWEST 3 traces had their detail loaded — the older backlog
-        # (t0–t2) is skipped, not queued for a later run.
-        assert sorted(detail_ids) == ["t3", "t4", "t5"]
+        # (t0–t2) is skipped, not queued for a later run. Each trace's detail
+        # is fetched twice (streaming baseline pass + streaming classify
+        # pass) so the payload is never retained across the batch; assert on
+        # the distinct ids, not the raw call sequence.
+        assert sorted(set(detail_ids)) == ["t3", "t4", "t5"]
         # Watermark advanced to ~now (the older backlog is dropped, not
         # incrementally drained), so the next run only sees newer traces.
         wm = _load_watermark(capped, rc.board_id)
@@ -1767,7 +1770,10 @@ class TestTraceReviewMemoryCap:
             lambda _s, tid, **kw: detail_ids.append(tid) or {"observations": []},
         )
         run_trace_review_pass(session_id="sess-small", repo_config=rc)
-        assert detail_ids == ["only"]
+        # The single trace's detail is fetched by the streaming baseline
+        # pass and again by the streaming classify pass; assert on the
+        # distinct id rather than the call count.
+        assert set(detail_ids) == {"only"}
 
 
 class TestInspectionCapAndCostOrdering:
