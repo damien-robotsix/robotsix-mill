@@ -518,13 +518,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("scope_triage_max_files", "MILL_SCOPE_TRIAGE_MAX_FILES", "25", 25),
     # --- periodic bc_check ---
     ("bc_check_interval_seconds", "MILL_BC_CHECK_INTERVAL_SECONDS", "43200", 43200),
-    # --- periodic changelog_autofill ---
-    (
-        "changelog_autofill_interval_seconds",
-        "MILL_CHANGELOG_AUTOFILL_INTERVAL_SECONDS",
-        "43200",
-        43200,
-    ),
     # --- periodic completeness_check ---
     (
         "completeness_check_interval_seconds",

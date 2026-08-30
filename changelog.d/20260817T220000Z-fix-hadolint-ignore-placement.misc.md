@@ -1,1 +1,0 @@
-fix: reattach the UI stage's `hadolint ignore` directive to its `RUN`. The WORKDIR added to unbreak `npm install` was inserted between the directive and the RUN, which silently detached it — DL3018/DL3016 then failed the Release workflow's lint job.

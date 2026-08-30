@@ -32,7 +32,6 @@ BUCKETS: frozenset[str] = frozenset(
         "mypy",
         "pytest-failure",
         "pytest-collection/import",
-        "changelog-fragment-missing",
         "modules-yaml-unregistered",
         "vulture",
         "deptry",
@@ -64,10 +63,6 @@ DEFAULT_PREVENTION_RULES: dict[str, str] = {
     "pytest-collection/import": (
         "After moving, renaming or deleting a symbol, grep for every import of "
         "it and run test collection (`pytest --collect-only`) before stopping."
-    ),
-    "changelog-fragment-missing": (
-        "Add a changelog fragment for every non-trivial change in the same "
-        "commit as the change."
     ),
     "modules-yaml-unregistered": (
         "Register every new file (and de-register every deleted file) in the "
@@ -156,15 +151,6 @@ _BUCKET_PATTERNS: tuple[tuple[str, tuple[re.Pattern[str], ...]], ...] = (
         (
             re.compile(r"\bdeptry\b"),
             re.compile(r"\bdep00[1-4]\b"),
-        ),
-    ),
-    (
-        "changelog-fragment-missing",
-        (
-            re.compile(r"changelog\.d"),
-            re.compile(r"changelog fragment"),
-            re.compile(r"\btowncrier\b"),
-            re.compile(r"missing changelog"),
         ),
     ),
     (

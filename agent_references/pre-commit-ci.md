@@ -29,8 +29,7 @@ offending line.
 
 ### Symptom
 
-CI reports `end-of-file-fixer` failure on a changelog fragment
-(`.d/*.md`) or other text file.
+CI reports `end-of-file-fixer` failure on a text file.
 
 ### Standard fix
 

@@ -56,7 +56,6 @@ _BUILTIN_KINDS: dict[str, str] = {
     "credit_balance": "schedule_only",
     "member_sync": "schedule_only",
     "data_dir_gc": "schedule_only",
-    "changelog_autofill": "schedule_only",
     "pin_bump": "schedule_only",
     "roadmap_sync": "schedule_only",
     # Recognized but NOT per-repo-presence managed (cross-repo / always-on).

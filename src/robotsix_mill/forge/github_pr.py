@@ -444,14 +444,6 @@ class GitHubForgePRMixin:
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
         return self._list_open_prs(owner=owner, repo=repo)
 
-    def get_pr_labels(self, pr_number: int) -> list[str]:
-        """Return the labels on PR *pr_number* as a list of name strings.
-
-        Paginates the GitHub issues labels API. Returns ``[]`` on failure.
-        """
-        owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        return self._get_pr_labels(owner=owner, repo=repo, pr_number=pr_number)
-
     def _required_status_contexts(
         self, *, owner: str, repo: str, branch: str
     ) -> list[str]:
@@ -478,14 +470,6 @@ class GitHubForgePRMixin:
                 ]
             return [ctx for ctx in body.get("contexts", []) if isinstance(ctx, str)]
         return []
-
-    def _get_pr_labels(self, *, owner: str, repo: str, pr_number: int) -> list[str]:
-        return _paginated_get(
-            self._http,  # type: ignore[attr-defined]
-            f"/repos/{owner}/{repo}/issues/{pr_number}/labels",
-            item_fn=lambda label: label["name"],
-            fallback=[],
-        )
 
     def required_status_contexts(self, *, target_branch: str) -> list[str]:
         """Return the status contexts branch protection requires on *target_branch*.

@@ -81,8 +81,7 @@ record.
 The `recurring_ci_failure` check is **summary-only**: it reports how the
 board's `CI_FAILURE` events distribute across semantic buckets
 (`ruff-format`, `ruff-lint`, `mypy`, `pytest-failure`,
-`pytest-collection/import`, `changelog-fragment-missing`,
-`modules-yaml-unregistered`, `vulture`, `deptry`, `codeql`, `trivy`,
+`pytest-collection/import`, `modules-yaml-unregistered`, `vulture`, `deptry`, `codeql`, `trivy`,
 `flaky-network`, `unknown`) and how many the ci-fix agent later resolved.
 It files no tickets. (It used to auto-file one `[diagnostic] recurring CI
 failure: key=…` report per normalized key; the key was a hash of the

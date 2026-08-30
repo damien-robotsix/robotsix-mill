@@ -303,7 +303,6 @@ class PollLoopsMixin(_WorkerBase):
         "credit_balance": (
             "robotsix_mill.agents.runners.credit_balance_runner:run_credit_balance_pass"
         ),
-        "changelog_autofill": "robotsix_mill.agents.runners.changelog_autofill_runner:run_changelog_autofill_pass",
         "diagnostic": "robotsix_mill.agents.runners.diagnostic_runner:run_diagnostic_pass",
         "pin_bump": "robotsix_mill.agents.runners.pin_bump_runner:run_pin_bump_pass",
         "roadmap_sync": "robotsix_mill.agents.runners.roadmap_sync_runner:run_roadmap_sync_pass",

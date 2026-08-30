@@ -4414,66 +4414,6 @@ def test_list_open_prs_skips_pr_without_ref(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# get_pr_labels / _get_pr_labels
-# ---------------------------------------------------------------------------
-
-
-def test_get_pr_labels_multi_page(tmp_path, monkeypatch):
-    """More than 100 labels → all pages are fetched (bug fix)."""
-    page1 = [{"name": f"label-{i}"} for i in range(100)]
-    page2 = [{"name": "label-last"}]
-
-    import httpx as real_httpx_module
-
-    class MultiPageClient:
-        def __init__(self, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            pass
-
-        def get(self, url, headers=None, params=None, **kwargs):
-            page = (params or {}).get("page", 1)
-            if page == 2:
-                return _make_response(200, page2)
-            return _make_response(200, page1)
-
-    monkeypatch.setattr(real_httpx_module, "Client", MultiPageClient)
-
-    forge = _forge(tmp_path)
-    labels = forge.get_pr_labels(pr_number=7)
-    assert len(labels) == 101
-    assert labels[0] == "label-0"
-    assert labels[-1] == "label-last"
-
-
-def test_get_pr_labels_exception_returns_empty(tmp_path, monkeypatch):
-    """API error → returns [] gracefully."""
-    import httpx as real_httpx_module
-
-    class ErrorClient:
-        def __init__(self, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            pass
-
-        def get(self, url, headers=None, params=None, **kwargs):
-            return _make_response(500, {}, "boom")
-
-    monkeypatch.setattr(real_httpx_module, "Client", ErrorClient)
-
-    forge = _forge(tmp_path)
-    assert forge.get_pr_labels(pr_number=7) == []
-
-
-# ---------------------------------------------------------------------------
 # get_authenticated_user_login / _get_authenticated_user_login
 # ---------------------------------------------------------------------------
 

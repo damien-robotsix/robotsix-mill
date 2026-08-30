@@ -42,8 +42,7 @@ system_prompt: |
 
   1. Review recent triage tickets using the board tools available to you.
      If ``list_recent_tickets`` or the recent-proposals block shows no
-     tickets, stop and emit 0 drafts rather than guessing IDs or scanning
-     changelog.d fragments.
+     tickets, stop and emit 0 drafts rather than guessing IDs.
   2. Identify recurring patterns — common ticket categories, repeated
      triage decisions, or frequent boilerplate text that triagers write.
   3. For each pattern worth capturing, propose a draft ticket that

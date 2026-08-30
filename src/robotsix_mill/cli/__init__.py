@@ -101,12 +101,6 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "BC-check pass",
         "format": "memory_drafts",
     },
-    "changelog-autofill": {
-        "module": "agents.runners.changelog_autofill_runner",
-        "function": "run_changelog_autofill_pass",
-        "label": "Changelog Autofill pass",
-        "format": "memory_drafts",
-    },
     "credit-balance": {
         "module": "agents.runners.credit_balance_runner",
         "function": "run_credit_balance_pass",
@@ -259,7 +253,6 @@ def _run_and_print(cmd: str, args: argparse.Namespace) -> int:
             "repo-description-sync",
             "trace-review",
             "roadmap-sync",
-            "changelog-autofill",
             "pin-bump",
         ):
             resolved = _resolve_repo_config(args, cmd)
@@ -819,21 +812,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",
-    )
-
-    # --- changelog-autofill command ---
-    p_changelog_autofill = sub.add_parser(
-        "changelog-autofill",
-        help="run a changelog autofill pass",
-    )
-    p_changelog_autofill.add_argument(
-        "--json",
-        action="store_true",
-        help="output full JSON result (default: summary)",
-    )
-    p_changelog_autofill.add_argument(
-        "--repo-id",
-        help="repository to run changelog-autofill for (required if multiple repos)",
     )
 
     # --- credit-balance command ---

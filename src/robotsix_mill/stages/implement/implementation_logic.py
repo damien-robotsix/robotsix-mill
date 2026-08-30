@@ -74,36 +74,6 @@ _CLAIM_X_TO_Y_RE = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
-# "changelog fragment created" / "created a changelog fragment" — the claim
-# names the fragment file almost never explicitly, so it needs a dedicated
-# pattern.
-_CHANGELOG_CLAIM_AFTER_RE = re.compile(
-    r"\bchangelog(?:\s+fragment)?(?:\s+file)?\s+"
-    r"(?:created|added|written|generated|registered)\b",
-    re.IGNORECASE,
-)
-_CHANGELOG_CLAIM_BEFORE_RE = re.compile(
-    r"\b(?:created|added|written|generated|registered)\s+"
-    r"(?:a\s+)?(?:new\s+)?changelog(?:\s+fragment)?(?:\s+file)?\b",
-    re.IGNORECASE,
-)
-
-# Explicit ``changelog.d/<file>`` mentions in the summary.
-_CHANGELOG_D_PATH_RE = re.compile(r"\bchangelog\.d/[\w./-]+")
-
-# A fragment the summary reports *removing* (typically a mis-named one from
-# an earlier pass) is not a claim that it exists — matching it flags the
-# tidy-up itself as a hallucinated file.
-_FRAGMENT_REMOVAL_RE = re.compile(
-    r"(?<![-\w])(?:deleted|removed|renamed|replaced)\b[^\n]{0,80}?$",
-    re.IGNORECASE,
-)
-
-# Conventional towncrier fragment directories.  ``changelog.d`` is the
-# default used by ``add_changelog_fragment``; the other two are the
-# alternates accepted by ``_changelog_validate``.
-_FRAGMENT_DIRS: tuple[str, ...] = ("changelog.d", "changelog", "changes")
-
 # Common config/build files that have no file extension but are valid
 # repo-relative paths (used by _looks_like_path).
 _COMMON_EXTLESS_PATHS: frozenset[str] = frozenset(
@@ -132,12 +102,6 @@ def _looks_like_path(token: str) -> bool:
     return token in _COMMON_EXTLESS_PATHS
 
 
-def _ticket_slug(ticket_id: str) -> str:
-    """Filesystem-safe stem used for a ticket's changelog fragment file."""
-    safe = "".join(c if (c.isalnum() or c in "-_") else "-" for c in ticket_id)
-    return safe.strip("-") or "entry"
-
-
 def _verify_summary_claims(
     summary: str,
     repo_dir: Path,
@@ -147,8 +111,7 @@ def _verify_summary_claims(
     """Return repo-relative paths claimed in *summary* but missing on disk.
 
     The implement agent's free-text summary sometimes claims it "created" or
-    "registered" files that never landed on disk (the changelog-fragment
-    claim being the recurring case).  Parse those claims and check each
+    "registered" files that never landed on disk.  Parse those claims and check each
     against *repo_dir* so the stage can re-prompt instead of accepting a
     hallucinated completion.
 
@@ -159,29 +122,11 @@ def _verify_summary_claims(
     """
     missing: list[str] = []
 
-    def add_missing(path: str) -> None:
-        if path not in missing and not (repo_dir / path).exists():
-            missing.append(path)
-
-    for match in _CHANGELOG_D_PATH_RE.finditer(summary or ""):
-        if _FRAGMENT_REMOVAL_RE.search(summary[: match.start()].rpartition("\n")[2]):
-            continue
-        add_missing(match.group(0).rstrip(".,;:)'\""))
-
-    if _CHANGELOG_CLAIM_AFTER_RE.search(
-        summary or ""
-    ) or _CHANGELOG_CLAIM_BEFORE_RE.search(summary or ""):
-        slug = _ticket_slug(ticket_id)
-        if not any(list((repo_dir / d).glob(f"{slug}.*.md")) for d in _FRAGMENT_DIRS):
-            add_missing(f"changelog.d/{slug}.*.md")
-
     # Collect paths from the direct verb-followed-by-path pattern.
     claimed_paths: list[str] = []
     for match in _CLAIM_PATH_RE.finditer(summary or ""):
         raw = match.group("path").strip().strip("`\"'").rstrip(".,;:)'\"")
         if not raw or not _looks_like_path(raw):
-            continue
-        if raw.startswith("changelog.d/"):
             continue
         claimed_paths.append(raw)
 
@@ -189,8 +134,6 @@ def _verify_summary_claims(
     for match in _CLAIM_X_TO_Y_RE.finditer(summary or ""):
         raw = match.group("path").strip().strip("`\"'").rstrip(".,;:)'\"")
         if not raw or not _looks_like_path(raw):
-            continue
-        if raw.startswith("changelog.d/"):
             continue
         if raw not in claimed_paths:
             claimed_paths.append(raw)
@@ -1073,7 +1016,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
 
         # --- post-summary verification gate ---
         # The LLM's free-text summary can claim artifacts that never landed
-        # on disk (the changelog-fragment claim is the recurring case).
+        # on disk.
         # Verify those claims before accepting the pass; on failure re-prompt
         # once with a specific diagnosis instead of advancing with a false
         # summary.

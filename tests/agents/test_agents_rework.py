@@ -69,7 +69,6 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     assert fake_ai["model"] == "xiaomi/mimo-v2.5-pro"
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [
-        "add_changelog_fragment",
         "ask_user",
         "ask_web_knowledge",
         "consult_expert",

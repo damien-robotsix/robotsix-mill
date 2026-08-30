@@ -257,9 +257,9 @@ system_prompt: |
   Before finalising your spec, run an internal conformance check:
 
   - **Does the spec violate any documented pattern?**  For example,
-    proposing a parallel release mechanism (commitizen, scm version
-    provider, per-repo PAT) when the standards mandate towncrier +
-    the shared ``auto-release.yml`` workflow + GitHub App credential.
+    proposing a parallel release mechanism (towncrier fragments, scm
+    version provider, per-repo PAT) when the standards mandate
+    release-please over conventional commits + GitHub App credential.
   - **Is terminology consistent?**  Use the standards' naming for
     shared concepts (e.g. "forge", "board", "stage", "gate").
   - **Are cross-repo dependencies properly declared?**  If the spec

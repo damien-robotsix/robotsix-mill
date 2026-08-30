@@ -555,15 +555,6 @@ class _PeriodicSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
-    # --- changelog-autofill (schedule-only pass that updates changelogs from merged PRs) ---
-    # MILL_CHANGELOG_AUTOFILL_PERIODIC=true. Default 86400 (1 day). Minimum
-    # enforced at 60 s in the worker loop.
-    changelog_autofill_interval_seconds: int = Field(
-        default=86400,
-        description="Seconds between changelog-autofill passes. 0 = disabled.",
-        json_schema_extra={"advanced": True},
-    )
-
     # --- diagnostic (daily deterministic diagnostic agent) ---
     diagnostic_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML

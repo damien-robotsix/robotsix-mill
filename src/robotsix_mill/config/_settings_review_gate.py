@@ -68,7 +68,7 @@ class _ReviewGateSettings(BaseModel):
     #
     # These are registry and boilerplate files: mechanical bookkeeping that
     # every ticket touches at the same spot, and that CI re-derives on merge
-    # (auto-fix commits for changelog and module registration are routine).
+    # (auto-fix commits for module registration are routine).
     # Their content is a function of the whole repo rather than of one branch,
     # so a rebase legitimately reconciles them to something that is neither
     # the branch's version nor the target's previous one.  The blob-equality
@@ -84,8 +84,6 @@ class _ReviewGateSettings(BaseModel):
     rebase_drop_exempt_paths: list[str] = Field(
         default_factory=lambda: [
             "CHANGELOG.md",
-            "changelog.d/",
-            "changelog/",
             "docs/modules.yaml",
             "site/modules.yaml",
             # detect-secrets' baseline: regenerated from a whole-repo scan,

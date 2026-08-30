@@ -1157,26 +1157,6 @@ class TestVerifySummaryClaims:
             p.write_text("x")
         return repo_dir
 
-    def test_changelog_fragment_claimed_but_missing(self, tmp_path):
-        """'Changelog fragment created' with no fragment on disk → flagged."""
-        repo_dir = self._repo(tmp_path, files=["docs/modules.yaml"])
-        missing = _verify_summary_claims(
-            "Changelog fragment created and registered in docs/modules.yaml",
-            repo_dir,
-            "20260809T161458Z-per-job-ci-status-xxxx",
-        )
-        assert missing == ["changelog.d/20260809T161458Z-per-job-ci-status-xxxx.*.md"]
-
-    def test_changelog_fragment_claimed_before_verb(self, tmp_path):
-        """'added a changelog fragment' ordering is also detected."""
-        repo_dir = self._repo(tmp_path)
-        missing = _verify_summary_claims(
-            "added a new changelog fragment",
-            repo_dir,
-            "ticket-1",
-        )
-        assert missing == ["changelog.d/ticket-1.*.md"]
-
     def test_changelog_fragment_exists(self, tmp_path):
         repo_dir = self._repo(tmp_path, files=["changelog.d/ticket-1.misc.md"])
         missing = _verify_summary_claims(
@@ -1553,17 +1533,20 @@ class TestRunSummaryVerification:
         result = _Stage._run_summary_verification(
             ticket=FakeTicket(),
             repo_dir=repo_dir,
-            summary="Changelog fragment created",
+            summary="Created src/pkg/new_module.py with the helper",
             ic=_ic(),
             updated_ref_files=None,
-            updated_prev_summary="Changelog fragment created",
+            updated_prev_summary="Created src/pkg/new_module.py with the helper",
             new_msgs=b"ms",
         )
         assert result is not None
         assert result.next_action == "retry"
         assert result.feedback.startswith("[VERIFY] Verification failed:")
         assert result.ic.feedback == result.feedback
-        assert result.ic.previous_attempt_summary == "Changelog fragment created"
+        assert (
+            result.ic.previous_attempt_summary
+            == "Created src/pkg/new_module.py with the helper"
+        )
         assert result.new_msgs == b"ms"
 
     def test_block_on_second_failure(self, tmp_path):
@@ -1572,7 +1555,7 @@ class TestRunSummaryVerification:
         result = _Stage._run_summary_verification(
             ticket=FakeTicket(),
             repo_dir=repo_dir,
-            summary="Changelog fragment created",
+            summary="Created src/pkg/new_module.py with the helper",
             ic=_ic(feedback="[VERIFY] Verification failed: x was claimed ..."),
             updated_ref_files=None,
             updated_prev_summary=None,

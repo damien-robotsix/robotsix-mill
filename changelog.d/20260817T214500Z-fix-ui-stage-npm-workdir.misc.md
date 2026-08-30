@@ -1,1 +1,0 @@
-fix: give the Dockerfile's UI stage a WORKDIR so `npm install` no longer runs in `/`. A `node:22-alpine` base refresh (npm 10.9.8) started rejecting that with `npm error Tracker "idealTree" already exists`, which broke every `Release` run from 2026-08-16 onward — mill could not publish an image at all.

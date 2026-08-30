@@ -770,7 +770,7 @@ class DeliverStage(Stage):
         # title, so this is the other half of the same requirement.
         ws = ctx.service.workspace(ticket)
         title = conventional_subject(
-            repo_dir, ticket.id, ticket.title, artifacts_dir=ws.artifacts_dir
+            ticket.id, ticket.title, artifacts_dir=ws.artifacts_dir
         )
         spec = ws.read_description()
 

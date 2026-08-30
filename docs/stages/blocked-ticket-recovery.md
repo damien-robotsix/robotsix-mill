@@ -56,11 +56,6 @@ was blocked *from* is recorded. You can recover in three ways:
   409 — a BLOCKED ticket must be resumed first (see **Resume to the
   originating state** above).
 
-  `mark_done` also refuses to close a ticket whose branch HEAD
-  carries duplicate towncrier changelog fragments (more than one
-  `changelog.d/<ticket-id>.xxx.md` file).  Remove the extra fragment
-  and re-push, or resume the ticket first.
-
   Use the CLI or API — the board no longer exposes a dedicated button.
 
 - **Migrate to another board** (the ticket was filed on the wrong

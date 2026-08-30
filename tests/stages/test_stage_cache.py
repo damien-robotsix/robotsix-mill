@@ -313,22 +313,6 @@ def test_review_input_hash_differs_when_the_reviewer_changes(tmp_path, monkeypat
     assert h1 != h2, "a changed review prompt must miss the cache"
 
 
-def test_review_input_hash_differs_on_repo_conventions(tmp_path):
-    """The release-please conventions block is part of the reviewer's input."""
-    ws = Workspace(tmp_path, "T-1")
-    ws.write_description("desc")
-
-    plain = tmp_path / "plain"
-    plain.mkdir()
-    release_please = tmp_path / "rp"
-    release_please.mkdir()
-    (release_please / "release-please-config.json").write_text("{}")
-
-    assert review_input_hash(ws, "diff", "", plain) != review_input_hash(
-        ws, "diff", "", release_please
-    )
-
-
 def test_review_input_hash_differs_on_review_rounds(tmp_path):
     """A different review round (when > 0) must change the cache key.
 

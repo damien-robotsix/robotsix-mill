@@ -32,7 +32,6 @@ def test_kind_for_schedule_only():
     assert wp.kind_for("credit_balance") == "schedule_only"
     assert wp.kind_for("member_sync") == "schedule_only"
     assert wp.kind_for("data_dir_gc") == "schedule_only"
-    assert wp.kind_for("changelog_autofill") == "schedule_only"
     assert wp.kind_for("pin_bump") == "schedule_only"
     assert wp.kind_for("roadmap_sync") == "schedule_only"
 
@@ -146,10 +145,6 @@ def test_render_global_only_label_and_note():
 
 def test_render_schedule_only_label_and_note():
     output = wp.render_workflow_portability()
-    assert (
-        "| `changelog_autofill` | **portable** | Deterministic schedule task |"
-        in output
-    )
     assert "| `diagnostic` | **portable** | Deterministic schedule task |" in output
 
 

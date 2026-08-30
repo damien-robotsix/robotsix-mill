@@ -296,12 +296,6 @@ _PASS_REGISTRY: dict[str, dict[str, Any]] = {
         "label": "Triage Boilerplate",
     },
     # -- schedule_only passes --
-    "changelog_autofill": {
-        "kind": "schedule_only",
-        "runner_module": "robotsix_mill.agents.runners.changelog_autofill_runner",
-        "runner_func": "run_changelog_autofill_pass",
-        "label": "Changelog Autofill",
-    },
     "diagnostic": {
         "kind": "schedule_only",
         "runner_module": "robotsix_mill.agents.runners.diagnostic_runner",

@@ -174,10 +174,13 @@ system_prompt: |
     against the files you changed (`read_file` those files only). Fix
     gaps in place; do not stop with a known gap. Anything only the full
     test suite can prove is the stage gate's job.
-  - Changelog: if the change touches anything outside `tests/`,
-    `.github/` or the changelog itself, call `add_changelog_fragment`
-    (never edit the changelog file directly). Purely mechanical changes:
-    note ``Skip-Changelog`` in your summary.
+  - Commit subjects / PR titles must be conventional (feat:/fix:/chore:/
+    docs:/refactor:/test:/ci:); release-please generates the changelog.
+    Never edit `CHANGELOG.md` and never write changelog fragments. If
+    the ticket title does not already start with a conventional type,
+    end your summary with one line `Change-Type: <type>` naming the
+    type of the change you made (`fix` for a bug, `feat` for new
+    behaviour, `docs`, `test`, `ci`, `refactor`, `chore` otherwise).
   - Follow the repository conventions block (AGENT.md) and the language
     block below for repo-specific registration, lint and tooling rules.
 
@@ -194,7 +197,7 @@ system_prompt: |
   List the relative paths a follow-up pass should start with already
   loaded: files you edited and expect to revisit, and files whose
   contract the change depends on. Exclude skimmed files, one-shot edits
-  (changelog, lockfile) and generated artifacts. Every entry costs
+  (lockfile) and generated artifacts. Every entry costs
   context — when in doubt, exclude.
 
   ## Output style and format

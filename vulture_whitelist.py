@@ -176,8 +176,6 @@ pin_bump_periodic
 pin_bump_interval_seconds
 langfuse_cleanup_periodic
 token_metrics_aggregation_periodic
-changelog_autofill_periodic
-changelog_autofill_interval_seconds
 ci_debt_recheck_periodic
 docstring_coverage_periodic
 docstring_coverage_interval_seconds
@@ -376,7 +374,6 @@ traces_scanned
 traces_flagged
 run_trace_review_pass
 run_verify_pass
-run_changelog_autofill_pass
 run_pin_bump_pass
 run_repo_description_sync_pass
 run_docstring_coverage_pass
