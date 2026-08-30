@@ -625,14 +625,46 @@ class _PeriodicSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
-    # --- recurring CI failure fix-proposal generation ---
-    # Number of distinct tickets that must hit the same normalized
-    # CI failure key before the recurring-CI diagnostic check auto-files
-    # a fix-proposal draft ticket.  Set to 0 to disable.
+    # --- recurring CI failure threshold (legacy, inert) ---
+    # The recurring-CI diagnostic check used to auto-file a fix-proposal
+    # ticket once this many distinct tickets hit the same normalized key.
+    # It no longer files anything — recurring failures feed the
+    # ci_prevention_rules pass instead. Kept so existing configs that pin
+    # it (production pins 0) still load.
     diagnostic_ci_failure_threshold: int = Field(
         default=3,
         ge=0,
-        description="Distinct-ticket threshold for auto-filing CI fix proposals.",
+        description=(
+            "Legacy, inert: the recurring-CI diagnostic check no longer files "
+            "tickets (recurring failures feed the ci_prevention_rules pass). "
+            "Kept for config compatibility only."
+        ),
+        json_schema_extra={"advanced": True},
+    )
+
+    # --- CI prevention rules pass ---
+    # Per board, the pass reads the most recent CI_FAILURE / CI_FIX_RESOLVED
+    # events (bucketed by failure class), asks a small model for a handful of
+    # imperative prevention rules and rewrites the
+    # "## CI prevention rules (auto-maintained)" section of the implement
+    # memory ledger in place. Scheduling comes from
+    # agent_definitions/periodic/ci_prevention_rules.yaml (interval: 1d).
+    ci_prevention_rules_max_events: int = Field(
+        default=100,
+        ge=1,
+        description=(
+            "Most recent CI_FAILURE events (per board) the ci_prevention_rules "
+            "pass reads when deriving prevention rules."
+        ),
+        json_schema_extra={"advanced": True},
+    )
+    ci_prevention_max_rules: int = Field(
+        default=10,
+        ge=1,
+        description=(
+            "Maximum prevention rules the ci_prevention_rules pass writes into "
+            "the implement memory ledger."
+        ),
         json_schema_extra={"advanced": True},
     )
 

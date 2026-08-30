@@ -53,6 +53,7 @@ class RunEntry:
         "audit",
         "bc-check",
         "bc_check",
+        "ci_prevention_rules",
         "completeness-check",
         "completeness_check",
         "config-sync",

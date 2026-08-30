@@ -945,6 +945,22 @@
           "description": "Path to the CI-fix agent's structured pattern memory (JSON). When unset, derives from data_dir/ci_patterns.json.",
           "title": "Ci Patterns Path"
         },
+        "ci_prevention_max_rules": {
+          "advanced": true,
+          "default": 10,
+          "description": "Maximum prevention rules the ci_prevention_rules pass writes into the implement memory ledger.",
+          "minimum": 1,
+          "title": "Ci Prevention Max Rules",
+          "type": "integer"
+        },
+        "ci_prevention_rules_max_events": {
+          "advanced": true,
+          "default": 100,
+          "description": "Most recent CI_FAILURE events (per board) the ci_prevention_rules pass reads when deriving prevention rules.",
+          "minimum": 1,
+          "title": "Ci Prevention Rules Max Events",
+          "type": "integer"
+        },
         "ci_transient_max_retries": {
           "advanced": true,
           "default": 3,
@@ -1281,7 +1297,7 @@
         "diagnostic_ci_failure_threshold": {
           "advanced": true,
           "default": 3,
-          "description": "Distinct-ticket threshold for auto-filing CI fix proposals.",
+          "description": "Legacy, inert: the recurring-CI diagnostic check no longer files tickets (recurring failures feed the ci_prevention_rules pass). Kept for config compatibility only.",
           "minimum": 0,
           "title": "Diagnostic Ci Failure Threshold",
           "type": "integer"

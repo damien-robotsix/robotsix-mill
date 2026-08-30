@@ -37,6 +37,7 @@ from ..runtime import tracing
 from ..vcs import git_ops
 from . import dependency_fix
 from .base import Outcome, Stage, StageContext
+from .ci_failure_buckets import classify_ci_failure
 from .ci_fix_analysis import (
     _build_failure_detail,
     _check_merge_conflict,
@@ -143,6 +144,7 @@ def _emit_ci_failure_event(
         normalized_key = _normalize_ci_failure_reason(failing, failing_summary)
         names = [chk.get("name", "?") for chk in failing]
         reason = f"failing checks: {', '.join(names)}"
+        klass = classify_ci_failure(failing, failing_summary)
         emitted = emit_diagnostic_event(
             ctx.settings,
             board_id,
@@ -150,13 +152,17 @@ def _emit_ci_failure_event(
             ticket_id=ticket.id,
             reason=reason,
             normalized_key=normalized_key,
+            bucket=klass.bucket,
+            root_cause=klass.root_cause,
+            prevention_rule=klass.prevention_rule,
         )
         if emitted:
             log.info(
-                "%s: emitted CI_FAILURE event (board_id=%s, key=%s)",
+                "%s: emitted CI_FAILURE event (board_id=%s, key=%s, bucket=%s)",
                 ticket.id,
                 board_id,
                 normalized_key,
+                klass.bucket,
             )
         else:
             log.warning(
@@ -168,6 +174,44 @@ def _emit_ci_failure_event(
             )
     except Exception:
         log.exception("%s: failed to emit CI_FAILURE event", ticket.id)
+
+
+def _emit_ci_fix_resolved_event(
+    ticket: Ticket,
+    ctx: StageContext,
+    failing: list[dict[str, Any]],
+    failing_summary: str,
+    result: CiFixResult,
+) -> None:
+    """Emit a ``CI_FIX_RESOLVED`` event when the ci-fix agent turned CI green.
+
+    Same bucket / key as the matching ``CI_FAILURE`` event so the
+    ``ci_prevention_rules`` pass can pair them; the agent's own summary of
+    what it changed becomes the ``root_cause`` (it is far more specific
+    than the deterministic log pick) and its ``pattern_approach``, when
+    given, replaces the default prevention rule.
+    """
+    try:
+        board_id = (
+            ctx.repo_config.board_id
+            if ctx.repo_config and ctx.repo_config.board_id
+            else (ticket.board_id or "")
+        )
+        klass = classify_ci_failure(failing, failing_summary)
+        names = [chk.get("name", "?") for chk in failing]
+        emit_diagnostic_event(
+            ctx.settings,
+            board_id,
+            category="CI_FIX_RESOLVED",
+            ticket_id=ticket.id,
+            reason=f"fixed checks: {', '.join(names)}",
+            normalized_key=_normalize_ci_failure_reason(failing, failing_summary),
+            bucket=klass.bucket,
+            root_cause=(result.summary or klass.root_cause)[:500],
+            prevention_rule=(result.pattern_approach or klass.prevention_rule)[:500],
+        )
+    except Exception:
+        log.exception("%s: failed to emit CI_FIX_RESOLVED event", ticket.id)
 
 
 class CIFixStage(Stage):
@@ -203,8 +247,8 @@ class CIFixStage(Stage):
 
         # --- Emit CI_FAILURE diagnostic event ---
         # Every time the stage confirms CI is genuinely failing, record a
-        # diagnostic event so the recurring-category check can detect
-        # systemic failures and auto-file fix-proposal tickets.
+        # bucketed diagnostic event so the ci_prevention_rules pass can
+        # distil recurring failure classes into implement-ledger rules.
         _emit_ci_failure_event(ticket, ctx, failing, failing_summary)
 
         # --- Upstream CI breakage check ---
@@ -775,6 +819,7 @@ class CIFixStage(Stage):
         self._add_ci_fix_history_note(ctx, ticket, failing_summary, result)
 
         if result is not None and result.status == "DONE":
+            _emit_ci_fix_resolved_event(ticket, ctx, failing, failing_summary, result)
             return self._finalize_success(ticket, ctx, repo_dir, branch)
 
         if result is not None and result.status == "OUT_OF_SCOPE":

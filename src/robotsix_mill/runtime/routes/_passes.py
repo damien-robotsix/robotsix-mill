@@ -223,6 +223,12 @@ _PASS_REGISTRY: dict[str, dict[str, Any]] = {
         "runner_func": "run_copy_paste_pass",
         "label": "Copy Paste",
     },
+    "ci_prevention_rules": {
+        "kind": "llm_agent",
+        "runner_module": "robotsix_mill.agents.runners.ci_prevention_rules_runner",
+        "runner_func": "run_ci_prevention_rules_pass",
+        "label": "CI Prevention Rules",
+    },
     "docstring_coverage": {
         "kind": "llm_agent",
         "runner_module": "robotsix_mill.agents.runners.periodic_runner",

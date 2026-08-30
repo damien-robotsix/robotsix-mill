@@ -131,6 +131,12 @@ _RUNNERS: dict[str, dict[str, str]] = {
         "label": "Diagnostic pass",
         "format": "drafts",
     },
+    "ci-prevention-rules": {
+        "module": "agents.runners.ci_prevention_rules_runner",
+        "function": "run_ci_prevention_rules_pass",
+        "label": "CI prevention-rules pass",
+        "format": "drafts",
+    },
     "survey": {
         "module": "agents.runners.periodic_runner",
         "function": "run_survey_pass",
@@ -896,6 +902,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="run a single daily-diagnostic pass over the registered checks",
     )
     p_diagnostic.add_argument(
+        "--json",
+        action="store_true",
+        help="output full JSON result (default: summary)",
+    )
+
+    # --- ci-prevention-rules command ---
+    p_ci_prevention_rules = sub.add_parser(
+        "ci-prevention-rules",
+        help=(
+            "distil the board's recurring CI failures into prevention rules "
+            "in the implement memory ledger"
+        ),
+    )
+    p_ci_prevention_rules.add_argument(
         "--json",
         action="store_true",
         help="output full JSON result (default: summary)",

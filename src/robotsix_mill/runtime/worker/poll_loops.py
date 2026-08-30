@@ -316,6 +316,9 @@ class PollLoopsMixin(_WorkerBase):
         "repo_description_sync": (
             "robotsix_mill.agents.runners.repo_description_sync_runner:run_repo_description_sync_pass"
         ),
+        "ci_prevention_rules": (
+            "robotsix_mill.agents.runners.ci_prevention_rules_runner:run_ci_prevention_rules_pass"
+        ),
     }
 
     def _build_periodic_workflow_runner(self, wf):

@@ -162,134 +162,127 @@ class TestEmitListDedup:
 
 
 class TestRecurringCIFailureCheck:
+    """The check is summary-only: it must never touch the ticket service."""
+
+    @pytest.fixture(autouse=True)
+    def _no_ticket_service(self, monkeypatch):
+        # The module no longer imports TicketService at all; guard the
+        # service class itself so any future re-introduction of ticket
+        # filing (via any import path) fails loudly here.
+        from robotsix_mill.core import service as service_mod
+
+        def _boom(*_a, **_kw):
+            raise AssertionError("recurring_ci_failure must not create tickets")
+
+        monkeypatch.setattr(service_mod.TicketService, "create", _boom)
+
     def test_no_events_returns_ok(self, settings, board_id):
         ctx = DiagnosticCheckContext(board_id=board_id, settings=settings)
-        check = RecurringCIFailureCheck()
-        result = check.run(ctx)
+        result = RecurringCIFailureCheck().run(ctx)
         assert result.ok is True
         assert result.drafts_created == []
+        assert "no CI_FAILURE events" in result.summary
 
-    def test_threshold_zero_disabled(self, settings, board_id):
+    def test_many_tickets_same_key_files_nothing(self, settings, board_id):
+        # This is exactly the shape that used to trigger a report ticket:
+        # well past the (now inert) threshold on a single normalized key.
+        settings.diagnostic_ci_failure_threshold = 3
+        for i in range(8):
+            emit_diagnostic_event(
+                settings,
+                board_id,
+                "CI_FAILURE",
+                f"ticket-{i}",
+                "failing checks: ci / tests",
+                "key-1",
+                bucket="ruff-format" if i % 2 else "mypy",
+            )
+        emit_diagnostic_event(
+            settings, board_id, "CI_FIX_RESOLVED", "ticket-1", "fixed", "key-1"
+        )
+        ctx = DiagnosticCheckContext(board_id=board_id, settings=settings)
+        result = RecurringCIFailureCheck().run(ctx)
+        assert result.ok is True
+        assert result.drafts_created == []
+        assert "8 CI_FAILURE event(s) across 8 ticket(s)" in result.summary
+        assert "ruff-format=4" in result.summary
+        assert "mypy=4" in result.summary
+        assert "1 resolved by ci_fix" in result.summary
+        assert "no tickets filed" in result.summary
+
+    def test_threshold_zero_still_summarises(self, settings, board_id):
         settings.diagnostic_ci_failure_threshold = 0
-        # Emit some events anyway.
-        for i in range(5):
-            emit_diagnostic_event(
-                settings, board_id, "CI_FAILURE", f"ticket-{i}", "r", "key-1"
-            )
+        emit_diagnostic_event(settings, board_id, "CI_FAILURE", "t", "r", "k")
         ctx = DiagnosticCheckContext(board_id=board_id, settings=settings)
-        check = RecurringCIFailureCheck()
-        result = check.run(ctx)
+        result = RecurringCIFailureCheck().run(ctx)
         assert result.ok is True
-        assert result.drafts_created == []
-        assert "disabled" in result.summary
+        assert "unknown=1" in result.summary  # legacy events have no bucket
 
-    def test_below_threshold_no_drafts(self, settings, board_id):
-        settings.diagnostic_ci_failure_threshold = 3
-        # 2 distinct tickets — below threshold of 3.
+
+# ---------------------------------------------------------------------------
+# Semantic fields (bucket / root_cause / prevention_rule)
+# ---------------------------------------------------------------------------
+
+
+class TestSemanticFields:
+    def test_roundtrip(self, settings, board_id):
         emit_diagnostic_event(
-            settings, board_id, "CI_FAILURE", "ticket-1", "r", "key-1"
+            settings,
+            board_id,
+            "CI_FAILURE",
+            "t-1",
+            "failing checks: ci / tests",
+            "k-1",
+            bucket="mypy",
+            root_cause="error: Incompatible return value type",
+            prevention_rule="Run mypy before stopping.",
         )
-        emit_diagnostic_event(
-            settings, board_id, "CI_FAILURE", "ticket-2", "r", "key-1"
+        (ev,) = list_diagnostic_events(settings, board_id)
+        assert ev.bucket == "mypy"
+        assert ev.root_cause == "error: Incompatible return value type"
+        assert ev.prevention_rule == "Run mypy before stopping."
+
+    def test_legacy_lines_without_fields_still_load(self, settings, board_id):
+        path = settings.diagnostic_events_file_for(board_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            '{"category":"CI_FAILURE","ticket_id":"old","repo_id":"x",'
+            '"reason":"r","normalized_key":"k","timestamp":"t"}\n',
+            encoding="utf-8",
         )
-        ctx = DiagnosticCheckContext(board_id=board_id, settings=settings)
-        check = RecurringCIFailureCheck()
-        result = check.run(ctx)
-        assert result.ok is True
-        assert result.drafts_created == []
-        assert "none reached threshold" in result.summary
+        (ev,) = list_diagnostic_events(settings, board_id)
+        assert ev.ticket_id == "old"
+        assert ev.bucket == ""
+        assert ev.root_cause == ""
+        assert ev.prevention_rule == ""
 
-    def test_at_threshold_files_draft(self, settings, board_id, monkeypatch):
-        settings.diagnostic_ci_failure_threshold = 3
-        for i in range(3):
-            emit_diagnostic_event(
-                settings, board_id, "CI_FAILURE", f"ticket-{i}", "r", "key-1"
-            )
+    def test_plain_event_keeps_historical_line_shape(self, settings, board_id):
+        import json
 
-        ctx = DiagnosticCheckContext(board_id=board_id, settings=settings)
-        check = RecurringCIFailureCheck()
+        emit_diagnostic_event(settings, board_id, "CI_FAILURE", "t", "r", "k")
+        line = settings.diagnostic_events_file_for(board_id).read_text().strip()
+        assert set(json.loads(line)) == {
+            "category",
+            "ticket_id",
+            "repo_id",
+            "reason",
+            "normalized_key",
+            "timestamp",
+        }
 
-        # Mock TicketService to avoid real DB interaction.
-        from unittest.mock import MagicMock
-
-        mock_service = MagicMock()
-        mock_service.list.return_value = []  # no duplicates
-        mock_ticket = MagicMock()
-        mock_ticket.id = "draft-1"
-        mock_ticket.title = "[diagnostic] recurring CI failure: key=abc123 (3 tickets)"
-        mock_service.create.return_value = mock_ticket
-
-        import robotsix_mill.agents.runners.diagnostic_check_recurring_ci as check_mod
-
-        monkeypatch.setattr(check_mod, "TicketService", lambda *a, **kw: mock_service)
-
-        result = check.run(ctx)
-        assert result.ok is True
-        assert len(result.drafts_created) == 1
-        assert mock_service.create.called
-
-    def test_multiple_keys_above_threshold(self, settings, board_id, monkeypatch):
-        settings.diagnostic_ci_failure_threshold = 2
-        # key-1: 3 tickets, key-2: 2 tickets — both at/above threshold.
-        for i in range(3):
-            emit_diagnostic_event(
-                settings, board_id, "CI_FAILURE", f"ta-{i}", "r", "key-1"
-            )
-        for i in range(2):
-            emit_diagnostic_event(
-                settings, board_id, "CI_FAILURE", f"tb-{i}", "r", "key-2"
-            )
-
-        ctx = DiagnosticCheckContext(board_id=board_id, settings=settings)
-        check = RecurringCIFailureCheck()
-
-        from unittest.mock import MagicMock
-
-        mock_service = MagicMock()
-        mock_service.list.return_value = []
-        mock_ticket = MagicMock()
-        mock_ticket.id = "draft-1"
-        mock_service.create.return_value = mock_ticket
-
-        import robotsix_mill.agents.runners.diagnostic_check_recurring_ci as check_mod
-
-        monkeypatch.setattr(check_mod, "TicketService", lambda *a, **kw: mock_service)
-
-        result = check.run(ctx)
-        assert result.ok is True
-        assert len(result.drafts_created) == 2
-        assert mock_service.create.call_count == 2
-
-    def test_duplicate_title_skipped(self, settings, board_id, monkeypatch):
-        settings.diagnostic_ci_failure_threshold = 2
-        for i in range(3):
-            emit_diagnostic_event(
-                settings, board_id, "CI_FAILURE", f"ticket-{i}", "r", "key-1"
-            )
-
-        ctx = DiagnosticCheckContext(board_id=board_id, settings=settings)
-        check = RecurringCIFailureCheck()
-
-        from unittest.mock import MagicMock
-
-        # Simulate an existing open ticket with the same title.
-        existing_ticket = MagicMock()
-        existing_ticket.title = (
-            "[diagnostic] recurring CI failure: key=key-1 (3 tickets)"
+    def test_dedup_is_per_category(self, settings, board_id):
+        # A CI_FIX_RESOLVED event pairs with its CI_FAILURE twin on the same
+        # (ticket, key) — it must not be swallowed by the dedup.
+        assert emit_diagnostic_event(
+            settings, board_id, "CI_FAILURE", "t-1", "r", "k-1"
         )
-        existing_ticket.state = "draft"
-
-        mock_service = MagicMock()
-        mock_service.list.return_value = [existing_ticket]
-
-        import robotsix_mill.agents.runners.diagnostic_check_recurring_ci as check_mod
-
-        monkeypatch.setattr(check_mod, "TicketService", lambda *a, **kw: mock_service)
-
-        result = check.run(ctx)
-        assert result.ok is True
-        assert result.drafts_created == []
-        assert not mock_service.create.called
+        assert emit_diagnostic_event(
+            settings, board_id, "CI_FIX_RESOLVED", "t-1", "fixed", "k-1"
+        )
+        assert not emit_diagnostic_event(
+            settings, board_id, "CI_FIX_RESOLVED", "t-1", "fixed again", "k-1"
+        )
+        assert len(list_diagnostic_events(settings, board_id)) == 2
 
 
 # ---------------------------------------------------------------------------
