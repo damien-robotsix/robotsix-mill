@@ -732,7 +732,7 @@ def test_merge_pr_success_synchronous_merge(tmp_path, monkeypatch):
 
     forge = _forge(tmp_path)
     result = forge.merge_pr(source_branch="feature/x")
-    assert result == {"merged": True, "reason": "merged"}
+    assert result == {"merged": True, "reason": "merged", "merge_commit_sha": "def456"}
     # Verify payload fields
     assert captured["put_payload"]["merge_when_pipeline_succeeds"] is True
     assert captured["put_payload"]["squash"] is True

@@ -231,6 +231,47 @@ def test_merge_now_happy_path(client, service, monkeypatch):
     assert "merged via board" in notes
 
 
+def test_merge_now_squash_uses_merge_commit_sha(client, service, monkeypatch):
+    """merge-now uses the merge commit SHA (not the branch head SHA) for
+    verification.  Under a squash merge the branch head is never on main,
+    so using it would incorrectly reject a successful merge."""
+    branch_head_sha = "aabbccdd" * 5  # 40-char fake SHA
+    merge_commit_sha = "11223344" * 5  # different 40-char fake SHA
+    captured_shas: list[str] = []
+
+    def fake_verify(repo_dir, sha, ticket_id, target="main"):
+        captured_shas.append(sha)
+        return True
+
+    fake = _FakeForge(
+        merge_result={
+            "merged": True,
+            "reason": "merged",
+            "merge_commit_sha": merge_commit_sha,
+        },
+        pr_status_result={
+            "url": "https://github.com/test/pr/1",
+            "merged": True,
+            "state": "closed",
+            "sha": branch_head_sha,
+        },
+    )
+    _patch_forge(monkeypatch, fake)
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.routes._tickets_merge._verify_merge_ancestor",
+        fake_verify,
+    )
+
+    t = _to_human_mr_approval(service, "Squash merge")
+    r = client.post(f"/tickets/{t.id}/merge-now")
+    assert r.status_code == 200, f"Got {r.status_code}: {r.text}"
+    assert service.get(t.id).state is State.DONE
+
+    # The verification must receive the merge commit SHA, not the branch head.
+    assert len(captured_shas) == 1
+    assert captured_shas[0] == merge_commit_sha
+
+
 def test_merge_now_blocks_when_not_merged_to_mainline(client, service, monkeypatch):
     """merge-now refuses the DONE transition when the merged commit is
     not an ancestor of the target branch (forge reported success but the

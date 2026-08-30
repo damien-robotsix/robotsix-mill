@@ -100,7 +100,11 @@ def merge_now(
             repo_dir = (
                 str(entry_repo_dir) if (entry_repo_dir / ".git").exists() else None
             )
-            sha = pr.get("sha", "")
+            # Prefer the merge commit SHA returned by the forge (squash/
+            # rebase merges produce a new SHA that differs from the branch
+            # head).  Fall back to the branch head SHA when the forge does
+            # not return one.
+            sha = result.get("merge_commit_sha") or pr.get("sha", "")
             target = target_branch_for(settings, rc)
             if not _verify_merge_ancestor(repo_dir, sha, ticket.id, target):
                 raise HTTPException(
@@ -136,7 +140,10 @@ def merge_now(
     # allow when there is no local clone or git errors).
     repo = svc.workspace(ticket).repo_dir
     repo_dir = str(repo) if (repo / ".git").exists() else None
-    sha = pr.get("sha", "")
+    # Prefer the merge commit SHA returned by the forge (squash/rebase
+    # merges produce a new SHA that differs from the branch head).  Fall
+    # back to the branch head SHA when the forge does not return one.
+    sha = result.get("merge_commit_sha") or pr.get("sha", "")
     target = target_branch_for(settings, repo_config)
     if not _verify_merge_ancestor(repo_dir, sha, ticket.id, target):
         raise HTTPException(
