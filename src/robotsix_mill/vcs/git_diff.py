@@ -251,8 +251,6 @@ def file_blobs(repo: Path, paths: list[str], ref: str = "HEAD") -> dict[str, str
 #: direct callers and tests working without threading settings through.
 DEFAULT_REBASE_DROP_EXEMPT_PATHS = (
     "CHANGELOG.md",
-    "changelog.d/",
-    "changelog/",
     "docs/modules.yaml",
     "site/modules.yaml",
     # detect-secrets' baseline: regenerated from a scan of the whole repo,

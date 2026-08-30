@@ -306,6 +306,29 @@ class Settings(
             )
         return stripped
 
+    @model_validator(mode="before")
+    @classmethod
+    def _strip_removed_keys(cls, data: Any) -> Any:
+        """Drop settings keys that no longer exist from incoming config.
+
+        Production pins most keys in ``config.json``; ``extra="forbid"``
+        would otherwise crash-loop the process on the first boot after a
+        key is removed.  The values are discarded — the feature they
+        configured is gone.
+        """
+        if not isinstance(data, dict):
+            return data
+        removed = {
+            # The changelog.d fragment layer (towncrier) was removed;
+            # release-please builds CHANGELOG.md from conventional commits.
+            "changelog_autofill_interval_seconds",
+        }
+        present = sorted(set(data) & removed)
+        if not present:
+            return data
+        log.warning("Dropped removed config keys: %s", present)
+        return {k: v for k, v in data.items() if k not in removed}
+
     # -- interval minimums ---------------------------------------------
 
     @field_validator("trace_health_interval_seconds")

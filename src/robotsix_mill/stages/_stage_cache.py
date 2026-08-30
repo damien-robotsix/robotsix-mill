@@ -188,13 +188,11 @@ def reviewer_fingerprint(repo_dir: Path | None = None) -> str:
     holding a cached outcome: the stale verdict replays forever and the
     ticket keeps failing for a reason that has already been fixed.
 
-    Live, that deadlocked central-deploy de52. Its reviewer kept asking for a
-    changelog fragment that implement deletes by design on a release-please
-    repo. The reviewer-side fix shipped in a34839e3 and deployed, but the
-    workspace replayed a 04:06 REQUEST_CHANGES on every pass — the diff and
-    HEAD had not moved, so the cache hit — and the ticket burned its
-    implement/review ceiling a second time without the new reviewer ever
-    running once.
+    Live, that deadlocked central-deploy de52: a reviewer-side prompt fix
+    shipped and deployed, but the workspace replayed a 04:06 REQUEST_CHANGES
+    on every pass — the diff and HEAD had not moved, so the cache hit — and
+    the ticket burned its implement/review ceiling a second time without the
+    new reviewer ever running once.
 
     Hashes the review YAML file from disk (not the in-memory constant) so a
     deploy-time change to the reviewer prompt invalidates cached verdicts
@@ -205,11 +203,7 @@ def reviewer_fingerprint(repo_dir: Path | None = None) -> str:
     the review from being cached at all.
     """
     try:
-        from ..agents.reviewing import (
-            _SYSPROMPT_PATH,
-            SYSTEM_PROMPT,
-            _repo_conventions,
-        )
+        from ..agents.reviewing import _SYSPROMPT_PATH, SYSTEM_PROMPT
 
         h = hashlib.sha256()
         # Hash the YAML file from disk so a deployed reviewer change
@@ -221,7 +215,6 @@ def reviewer_fingerprint(repo_dir: Path | None = None) -> str:
         # Also hash the in-memory SYSTEM_PROMPT so tests can monkeypatch
         # it and observe a hash change without touching the filesystem.
         h.update(SYSTEM_PROMPT.encode("utf-8", errors="replace"))
-        h.update(_repo_conventions(repo_dir).encode("utf-8", errors="replace"))
         return h.hexdigest()
     except Exception:
         log.debug("Failed to fingerprint the reviewer", exc_info=True)

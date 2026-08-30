@@ -26,8 +26,8 @@ log = logging.getLogger(__name__)
 
 # Key standards pages to fetch.  repo-baseline.md covers versioning/
 # release, repo lifecycle, CI conventions — the domain where the
-# most costly spec-vs-standard conflicts arise (e.g. commitizen vs
-# towncrier).  The README gives the high-level stack overview.
+# most costly spec-vs-standard conflicts arise (e.g. towncrier vs
+# release-please).  The README gives the high-level stack overview.
 # distribution-packaging.md and free-tier-only.md carry the explicit
 # PROHIBITIONS (no registry publishing, no paid GitHub features) that
 # the refine-time standards gate enforces — a draft like "publish

@@ -353,10 +353,10 @@ filing a "stale paths" cleanup ticket after the fact.
   it. When deleting a tracked file, `git rm` it first, then update
   `docs/modules.yaml`, then re-run the check — otherwise `git ls-files`
   still sees it and the check loops.
-- **Changelog fragments are tracked files.** A new `changelog.d/<id>.<kind>.md`
-  must also be added to `docs/modules.yaml` under the `core` module's
-  `paths`, alphabetically among the existing `changelog.d/` entries —
-  even when no Python file changed.
+- **No changelog edits.** Commit subjects / PR titles must be conventional
+  (feat:/fix:/chore:/docs:/refactor:/test:/ci:); release-please generates
+  `CHANGELOG.md` from them. Never edit `CHANGELOG.md` by hand and never
+  add changelog fragment files.
 - **Docker image digests.** To pin a base image to `@sha256:…`, run
   `python3 scripts/resolve_docker_digest.py <image:tag> [--platform …]`
   (Docker Hub + OCI registries, no auth). Never ask the operator for a

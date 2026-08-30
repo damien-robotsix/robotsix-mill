@@ -244,22 +244,9 @@ def test_system_prompt_covers_module_registration_companion():
     assert "registers a new module entry" in low
 
 
-def test_system_prompt_covers_changelog_fragment_companion():
-    """The scope-triage prompt must treat changelog.d/*.md fragments as
-    EXPAND companions, not scope creep."""
-    prompt = _load_scope_triage_system_prompt()
-    low = prompt.lower()
-
-    # Must mention towncrier changelog fragments explicitly.
-    assert "changelog.d/*.md" in low
-    # Must treat them as a mandatory compliance gate.
-    assert "mandatory compliance gate" in low
-    assert "not scope creep" in prompt
-
-
 def test_expand_for_companion_files(monkeypatch):
     """A new-file ticket whose implement adds docs/modules.yaml +
-    changelog.d fragment → plumbing routes EXPAND correctly."""
+    accompanying doc file → plumbing routes EXPAND correctly."""
     from robotsix_mill.config import Settings
 
     base_mod = _install_mocks(monkeypatch)
@@ -277,14 +264,14 @@ def test_expand_for_companion_files(monkeypatch):
                                 "scope-triage EXPAND: companion files are legitimate\n\n"
                                 "- docs/modules.yaml: module-registration compliance — "
                                 "registering the new file is a direct mechanical consequence\n"
-                                "- changelog.d/20260823T164252Z.misc.md: changelog fragment "
+                                "- docs/notes/20260823T164252Z.md: accompanying doc "
                                 "required by policy\n\n"
                                 "No unrelated files were modified. "
-                                "(added: docs/modules.yaml, changelog.d/20260823T164252Z.misc.md)"
+                                "(added: docs/modules.yaml, docs/notes/20260823T164252Z.md)"
                             ),
                             expand_files=[
                                 "docs/modules.yaml",
-                                "changelog.d/20260823T164252Z.misc.md",
+                                "docs/notes/20260823T164252Z.md",
                             ],
                         ),
                     },
@@ -303,18 +290,18 @@ def test_expand_for_companion_files(monkeypatch):
         file_map=[".robotsix-mill/periodic/triage_boilerplate.yaml"],
         out_of_scope_files=[
             "docs/modules.yaml",
-            "changelog.d/20260823T164252Z.misc.md",
+            "docs/notes/20260823T164252Z.md",
         ],
         diff_summaries={
             "docs/modules.yaml": "+  - .robotsix-mill/periodic/triage_boilerplate.yaml",
-            "changelog.d/20260823T164252Z.misc.md": (
+            "docs/notes/20260823T164252Z.md": (
                 "Enable triage_boilerplate periodic workflow"
             ),
         },
     )
     assert result.action == "EXPAND"
     assert "docs/modules.yaml" in result.expand_files
-    assert any("changelog.d" in f for f in result.expand_files)
+    assert any("docs/notes" in f for f in result.expand_files)
 
 
 def test_reject_for_companions_plus_unrelated_edit(monkeypatch):
@@ -336,7 +323,7 @@ def test_reject_for_companions_plus_unrelated_edit(monkeypatch):
                             justification=(
                                 "scope-triage REJECT: pyproject.toml malware-check=false "
                                 "is an unrelated change not authorized by the spec. "
-                                "The docs/modules.yaml and changelog.d entries are "
+                                "The docs/modules.yaml and docs/notes entries are "
                                 "legitimate companions, but the unrelated edit makes "
                                 "the overall diff scope creep."
                             ),
@@ -357,12 +344,12 @@ def test_reject_for_companions_plus_unrelated_edit(monkeypatch):
         file_map=[".robotsix-mill/periodic/triage_boilerplate.yaml"],
         out_of_scope_files=[
             "docs/modules.yaml",
-            "changelog.d/20260823T164252Z.misc.md",
+            "docs/notes/20260823T164252Z.md",
             "pyproject.toml",
         ],
         diff_summaries={
             "docs/modules.yaml": "+  - .robotsix-mill/periodic/triage_boilerplate.yaml",
-            "changelog.d/20260823T164252Z.misc.md": (
+            "docs/notes/20260823T164252Z.md": (
                 "Enable triage_boilerplate periodic workflow"
             ),
             "pyproject.toml": "-malware-check = true\n+malware-check = false",

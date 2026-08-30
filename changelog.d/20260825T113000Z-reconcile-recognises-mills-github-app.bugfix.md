@@ -1,1 +1,0 @@
-Stop the merge/ci_fix reconcile blocking on the mill's own GitHub App commits: divergence now recognises `<id>+robotsix-mill[bot]@users.noreply.github.com` as automation, so a ci_fix push no longer hard-blocks the ticket with "a human likely pushed".

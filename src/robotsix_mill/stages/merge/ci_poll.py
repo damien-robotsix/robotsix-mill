@@ -34,7 +34,6 @@ from ._shared import (
     _REBASE_FROM_STATE,
     _REBASE_LAST_TS,
     _ci_truly_green,
-    _duplicate_changelog_fragments,
     _is_pr_check_run,
     _latest_failing_workflows,
     _merge_rejection_outcome,
@@ -469,11 +468,11 @@ class CIPollMixin(_MergeStageBase):
     def _merge_or_promote_when_green(
         self, ticket: Ticket, ctx: StageContext, pr: dict[str, Any], branch: str
     ) -> Outcome:
-        """Handle a green CI: changelog gate, counter reset, auto-merge or promote.
+        """Handle a green CI: counter reset, auto-merge or promote.
 
         Called only when ``_ci_truly_green(conclusion, pr)`` is True.
-        Runs the changelog duplicate-fragment gate, resets the ci_fix /
-        auto-fix / ping-pong counters, attempts auto-merge when eligible,
+        Resets the ci_fix / auto-fix / ping-pong counters, attempts
+        auto-merge when eligible,
         and falls back to ``HUMAN_MR_APPROVAL`` otherwise.
         """
         s = ctx.settings
@@ -485,23 +484,6 @@ class CIPollMixin(_MergeStageBase):
         # Also reset the cross-stage auto-fix cycle counter and ping-pong
         # detector files — CI green is the ONLY genuine forward-progress
         # signal.
-
-        # --- Changelog duplicate-fragment gate ---
-        repo_dir = str(ctx.service.workspace(ticket).dir / "repo")
-        target = target_branch_for(s, ctx.repo_config)
-        dups = _duplicate_changelog_fragments(repo_dir, target)
-        if dups:
-            log.warning(
-                "%s: duplicate changelog fragments %s → BLOCKED",
-                ticket.id,
-                sorted(dups),
-            )
-            return Outcome(
-                State.BLOCKED,
-                f"Duplicate changelog fragments detected for ticket(s): "
-                f"{', '.join(sorted(dups))}. Each ticket id must have exactly one "
-                f"changelog fragment — remove the extra fragment(s) and re-run. Resumable.",
-            )
 
         artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
         _write_counter(artifacts_dir / "ci_fix_cycles.txt", 0)
@@ -980,19 +962,6 @@ class CIPollMixin(_MergeStageBase):
 
     def _handle_human_mr_approval(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Poll PR status from HUMAN_MR_APPROVAL: merged/closed/conflicting/CI/auto-merge."""
-        from robotsix_mill.stages import merge as _facade
-
-        # --- CHANGELOG lint (advisory, non-blocking) -------------------
-        repo_dir = _facade._workspace_repo_dir(ctx, ticket)
-        warnings = _facade._changelog_warnings_for_ticket(repo_dir, ticket.id)
-        for w in warnings:
-            log.warning(
-                "%s: CHANGELOG %s: %s",
-                ticket.id,
-                w.get("severity", "warn"),
-                w.get("message", ""),
-            )
-
         s = ctx.settings
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
         pr, early = self._check_pr_baseline(

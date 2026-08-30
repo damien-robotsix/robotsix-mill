@@ -1,1 +1,0 @@
-Create sandbox containers with `--no-healthcheck` so they stop inheriting the mill image's HEALTHCHECK, which probed a mill API that does not run inside a sandbox — burning a fresh CPython per sandbox every 30s and showing every sandbox as `(unhealthy)`.

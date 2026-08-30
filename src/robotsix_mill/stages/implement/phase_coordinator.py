@@ -19,9 +19,8 @@ from ...vcs import git_ops
 from .. import short_circuit_verify
 from .._conventional import (
     conventional_subject,
-    drop_fragments,
-    record_kind,
-    resolve_kind,
+    record_type,
+    type_from_summary,
 )
 from ..base import Outcome, StageContext
 from ..pause import (
@@ -1235,21 +1234,16 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         # must be a conventional commit: with squash_merge_commit_title
         # = COMMIT_OR_PR_TITLE, a single-commit PR is squashed under
         # THIS subject, and release-please ignores anything it cannot
-        # parse.  The type comes from the fragment the agent just wrote.
-        # Park the kind before the fragment goes: deliver builds the PR
-        # title later, by which point the branch no longer carries it.
-        record_kind(ws.artifacts_dir, resolve_kind(repo_dir, ticket.id))
+        # parse.  The type comes from the ``Change-Type:`` line of the
+        # summary the agent just wrote; park it so deliver can build the
+        # PR title later from the same source.
+        record_type(ws.artifacts_dir, type_from_summary(summary))
         commit_message = conventional_subject(
-            repo_dir,
             ticket.id,
             ticket.title,
             suffix="" if ok else " [WIP]",
             artifacts_dir=ws.artifacts_dir,
         )
-        # Only now that the kind has been folded into the subject: on a
-        # release-please repo nothing drains changelog.d, so leaving the
-        # fragment behind litters main with dead duplicates.
-        drop_fragments(repo_dir, ticket.id)
         # Per-repo commit for extra_roots (multi-repo meta tickets).
         # Write a touched_repos.json artifact listing every repo that
         # received a commit so the downstream deliver stage knows which
@@ -1279,10 +1273,6 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     )
         # Commit primary repo (always — regardless of extra_roots).
         if git_ops.has_changes(repo_dir):
-            from ..towncrier import maybe_generate_towncrier_fragment
-
-            maybe_generate_towncrier_fragment(repo_dir, ticket.id, ticket.title)
-            cls._validate_changelog_fragments(repo_dir)
             # Regenerate shell completions if the CLI subcommand
             # definitions changed — avoids a stale-completions CI
             # auto-fix commit on the next push.
@@ -1309,12 +1299,6 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 if repo_path == repo_dir:
                     continue
                 if git_ops.has_changes(repo_path):
-                    from ..towncrier import maybe_generate_towncrier_fragment
-
-                    maybe_generate_towncrier_fragment(
-                        repo_path, ticket.id, ticket.title
-                    )
-                    cls._validate_changelog_fragments(repo_path)
                     # Regenerate config schema if settings files
                     # changed in this extra-root repo.
                     _xtra_target = effective_target_branch(
@@ -1347,29 +1331,3 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     ticket.id,
                     exc_info=True,
                 )
-
-    # ------------------------------------------------------------------
-    # Changelog validation (pre-commit guard)
-    # ------------------------------------------------------------------
-
-    @classmethod
-    def _validate_changelog_fragments(cls, repo_dir: Path) -> None:
-        """Validate changelog fragment files before committing.
-
-        Ensures trailing newlines and ``docs/modules.yaml`` registration
-        so that pre-commit hooks (``end-of-file-fixer`` and
-        ``robotsix-modules check-registration``) pass in CI without an
-        auto-fix commit.
-        """
-        try:
-            from .._changelog_validate import validate_changelog
-
-            msgs = validate_changelog(repo_dir)
-            for m in msgs:
-                log.info("validate-changelog: %s", m)
-        except Exception:
-            log.warning(
-                "%s: validate_changelog failed — continuing without validation",
-                repo_dir,
-                exc_info=True,
-            )

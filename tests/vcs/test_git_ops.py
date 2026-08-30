@@ -1068,21 +1068,6 @@ class TestCheckRebaseDiffIntegrity:
         assert ok is True
         assert dropped == []
 
-    def test_changelog_fragment_excluded(self, tmp_path):
-        remote = make_bare_repo(tmp_path)
-        dest = tmp_path / "repo"
-        git_ops.clone(remote, dest, "main")
-        git_ops.create_branch(dest, "feature")
-        (dest / "src").mkdir(parents=True, exist_ok=True)
-        (dest / "src" / "mod.py").write_text("real work")
-        git_ops.commit_all(dest, "implement")
-
-        ok, dropped, _s = git_ops.check_rebase_diff_integrity(
-            dest, "main", ["src/mod.py", "changelog.d/20250601.misc.md"]
-        )
-        assert ok is True
-        assert dropped == []
-
     def test_modules_yaml_registry_excluded(self, tmp_path):
         """``docs/modules.yaml`` is a registry CI re-derives, not
         implement-stage content.

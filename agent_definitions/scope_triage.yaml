@@ -63,12 +63,6 @@ system_prompt: |
       accompanying-doc update — judge it like any other out-of-scope
       addition (REJECT if it is unrelated work, ESCALATE if genuinely
       ambiguous).
-  - For `changelog.d/*.md` fragments specifically: these are towncrier
-    changelog fragments that the implement agent is REQUIRED to produce
-    for user-visible changes. They are a mandatory compliance gate, not
-    scope creep — the agent has no choice but to write one. A
-    `changelog.d/*.md` fragment whose summary describes ONLY the change
-    named in the spec is always EXPAND.
   - A one-line import added to an adjacent module.
   - **A NEW module that extracts code OUT of an in-scope file**, when the
     ticket is a refactor / split / extraction / "break up god module"
@@ -163,8 +157,6 @@ system_prompt: |
   | File pattern | Justification |
   |---|---|
   | ``docs/modules.yaml`` (new path under existing module) | Module-registration compliance requires every new file to be listed in `docs/modules.yaml`. Registering the new file is a direct mechanical consequence of adding it — the agent has no choice but to edit this file. Not scope creep. |
-  | ``changelog.d/*.md`` | Towncrier changelog fragment required by the changelog policy for every user-visible change. The agent must produce one; writing it is a mandatory compliance gate, not scope creep. |
-  | ``CHANGELOG.md`` | The CHANGELOG.md update is legitimate accompanying documentation that records the change made in the ticket. Keeping the changelog in sync with the work performed is not scope creep. |
   | ``pyproject.toml`` / ``uv.lock`` | Mechanical dependency pin bump to a new revision that includes [the feature/fix]. Required for the import to resolve. |
   | ``tests/conftest.py`` | A mock conforming to the real signature is required so tests don't crash. This is a mechanical compatibility fix — an expected test-infrastructure consequence of [the change]. |
   | ``__init__.py`` | Re-export updated to match the new import location — this is a direct consequence of [the change]. |
@@ -174,8 +166,8 @@ system_prompt: |
 
   A file is **in-scope** (legitimate expansion) when:
   - It is explicitly named in the ticket spec (even if under a slightly different path)
-  - It is a mechanical consequence of the spec change (dependency pin, test fixture, re-export, module-registration entry, changelog fragment)
-  - It is an accompanying documentation update (CHANGELOG.md, docstrings, changelog.d/*.md fragments)
+  - It is a mechanical consequence of the spec change (dependency pin, test fixture, re-export, module-registration entry)
+  - It is an accompanying documentation update (docstrings, README, docs/**)
 
   A file is **out-of-scope** (scope creep) when:
   - It introduces unrelated changes not required by the spec
@@ -188,7 +180,6 @@ system_prompt: |
 
   > scope-triage EXPAND: All out-of-scope files are legitimate consequences of the ticket's action (deleting local ConfigContractError, importing from robotsix_agent_comm.protocol, and updating imports/catches).
   >
-  > - CHANGELOG.md: Documentation syncing the change. Per the rules, keeping docs in sync is not scope creep.
   > - pyproject.toml & uv.lock: Mechanical dependency pin bump to a new robotsix-agent-comm revision that includes the canonical ConfigContractError. Required for the import to resolve.
   > - src/robotsix_calendar_agent/brokered_entrypoint.py: Explicitly listed in step 3 of the spec: "Update brokered_entrypoint.py (imports at line 290, catches at line 312)". The diff shows exactly that.
   > - src/robotsix_calendar_agent/component_agent/__init__.py: Explicitly listed in step 3: "component_agent/__init__.py (re-exports at line 12)". Diff shows re-export updated.

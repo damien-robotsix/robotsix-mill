@@ -428,8 +428,6 @@ _PROGRESS_SIGNAL_TOOLS = frozenset(
         "run_command",
         "spawn_subtask",
         "post_comment",
-        "insert_changelog_entry",
-        "add_changelog_fragment",
         "ask_user",
         "reply_to_thread",
     }

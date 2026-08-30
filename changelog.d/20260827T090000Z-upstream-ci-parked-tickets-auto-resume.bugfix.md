@@ -1,1 +1,0 @@
-Tickets parked BLOCKED on a red target branch ("Upstream CI breakage detected") now resume automatically once that branch is green again (new `upstream_ci_recovery` pass, `upstream_ci_recovery_interval_seconds`), and `source=ci` tickets — the ones filed to repair the target branch — are no longer parked behind the very breakage they exist to fix.

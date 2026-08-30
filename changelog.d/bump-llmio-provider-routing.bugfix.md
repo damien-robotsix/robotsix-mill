@@ -1,1 +1,0 @@
-Bump robotsix-llmio so the level-2 OpenRouter provider routing (Xiaomi preferred, DigitalOcean/DeepInfra excluded) actually applies to `xiaomi/mimo-v2.5-pro` requests instead of being dropped for non-DeepSeek models — restores the cheap cache-read pricing the tier was configured for.

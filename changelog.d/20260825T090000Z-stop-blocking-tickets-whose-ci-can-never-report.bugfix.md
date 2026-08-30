@@ -1,1 +1,0 @@
-Stop blocking tickets on CI that can never report: the merge stage now bounds the "CI green but the forge won't promote" re-poll and names the required status contexts the PR is missing, and the ci_fix stage reroutes a conflicting PR to rebase instead of spending its whole iteration budget waiting on checks the forge never runs.

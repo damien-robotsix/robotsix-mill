@@ -78,14 +78,6 @@ def _summary(log: str, name: str = "ci / tests") -> str:
             "pytest-collection/import",
         ),
         (
-            [{"name": "changelog / fragment", "conclusion": "failure"}],
-            (
-                "Run python scripts/validate-changelog.py\n"
-                "ERROR: no changelog fragment found under changelog.d/ for this PR"
-            ),
-            "changelog-fragment-missing",
-        ),
-        (
             _TESTS_CHECK,
             (
                 "Run uv run robotsix-modules check-registration docs/modules.yaml --root .\n"

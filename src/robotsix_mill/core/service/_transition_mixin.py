@@ -161,45 +161,14 @@ def _clear_stale_implement_guard(ws: Workspace) -> None:
     fingerprint is retained so an attempt that once again returns a
     byte-identical summary re-trips the guard on its very next cycle.
 
-    The spec-fingerprint is persisted to ``implement_spec_override``
-    and the current branch tip to ``implement_changelog_override`` so
-    the stale-spec and changelog-only guards stay suppressed for this
-    exact spec / branch state — re-arming as soon as either moves.
+    The spec-fingerprint is persisted to ``implement_spec_override`` so
+    the stale-spec guard stays suppressed for this exact spec — re-arming
+    as soon as it moves.
     """
     _persist_stall_state_from_implement_md(ws, reset_count=True)
     _persist_spec_fingerprint_override(ws)
-    _persist_changelog_guard_override(ws)
     with contextlib.suppress(FileNotFoundError):
         (ws.artifacts_dir / "implement.md").unlink()
-
-
-def _persist_changelog_guard_override(ws: Workspace) -> None:
-    """Record the current branch tip in ``implement_changelog_override``.
-
-    Tells the preflight changelog-only guard that the operator has
-    explicitly authorised one fresh attempt at this exact branch state.
-    Once the attempt commits anything the tip moves and the guard
-    re-arms on its own.
-
-    Best-effort — silently no-ops when the workspace has no clone yet.
-    """
-    repo_dir = ws.dir / "repo"
-    if not (repo_dir / ".git").exists():
-        return
-    try:
-        head = subprocess.run(
-            ["git", "-C", str(repo_dir), "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        ).stdout.strip()
-    except (subprocess.SubprocessError, OSError):  # fmt: skip
-        return
-    if head:
-        with contextlib.suppress(OSError):
-            (ws.artifacts_dir / "implement_changelog_override").write_text(
-                head, encoding="utf-8"
-            )
 
 
 def _persist_spec_fingerprint_override(ws: Workspace) -> None:
@@ -426,63 +395,6 @@ def _verify_citations(note: str, repo_dir: Path | None) -> str:
     return note.rstrip() + "\n\n" + "\n".join(lines)
 
 
-def _check_changelog_duplicates(repo_dir: Path | None, ticket_id: str) -> list[str]:
-    """Check *repo_dir*'s HEAD for duplicate towncrier fragments for
-    *ticket_id*.  Returns a list of the duplicate fragment basenames
-    (empty when there are 0 or 1 fragments — no problem).
-
-    Best-effort: returns ``[]`` when *repo_dir* is ``None``, the repo
-    has no ``pyproject.toml``, no ``[tool.towncrier]`` config, or any
-    git / parsing error occurs.  Never raises.
-    """
-    if repo_dir is None:
-        return []
-
-    pp = repo_dir / "pyproject.toml"
-    if not pp.is_file():
-        return []
-
-    try:
-        import tomllib
-
-        data = tomllib.loads(pp.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-
-    tc = (data.get("tool", {}) or {}).get("towncrier")
-    if not tc:
-        return []
-
-    directory = str(tc.get("directory") or "changes").rstrip("/")
-
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(repo_dir), "ls-tree", "HEAD", "--", f"{directory}/"],
-            capture_output=True,
-            text=True,
-        )
-    except Exception:
-        return []
-
-    if result.returncode != 0:
-        return []
-
-    fragments: list[str] = []
-    prefix = f"{ticket_id}."
-    for line in result.stdout.splitlines():
-        # git ls-tree output: <mode> <type> <sha>\t<path>
-        if "\t" not in line:
-            continue
-        path = line.split("\t", 1)[1]
-        name = Path(path).name
-        if name.startswith(prefix) and name.endswith(".md"):
-            fragments.append(name)
-
-    if len(fragments) > 1:
-        return fragments
-    return []
-
-
 class _TransitionMixin(_ServiceBase):
     """State transitions, resume, retry, request-changes, and mark-done."""
 
@@ -543,19 +455,6 @@ class _TransitionMixin(_ServiceBase):
                             f"{len(open_threads)} [ASK_USER] thread(s) are "
                             f"open (IDs: {ids})"
                         )
-            # Refuse transition to DONE when duplicate changelog
-            # fragments exist on the ticket's branch.  This gate
-            # prevents a BLOCKED ticket from being force-closed
-            # while the fragment conflict is still live on HEAD.
-            if dst is State.DONE:
-                repo_dir = self.workspace(ticket).repo_dir
-                dupes = _check_changelog_duplicates(repo_dir, ticket_id)
-                if dupes:
-                    raise TransitionError(
-                        f"{ticket_id}: cannot transition to {dst} — "
-                        f"duplicate changelog fragments on branch: "
-                        f"{', '.join(sorted(dupes))}"
-                    )
             # Record originating state when blocking; clear when leaving
             # BLOCKED (regardless of resume or override path).
             if dst is State.BLOCKED:
@@ -978,7 +877,7 @@ class _TransitionMixin(_ServiceBase):
         """Close a tracking ticket from any non-terminal state.
 
         Escape hatch for tracker tickets (source=ORPHANED_PR_CHECK): unlike
-        mark_done, works from BLOCKED and skips all merge/branch/changelog
+        mark_done, works from BLOCKED and skips all merge/branch
         verification (tracker tickets have no mill-authored commits).
         Transitions directly to CLOSED — no retrospect stage.
 
@@ -1070,16 +969,7 @@ class _TransitionMixin(_ServiceBase):
             if is_force_close:
                 reason = note if note.strip() else "operator mark-done"
                 note = f"[force-closed from {ticket.state}] {reason}"
-            # Refuse mark-done when duplicate changelog fragments
-            # exist on the ticket's branch.
             repo_dir = self.workspace(ticket).repo_dir
-            dupes = _check_changelog_duplicates(repo_dir, ticket_id)
-            if dupes:
-                raise TransitionError(
-                    f"{ticket_id}: cannot mark done — "
-                    f"duplicate changelog fragments on branch: "
-                    f"{', '.join(sorted(dupes))}"
-                )
             # Refuse mark-done when the ticket's branch hasn't been
             # merged to origin/main (best-effort — skipped when the
             # workspace clone or branch isn't available).

@@ -793,13 +793,6 @@
           "title": "Branch Prefix",
           "type": "string"
         },
-        "changelog_autofill_interval_seconds": {
-          "advanced": true,
-          "default": 86400,
-          "description": "Seconds between changelog-autofill passes. 0 = disabled.",
-          "title": "Changelog Autofill Interval Seconds",
-          "type": "integer"
-        },
         "ci_debt_recheck_interval_seconds": {
           "advanced": true,
           "default": 3600,
