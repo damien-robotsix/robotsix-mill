@@ -68,6 +68,35 @@ from .ci_fix_helpers import (
 
 log = logging.getLogger("robotsix_mill.stages.ci_fix")
 
+# Maximum characters to read from the ci_fix_history.md file when
+# injecting previous attempts into the next prompt.  Keeps the LLM
+# context bounded while still surfacing the most recent attempts.
+_CI_FIX_HISTORY_MAX_CHARS = 4000
+
+
+def _load_ci_fix_history(ctx: StageContext, ticket: Ticket) -> str:
+    """Load the compacted ci-fix attempt history for *ticket*.
+
+    Returns the tail of ``ci_fix_history.md`` (up to
+    ``_CI_FIX_HISTORY_MAX_CHARS``) or an empty string when no history
+    exists yet.  Best-effort: read failures return an empty string.
+    """
+    try:
+        path = ctx.service.workspace(ticket).artifacts_dir / "ci_fix_history.md"
+        if not path.exists():
+            return ""
+        text = path.read_text(encoding="utf-8")
+        if len(text) > _CI_FIX_HISTORY_MAX_CHARS:
+            text = text[-_CI_FIX_HISTORY_MAX_CHARS:]
+        return text
+    except Exception:
+        log.warning(
+            "%s: failed to read ci_fix_history.md — proceeding without prior attempts",
+            ticket.id,
+            exc_info=True,
+        )
+        return ""
+
 
 def _extract_check_names(failing_summary: str) -> str:
     """Extract a short, human-readable list of failing CI check names.
@@ -830,10 +859,13 @@ class CIFixStage(Stage):
         failing_summary: str,
         result: CiFixResult | None,
     ) -> None:
-        """Write the per-cycle ``ci_fix.md`` artifact (single latest, overwrite).
+        """Write the per-cycle ``ci_fix.md`` artifact and append to history.
 
-        Includes the detected failure detail and, when the agent produced a
-        result, a recap of what it did and its verdict.  Best-effort only.
+        Writes the latest cycle detail to ``ci_fix.md`` (overwrite) and
+        appends a compacted entry to ``ci_fix_history.md`` so that
+        subsequent ci_fix runs can see what was already tried.  The
+        history file is never truncated — each attempt adds one entry.
+        Best-effort only.
         """
         try:
             parts: list[str] = []
@@ -849,8 +881,36 @@ class CIFixStage(Stage):
             else:
                 parts.append("## Agent Recap\n")
                 parts.append("The ci-fix agent crashed before producing a result.")
-            path = ctx.service.workspace(ticket).artifacts_dir / "ci_fix.md"
+            artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+            path = artifacts_dir / "ci_fix.md"
             _write_text(path, "\n".join(parts))
+
+            # Append a compacted entry to the persistent history file so
+            # the next ci_fix run knows what was already attempted.
+            history_path = artifacts_dir / "ci_fix_history.md"
+            entry_lines: list[str] = []
+            entry_lines.append("## Attempt\n")
+            entry_lines.append(
+                "**Failure:** "
+                + (failing_summary.strip()[:200] or "(no detail)")
+            )
+            if result is not None:
+                entry_lines.append(f"**Verdict:** {result.status}")
+                if result.summary:
+                    # Truncate long summaries to keep the history compact.
+                    summary = result.summary.strip()
+                    if len(summary) > 500:
+                        summary = summary[:500] + "…"
+                    entry_lines.append(summary)
+            else:
+                entry_lines.append("**Verdict:** CRASH")
+            entry_lines.append("")  # blank separator
+            # Append (create if absent).
+            if history_path.exists():
+                existing = history_path.read_text(encoding="utf-8")
+            else:
+                existing = "# CI Fix Attempt History\n\n"
+            _write_text(history_path, existing + "\n".join(entry_lines))
         except Exception:
             log.exception("%s: failed to write ci_fix.md artifact", ticket.id)
 
@@ -941,6 +1001,7 @@ class CIFixStage(Stage):
                         branch=branch,
                         failing_summary=failing_summary,
                         memory=memory_text,
+                        previous_attempts=_load_ci_fix_history(ctx, ticket),
                         ticket_id=ticket.id,
                         board_id=ctx.repo_config.board_id if ctx.repo_config else "",
                         target=target,

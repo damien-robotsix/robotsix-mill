@@ -48,6 +48,7 @@ def run_ci_fix_agent(
     branch: str,
     failing_summary: str,
     memory: str = "",
+    previous_attempts: str = "",
     ticket_id: str = "",
     board_id: str = "",
     target: str = "main",
@@ -179,6 +180,14 @@ def run_ci_fix_agent(
     if patterns_text != "(no prior patterns for this failure)":
         user_prompt_parts.append(
             "## Prior fix attempts for similar failures\n\n" + patterns_text
+        )
+    if previous_attempts:
+        user_prompt_parts.append(
+            "## Previous attempts on this ticket\n\n"
+            "The following is a compacted history of prior ci-fix attempts "
+            "on this ticket.  Use it to avoid repeating approaches that "
+            "already failed.\n\n"
+            + previous_attempts
         )
     if memory:
         user_prompt_parts.append(section("memory", memory))
