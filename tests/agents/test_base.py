@@ -554,12 +554,6 @@ def test_build_agent_claude_sdk_path(monkeypatch):
         lambda level, tier_config=None, **kwargs: fake_provider,
     )
 
-    # bound_claude_handle is a pass-through in the test.
-    monkeypatch.setattr(
-        "robotsix_mill.agents.claude_concurrency.bound_claude_handle",
-        lambda handle, max_concurrency: handle,
-    )
-
     result = bmod.build_agent(
         s,
         system_prompt="Test prompt.",
@@ -568,7 +562,7 @@ def test_build_agent_claude_sdk_path(monkeypatch):
         tools=[],
     )
 
-    # bound_claude_handle is a pass-through, so result is the raw handle.
+    # The provider handle is returned as-is (no concurrency wrapper).
     assert result is fake_claude_handle
     # build_agent was called on the provider with level=3.
     fake_provider.build_agent.assert_called_once()

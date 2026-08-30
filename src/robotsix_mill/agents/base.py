@@ -151,16 +151,13 @@ def build_subagent(
     Claude levels go through the llmio provider's ``build_agent`` exactly like
     :func:`build_agent` does: *tools* become injected MCP tools, the SDK's
     built-in Bash/Read/Edit/… are denied (``builtin_tools=False``) so the
-    sub-agent stays as read-only as its tool list, and the handle shares the
-    process-wide Claude concurrency bound. ``max_tokens`` rides on the
+    sub-agent stays as read-only as its tool list. ``max_tokens`` rides on the
     provider constructor there. The returned client is ``None`` on Claude
     tiers (the CLI is the transport); OpenRouter tiers return the httpx client
     the caller must close (pair with :func:`_aclose_async_client`).
     """
     if level_uses_claude(level):
         from robotsix_llmio import get_provider_for_level
-
-        from .claude_concurrency import bound_claude_handle
 
         provider_kwargs: dict[str, Any] = {}
         if max_tokens is not None:
@@ -175,7 +172,7 @@ def build_subagent(
             workspace_root=workspace_root,  # type: ignore[call-arg]  # ClaudeSDKProvider accepts this
             builtin_tools=False,
         )
-        return bound_claude_handle(handle, settings.claude_max_concurrency), None
+        return handle, None
 
     from pydantic_ai import Agent
     from pydantic_ai.settings import ModelSettings
@@ -699,10 +696,6 @@ def build_agent(
     tlc = default_tier_config().for_level(level)
 
     if tlc.model.startswith(_CLAUDE_SDK_PROVIDER):
-        # Lazy: claude_agent_sdk is only imported when a Claude-transport
-        # agent is actually built.
-        from .claude_concurrency import bound_claude_handle
-
         provider = get_provider_for_level(level)
         try:
             handle = provider.build_agent(
@@ -734,9 +727,7 @@ def build_agent(
                 retries=retries,
                 workspace_root=repo_dir,  # type: ignore[call-arg]
             )
-        # Bound concurrent CLI-subprocess spawns process-wide so a worker
-        # fanning out many runs at startup can't stall on spawn contention.
-        return bound_claude_handle(handle, settings.claude_max_concurrency)
+        return handle
 
     # --- OpenRouter (L1/L2) ------------------------------------------------
     return _build_openrouter_handle(

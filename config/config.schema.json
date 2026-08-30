@@ -979,7 +979,7 @@
         "claude_max_concurrency": {
           "advanced": true,
           "default": 4,
-          "description": "Maximum concurrent Claude Agent SDK runs. Each run spawns a claude CLI subprocess; this semaphore bounds concurrent spawns.",
+          "description": "Deprecated, inert since the Claude run semaphore was removed: no longer bounds anything. Kept so existing pinned configs load.",
           "minimum": 1,
           "title": "Claude Max Concurrency",
           "type": "integer"
