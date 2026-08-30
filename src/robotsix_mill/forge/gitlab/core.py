@@ -803,11 +803,11 @@ class GitLabForge(
             if r.status_code == 200:
                 try:
                     data = r.json()
-                except (ValueError, AttributeError):
+                except ValueError, AttributeError:
                     data = {}
                 if isinstance(data, dict) and data.get("state") == "merged":
                     result: dict[str, Any] = {"merged": True, "reason": "merged"}
-                    merge_sha = data.get("sha")
+                    merge_sha = data.get("merge_commit_sha")
                     if merge_sha:
                         result["merge_commit_sha"] = merge_sha
                     return result

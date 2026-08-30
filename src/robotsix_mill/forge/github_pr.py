@@ -587,7 +587,7 @@ class GitHubForgePRMixin:
                         merge_sha = data.get("sha")
                         if merge_sha:
                             result["merge_commit_sha"] = merge_sha
-                except (ValueError, AttributeError):
+                except ValueError, AttributeError:
                     pass
                 return result
             if r.status_code == 405:
