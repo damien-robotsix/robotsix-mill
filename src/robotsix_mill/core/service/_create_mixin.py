@@ -45,6 +45,7 @@ class _CreateMixin(_ServiceBase):
         parent_id: str | None = None,
         board_id: str | None = None,
         priority: bool = False,
+        initial_state: State | None = None,
     ) -> Ticket:
         """Create a new ticket with the given *title*.
 
@@ -68,6 +69,9 @@ class _CreateMixin(_ServiceBase):
         the multi-repo API surface to stamp the correct board on each
         ticket.
 
+        *initial_state* overrides the default state determined by *kind*.
+        Used by the ingest route to create tickets in CLASSIFYING state.
+
         Raises :class:`ValueError` if *depends_on* includes the ticket's
         own ID (self-dependency), is provided for an inquiry or epic, or
         if *parent_id* references a nonexistent ticket.
@@ -84,7 +88,9 @@ class _CreateMixin(_ServiceBase):
             if ticket_id in dep_ids:
                 raise ValueError(f"Ticket cannot depend on itself: {ticket_id}")
 
-        if kind == TicketKind.EPIC:
+        if initial_state is not None:
+            pass  # use the explicitly provided state
+        elif kind == TicketKind.EPIC:
             initial_state = State.EPIC_OPEN
         elif kind == TicketKind.INQUIRY:
             initial_state = State.ASKED

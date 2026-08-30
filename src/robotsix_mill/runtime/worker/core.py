@@ -142,6 +142,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
     # on any drift. _DEFAULT_STAGE_RANK applies to unknown states.
     _DEFAULT_STAGE_RANK: int = 99
     _STAGE_RANK: dict[str, Any] = {
+        State.CLASSIFYING: 0,  # classify — lightweight, highest priority
         State.DONE: 0,  # retrospect → CLOSED
         State.DELIVERABLE: 1,  # deliver opens the PR
         State.DOCUMENTING: 2,  # document → DELIVERABLE

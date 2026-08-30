@@ -24,7 +24,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ...agents.dedup import (
-    any_candidate_overlap,
     rank_candidates_by_similarity,
     run_dedup_check,
 )
@@ -245,6 +244,10 @@ def ingest_ticket(
     Returns 200 with ``deduped=True`` when the report matches an
     existing ticket (a history note is appended to the existing one).
     Returns 404 when *repo_id* is not registered.
+
+    Classification (ops_classify, LLM dedup, scope_classify) runs
+    asynchronously in the classify stage after the ticket is created,
+    keeping the HTTP response under 2 s.
     """
     # 1. Repo validation — 404 for unknown repo_id.
     repo_config = repos.repos.get(body.repo_id)
@@ -263,30 +266,6 @@ def ingest_ticket(
     _check_repo_workable(repo_config, body.repo_id, settings)
 
     board_id = repo_config.board_id
-
-    # 2b. Operational-maintenance classification — reject reports
-    #     that describe manual operational actions (credential rotation,
-    #     redeploy, infra console changes) rather than code work.
-    ops_verdict = _run_ops_classify(body, board_id, settings)
-    if ops_verdict is not None and ops_verdict.classification == "OPERATIONAL":
-        logger.info(
-            "ingest rejected as operational-maintenance: %s",
-            ops_verdict.reason,
-        )
-        return JSONResponse(
-            status_code=200,
-            content={
-                "filed": False,
-                "reason": "operational-maintenance",
-                "classification": "OPERATIONAL",
-                "guidance": ops_verdict.reason,
-            },
-        )
-
-    # Classification label for CODE reports (None if classifier failed).
-    classification_label: str | None = (
-        ops_verdict.classification if ops_verdict is not None else None
-    )
 
     # 3. Candidate selection — scope to the target board.
     board_svc = TicketService(settings, board_id=board_id)
@@ -311,7 +290,6 @@ def ingest_ticket(
             board_svc,
             worker,
             settings,
-            classification=classification_label,
         )
 
     # 4. Normalized-title fingerprint dedup — fast, deterministic,
@@ -331,34 +309,8 @@ def ingest_ticket(
             content=IngestResult(ticket_id=dup_id, deduped=True).model_dump(),
         )
 
-    # 4. Cheap prefilter — skip LLM when no token overlap.
-    candidate_texts: list[str] = []
-    for t in candidates:
-        try:
-            desc = board_svc.workspace(t).read_description()
-        except Exception:
-            desc = ""
-        candidate_texts.append(f"{t.title} {desc}")
-    if not any_candidate_overlap(
-        draft_title=body.title,
-        draft_body=body.body,
-        candidates_texts=candidate_texts,
-    ):
-        return _create_ticket_guarded(body, board_id, board_svc, worker, settings)
-
-    # 5. LLM dedup.
-    dup_id = _run_llm_dedup(body, candidates, board_svc, worker, settings)
-    if dup_id is not None:
-        board_svc.add_history_note(
-            dup_id,
-            f"re-reported by {body.source_tag} on {date.today().isoformat()}",
-        )
-        return JSONResponse(
-            status_code=200,
-            content=IngestResult(ticket_id=dup_id, deduped=True).model_dump(),
-        )
-
-    # already_done is deliberately not acted on — fall through to create.
+    # 5. Create ticket — classification (ops/scope/dedup) runs
+    #    asynchronously in the classify stage.
     return _create_ticket_guarded(body, board_id, board_svc, worker, settings)
 
 
@@ -698,8 +650,11 @@ def _create_ticket(
     *,
     classification: str | None = None,
 ) -> JSONResponse:
-    """Create a new draft ticket and enqueue it.  Shared between the
-    dedup-miss path and the fail-open path.
+    """Create a new ticket in CLASSIFYING state and enqueue it.
+
+    The classify stage will run ops/scope/dedup classification
+    asynchronously, then transition to DRAFT (for refine) or close
+    the ticket if it's operational/duplicate.
 
     When the board's open-ticket count has reached the configured cap
     (``board_hygiene_max_open_tickets``), the finding is appended as a
@@ -723,21 +678,13 @@ def _create_ticket(
                 content=IngestResult(ticket_id=rollup_id, deduped=False).model_dump(),
             )
 
-    # Scope gate: promote clearly multi-concern reports to an
-    # auto-decomposed epic before creating a single task.  This runs
-    # past every dedup check, so a re-ingest of the same report is
-    # deduped upstream and never reaches here — preserving idempotency
-    # (no double-classification / double-decomposition).
-    epic_response = _maybe_promote_to_epic(body, board_id, board_svc, worker, settings)
-    if epic_response is not None:
-        return epic_response
-
     ticket = board_svc.create(
         title=body.title,
         description=body.body,
         source=body.source_tag,
         kind=TicketKind.TASK,
         board_id=board_id,
+        initial_state=State.CLASSIFYING,
     )
     maybe_enqueue(ticket, worker)
     return JSONResponse(
