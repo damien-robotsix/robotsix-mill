@@ -801,9 +801,16 @@ class GitLabForge(
                 json=payload,
             )
             if r.status_code == 200:
-                data = r.json()
-                if data.get("state") == "merged":
-                    return {"merged": True, "reason": "merged"}
+                try:
+                    data = r.json()
+                except (ValueError, AttributeError):
+                    data = {}
+                if isinstance(data, dict) and data.get("state") == "merged":
+                    result: dict[str, Any] = {"merged": True, "reason": "merged"}
+                    merge_sha = data.get("sha")
+                    if merge_sha:
+                        result["merge_commit_sha"] = merge_sha
+                    return result
                 return {
                     "merged": False,
                     "reason": "merge_when_pipeline_succeeds set; awaiting pipeline",

@@ -218,6 +218,11 @@ class Forge(ABC):
         raise for API-level failures (branch protection, not mergeable,
         conflict, network error) — catch and return a failure dict.
 
+        A success dict may carry ``"merge_commit_sha"`` with the SHA of
+        the commit that landed on the target branch.  For squash and
+        rebase merges this differs from the branch head SHA; callers
+        should prefer it for post-merge verification.
+
         A failure dict may carry ``"retryable": True`` to mean "this
         rejection is not necessarily permanent — re-poll and try again".
         Forges use it for the status codes that cover both a permanent

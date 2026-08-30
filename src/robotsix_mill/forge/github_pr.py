@@ -580,7 +580,16 @@ class GitHubForgePRMixin:
                 json={"merge_method": "squash"},
             )
             if r.status_code == 200:
-                return {"merged": True, "reason": "merged"}
+                result: dict[str, Any] = {"merged": True, "reason": "merged"}
+                try:
+                    data = r.json()
+                    if isinstance(data, dict):
+                        merge_sha = data.get("sha")
+                        if merge_sha:
+                            result["merge_commit_sha"] = merge_sha
+                except (ValueError, AttributeError):
+                    pass
+                return result
             if r.status_code == 405:
                 # GitHub overloads 405 for both permanent refusals ("Merge
                 # commits are not allowed on this repository") and the
