@@ -176,6 +176,32 @@ def run_doc_classifier(
         _safe_close(agent)
 
 
+def _build_doc_preseed(
+    reference_files: list[str] | None,
+    repo_dir: Path | None,
+    user_prompt: str,
+) -> tuple[dict[str, Any], str | None]:
+    """Build preseed message history when reference files are available.
+
+    Returns ``(run_kwargs, run_user_prompt)`` — the caller passes these
+    directly into ``h.run_sync()``.  When no preseed is applicable the
+    returned kwargs dict is empty and *run_user_prompt* is the original
+    prompt unchanged.
+    """
+    if not reference_files or repo_dir is None:
+        return {}, user_prompt
+    from .fs_tools import build_preseed_history
+
+    preseed = build_preseed_history(
+        repo_dir,
+        list(reference_files),
+        user_prompt=user_prompt,
+    )
+    if preseed:
+        return {"message_history": preseed}, None
+    return {}, user_prompt
+
+
 def run_doc_agent(
     *,
     settings: Settings,
@@ -285,23 +311,17 @@ def run_doc_agent(
 
         user_prompt = section("ticket-spec", spec) + "\n\n" + section("git-diff", diff)
         limits = UsageLimits(request_limit=settings.doc_request_limit)
-        run_user_prompt: str | None = user_prompt
         run_kwargs: dict[str, Any] = {"usage_limits": limits}
         # Pre-load the modified files (and any docs the operator
         # supplied) into a single parallel-read_file turn, with the
         # user_prompt as the leading ModelRequest so the trace reads
         # system → user → preload-call → preload-return → response.
-        if reference_files and repo_dir is not None:
-            from .fs_tools import build_preseed_history
-
-            preseed = build_preseed_history(
-                repo_dir,
-                list(reference_files),
-                user_prompt=user_prompt,
-            )
-            if preseed:
-                run_kwargs["message_history"] = preseed
-                run_user_prompt = None
+        preseed_kw, run_user_prompt = _build_doc_preseed(
+            reference_files,
+            repo_dir,
+            user_prompt,
+        )
+        run_kwargs.update(preseed_kw)
 
         def _run(h: Any) -> Any:
             try:
