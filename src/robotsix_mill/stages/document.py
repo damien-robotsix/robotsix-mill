@@ -208,6 +208,26 @@ class DocumentStage(Stage):
 
         next_state = State.DELIVERABLE
 
+        # Rate-limit degradation: the doc agent hit a usage ceiling and
+        # returned a recommendation-only fallback. Pass through (a doc
+        # hiccup must never sink a finished implementation) but emit a
+        # distinct marker so retrospect/monitoring can tell "degraded due
+        # to rate limit" apart from a clean "completed successfully" run.
+        if doc_result.degraded:
+            log.warning(
+                "%s: doc agent degraded due to rate limit — "
+                "recommendation-only deliverable (no docs generated)",
+                ticket.id,
+            )
+            ctx.service.add_step_event(
+                ticket.id,
+                "doc agent: degraded due to rate limit (no docs generated)",
+            )
+            return Outcome(
+                next_state,
+                f"degraded due to rate limit: {doc_result.summary}",
+            )
+
         if doc_result.user_facing:
             try:
                 if git_ops.has_changes(repo_dir):
