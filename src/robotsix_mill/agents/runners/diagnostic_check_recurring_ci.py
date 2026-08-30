@@ -1,23 +1,31 @@
-"""Recurring CI failure diagnostic check.
+"""Recurring CI failure diagnostic check — summary only.
 
-A :class:`DiagnosticCheck` that reads the diagnostic event store,
-groups ``CI_FAILURE`` events by their normalized key, and auto-files a
-fix-proposal draft ticket when a key has been hit by at least
-``diagnostic_ci_failure_threshold`` distinct tickets (default 3).
+A :class:`DiagnosticCheck` that reads the diagnostic event store and
+reports how the ``CI_FAILURE`` events distribute across semantic buckets
+(``ruff-format``, ``mypy``, ``pytest-failure``, …) and how many of them
+the ci-fix agent later resolved.
 
-Registered via :func:`register_check` so the daily diagnostic agent
-picks it up automatically — no runner edits required.
+It files **no tickets**. The previous incarnation auto-filed a
+``[diagnostic] recurring CI failure: key=…`` report ticket per normalized
+key once ``diagnostic_ci_failure_threshold`` distinct tickets had hit it.
+That was noise: the key was a hash of the failing check *names* (in
+practice ``"failing checks: ci / tests"``), the dedup only looked at
+non-terminal twins so the same eight keys were re-filed on every pass
+(21 report tickets in three passes), and each report then consumed
+refine/implement cycles for a "review this pattern" task. Learning from
+recurring CI failures is now the job of the ``ci_prevention_rules``
+periodic pass, which rewrites a rules section in the implement agent's
+memory ledger instead.
+
+Registered via :func:`register_check` so the daily diagnostic agent picks
+it up automatically.
 """
 
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
-from typing import Any
+from collections import Counter
 
-from ...core.models import SourceKind, TicketKind
-from ...core.service import TicketService
-from ...core.states import DONE_OR_CLOSED
 from .diagnostic_checks import (
     DiagnosticCheckContext,
     DiagnosticCheckResult,
@@ -27,21 +35,14 @@ from .diagnostic_events import list_diagnostic_events
 
 log = logging.getLogger(__name__)
 
-_DIAGNOSTIC_TITLE_PREFIX = "[diagnostic] recurring CI failure:"
-
-
-def _normalized_key_short(key: str) -> str:
-    """First 8 chars of a hex key — enough to disambiguate in titles."""
-    return key[:8] if len(key) >= 8 else key
-
 
 class RecurringCIFailureCheck:
-    """Detect recurring CI failures and file fix-proposal draft tickets."""
+    """Summarise recurring CI failures by bucket; never files tickets."""
 
     name = "recurring_ci_failure"
 
     def run(self, ctx: DiagnosticCheckContext) -> DiagnosticCheckResult:
-        """Execute the recurring CI failure check and file fix-proposal drafts."""
+        """Summarise the board's ``CI_FAILURE`` events by semantic bucket."""
         try:
             return self._run(ctx)
         except Exception:
@@ -56,14 +57,6 @@ class RecurringCIFailureCheck:
         settings = ctx.settings
         board_id = ctx.board_id
 
-        threshold = settings.diagnostic_ci_failure_threshold
-        if threshold == 0:
-            return DiagnosticCheckResult(
-                name=self.name,
-                ok=True,
-                summary="recurring CI failure detection disabled (threshold=0)",
-            )
-
         events = list_diagnostic_events(settings, board_id, category="CI_FAILURE")
         if not events:
             return DiagnosticCheckResult(
@@ -71,114 +64,22 @@ class RecurringCIFailureCheck:
                 ok=True,
                 summary="no CI_FAILURE events in store",
             )
+        resolved = list_diagnostic_events(
+            settings, board_id, category="CI_FIX_RESOLVED"
+        )
 
-        # Group by normalized key; collect distinct ticket ids.
-        groups: dict[str, set[str]] = defaultdict(set)
-        # Also track the most recent reason per key for the ticket body.
-        reasons: dict[str, str] = {}
-        for ev in events:
-            groups[ev.normalized_key].add(ev.ticket_id)
-            reasons[ev.normalized_key] = ev.reason  # last wins; fine for body
-
-        # Find keys that have crossed the threshold.
-        triggered = {
-            key: tickets for key, tickets in groups.items() if len(tickets) >= threshold
-        }
-        if not triggered:
-            return DiagnosticCheckResult(
-                name=self.name,
-                ok=True,
-                summary=(
-                    f"{len(events)} CI_FAILURE event(s) across "
-                    f"{len(groups)} key(s); none reached threshold {threshold}"
-                ),
-            )
-
-        service = TicketService(settings, board_id=board_id)
-        drafts_created: list[dict[str, Any]] = []
-
-        for key, tickets in sorted(triggered.items()):
-            short = _normalized_key_short(key)
-            title = f"{_DIAGNOSTIC_TITLE_PREFIX} key={short} ({len(tickets)} tickets)"
-            if self._is_duplicate(title, service):
-                log.info("recurring_ci_failure: skipping duplicate ticket %r", title)
-                continue
-            body = self._build_body(board_id, key, tickets, reasons.get(key, ""))
-            try:
-                ticket = service.create(
-                    title,
-                    body,
-                    source=SourceKind.AGENT,
-                    kind=TicketKind.TASK,
-                )
-                log.info(
-                    "recurring_ci_failure: filed fix-proposal ticket %s — %r",
-                    ticket.id,
-                    title,
-                )
-                drafts_created.append({"id": ticket.id, "title": title})
-            except Exception:
-                log.exception(
-                    "recurring_ci_failure: failed to file ticket for key %s", key
-                )
-
+        by_bucket: Counter[str] = Counter(ev.bucket or "unknown" for ev in events)
+        tickets = {ev.ticket_id for ev in events}
+        breakdown = ", ".join(
+            f"{bucket}={count}" for bucket, count in by_bucket.most_common()
+        )
         summary = (
-            f"{len(events)} CI_FAILURE event(s) across {len(groups)} key(s); "
-            f"{len(triggered)} key(s) reached threshold {threshold}; "
-            f"{len(drafts_created)} fix-proposal draft(s) filed"
+            f"{len(events)} CI_FAILURE event(s) across {len(tickets)} ticket(s) "
+            f"[{breakdown}]; {len(resolved)} resolved by ci_fix; "
+            "prevention rules are maintained by the ci_prevention_rules pass "
+            "(no tickets filed)"
         )
-        return DiagnosticCheckResult(
-            name=self.name,
-            ok=True,
-            summary=summary,
-            drafts_created=drafts_created,
-        )
-
-    @staticmethod
-    def _is_duplicate(title: str, service: TicketService) -> bool:
-        """Return True if a non-terminal ticket with *title* already exists."""
-        norm = title.strip().casefold()
-        for t in service.list():
-            if t.title.strip().casefold() == norm and t.state not in DONE_OR_CLOSED:
-                return True
-        return False
-
-    @staticmethod
-    def _build_body(
-        board_id: str,
-        normalized_key: str,
-        tickets: set[str],
-        reason: str,
-    ) -> str:
-        """Build the fix-proposal ticket body."""
-        ticket_list = "\n".join(f"- `{tid}`" for tid in sorted(tickets))
-        lines = [
-            "Auto-filed by the daily diagnostic agent (recurring_ci_failure check).",
-            "",
-            f"- **Repository / board:** `{board_id}`",
-            f"- **Normalized failure key:** `{normalized_key}`",
-            f"- **Distinct tickets affected:** {len(tickets)}",
-            "",
-            "### Affected tickets",
-            ticket_list,
-            "",
-            "### Failure reason (representative)",
-            "",
-            "```",
-            reason[:4000] if reason else "(no reason recorded)",
-            "```",
-            "",
-            "### Action",
-            (
-                "Review the recurring CI failure pattern above. If a systemic "
-                "fix is appropriate (e.g. a pre-commit hook, a CI workflow "
-                "change, or a lint rule adjustment), draft a task ticket for "
-                "the fix. Once the root cause is resolved, this diagnostic "
-                "will stop filing for this key — existing events age out "
-                "naturally as new tickets cycle through CI."
-            ),
-        ]
-        return "\n".join(lines) + "\n"
+        return DiagnosticCheckResult(name=self.name, ok=True, summary=summary)
 
 
 register_check(RecurringCIFailureCheck())

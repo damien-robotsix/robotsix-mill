@@ -9,6 +9,7 @@ _shtab_robotsix_mill_commands() {
     "audit:"
     "bc-check:"
     "changelog-autofill:"
+    "ci-prevention-rules:"
     "completeness-check:"
     "config-sync:"
     "copy-paste:"
@@ -110,6 +111,14 @@ _shtab_robotsix_mill_changelog_autofill_options=(
 
 # guard to ensure default positional specs are added only once per session
 _shtab_robotsix_mill_changelog_autofill_defaults_added=0
+
+_shtab_robotsix_mill_ci_prevention_rules_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--json[output full JSON result (default\: summary)]"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_robotsix_mill_ci_prevention_rules_defaults_added=0
 
 _shtab_robotsix_mill_completeness_check_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -455,6 +464,7 @@ _shtab_robotsix_mill() {
         audit) _arguments -C -s $_shtab_robotsix_mill_audit_options ;;
         bc-check) _arguments -C -s $_shtab_robotsix_mill_bc_check_options ;;
         changelog-autofill) _arguments -C -s $_shtab_robotsix_mill_changelog_autofill_options ;;
+        ci-prevention-rules) _arguments -C -s $_shtab_robotsix_mill_ci_prevention_rules_options ;;
         completeness-check) _arguments -C -s $_shtab_robotsix_mill_completeness_check_options ;;
         config-sync) _arguments -C -s $_shtab_robotsix_mill_config_sync_options ;;
         copy-paste) _arguments -C -s $_shtab_robotsix_mill_copy_paste_options ;;

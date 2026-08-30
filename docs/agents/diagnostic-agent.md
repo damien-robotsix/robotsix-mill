@@ -76,6 +76,46 @@ Diagnostic pass starting (session=…): monitoring 2 repo(s): ['robotsix-mill', 
 Any skipped/inaccessible repos are reported in a separate WARNING
 record.
 
+## Recurring CI failures → prevention rules
+
+The `recurring_ci_failure` check is **summary-only**: it reports how the
+board's `CI_FAILURE` events distribute across semantic buckets
+(`ruff-format`, `ruff-lint`, `mypy`, `pytest-failure`,
+`pytest-collection/import`, `changelog-fragment-missing`,
+`modules-yaml-unregistered`, `vulture`, `deptry`, `codeql`, `trivy`,
+`flaky-network`, `unknown`) and how many the ci-fix agent later resolved.
+It files no tickets. (It used to auto-file one `[diagnostic] recurring CI
+failure: key=…` report per normalized key; the key was a hash of the
+failing check *names* — in practice always `ci / tests` — so the same eight
+keys were re-filed on every pass, 21 reports in three passes, each then
+consuming refine/implement cycles. `diagnostic_ci_failure_threshold` is
+kept for config compatibility but inert.)
+
+Learning from those failures is the job of the separate
+**`ci_prevention_rules`** periodic pass
+(`agent_definitions/periodic/ci_prevention_rules.yaml`, daily, enabled per
+repo by a `.robotsix-mill/periodic/ci_prevention_rules.yaml` presence
+file):
+
+1. The ci-fix stage emits every confirmed red CI as a `CI_FAILURE` event
+   carrying a deterministic `bucket`, a one-line `root_cause` picked from
+   the job log and a default `prevention_rule`
+   (`stages/ci_failure_buckets.py`); when its agent turns CI green it emits
+   a paired `CI_FIX_RESOLVED` event with the agent's own account of the fix.
+2. The pass reads the board's last `ci_prevention_rules_max_events`
+   failures, renders a per-bucket digest and asks a small-tier agent for at
+   most `ci_prevention_max_rules` short imperative rules.
+3. It rewrites the `## CI prevention rules (auto-maintained)` section at
+   the **top** of the board's implement memory ledger
+   (`<data_dir>/<board_id>/implement_memory.md`) in place — never
+   appending, removing the section when there are no rules, and preserving
+   every other byte of the ledger. The implement coordinator injects that
+   ledger into its prompt on every pass, so the rules reach the agent that
+   caused the failures.
+
+Run it by hand with `robotsix-mill ci-prevention-rules` or
+`POST /passes/ci_prevention_rules/run?repo_id=<id>`.
+
 ## Configuration
 
 | Variable | Default | Description |

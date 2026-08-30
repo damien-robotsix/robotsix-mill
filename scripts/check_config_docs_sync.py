@@ -127,7 +127,6 @@ _MODEL_FIELDS_NOT_IN_DOCS: frozenset[str] = frozenset(
         #    doc entry or be explicitly documented as internal --
         "smoke_command",
         "allow_runtime_repo_registration",
-        "diagnostic_ci_failure_threshold",
         "refine_prescriptive_spec_code_lines_threshold",
         "refine_skip_llm_on_impl_ready_spec",
         "copy_paste_periodic",

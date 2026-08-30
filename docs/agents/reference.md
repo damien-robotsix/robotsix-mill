@@ -55,6 +55,8 @@
 
 ::: robotsix_mill.agents.ci_fixing
 
+::: robotsix_mill.agents.ci_prevention_rules
+
 ::: robotsix_mill.agents.ci_patterns
 
 ::: robotsix_mill.agents.claude_concurrency

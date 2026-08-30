@@ -5,9 +5,15 @@ Provides a lightweight JSONL-based event store (one file per repo under
 functions consumed by the ci-fix stage and the recurring-category
 diagnostic check.
 
-Events are deduplicated on ``(ticket_id, normalized_key)`` so a single
-stuck ticket retrying the same failure many times does not flood the
-category.
+Events are deduplicated on ``(category, ticket_id, normalized_key)`` so a
+single stuck ticket retrying the same failure many times does not flood
+the category.
+
+``CI_FAILURE`` events (and their ``CI_FIX_RESOLVED`` counterparts, emitted
+when the ci-fix agent turns CI green) additionally carry a semantic
+``bucket`` / ``root_cause`` / ``prevention_rule`` triple derived by
+:mod:`robotsix_mill.stages.ci_failure_buckets`. The fields are optional so
+events stored before they existed still load (they read back as ``""``).
 """
 
 from __future__ import annotations
@@ -37,6 +43,12 @@ class DiagnosticEvent:
             recurring failures (e.g. first 16 hex digits of a SHA-256
             hash of the structured failure summary).
         timestamp: ISO-8601 UTC timestamp of when the event was emitted.
+        bucket: Semantic failure bucket (``"ruff-format"``, ``"mypy"``, …);
+            ``""`` for events stored before buckets existed.
+        root_cause: One-line root cause picked from the failing log.
+        prevention_rule: Imperative rule that would have prevented the
+            failure (deterministic seed for the ``ci_prevention_rules``
+            pass); ``""`` when none is known.
     """
 
     category: str
@@ -45,6 +57,9 @@ class DiagnosticEvent:
     reason: str
     normalized_key: str
     timestamp: str
+    bucket: str = ""
+    root_cause: str = ""
+    prevention_rule: str = ""
 
 
 def _events_file_path(settings: Settings, board_id: str) -> Path:
@@ -59,13 +74,18 @@ def emit_diagnostic_event(
     ticket_id: str,
     reason: str,
     normalized_key: str,
+    *,
+    bucket: str = "",
+    root_cause: str = "",
+    prevention_rule: str = "",
 ) -> bool:
     """Append a diagnostic event to the per-repo JSONL store.
 
-    Deduplicates on ``(ticket_id, normalized_key)``: if an event with
-    the same ticket and normalized key already exists in the store, the
-    new event is silently skipped and ``False`` is returned.  Otherwise
-    the event is appended and ``True`` is returned.
+    Deduplicates on ``(category, ticket_id, normalized_key)``: if an
+    event with the same category, ticket and normalized key already
+    exists in the store, the new event is silently skipped and ``False``
+    is returned.  Otherwise the event is appended and ``True`` is
+    returned.
 
     Fail-safe: any I/O error is logged and ``False`` is returned (the
     caller must not break on a failed event write).
@@ -74,8 +94,8 @@ def emit_diagnostic_event(
         path = _events_file_path(settings, board_id)
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Dedup: check for existing (ticket_id, normalized_key) pair.
-        if _event_exists(path, ticket_id, normalized_key):
+        # Dedup: check for an existing (category, ticket_id, normalized_key).
+        if _event_exists(path, ticket_id, normalized_key, category):
             log.debug(
                 "diagnostic_events: skipping duplicate event "
                 "ticket=%s category=%s key=%s",
@@ -92,18 +112,25 @@ def emit_diagnostic_event(
             reason=reason,
             normalized_key=normalized_key,
             timestamp=datetime.now(UTC).isoformat(),
+            bucket=bucket,
+            root_cause=root_cause,
+            prevention_rule=prevention_rule,
         )
-        line = json.dumps(
-            {
-                "category": event.category,
-                "ticket_id": event.ticket_id,
-                "repo_id": event.repo_id,
-                "reason": event.reason,
-                "normalized_key": event.normalized_key,
-                "timestamp": event.timestamp,
-            },
-            ensure_ascii=False,
-        )
+        payload: dict[str, str] = {
+            "category": event.category,
+            "ticket_id": event.ticket_id,
+            "repo_id": event.repo_id,
+            "reason": event.reason,
+            "normalized_key": event.normalized_key,
+            "timestamp": event.timestamp,
+        }
+        # Only write the semantic fields when set, so plain events keep
+        # the historical line shape.
+        for key in ("bucket", "root_cause", "prevention_rule"):
+            value = getattr(event, key)
+            if value:
+                payload[key] = value
+        line = json.dumps(payload, ensure_ascii=False)
         with path.open("a", encoding="utf-8") as fh:
             fh.write(line + "\n")
         log.info(
@@ -135,6 +162,9 @@ def _parse_event_line(obj: dict[str, Any]) -> DiagnosticEvent | None:
             reason=str(obj.get("reason", "")),
             normalized_key=str(obj["normalized_key"]),
             timestamp=str(obj.get("timestamp", "")),
+            bucket=str(obj.get("bucket", "") or ""),
+            root_cause=str(obj.get("root_cause", "") or ""),
+            prevention_rule=str(obj.get("prevention_rule", "") or ""),
         )
     except KeyError, TypeError, ValueError:
         return None
@@ -209,8 +239,10 @@ def list_diagnostic_events(
         return []
 
 
-def _event_exists(path: Path, ticket_id: str, normalized_key: str) -> bool:
-    """Return ``True`` if an event with the same ticket+key already exists."""
+def _event_exists(
+    path: Path, ticket_id: str, normalized_key: str, category: str
+) -> bool:
+    """Return ``True`` if an event with the same category+ticket+key exists."""
     try:
         if not path.is_file():
             return False
@@ -225,6 +257,7 @@ def _event_exists(path: Path, ticket_id: str, normalized_key: str) -> bool:
             if (
                 str(obj.get("ticket_id", "")) == ticket_id
                 and str(obj.get("normalized_key", "")) == normalized_key
+                and str(obj.get("category", "")) == category
             ):
                 return True
     except Exception:

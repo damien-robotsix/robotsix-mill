@@ -48,6 +48,7 @@ _BUILTIN_KINDS: dict[str, str] = {
     "frontend_sync": "mill_only",
     "triage_boilerplate": "llm_agent",
     "repo_description_sync": "llm_agent",
+    "ci_prevention_rules": "llm_agent",
     # Schedule-only passes (deterministic runner / no LLM).
     "diagnostic": "schedule_only",
     "trace_review": "schedule_only",

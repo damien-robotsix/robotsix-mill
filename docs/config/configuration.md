@@ -680,7 +680,7 @@ Each periodic agent shares this pattern:
 
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_debt_recheck`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
-`completeness_check`, `diagnostic`, `docstring_coverage`, `forge_parity`, `frontend_sync`, `module_curator`, `module_size`, `mypy_baseline`, `orphaned_pr_check`, `pin_bump`,
+`ci_prevention_rules`, `completeness_check`, `diagnostic`, `docstring_coverage`, `forge_parity`, `frontend_sync`, `module_curator`, `module_size`, `mypy_baseline`, `orphaned_pr_check`, `pin_bump`,
 `copy_paste`, `timeout_escalation`, `triage_boilerplate`, `langfuse_cleanup`, `token_metrics_aggregation`, `data_dir_gc`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
 `db_maintenance`, `roadmap_sync`, `sandbox_reaper`, `repo_description_sync`.
 
@@ -720,6 +720,8 @@ Additional fields:
 | `periodic.blocked_auto_resume_max_per_ticket` | `MILL_BLOCKED_AUTO_RESUME_MAX_PER_TICKET` | `1` | Maximum automatic resumes per ticket (counted from its `[auto-resume` comments); after that a human is needed. |
 | `periodic.blocked_auto_resume_patterns` | `MILL_BLOCKED_AUTO_RESUME_PATTERNS` | `["agent error \u2014 resumable", "\u2014 resumable", "timed out", "stage timeout", "clone (is )?missing", "pr_urls\\.json corrupted", "unknown repo_id", "could not turn CI green within its iteration budget", "tests still failing after", "review rounds exhausted", "Infrastructure: LLM model outage"]` | Case-insensitive regexes matched against the latest BLOCKED note; a match makes the block auto-resumable. Spec-fingerprint (`spec unchanged`) and upstream-CI parks are always excluded. |
 | `periodic.config_pin_drift_baseline` | `MILL_CONFIG_PIN_DRIFT_BASELINE` | `[]` | Settings keys whose pinned value deliberately differs from the code default; excluded from pin-drift reporting (ratchet baseline, same idea as the mypy baseline). |
+| `periodic.ci_prevention_rules.max_events` | `MILL_CI_PREVENTION_RULES_MAX_EVENTS` | `100` | Most recent `CI_FAILURE` events (per board) the `ci_prevention_rules` pass reads when deriving prevention rules for the implement memory ledger. |
+| `periodic.ci_prevention_rules.max_rules` | `MILL_CI_PREVENTION_MAX_RULES` | `10` | Maximum prevention rules the `ci_prevention_rules` pass writes into the `## CI prevention rules (auto-maintained)` section of the implement memory ledger. |
 | `periodic.ci_monitor.log_max_bytes` | `MILL_CI_LOG_MAX_BYTES` | `65536` | Max bytes fetched per CI job log |
 | `periodic.diagnostic.target_repo_id` | `MILL_DIAGNOSTIC_TARGET_REPO_ID` | `robotsix-mill` | Board the diagnostic agent routes activity to; single-repo fallback when the monitored list is empty |
 | `periodic.diagnostic.monitored_repo_ids` | `MILL_DIAGNOSTIC_MONITORED_REPO_IDS` | `[]` | Repos the diagnostic agent monitors each pass (JSON list); empty → falls back to `target_repo_id`. Add/remove repos here — no code change. See [diagnostic-agent.md](../agents/diagnostic-agent.md) |
@@ -966,7 +968,8 @@ and as environment variables:
 | `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
 | `MILL_CONFIG_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between config-sync passes (1 day). Set to `0` to disable. |
 | `MILL_DIAGNOSTIC_EVENTS_PATH` | `None` | Explicit file path for the diagnostic event store JSONL file |
-| `MILL_DIAGNOSTIC_EVENTS_MAX_AGE_DAYS` | `90` | Days after which diagnostic events are considered stale and excluded from recurring-failure counts. Set to `0` to disable aging (keep events indefinitely) |
+| `MILL_DIAGNOSTIC_EVENTS_MAX_AGE_DAYS` | `90` | Days after which diagnostic events are considered stale and excluded from recurring-failure counts and from the `ci_prevention_rules` digest. Set to `0` to disable aging (keep events indefinitely) |
+| `MILL_DIAGNOSTIC_CI_FAILURE_THRESHOLD` | `3` | Legacy, inert. The recurring-CI diagnostic check no longer files report tickets (recurring failures feed the `ci_prevention_rules` pass instead); the field is kept only so configs that pin it still load. |
 | `MILL_FRONTEND_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between frontend-sync passes. Set to `0` to disable. |
 | `MILL_MEMBER_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between member-sync passes. Set to `0` to disable. |
 | `MILL_PIN_BUMP_INTERVAL_SECONDS` | `86400` | Seconds between pin-bump passes. Set to `0` to disable. |

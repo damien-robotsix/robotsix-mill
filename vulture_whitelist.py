@@ -164,6 +164,9 @@ orphaned_pr_check_periodic
 orphaned_pr_check_interval_seconds
 repo_description_sync_periodic
 repo_description_sync_interval_seconds
+# diagnostic_ci_failure_threshold — legacy, inert knob kept only so pinned
+# configs (production pins 0) still load; nothing reads it any more.
+diagnostic_ci_failure_threshold
 roadmap_sync_periodic
 roadmap_sync_interval_seconds
 pin_bump_periodic
@@ -338,6 +341,14 @@ run_audit_pass
 run_bc_check_pass
 run_completeness_check_pass
 run_config_sync_pass
+# run_ci_prevention_rules_pass — resolved by string path from the CLI _RUNNERS,
+# routes _PASS_REGISTRY and PollLoopsMixin._CUSTOM_LLM_AGENT_RUNNERS tables.
+run_ci_prevention_rules_pass
+# CiPreventionRulesPassResult.rules_written — result field read by tests and
+# operators (CLI --json), not by src.
+rules_written
+# ci_failure_buckets.BUCKETS — the closed bucket vocabulary; validated by tests.
+BUCKETS
 run_copy_paste_pass
 run_data_dir_gc_pass
 dir_size_bytes

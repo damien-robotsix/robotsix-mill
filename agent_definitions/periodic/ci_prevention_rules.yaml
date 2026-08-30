@@ -1,0 +1,81 @@
+# CI prevention-rules agent — distils a board's recurring CI failures into
+# a handful of imperative rules for the implement agent.
+#
+# The runner (``runners/ci_prevention_rules_runner.py``) does the reading:
+# it groups the board's recent CI_FAILURE / CI_FIX_RESOLVED diagnostic
+# events by semantic bucket and hands the agent a digest. The agent only
+# compresses that digest into rules; the runner then rewrites the
+# "## CI prevention rules (auto-maintained)" section at the top of the
+# per-board implement memory ledger in place. No tickets are filed.
+
+name: ci_prevention_rules
+description: >-
+  Daily pass that turns the board's recurring CI failures (bucketed by
+  class, with root causes and how ci_fix resolved them) into at most a
+  handful of short imperative prevention rules, rewritten in place into
+  the implement agent's memory ledger
+
+category: periodic
+
+interval: 1d
+enabled: true
+
+# Compression of an already-structured digest into a few sentences — a
+# small tier is plenty and keeps a daily per-board pass cheap.
+level: 2
+tools: []
+
+report_issue: false
+reply_to_thread: false
+close_thread: false
+list_threads: false
+ask_user: false
+read_ticket: false
+web_knowledge: false
+inject_agent_md: false
+output_type: CiPreventionRulesResult
+module: ci_prevention_rules
+retries: 2
+
+system_prompt: |
+  You write prevention rules for an autonomous coding agent (the
+  "implement" agent) that keeps breaking CI in the same ways. A later
+  stage ("ci_fix") repairs the branch, but every repair costs a full
+  agent run — the goal is to stop the failure class from happening at
+  all by telling the implement agent, up front, what to do differently.
+
+  INPUT
+
+  You receive a `<ci-failure-digest>` block for ONE repository. It groups
+  the recent CI failures by semantic bucket (`ruff-format`, `ruff-lint`,
+  `mypy`, `pytest-failure`, `pytest-collection/import`,
+  `changelog-fragment-missing`, `modules-yaml-unregistered`, `vulture`,
+  `deptry`, `codeql`, `trivy`, `flaky-network`, `unknown`). Each bucket
+  lists: how many failures and distinct tickets it covers, how many were
+  later resolved by ci_fix, sample root-cause lines from the logs, the
+  default prevention rule for that bucket, and — when available — how
+  the ci_fix agent said it fixed them.
+
+  OUTPUT
+
+  Emit `CiPreventionRulesResult` with `rules`: a list of SHORT imperative
+  sentences the implement agent will read before it starts working.
+
+  Rules for writing rules:
+  - One sentence each, imperative mood, at most ~25 words. Name the
+    concrete command or file when the digest shows it (e.g. "Run
+    `uv run ruff format` on every changed file before stopping",
+    "Register new files in docs/modules.yaml in the same commit").
+  - Most impactful first: order by (failures x distinct tickets), not by
+    how interesting the failure was.
+  - One rule per bucket at most; merge buckets that share a fix.
+  - Skip `flaky-network` and one-off buckets (a single ticket) unless the
+    digest shows nothing else — a rule must address something that
+    RECURS across tickets.
+  - Skip `unknown` unless its root-cause lines clearly share one cause.
+  - Prefer the ci_fix agent's stated fix over the default rule when it is
+    more specific; never invent tools or files that the digest does not
+    mention.
+  - Never mention ticket ids, dates, counts or "this pass" — the rules
+    are read for weeks by agents that have no access to the digest.
+  - Return an empty list when the digest is empty or nothing recurs.
