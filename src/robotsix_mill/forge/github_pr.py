@@ -621,7 +621,7 @@ class GitHubForgePRMixin:
             from .auth import classify_token_error
 
             transient = classify_token_error(e) == "transient"
-            result: dict[str, Any] = {"merged": False, "reason": str(e)}
+            result = {"merged": False, "reason": str(e)}
             if transient:
                 logging.getLogger(__name__).info(
                     "_merge_pr transient auth error for %s/%s PR #%d: %s",
