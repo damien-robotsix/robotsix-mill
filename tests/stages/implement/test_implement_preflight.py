@@ -821,7 +821,10 @@ def test_scope_triage_agent_error_escalates(ctx_factory, tmp_path, monkeypatch):
     def _failing_triage(
         *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
     ):
-        raise RuntimeError("model unavailable")
+        # A genuine agent failure: infrastructure errors (model outage,
+        # quota exhaustion) propagate to the worker instead — see
+        # ``test_scope_triage_infra_error_reaches_worker``.
+        raise RuntimeError("structured output invalid")
 
     monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _failing_triage)
 
@@ -831,11 +834,48 @@ def test_scope_triage_agent_error_escalates(ctx_factory, tmp_path, monkeypatch):
     assert "agent error" in out.note
     # The note names the ACTUAL exception — a bare "agent error" reads
     # like a scope verdict and sends the operator log-hunting.
-    assert "RuntimeError: model unavailable" in out.note
+    assert "RuntimeError: structured output invalid" in out.note
     # The "agent error" diagnostic lives in the transition note now
     # (v1 — scope-triage no longer comments).
     comments = ctx.service.list_comments(t.id)
     assert not any("scope-triage" in (c.body or "") for c in comments)
+
+
+def test_scope_triage_infra_error_reaches_worker(ctx_factory, tmp_path, monkeypatch):
+    """A model outage / quota exhaustion in the triage agent must escape
+    the stage so the worker parks the ticket, not become a BLOCKED
+    'scope-triage agent error' note."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+        max_fix_iterations="3",
+    )
+    t = _ticket(ctx)
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        '[{"file": "wip.txt", "note": "only this file"}]',
+        encoding="utf-8",
+    )
+
+    def _run(*, repo_dir, **_kwargs):
+        (Path(repo_dir) / "wip.txt").write_text("in scope")
+        (Path(repo_dir) / "README.md").write_text("out of scope edit")
+        return ("edit done", [], "", None, None, False, "")
+
+    monkeypatch.setattr(coding, "run_implement_agent", _run)
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+
+    def _failing_triage(**_kwargs):
+        raise RuntimeError("You've hit your session limit · resets 12pm (UTC)")
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _failing_triage)
+
+    with pytest.raises(RuntimeError, match="session limit"):
+        ImplementStage().run(t, ctx)
 
 
 # --- preflight: tool-definition integrity ---------------------------------

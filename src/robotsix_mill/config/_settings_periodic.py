@@ -121,6 +121,7 @@ class _PeriodicSettings(BaseModel):
             r"tests still failing after",
             r"review rounds exhausted",
             r"Infrastructure: LLM model outage",
+            r"scope-triage agent error",
         ],
         description="Regexes (case-insensitive) matched against the latest BLOCKED note; a match makes the block auto-resumable. Spec-fingerprint and upstream-CI parks are always excluded.",
         json_schema_extra={"advanced": True},

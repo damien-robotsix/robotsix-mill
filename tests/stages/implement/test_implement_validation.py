@@ -1661,3 +1661,85 @@ class TestStandardConfigSpecCarveOut:
         assert skip is not None and skip.action == "skip_iteration"
         assert len(events) == 1 and "auto-REVERT" in events[0]
         assert "healthcheck" not in content, "scaffolding drift must be undone"
+
+
+# ---------------------------------------------------------------------------
+# _run_scope_guardrail — triage agent error routing
+# ---------------------------------------------------------------------------
+
+
+def _triage_raising(monkeypatch, exc):
+    """Wire the guardrail so the diff has one out-of-scope file and the
+    scope-triage agent raises *exc*."""
+    monkeypatch.setattr(validation_mod, "target_branch_for", lambda *a: "main")
+    monkeypatch.setattr(
+        validation_mod.git_ops, "introduced_files", lambda *a: ["a.py", "b.py"]
+    )
+    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(
+        validation_mod.subprocess,
+        "run",
+        lambda *a, **kw: SimpleNamespace(stdout="+x"),
+    )
+    finalized = {}
+    monkeypatch.setattr(
+        ValidationMixin,
+        "_finalize",
+        classmethod(lambda cls, *a, **kw: finalized.update(ok=kw.get("ok"))),
+        raising=False,
+    )
+    from robotsix_mill.agents import scope_triage as st
+
+    def _raise(*a, **kw):
+        raise exc
+
+    monkeypatch.setattr(st, "run_scope_triage_agent", _raise)
+    return finalized
+
+
+def _run_triage_guardrail():
+    return _call_guardrail(
+        _scope_ctx(),
+        _scope_settings(scope_triage_enabled=True, scope_triage_max_files=10),
+        file_map={"a.py"},
+    )
+
+
+def test_scope_triage_usage_exhaustion_propagates_to_worker(monkeypatch):
+    """Claude quota exhaustion is infrastructure: the exception must reach
+    the worker (which parks until the reset) instead of becoming a BLOCKED
+    'scope-triage agent error' note (ticket ...-c504, 2026-08-30)."""
+
+    class ClaudeSDKUsageExhaustedError(RuntimeError):
+        pass
+
+    exc = ClaudeSDKUsageExhaustedError(
+        "You've hit your session limit · resets 12pm (UTC)"
+    )
+    finalized = _triage_raising(monkeypatch, exc)
+    with pytest.raises(ClaudeSDKUsageExhaustedError):
+        _run_triage_guardrail()
+    assert finalized == {}, "must not finalize the branch for an infra error"
+
+
+def test_scope_triage_cooldown_exhausted_propagates_to_worker(monkeypatch):
+    """An llmio tier in cooldown with no fallback left is a model outage
+    (ticket ...-b346, 2026-08-29), not a scope verdict."""
+    exc = RuntimeError(
+        "scope triage: level2 is in cooldown and fallback depth (2) exhausted"
+    )
+    _triage_raising(monkeypatch, exc)
+    with pytest.raises(RuntimeError, match="cooldown"):
+        _run_triage_guardrail()
+
+
+def test_scope_triage_structured_output_failure_still_escalates(monkeypatch):
+    """A genuine agent failure keeps today's ESCALATE-to-human behaviour."""
+    exc = ValueError("structured output did not validate against ScopeTriageVerdict")
+    finalized = _triage_raising(monkeypatch, exc)
+    res = _run_triage_guardrail()
+    assert res.action == "return"
+    assert res.outcome.next_state is State.BLOCKED
+    assert "scope-triage agent error (ValueError:" in res.outcome.note
+    assert "b.py" in res.outcome.note
+    assert finalized == {"ok": False}

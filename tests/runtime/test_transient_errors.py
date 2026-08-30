@@ -637,6 +637,20 @@ def test_is_model_unavailable_error_overloaded():
     assert is_model_unavailable_error(exc)
 
 
+def test_is_model_unavailable_error_tier_cooldown_exhausted():
+    """llmio "tier in cooldown, fallback depth exhausted" → model outage."""
+    from robotsix_mill.runtime.transient_errors import (
+        classify_stage_error,
+        is_model_unavailable_error,
+    )
+
+    exc = RuntimeError(
+        "scope triage: level2 is in cooldown and fallback depth (2) exhausted"
+    )
+    assert is_model_unavailable_error(exc)
+    assert classify_stage_error(exc) == "transient"
+
+
 def test_is_model_unavailable_error_rejects_generic_503():
     """A bare 503 without outage signal is NOT a model outage."""
     from robotsix_mill.runtime.transient_errors import is_model_unavailable_error

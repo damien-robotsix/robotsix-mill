@@ -96,7 +96,13 @@ _MODEL_UNAVAILABLE_RE = re.compile(
     r"|all endpoints unavailable"
     r"|provider\b.*\boverloaded"
     r"|overloaded.*try again"
-    r"|the model .* is currently at capacity)",
+    r"|the model .* is currently at capacity"
+    # llmio's tier router: the requested tier is cooling down after
+    # provider failures and every fallback tier is exhausted too, so no
+    # model can serve the call right now. Same shape as an outage — the
+    # cooldown lifts by itself. Seen 2026-08-29 as "scope triage: level2
+    # is in cooldown and fallback depth (2) exhausted".
+    r"|is in cooldown and fallback depth)",
     re.IGNORECASE,
 )
 

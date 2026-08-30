@@ -133,3 +133,18 @@ def test_matches_helper_is_case_insensitive_and_ignores_bad_patterns():
     assert bar._matches("Agent Error — Resumable: x", ["agent error — resumable"])
     assert not bar._matches("agent error — resumable: spec unchanged", ["— resumable"])
     assert bar._matches("stage timed out", ["([unclosed", "timed out"])
+
+
+def test_default_patterns_cover_scope_triage_agent_error():
+    """Tickets already BLOCKED by the implement stage's scope-triage error
+    fall-through (infra errors swallowed before the fix) get the one
+    automatic retry from the default pattern list."""
+    from robotsix_mill.config._settings_periodic import _PeriodicSettings
+
+    patterns = _PeriodicSettings.model_fields["blocked_auto_resume_patterns"].default
+    note = (
+        "scope-triage agent error (ClaudeSDKUsageExhaustedError: You've hit "
+        "your session limit · resets 12pm (UTC)) — escalated for human review; "
+        "resume-blocked re-runs the triage — out-of-scope: `a.py`"
+    )
+    assert bar._matches(note, patterns)
