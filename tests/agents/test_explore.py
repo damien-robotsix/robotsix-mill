@@ -1385,3 +1385,73 @@ def test_explore_claude_usage_exhausted_surfaces_without_paid_fallback(
     assert out.startswith("explore failed")
     assert "usage limit" in out
     assert sleeps == []  # non-transient: no retry ladder
+
+
+def test_explore_claude_usage_exhausted_falls_back_with_paid_flag(
+    tmp_path, monkeypatch
+):
+    """With ``claude_exhaustion_paid_fallback=true``, an exhausted Claude
+    explore call is rebuilt at the nearest keyed (non-Claude) level and
+    the same question is retried once — the caller gets a real answer."""
+    from robotsix_llmio.claude_sdk._errors import ClaudeSDKUsageExhaustedError
+
+    (tmp_path / "a.txt").write_text("hi")
+    s = _settings(
+        tmp_path,
+        explore_model_level="2",
+        claude_exhaustion_paid_fallback=True,
+        OPENROUTER_API_KEY="fallback-key",
+    )
+
+    claude_err = ClaudeSDKUsageExhaustedError("You've hit your session limit")
+    claude_cap = {}
+    _patch_claude_provider(
+        monkeypatch, _FakeClaudeProvider(claude_cap, error=claude_err)
+    )
+
+    # Level-1 (fallback) agent that succeeds.
+    fallback_cap: dict = {}
+
+    class FallbackAgent:
+        def __init__(self, **kw):
+            fallback_cap["tools"] = sorted(t.__name__ for t in kw.get("tools", []))
+            fallback_cap["name"] = kw.get("name")
+
+        async def run(self, q, *, usage_limits=None):
+            fallback_cap["prompt"] = q
+            fallback_cap["limit"] = usage_limits.request_limit if usage_limits else None
+            return type("R", (), {"output": "fallback answer"})()
+
+    import pydantic_ai
+
+    # Patch pydantic_ai.Agent so the OpenRouter fallback path uses our fake.
+    monkeypatch.setattr(pydantic_ai, "Agent", FallbackAgent)
+
+    from robotsix_mill.agents import base as bmod
+
+    def fake_build_openrouter_model(level=1, *, online=False):
+        fallback_cap["level"] = level
+        return object(), object()
+
+    monkeypatch.setattr(bmod, "build_openrouter_model", fake_build_openrouter_model)
+
+    out = asyncio.run(
+        explore.run_explore(
+            settings=s, repo_dir=tmp_path, question="a test question long enough"
+        )
+    )
+    assert out == "fallback answer"
+    # The fallback was level 1 (nearest non-Claude).
+    assert fallback_cap["level"] == 1
+    assert fallback_cap["name"] == "explore"
+    # The same question was forwarded (not simplified).
+    assert "a test question long enough" in fallback_cap["prompt"]
+    # Read-only tools were passed to the fallback agent.
+    assert fallback_cap["tools"] == [
+        "list_dir",
+        "parallel_commands",
+        "read_file",
+        "run_command",
+    ]
+    # UsageLimits were set for the non-Claude fallback.
+    assert fallback_cap["limit"] == s.explore_request_limit

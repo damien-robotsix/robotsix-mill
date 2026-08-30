@@ -421,7 +421,7 @@ async def run_explore(
     via pydantic-ai's async ``agent.run`` rather than ``run_sync`` (which
     would call ``asyncio.run`` and raise "event loop is already running").
     """
-    from .base import build_subagent, level_uses_claude
+    from .base import build_subagent, level_uses_claude, tier_fallback_levels
 
     level = settings.explore_model_level
     on_claude = level_uses_claude(level)
@@ -462,7 +462,7 @@ async def run_explore(
 
     from pydantic_ai.exceptions import UsageLimitExceeded
 
-    from .retry import is_transient
+    from .retry import is_tier_unavailable, is_transient
 
     last_error: Exception | None = None
 
@@ -534,6 +534,55 @@ async def run_explore(
                     type(e).__name__,
                     e,
                 )
+                # Claude exhaustion / auth error with paid fallback enabled:
+                # rebuild the scout at the nearest keyed (non-Claude) level
+                # and retry the same question once, mirroring
+                # ``run_agent``'s ``_run_at_fallback_tier``.
+                if (
+                    on_claude
+                    and settings.claude_exhaustion_paid_fallback
+                    and is_tier_unavailable(e)
+                ):
+                    for next_level in tier_fallback_levels(level):
+                        log.warning(
+                            "explore: level%d unavailable (%s: %s) — "
+                            "falling back to level%d",
+                            level,
+                            type(e).__name__,
+                            str(e)[:160],
+                            next_level,
+                        )
+                        fallback_agent, fallback_client = build_subagent(
+                            settings,
+                            level=next_level,
+                            system_prompt=_SYSTEM_PROMPT,
+                            tools=ro_tools,
+                            name="explore",
+                            max_tokens=settings.explore_max_tokens,
+                            workspace_root=repo_dir,
+                        )
+                        try:
+                            fb_limits = (
+                                None
+                                if level_uses_claude(next_level)
+                                else UsageLimits(
+                                    request_limit=settings.explore_request_limit
+                                )
+                            )
+                            return await asyncio.wait_for(
+                                _run_single_explore_attempt(
+                                    agent=fallback_agent,
+                                    prompt=current_prompt,
+                                    limits=fb_limits,
+                                    settings=settings,
+                                ),
+                                timeout=settings.explore_timeout_seconds,
+                            )
+                        except Exception:
+                            last_error = e
+                        finally:
+                            if fallback_client is not None:
+                                await _aclose_async_client(fallback_client)
                 break
             if attempt < _EXPLORE_MAX_ATTEMPTS:
                 delay = min(_EXPLORE_BACKOFF_CAP, 2.0**attempt)
