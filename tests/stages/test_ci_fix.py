@@ -1729,6 +1729,73 @@ def test_agent_failed_blocks_immediately(tmp_path, monkeypatch):
     assert "iteration budget" in out.note
 
 
+def _flip_check_status_to_success_after_first(monkeypatch):
+    """check_status returns 'failure' on the first call (stage entry) and
+    'success' on every subsequent call (the pre-block CI re-check)."""
+    calls = {"n": 0}
+
+    def _status(self, *, source_branch, require_checks=False):
+        calls["n"] += 1
+        conclusion = "failure" if calls["n"] == 1 else "success"
+        return {
+            "conclusion": conclusion,
+            "failing": (
+                [{"name": "lint", "summary": "err", "text": None, "annotations": []}]
+                if conclusion == "failure"
+                else []
+            ),
+        }
+
+    monkeypatch.setattr(github.GitHubForge, "check_status", _status)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    return calls
+
+
+def test_agent_failed_ci_recovered_returns_implement_complete(tmp_path, monkeypatch):
+    """A FAILED verdict (iteration budget spent) does NOT block when the agent
+    already pushed a fix that turned CI green — the pre-block re-check sees
+    'success' and returns to the merge poll instead."""
+    ctx = _gh(tmp_path)
+    calls = _flip_check_status_to_success_after_first(monkeypatch)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="FAILED", summary="could not fix ruff"),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    # The re-check queried the forge a second time before deciding.
+    assert calls["n"] >= 2
+
+
+def test_agent_timeout_ci_recovered_returns_implement_complete(tmp_path, monkeypatch):
+    """A wall-clock timeout does NOT block when CI is green at block time — the
+    pre-block re-check sees 'success' and returns to the merge poll."""
+    ctx = _gh(tmp_path, ci_fix_agent_timeout_seconds="1800")
+    calls = _flip_check_status_to_success_after_first(monkeypatch)
+
+    def fake_invoke(self, ticket, ctx, repo_dir, branch, failing_summary):
+        self._last_agent_timed_out = True
+        self._last_agent_timeout_elapsed = 1850.0
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.CIFixStage._invoke_agent",
+        fake_invoke,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert calls["n"] >= 2
+
+
 def test_codeql_security_severity_block_note(tmp_path, monkeypatch):
     """A CodeQL-only failure with a security-severity alert produces a BLOCKED
     note that names the alert and states human sign-off is required, without

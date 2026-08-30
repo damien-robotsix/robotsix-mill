@@ -726,6 +726,9 @@ class CIFixStage(Stage):
                 "failure requires a more complex fix than the agent can apply "
                 "within the time budget. Resume-blocked to retry."
             )
+            recovered = self._ci_recovered_before_block(ticket, ctx, branch)
+            if recovered is not None:
+                return recovered
             return Outcome(State.BLOCKED, timeout_note)
 
         # Before emitting the generic message, check whether CodeQL code-
@@ -759,6 +762,9 @@ class CIFixStage(Stage):
             if artifact_path.exists()
             else ""
         )
+        recovered = self._ci_recovered_before_block(ticket, ctx, branch)
+        if recovered is not None:
+            return recovered
         return Outcome(
             State.BLOCKED,
             f"ci fix agent could not turn CI green within its iteration budget "
@@ -766,6 +772,56 @@ class CIFixStage(Stage):
             "Manual intervention required — resume-blocked to retry from "
             "human_mr_approval.",
         )
+
+    def _ci_recovered_before_block(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        branch: str,
+    ) -> Outcome | None:
+        """Re-read the current head's CI conclusion before emitting BLOCKED.
+
+        The agent may have already pushed a fix that turned CI green (or
+        that is still running) even though it exhausted its wall-clock or
+        iteration budget without observing the green itself. Blocking in
+        that case forces needless manual intervention, so re-probe the
+        forge for the branch's current CI conclusion and, when it is
+        ``success`` or ``pending``/unknown, return to the merge poll
+        (``IMPLEMENT_COMPLETE``) instead of blocking.
+
+        Returns an ``Outcome(State.IMPLEMENT_COMPLETE)`` when CI is no longer
+        failing, or ``None`` when the caller should proceed to BLOCKED.
+        """
+        try:
+            status = get_forge(ctx.settings, repo_config=ctx.repo_config).check_status(
+                source_branch=branch, require_checks=True
+            )
+        except Exception as e:
+            log.warning(
+                "%s: pre-block CI re-check failed (proceeding to BLOCKED): %s",
+                ticket.id,
+                e,
+            )
+            return None
+
+        if status is None:
+            # PR disappeared — nothing to block on; re-poll.
+            return Outcome(State.IMPLEMENT_COMPLETE)
+
+        conclusion = status.get("conclusion")
+        if conclusion != "failure":
+            # success / pending / None / unknown — CI is not (currently)
+            # failing on the head the agent last pushed. Do not block; return
+            # to the merge poll so the CI wait loop re-evaluates.
+            log.info(
+                "%s: CI no longer failing (conclusion=%r) at block time — "
+                "returning to merge poll instead of BLOCKED",
+                ticket.id,
+                conclusion,
+            )
+            return Outcome(State.IMPLEMENT_COMPLETE)
+
+        return None
 
     def _write_ci_fix_artifact(
         self,
