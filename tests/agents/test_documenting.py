@@ -1401,9 +1401,7 @@ class TestRunDocAgentRateLimitDegradation:
         assert agent.calls == 1
         assert agent.closed is True
 
-    def test_claude_sdk_usage_exhausted_degrades(
-        self, settings, repo_dir, monkeypatch
-    ):
+    def test_claude_sdk_usage_exhausted_degrades(self, settings, repo_dir, monkeypatch):
         """A Claude SDK session/weekly cap
         (``ClaudeSDKUsageExhaustedError``) degrades rather than triggering
         the tier-fallback re-run machinery."""
