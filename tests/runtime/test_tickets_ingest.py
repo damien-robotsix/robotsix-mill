@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import threading
-from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -303,7 +302,9 @@ def test_normalize_title_case_folds():
 
 def test_ingest_fingerprint_dedup_hit(client, service):
     """When the normalized title matches an existing open ticket, the
-    endpoint returns 200 deduped=True without calling the LLM."""
+    endpoint returns 200 deduped=True. LLM dedup is not called —
+    fingerprint match is deterministic and handled entirely in the
+    ingest route (no LLM import remains in the module)."""
     existing = service.create(
         "mail-ingester unhealthy on 2026-07-30",
         "The ingester container is failing health checks.",
@@ -312,20 +313,14 @@ def test_ingest_fingerprint_dedup_hit(client, service):
         board_id="test-board",
     )
 
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
-    ) as mock_dedup:
-        r = client.post(
-            "/tickets/ingest",
-            json=_ingest_payload(
-                title="mail-ingester unhealthy on 2026-07-31",
-                body="Still failing after restart.",
-                source_tag="monitor-2",
-            ),
-        )
-    # LLM dedup should NOT be called — fingerprint match is
-    # deterministic and cheaper.
-    assert mock_dedup.call_count == 0
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(
+            title="mail-ingester unhealthy on 2026-07-31",
+            body="Still failing after restart.",
+            source_tag="monitor-2",
+        ),
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["ticket_id"] == existing.id

@@ -9,7 +9,7 @@ import pytest
 from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.stages.base import Outcome, StageContext
+from robotsix_mill.stages.base import StageContext
 from robotsix_mill.stages.classify import ClassifyStage
 
 
