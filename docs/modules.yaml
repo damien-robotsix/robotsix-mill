@@ -252,6 +252,7 @@ modules:
       - src/robotsix_mill/stages/hooks.py
       - src/robotsix_mill/stages/base.py
       - src/robotsix_mill/stages/registry.py
+      - src/robotsix_mill/stages/classify.py
       - src/robotsix_mill/stages/implement/__init__.py
       - src/robotsix_mill/stages/implement/_shared.py
       - src/robotsix_mill/stages/implement/_base.py
@@ -302,6 +303,7 @@ modules:
       - tests/stages/test_hooks.py
       - tests/stages/test_dependency_fix.py
       - tests/stages/test_registry.py
+      - tests/stages/test_classify.py
       - tests/stages/implement/test_implement.py
       - tests/stages/implement/test_implement_scope_guardrail.py
       - tests/stages/implement/test_implement_preflight.py
