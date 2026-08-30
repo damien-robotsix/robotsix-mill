@@ -59,8 +59,6 @@
 
 ::: robotsix_mill.agents.ci_patterns
 
-::: robotsix_mill.agents.claude_concurrency
-
 ::: robotsix_mill.agents.close_thread
 
 ::: robotsix_mill.agents.completeness_check

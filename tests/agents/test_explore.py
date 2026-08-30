@@ -1320,25 +1320,12 @@ def test_explore_claude_tier_builds_via_provider_with_read_only_tools(
     """On a Claude tier the scout is built through the llmio provider (a raw
     pydantic-ai Agent cannot carry tools there): the configured level and the
     read-only tool subset reach ``provider.build_agent``, the SDK's built-in
-    tools are denied, the handle is wrapped in the Claude concurrency bound,
-    and no OpenRouter key or ``usage_limits`` is required."""
+    tools are denied, and no OpenRouter key or ``usage_limits`` is required."""
     (tmp_path / "a.txt").write_text("hi")
     # No OPENROUTER_API_KEY: the Claude tier is keyless.
     s = _settings(tmp_path, explore_model_level="2", explore_max_tokens="600")
     cap = {}
     calls = _patch_claude_provider(monkeypatch, _FakeClaudeProvider(cap))
-
-    from robotsix_mill.agents import claude_concurrency
-
-    claude_concurrency.reset_for_tests()
-    seen = {}
-    real_bound = claude_concurrency.bound_claude_handle
-
-    def spy_bound(handle, limit):
-        seen["limit"] = limit
-        return real_bound(handle, limit)
-
-    monkeypatch.setattr(claude_concurrency, "bound_claude_handle", spy_bound)
 
     out = asyncio.run(
         explore.run_explore(
@@ -1362,7 +1349,6 @@ def test_explore_claude_tier_builds_via_provider_with_read_only_tools(
     ]  # NO write/edit/delete
     # The SDK tool loop cannot honour usage_limits — none is forwarded.
     assert cap["run_kwargs"] == {}
-    assert seen["limit"] == s.claude_max_concurrency
 
 
 def test_explore_claude_usage_exhausted_surfaces_without_paid_fallback(

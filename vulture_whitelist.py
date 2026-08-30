@@ -167,6 +167,9 @@ repo_description_sync_interval_seconds
 # diagnostic_ci_failure_threshold — legacy, inert knob kept only so pinned
 # configs (production pins 0) still load; nothing reads it any more.
 diagnostic_ci_failure_threshold
+# claude_max_concurrency — deprecated, inert since the Claude run semaphore
+# was removed; kept only so pinned configs (and PUT /config) still load.
+claude_max_concurrency
 roadmap_sync_periodic
 roadmap_sync_interval_seconds
 pin_bump_periodic

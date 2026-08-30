@@ -26,15 +26,20 @@ class _CoreSettings(BaseModel):
     # for current mapping). There is no
     # global backend toggle.
     #
-    # Process-wide cap on how many Claude Agent SDK runs may execute at once.
-    # Each run spawns a ``claude`` CLI subprocess; spawning many simultaneously
-    # (worker startup contention) can stall a run. A global semaphore (see
-    # ``agents.claude_concurrency``) bounds concurrent runs to smooth the spawn
-    # storm. Applies to Claude SDK agents (levels 2/4/5). Must be ≥ 1.
+    # Deprecated, inert. Used to size a process-wide semaphore around every
+    # Claude SDK ``run_sync`` (``agents.claude_concurrency``, removed): a
+    # 30-minute implement run held a slot for its whole duration and every
+    # short Claude call (gates, classifiers, ingest) queued behind it. The real
+    # limits are the subscription rate cap (park logic) and host resources
+    # (``max_global_concurrency`` + sandbox caps). Kept only so configs that
+    # pin it still load and ``PUT /config`` still accepts it.
     claude_max_concurrency: int = Field(
         default=4,
         ge=1,
-        description="Maximum concurrent Claude Agent SDK runs. Each run spawns a claude CLI subprocess; this semaphore bounds concurrent spawns.",
+        description=(
+            "Deprecated, inert since the Claude run semaphore was removed: "
+            "no longer bounds anything. Kept so existing pinned configs load."
+        ),
         json_schema_extra={"advanced": True},
     )
     # Host-level cap on total concurrently-running stages across ALL boards,
