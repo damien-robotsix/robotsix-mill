@@ -10,6 +10,7 @@ from __future__ import annotations
 from .answer import AnswerStage
 from .base import Stage
 from .ci_fix import CIFixStage
+from .classify import ClassifyStage
 from .deliver import DeliverStage
 from .document import DocumentStage
 from .implement import ImplementStage
@@ -19,6 +20,7 @@ from .retrospect import RetrospectStage
 from .review import ReviewStage
 
 _REGISTERED: list[type[Stage]] = [
+    ClassifyStage,
     RefineStage,
     ImplementStage,
     DocumentStage,

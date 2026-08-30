@@ -59,6 +59,7 @@ ASK_USER_MARKER: str = "[ASK_USER]"
 class State(StrEnum):
     """Ticket states in the pipeline lifecycle."""
 
+    CLASSIFYING = "classifying"  # ingested; awaiting ops/scope/dedup classification
     DRAFT = "draft"  # raw idea, awaiting refinement
     HUMAN_ISSUE_APPROVAL = "human_issue_approval"  # refined; awaiting human approval
     READY = "ready"  # actionable; awaiting implementation
@@ -96,6 +97,18 @@ DONE_OR_CLOSED: frozenset[State] = frozenset({State.CLOSED, State.DONE})
 #: state -> the set of states it may transition to (the "happy path"
 #: plus the always-available escalation edges).
 TRANSITIONS: dict[State, set[State]] = {
+    # CLASSIFYING: the classify stage runs ops/scope/dedup classification.
+    # On success → DRAFT (proceed to refine) or EPIC_OPEN (promoted).
+    # OPERATIONAL or duplicate → CLOSED. Errors → ERRORED/BLOCKED.
+    State.CLASSIFYING: {
+        State.DRAFT,
+        State.EPIC_OPEN,
+        State.CLOSED,
+        State.DONE,
+        State.ERRORED,
+        State.BLOCKED,
+        State.AWAITING_USER_REPLY,
+    },
     # DRAFT → EPIC_OPEN is the refine-stage promote_to_epic outcome:
     # refine decided the work is too varied to spec in one pass, flips
     # ``kind=epic`` via ``service.promote_to_epic`` and emits this
@@ -259,18 +272,19 @@ TRANSITIONS: dict[State, set[State]] = {
     State.EPIC_OPEN: {State.EPIC_CLOSED, State.BLOCKED},
     State.EPIC_CLOSED: set(),
     # a human moves these back into the pipeline manually
-    State.ERRORED: {State.READY, State.DRAFT},
+    State.ERRORED: {State.READY, State.DRAFT, State.CLASSIFYING},
     # BLOCKED: human can override to READY or DRAFT (re-run downstream),
     # or resume to the originating state (re-run only the failed stage).
     # ASKED is included so a blocked inquiry can resume to ASKED.
     # CLOSED provides a terminal escape for ask_user-blocked tickets
     # that will never receive an operator answer (the operator can
     # force-close rather than let them accumulate indefinitely).
-    State.BLOCKED: {State.READY, State.DRAFT, State.CLOSED},
+    State.BLOCKED: {State.READY, State.DRAFT, State.CLASSIFYING, State.CLOSED},
 }
 
 #: active state -> name of the stage that consumes it.
 STAGE_FOR_STATE: dict[State, str] = {
+    State.CLASSIFYING: "classify",
     State.DRAFT: "refine",
     State.READY: "implement",
     State.IMPLEMENT_COMPLETE: "merge",

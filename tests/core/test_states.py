@@ -11,6 +11,7 @@ from robotsix_mill.core.states import (
 
 # Known stage names that STAGE_FOR_STATE values must belong to.
 VALID_STAGE_NAMES = {
+    "classify",
     "refine",
     "implement",
     "document",

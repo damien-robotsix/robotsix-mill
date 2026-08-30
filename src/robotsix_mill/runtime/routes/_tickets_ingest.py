@@ -23,14 +23,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from ...agents.dedup import (
-    any_candidate_overlap,
-    rank_candidates_by_similarity,
-    run_dedup_check,
-)
-from ...agents.ops_classify import OpsClassifyVerdict, run_ops_classify_agent
-from ...agents.runners.diagnostic_events import emit_diagnostic_event
-from ...agents.scope_classify import ScopeVerdict, run_scope_classify_agent
 from ...config import RepoConfig, ReposRegistry, Settings
 from ...core.models import Ticket, TicketKind
 from ...core.service import TicketService
@@ -245,6 +237,10 @@ def ingest_ticket(
     Returns 200 with ``deduped=True`` when the report matches an
     existing ticket (a history note is appended to the existing one).
     Returns 404 when *repo_id* is not registered.
+
+    Classification (ops_classify, LLM dedup, scope_classify) runs
+    asynchronously in the classify stage after the ticket is created,
+    keeping the HTTP response under 2 s.
     """
     # 1. Repo validation — 404 for unknown repo_id.
     repo_config = repos.repos.get(body.repo_id)
@@ -263,30 +259,6 @@ def ingest_ticket(
     _check_repo_workable(repo_config, body.repo_id, settings)
 
     board_id = repo_config.board_id
-
-    # 2b. Operational-maintenance classification — reject reports
-    #     that describe manual operational actions (credential rotation,
-    #     redeploy, infra console changes) rather than code work.
-    ops_verdict = _run_ops_classify(body, board_id, settings)
-    if ops_verdict is not None and ops_verdict.classification == "OPERATIONAL":
-        logger.info(
-            "ingest rejected as operational-maintenance: %s",
-            ops_verdict.reason,
-        )
-        return JSONResponse(
-            status_code=200,
-            content={
-                "filed": False,
-                "reason": "operational-maintenance",
-                "classification": "OPERATIONAL",
-                "guidance": ops_verdict.reason,
-            },
-        )
-
-    # Classification label for CODE reports (None if classifier failed).
-    classification_label: str | None = (
-        ops_verdict.classification if ops_verdict is not None else None
-    )
 
     # 3. Candidate selection — scope to the target board.
     board_svc = TicketService(settings, board_id=board_id)
@@ -311,7 +283,6 @@ def ingest_ticket(
             board_svc,
             worker,
             settings,
-            classification=classification_label,
         )
 
     # 4. Normalized-title fingerprint dedup — fast, deterministic,
@@ -331,302 +302,9 @@ def ingest_ticket(
             content=IngestResult(ticket_id=dup_id, deduped=True).model_dump(),
         )
 
-    # 4. Cheap prefilter — skip LLM when no token overlap.
-    candidate_texts: list[str] = []
-    for t in candidates:
-        try:
-            desc = board_svc.workspace(t).read_description()
-        except Exception:
-            desc = ""
-        candidate_texts.append(f"{t.title} {desc}")
-    if not any_candidate_overlap(
-        draft_title=body.title,
-        draft_body=body.body,
-        candidates_texts=candidate_texts,
-    ):
-        return _create_ticket_guarded(body, board_id, board_svc, worker, settings)
-
-    # 5. LLM dedup.
-    dup_id = _run_llm_dedup(body, candidates, board_svc, worker, settings)
-    if dup_id is not None:
-        board_svc.add_history_note(
-            dup_id,
-            f"re-reported by {body.source_tag} on {date.today().isoformat()}",
-        )
-        return JSONResponse(
-            status_code=200,
-            content=IngestResult(ticket_id=dup_id, deduped=True).model_dump(),
-        )
-
-    # already_done is deliberately not acted on — fall through to create.
+    # 5. Create ticket — classification (ops/scope/dedup) runs
+    #    asynchronously in the classify stage.
     return _create_ticket_guarded(body, board_id, board_svc, worker, settings)
-
-
-def _run_ops_classify(
-    body: TicketIngest,
-    board_id: str,
-    settings: Settings,
-) -> OpsClassifyVerdict | None:
-    """Run the operational-maintenance classifier on the ingest body.
-
-    Returns an :class:`OpsClassifyVerdict` on success, or ``None``
-    when the LLM call fails (fail-open: a missed ops rejection is
-    cheaper than a lost incident report).  Emits a diagnostic event
-    so false-positives and false-negatives can be audited.
-    """
-    try:
-        verdict = run_ops_classify_agent(
-            settings=settings,
-            title=body.title,
-            body=body.body,
-        )
-    except Exception as exc:
-        logger.warning(
-            "ingest ops-classify failed, proceeding as code (fail-open): %s",
-            exc,
-        )
-        return None
-
-    # Record the classification decision for auditability.
-    try:
-        emit_diagnostic_event(
-            settings=settings,
-            board_id=board_id,
-            category="OPS_CLASSIFY",
-            ticket_id="",
-            reason=(
-                f"classification={verdict.classification} "
-                f"title={body.title!r} reason={verdict.reason!r}"
-            ),
-            normalized_key=_normalize_title(body.title),
-        )
-    except Exception:
-        logger.debug("ops-classify diagnostic event emission failed", exc_info=True)
-
-    return verdict
-
-
-def _run_scope_classify(
-    body: TicketIngest,
-    board_id: str,
-    settings: Settings,
-) -> ScopeVerdict | None:
-    """Run the scope-breadth classifier on the ingest body.
-
-    Returns a :class:`ScopeVerdict` on success, or ``None`` when the
-    feature is disabled or the LLM call fails (fail-open: a missed epic
-    promotion is cheaper than a lost report — the ticket is created as a
-    single task and refine can still promote it later).  Emits a
-    diagnostic event so promotion decisions are auditable.
-    """
-    if not settings.auto_epic_enabled:
-        return None
-    try:
-        verdict = run_scope_classify_agent(
-            settings=settings,
-            title=body.title,
-            body=body.body,
-        )
-    except Exception as exc:
-        logger.warning(
-            "ingest scope-classify failed, proceeding as task (fail-open): %s",
-            exc,
-        )
-        return None
-
-    try:
-        emit_diagnostic_event(
-            settings=settings,
-            board_id=board_id,
-            category="SCOPE_CLASSIFY",
-            ticket_id="",
-            reason=(
-                f"classification={verdict.classification} "
-                f"confidence={verdict.confidence:.2f} "
-                f"title={body.title!r} reason={verdict.reason!r}"
-            ),
-            normalized_key=_normalize_title(body.title),
-        )
-    except Exception:
-        logger.debug("scope-classify diagnostic event emission failed", exc_info=True)
-
-    return verdict
-
-
-def _maybe_promote_to_epic(
-    body: TicketIngest,
-    board_id: str,
-    board_svc: TicketService,
-    worker: Worker,
-    settings: Settings,
-) -> JSONResponse | None:
-    """Promote a clearly multi-concern report to an auto-decomposed epic.
-
-    Runs the scope classifier and, when it returns ``EPIC`` with
-    confidence at or above ``auto_epic_min_confidence``, creates the
-    ticket as an epic, records the decision + rationale in its history,
-    and invokes the existing epic-breakdown machinery to spawn
-    dependency-ordered child tickets.  Returns the ``201`` response for
-    the created epic, or ``None`` when the report should proceed as a
-    single task (disabled, classifier failure, ``TASK`` verdict, or a
-    borderline ``EPIC`` below the confidence threshold).
-    """
-    verdict = _run_scope_classify(body, board_id, settings)
-    if verdict is None or verdict.classification != "EPIC":
-        return None
-    if verdict.confidence < settings.auto_epic_min_confidence:
-        logger.info(
-            "ingest scope-classify EPIC below threshold "
-            "(%.2f < %.2f); staying a single task: %s",
-            verdict.confidence,
-            settings.auto_epic_min_confidence,
-            verdict.reason,
-        )
-        return None
-
-    epic = board_svc.create(
-        title=body.title,
-        description=body.body,
-        source=body.source_tag,
-        kind=TicketKind.EPIC,
-        board_id=board_id,
-    )
-    board_svc.add_history_note(
-        epic.id,
-        f"auto-classified as epic at ingest (scope gate, confidence "
-        f"{verdict.confidence:.2f}): {verdict.reason}",
-    )
-    logger.info(
-        "ingest promoted %s to epic (confidence %.2f)",
-        epic.id,
-        verdict.confidence,
-    )
-    try:
-        _decompose_epic(epic, body, board_id, board_svc, worker, settings)
-    except Exception:
-        logger.exception(
-            "%s: epic-breakdown after ingest promotion failed — epic body "
-            "is in place, children left for /generate-children",
-            epic.id,
-        )
-    return JSONResponse(
-        status_code=201,
-        content=IngestResult(
-            ticket_id=epic.id,
-            deduped=False,
-            classified="EPIC",
-        ).model_dump(),
-    )
-
-
-def _decompose_epic(
-    epic: Ticket,
-    body: TicketIngest,
-    board_id: str,
-    board_svc: TicketService,
-    worker: Worker,
-    settings: Settings,
-) -> None:
-    """Break *epic* into dependency-ordered child tickets.
-
-    Reuses the shared ``run_epic_breakdown_agent`` +
-    ``plan_child_dependencies`` machinery (the same path the refine
-    stage's ``promote_to_epic`` mode uses).  Children are created as
-    DRAFT tasks parented to *epic*, chained in dependency order, and
-    enqueued so they flow into refine on their own cycles.
-    """
-    from ...agents.epic_breakdown import (
-        plan_child_dependencies,
-        run_epic_breakdown_agent,
-    )
-
-    breakdown = run_epic_breakdown_agent(
-        settings=settings,
-        epic_title=epic.title,
-        epic_description=body.body,
-    )
-    created_children: list[tuple[str, str, str]] = []
-    for child_title, child_body in zip(
-        breakdown.child_titles,
-        breakdown.child_bodies,
-        strict=True,
-    ):
-        child = board_svc.create(
-            title=child_title,
-            description=child_body,
-            source=body.source_tag,
-            kind=TicketKind.TASK,
-            parent_id=epic.id,
-            board_id=board_id,
-        )
-        created_children.append((child.id, child_title, child_body))
-
-    for child_id, deps in plan_child_dependencies(created_children).items():
-        board_svc.set_depends_on(child_id, deps)
-
-    # Adopt the breakdown agent's revised epic body when it reworked one.
-    if breakdown.epic_body and breakdown.epic_body.strip():
-        new_hash = board_svc.workspace(epic).write_description(
-            breakdown.epic_body.strip()
-        )
-        board_svc.set_content_hash(epic.id, new_hash)
-
-    for child_id, _t, _b in created_children:
-        created = board_svc.get(child_id)
-        if created is not None:
-            maybe_enqueue(created, worker)
-
-    board_svc.add_history_note(
-        epic.id,
-        f"epic-breakdown spawned {len(created_children)} child ticket(s)",
-    )
-
-
-def _run_llm_dedup(
-    body: TicketIngest,
-    candidates: list[Ticket],
-    board_svc: TicketService,
-    worker: Worker,
-    settings: Settings,
-) -> str | None:
-    """Run the LLM dedup check against the top-ranked candidates.
-
-    Returns a ``ticket_id`` when a duplicate is found, or ``None``
-    when no duplicate was detected (fail-open: LLM errors also return
-    ``None`` so the ticket is created).
-    """
-    top = rank_candidates_by_similarity(
-        draft_title=body.title,
-        draft_body=body.body,
-        candidates=candidates,
-        max_candidates=settings.dedup_max_candidates,
-    )
-    # Build candidates_json: one H2 section per candidate.
-    lines: list[str] = []
-    for t in top:
-        try:
-            desc = board_svc.workspace(t).read_description()
-        except Exception:
-            desc = ""
-        snippet = desc[: settings.dedup_candidate_body_max_chars]
-        lines.append(
-            f"## {t.id}\n**Title**: {t.title}\n**State**: {t.state}\n\n{snippet}\n"
-        )
-    candidates_json = "\n".join(lines)
-
-    try:
-        verdict = run_dedup_check(
-            settings=settings,
-            draft_title=body.title,
-            draft_body=body.body,
-            candidates_json=candidates_json,
-            repo_dir=None,
-        )
-    except Exception as exc:
-        logger.warning("ingest dedup LLM failed, creating ticket (fail-open): %s", exc)
-        return None
-
-    return verdict.get("duplicate_of")
 
 
 def _count_open_tickets(board_svc: TicketService, board_id: str) -> int:
@@ -698,8 +376,11 @@ def _create_ticket(
     *,
     classification: str | None = None,
 ) -> JSONResponse:
-    """Create a new draft ticket and enqueue it.  Shared between the
-    dedup-miss path and the fail-open path.
+    """Create a new ticket in CLASSIFYING state and enqueue it.
+
+    The classify stage will run ops/scope/dedup classification
+    asynchronously, then transition to DRAFT (for refine) or close
+    the ticket if it's operational/duplicate.
 
     When the board's open-ticket count has reached the configured cap
     (``board_hygiene_max_open_tickets``), the finding is appended as a
@@ -723,21 +404,13 @@ def _create_ticket(
                 content=IngestResult(ticket_id=rollup_id, deduped=False).model_dump(),
             )
 
-    # Scope gate: promote clearly multi-concern reports to an
-    # auto-decomposed epic before creating a single task.  This runs
-    # past every dedup check, so a re-ingest of the same report is
-    # deduped upstream and never reaches here — preserving idempotency
-    # (no double-classification / double-decomposition).
-    epic_response = _maybe_promote_to_epic(body, board_id, board_svc, worker, settings)
-    if epic_response is not None:
-        return epic_response
-
     ticket = board_svc.create(
         title=body.title,
         description=body.body,
         source=body.source_tag,
         kind=TicketKind.TASK,
         board_id=board_id,
+        initial_state=State.CLASSIFYING,
     )
     maybe_enqueue(ticket, worker)
     return JSONResponse(

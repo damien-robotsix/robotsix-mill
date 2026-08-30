@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import threading
-from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -42,97 +41,57 @@ def _ingest_payload(**overrides) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Dedup hit
+# Dedup hit — now handled by classify stage
 # ---------------------------------------------------------------------------
 def test_ingest_dedup_hit(client, service):
-    """When run_dedup_check returns duplicate_of, the endpoint returns
-    200, deduped=True, and appends a history note to the existing ticket."""
+    """When fingerprint dedup matches, the endpoint returns 200,
+    deduped=True. LLM dedup is now handled by the classify stage."""
     existing = service.create(
-        "Existing anomaly",
+        "mail-ingester unhealthy on 2026-07-30",
         "Something went wrong with the deployment.",
         source=SourceKind.USER,
         kind=TicketKind.TASK,
         board_id="test-board",
     )
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
-        return_value={
-            "duplicate_of": existing.id,
-            "already_done": None,
-            "reason": "same anomaly",
-        },
-    ) as mock_dedup:
-        r = client.post("/tickets/ingest", json=_ingest_payload())
-    assert mock_dedup.called
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(
+            title="mail-ingester unhealthy on 2026-07-31",
+            body="Still failing after restart.",
+        ),
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["ticket_id"] == existing.id
     assert body["deduped"] is True
 
-    # History note appended.
-    history = service.history(existing.id)
-    notes = [e.note for e in history if e.note and "re-reported by" in e.note]
-    assert len(notes) == 1
-    assert "monitor-1" in notes[0]
-
 
 # ---------------------------------------------------------------------------
-# Dedup miss
+# Dedup miss — ticket created in CLASSIFYING state
 # ---------------------------------------------------------------------------
 def test_ingest_dedup_miss(client, service):
-    """When run_dedup_check returns no duplicate_of, the endpoint returns
-    201, deduped=False, and a new ticket is created."""
-    # Seed a ticket that shares tokens so candidates are selected for LLM dedup.
-    service.create(
-        "Something about deployment",
-        "anomaly detection system",
-        source=SourceKind.USER,
-        kind=TicketKind.TASK,
-        board_id="test-board",
-    )
-
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
-        return_value={
-            "duplicate_of": None,
-            "already_done": None,
-            "reason": "different",
-        },
-    ) as mock_dedup:
-        r = client.post("/tickets/ingest", json=_ingest_payload())
-    assert mock_dedup.called
+    """When no fingerprint match, the endpoint creates a ticket in
+    CLASSIFYING state for async classification."""
+    r = client.post("/tickets/ingest", json=_ingest_payload())
     assert r.status_code == 201
     body = r.json()
     assert body["deduped"] is False
     assert body["ticket_id"]
 
-    # Ticket exists in the DB.
+    # Ticket exists in the DB in CLASSIFYING state.
     ticket = service.get(body["ticket_id"])
     assert ticket is not None
     assert ticket.title == "Test anomaly"
+    assert ticket.state == "classifying"
 
 
 # ---------------------------------------------------------------------------
-# LLM failure → fail-open
+# LLM failure → fail-open (now handled by classify stage)
 # ---------------------------------------------------------------------------
 def test_ingest_llm_failure_fail_open(client, service):
-    """When run_dedup_check raises, the endpoint still creates the ticket
-    (fail-open — a missed dedup is cheaper than a lost incident report)."""
-    # Seed so we pass the candidate check and hit the LLM path.
-    service.create(
-        "Existing ticket",
-        "deployment went wrong",
-        source=SourceKind.USER,
-        kind=TicketKind.TASK,
-        board_id="test-board",
-    )
-
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
-        side_effect=RuntimeError("timeout"),
-    ) as mock_dedup:
-        r = client.post("/tickets/ingest", json=_ingest_payload())
-    assert mock_dedup.called
+    """The ingest route no longer runs LLM dedup inline — it creates
+    tickets in CLASSIFYING state for async classification."""
+    r = client.post("/tickets/ingest", json=_ingest_payload())
     assert r.status_code == 201
     body = r.json()
     assert body["deduped"] is False
@@ -140,6 +99,7 @@ def test_ingest_llm_failure_fail_open(client, service):
 
     ticket = service.get(body["ticket_id"])
     assert ticket is not None
+    assert ticket.state == "classifying"
 
 
 # ---------------------------------------------------------------------------
@@ -154,11 +114,11 @@ def test_ingest_unknown_repo_id(client):
 
 
 # ---------------------------------------------------------------------------
-# No overlap → skip LLM
+# No overlap → ticket created in CLASSIFYING state
 # ---------------------------------------------------------------------------
 def test_ingest_no_overlap_skips_llm(client, service):
-    """When the draft shares zero tokens with any candidate, run_dedup_check
-    is never called and the ticket is created directly."""
+    """The ingest route creates tickets in CLASSIFYING state regardless
+    of token overlap — LLM dedup is now handled by the classify stage."""
     service.create(
         "12345 67890",
         "99999 00000",  # all digits
@@ -167,60 +127,55 @@ def test_ingest_no_overlap_skips_llm(client, service):
         board_id="test-board",
     )
 
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
-    ) as mock_dedup:
-        r = client.post(
-            "/tickets/ingest",
-            json=_ingest_payload(
-                title="abcdef ghijkl",
-                body="mnopqr stuvwx",  # all letters — zero overlap
-            ),
-        )
-    assert mock_dedup.call_count == 0
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(
+            title="abcdef ghijkl",
+            body="mnopqr stuvwx",  # all letters — zero overlap
+        ),
+    )
     assert r.status_code == 201
     assert r.json()["deduped"] is False
 
+    # Ticket created in CLASSIFYING state.
+    ticket = service.get(r.json()["ticket_id"])
+    assert ticket is not None
+    assert ticket.state == "classifying"
+
 
 # ---------------------------------------------------------------------------
-# No candidates → skip LLM
+# No candidates → ticket created in CLASSIFYING state
 # ---------------------------------------------------------------------------
 def test_ingest_no_candidates_skips_llm(client):
-    """When the board has zero tickets, run_dedup_check is never called."""
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
-    ) as mock_dedup:
-        r = client.post("/tickets/ingest", json=_ingest_payload())
-    assert mock_dedup.call_count == 0
+    """When the board has zero tickets, the ingest route creates a ticket
+    in CLASSIFYING state — LLM dedup is handled by the classify stage."""
+    r = client.post("/tickets/ingest", json=_ingest_payload())
     assert r.status_code == 201
     assert r.json()["deduped"] is False
 
+    # Ticket created in CLASSIFYING state.
+    from robotsix_mill.core.service import TicketService
+
+    svc = TicketService(client.app.state.settings, board_id="test-board")
+    ticket = svc.get(r.json()["ticket_id"])
+    assert ticket is not None
+    assert ticket.state == "classifying"
+
 
 # ---------------------------------------------------------------------------
-# already_done is ignored (treated as negative)
+# already_done is ignored (treated as negative) — now handled by classify stage
 # ---------------------------------------------------------------------------
 def test_ingest_already_done_treated_as_negative(client, service):
-    """The already_done verdict has no effect — it falls through to create."""
-    service.create(
-        "Existing ticket",
-        "deployment went wrong",
-        source=SourceKind.USER,
-        kind=TicketKind.TASK,
-        board_id="test-board",
-    )
-
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
-        return_value={
-            "duplicate_of": None,
-            "already_done": "some-ticket-id",
-            "reason": "already implemented",
-        },
-    ) as mock_dedup:
-        r = client.post("/tickets/ingest", json=_ingest_payload())
-    assert mock_dedup.called
+    """The ingest route creates tickets in CLASSIFYING state regardless
+    of already_done — LLM dedup is now handled by the classify stage."""
+    r = client.post("/tickets/ingest", json=_ingest_payload())
     assert r.status_code == 201
     assert r.json()["deduped"] is False
+
+    # Ticket created in CLASSIFYING state.
+    ticket = service.get(r.json()["ticket_id"])
+    assert ticket is not None
+    assert ticket.state == "classifying"
 
 
 # ---------------------------------------------------------------------------
@@ -347,7 +302,9 @@ def test_normalize_title_case_folds():
 
 def test_ingest_fingerprint_dedup_hit(client, service):
     """When the normalized title matches an existing open ticket, the
-    endpoint returns 200 deduped=True without calling the LLM."""
+    endpoint returns 200 deduped=True. LLM dedup is not called —
+    fingerprint match is deterministic and handled entirely in the
+    ingest route (no LLM import remains in the module)."""
     existing = service.create(
         "mail-ingester unhealthy on 2026-07-30",
         "The ingester container is failing health checks.",
@@ -356,20 +313,14 @@ def test_ingest_fingerprint_dedup_hit(client, service):
         board_id="test-board",
     )
 
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
-    ) as mock_dedup:
-        r = client.post(
-            "/tickets/ingest",
-            json=_ingest_payload(
-                title="mail-ingester unhealthy on 2026-07-31",
-                body="Still failing after restart.",
-                source_tag="monitor-2",
-            ),
-        )
-    # LLM dedup should NOT be called — fingerprint match is
-    # deterministic and cheaper.
-    assert mock_dedup.call_count == 0
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(
+            title="mail-ingester unhealthy on 2026-07-31",
+            body="Still failing after restart.",
+            source_tag="monitor-2",
+        ),
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["ticket_id"] == existing.id
@@ -382,8 +333,8 @@ def test_ingest_fingerprint_dedup_hit(client, service):
 
 
 def test_ingest_fingerprint_no_false_match(client, service):
-    """Different symptoms with different normalized titles still reach the
-    LLM dedup step (no fingerprint false-positive)."""
+    """Different symptoms with different normalized titles still create
+    a ticket in CLASSIFYING state (no fingerprint false-positive)."""
     _ = service.create(
         "mail-ingester unhealthy on 2026-07-30",
         "health check failure for the ingester service",
@@ -392,25 +343,18 @@ def test_ingest_fingerprint_no_false_match(client, service):
         board_id="test-board",
     )
 
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
-        return_value={
-            "duplicate_of": None,
-            "already_done": None,
-            "reason": "different",
-        },
-    ) as mock_dedup:
-        r = client.post(
-            "/tickets/ingest",
-            json=_ingest_payload(
-                title="database connection pool exhausted",
-                body="Postgres max_connections reached for ingester service.",
-            ),
-        )
-    # LLM dedup should be called since fingerprint didn't match AND
-    # there is some token overlap ("ingester", "service").
-    assert mock_dedup.call_count >= 1
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(
+            title="database connection pool exhausted",
+            body="Postgres max_connections reached for ingester service.",
+        ),
+    )
+    # No fingerprint match — ticket created in CLASSIFYING state.
     assert r.status_code == 201
+    ticket = service.get(r.json()["ticket_id"])
+    assert ticket is not None
+    assert ticket.state == "classifying"
 
 
 # ---------------------------------------------------------------------------
@@ -422,42 +366,19 @@ def test_ingest_concurrent_identical_reports_create_one_ticket(client, service):
     Regression guard for the duplicate-ticket incident: a retried
     ``POST /tickets/ingest`` had both attempts read the board before
     either created, so both missed the fingerprint and both created.
-    The barrier below reproduces exactly that interleaving — each
-    request is held inside the (slow) LLM dedup step until the other
-    has also finished listing candidates.
+    The board lock in ``_create_ticket_guarded`` closes the window.
     """
-    # Seed an unrelated ticket that shares tokens, so both requests take
-    # the LLM path rather than short-circuiting on "no candidates".
-    service.create(
-        "Something about deployment",
-        "anomaly detection system",
-        source=SourceKind.USER,
-        kind=TicketKind.TASK,
-        board_id="test-board",
-    )
-
-    barrier = threading.Barrier(2, timeout=10)
-
-    def _slow_dedup(**_kwargs) -> dict:
-        # Both requests are now past their candidate listing.
-        barrier.wait()
-        return {"duplicate_of": None, "already_done": None, "reason": "distinct"}
-
     payload = _ingest_payload(title="Wallet value shows cash, not equity")
     results: list = [None, None]
 
     def _post(index: int) -> None:
         results[index] = client.post("/tickets/ingest", json=payload)
 
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
-        side_effect=_slow_dedup,
-    ):
-        threads = [threading.Thread(target=_post, args=(i,)) for i in range(2)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=20)
+    threads = [threading.Thread(target=_post, args=(i,)) for i in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=20)
 
     statuses = sorted(r.status_code for r in results)
     assert statuses == [200, 201], f"expected one create + one dedup, got {statuses}"
@@ -472,188 +393,120 @@ def test_ingest_concurrent_identical_reports_create_one_ticket(client, service):
 
 
 # ---------------------------------------------------------------------------
-# Operational-maintenance classification
+# Operational-maintenance classification — now handled by classify stage
 # ---------------------------------------------------------------------------
 def test_ingest_rejects_operational_report(client, service):
-    """A report classified as OPERATIONAL is rejected with structured
-    reason and no ticket is created."""
-    from robotsix_mill.agents.ops_classify import OpsClassifyVerdict
-
-    with (
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
-            return_value=OpsClassifyVerdict(
-                classification="OPERATIONAL",
-                reason="Manual credential rotation — no code change needed.",
+    """The ingest route creates tickets in CLASSIFYING state — ops
+    classification is now handled by the classify stage."""
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(
+            title="Rotate GHCR pull token due to cleartext transmission",
+            body=(
+                "The GHCR pull token was transmitted in cleartext. "
+                "Rotate it manually via GitHub settings."
             ),
         ),
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
-            return_value=True,
-        ),
-    ):
-        r = client.post(
-            "/tickets/ingest",
-            json=_ingest_payload(
-                title="Rotate GHCR pull token due to cleartext transmission",
-                body=(
-                    "The GHCR pull token was transmitted in cleartext. "
-                    "Rotate it manually via GitHub settings."
-                ),
-            ),
-        )
+    )
 
-    assert r.status_code == 200
+    # Ticket created in CLASSIFYING state — classification happens async.
+    assert r.status_code == 201
     body = r.json()
-    assert body["filed"] is False
-    assert body["reason"] == "operational-maintenance"
-    assert body["classification"] == "OPERATIONAL"
-    assert "Manual credential rotation" in body["guidance"]
+    assert body["deduped"] is False
 
-    # No ticket created.
-    assert len(service.list()) == 0
+    ticket = service.get(body["ticket_id"])
+    assert ticket is not None
+    assert ticket.state == "classifying"
 
 
 def test_ingest_rejects_redeploy_report(client, service):
-    """A service redeploy report classified as OPERATIONAL is rejected."""
-    from robotsix_mill.agents.ops_classify import OpsClassifyVerdict
-
-    with (
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
-            return_value=OpsClassifyVerdict(
-                classification="OPERATIONAL",
-                reason="Service redeploy — no code change required.",
+    """The ingest route creates tickets in CLASSIFYING state — ops
+    classification is now handled by the classify stage."""
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(
+            title="Redeploy file-hub to activate llmio enrichment",
+            body=(
+                "Redeploy file-hub to pick up the latest llmio enrichment "
+                "and Langfuse tracing."
             ),
         ),
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
-            return_value=True,
-        ),
-    ):
-        r = client.post(
-            "/tickets/ingest",
-            json=_ingest_payload(
-                title="Redeploy file-hub to activate llmio enrichment",
-                body=(
-                    "Redeploy file-hub to pick up the latest llmio enrichment "
-                    "and Langfuse tracing."
-                ),
-            ),
-        )
+    )
 
-    assert r.status_code == 200
+    # Ticket created in CLASSIFYING state — classification happens async.
+    assert r.status_code == 201
     body = r.json()
-    assert body["filed"] is False
-    assert body["reason"] == "operational-maintenance"
+    assert body["deduped"] is False
+
+    ticket = service.get(body["ticket_id"])
+    assert ticket is not None
+    assert ticket.state == "classifying"
 
 
 def test_ingest_allows_code_ticket_mentioning_deploy(client, service):
-    """A ticket that mentions deploy/rotation but requires code changes
-    is classified as CODE and proceeds normally."""
-    from robotsix_mill.agents.ops_classify import OpsClassifyVerdict
-
-    with (
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
-            return_value=OpsClassifyVerdict(
-                classification="CODE",
-                reason=(
-                    "Report describes a code defect in the deploy script "
-                    "that must be fixed in the repository."
-                ),
+    """The ingest route creates tickets in CLASSIFYING state — ops
+    classification is now handled by the classify stage."""
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(
+            title="Fix deploy script that fails to rotate tokens",
+            body=(
+                "The deploy script crashes when trying to rotate "
+                "the GHCR token. Fix the rotation logic in "
+                "scripts/deploy.py."
             ),
         ),
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
-            return_value=True,
-        ),
-    ):
-        r = client.post(
-            "/tickets/ingest",
-            json=_ingest_payload(
-                title="Fix deploy script that fails to rotate tokens",
-                body=(
-                    "The deploy script crashes when trying to rotate "
-                    "the GHCR token. Fix the rotation logic in "
-                    "scripts/deploy.py."
-                ),
-            ),
-        )
+    )
 
+    # Ticket created in CLASSIFYING state — classification happens async.
     assert r.status_code == 201
     body = r.json()
     assert body["deduped"] is False
-    assert body["classified"] == "CODE"
 
-    # Ticket was created.
     ticket = service.get(body["ticket_id"])
     assert ticket is not None
-    assert "Fix deploy script" in ticket.title
+    assert ticket.state == "classifying"
 
 
 def test_ingest_ops_classify_fail_open(client, service):
-    """When the ops-classify LLM call fails, the report proceeds
-    through normally (fail-open)."""
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
-        side_effect=RuntimeError("LLM timeout"),
-    ):
-        r = client.post("/tickets/ingest", json=_ingest_payload())
+    """The ingest route creates tickets in CLASSIFYING state — ops
+    classification is now handled by the classify stage."""
+    r = client.post("/tickets/ingest", json=_ingest_payload())
 
-    # Fail-open: ticket is created.
+    # Ticket created in CLASSIFYING state — classification happens async.
     assert r.status_code == 201
     body = r.json()
     assert body["deduped"] is False
 
     ticket = service.get(body["ticket_id"])
     assert ticket is not None
+    assert ticket.state == "classifying"
 
 
 def test_ingest_ops_classify_emits_diagnostic_event(client, service):
-    """The ops-classify decision is recorded as a diagnostic event."""
-    from robotsix_mill.agents.ops_classify import OpsClassifyVerdict
-
-    emitted_events: list[dict] = []
-
-    def _capture_emit(**kwargs):
-        emitted_events.append(kwargs)
-        return True
-
-    with (
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
-            return_value=OpsClassifyVerdict(
-                classification="OPERATIONAL",
-                reason="Token rotation.",
-            ),
+    """The ingest route creates tickets in CLASSIFYING state — diagnostic
+    events are now emitted by the classify stage."""
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(
+            title="Rotate PAT token",
+            body="Rotate the PAT token.",
         ),
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
-            side_effect=_capture_emit,
-        ),
-    ):
-        r = client.post(
-            "/tickets/ingest",
-            json=_ingest_payload(
-                title="Rotate PAT token",
-                body="Rotate the PAT token.",
-            ),
-        )
+    )
 
-    assert r.status_code == 200
-    assert len(emitted_events) == 1
-    event = emitted_events[0]
-    assert event["category"] == "OPS_CLASSIFY"
-    assert "OPERATIONAL" in event["reason"]
+    # Ticket created in CLASSIFYING state — classification happens async.
+    assert r.status_code == 201
+    body = r.json()
+    assert body["deduped"] is False
+
+    ticket = service.get(body["ticket_id"])
+    assert ticket is not None
+    assert ticket.state == "classifying"
 
 
 def test_ingest_ops_classify_runs_before_dedup(client, service):
-    """The ops-classification step runs before dedup, so an
-    operational report that matches an existing ticket is still
-    rejected without being deduped."""
-    from robotsix_mill.agents.ops_classify import OpsClassifyVerdict
-
+    """The ingest route creates tickets in CLASSIFYING state — both ops
+    classification and dedup are now handled by the classify stage."""
     # Create an existing ticket with similar title.
     service.create(
         "Rotate GHCR pull token",
@@ -663,40 +516,22 @@ def test_ingest_ops_classify_runs_before_dedup(client, service):
         board_id="test-board",
     )
 
-    with (
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.run_ops_classify_agent",
-            return_value=OpsClassifyVerdict(
-                classification="OPERATIONAL",
-                reason="Manual credential rotation.",
-            ),
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(
+            title="Rotate GHCR pull token",
+            body="Rotate the GHCR pull token.",
         ),
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
-            return_value=True,
-        ),
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.run_dedup_check",
-        ) as mock_dedup,
-    ):
-        r = client.post(
-            "/tickets/ingest",
-            json=_ingest_payload(
-                title="Rotate GHCR pull token",
-                body="Rotate the GHCR pull token.",
-            ),
-        )
+    )
 
-    # Rejected as ops — dedup LLM was never called.
+    # Fingerprint match — deduped at ingest time.
     assert r.status_code == 200
     body = r.json()
-    assert body["filed"] is False
-    assert body["reason"] == "operational-maintenance"
-    mock_dedup.assert_not_called()
+    assert body["deduped"] is True
 
 
 # ---------------------------------------------------------------------------
-# Scope classification / auto-epic promotion
+# Scope classification / auto-epic promotion — now handled by classify stage
 # ---------------------------------------------------------------------------
 def _scope_verdict(classification: str, confidence: float, reason: str = "r"):
     from robotsix_mill.agents.scope_classify import ScopeVerdict
@@ -717,118 +552,62 @@ def _broad_payload() -> dict:
 
 
 def test_ingest_promotes_broad_report_to_epic(client, service):
-    """A report classified EPIC (above threshold) is created as an epic
-    and decomposed into dependency-ordered child tickets."""
-    from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+    """The ingest route creates tickets in CLASSIFYING state — epic
+    promotion is now handled by the classify stage."""
+    r = client.post("/tickets/ingest", json=_broad_payload())
 
-    breakdown = EpicBreakdownResult(
-        child_titles=[
-            "Add email delivery channel",
-            "Add SMS delivery channel",
-            "Add webhook delivery channel",
-        ],
-        child_bodies=["Email body.", "SMS body.", "Webhook body."],
-    )
-    with (
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.run_scope_classify_agent",
-            return_value=_scope_verdict("EPIC", 0.9, "Three independent channels."),
-        ),
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
-            return_value=True,
-        ),
-        patch(
-            "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
-            return_value=breakdown,
-        ),
-    ):
-        r = client.post("/tickets/ingest", json=_broad_payload())
-
-    assert r.status_code == 201
-    body = r.json()
-    assert body["deduped"] is False
-    assert body["classified"] == "EPIC"
-
-    epic = service.get(body["ticket_id"])
-    assert epic is not None
-    assert epic.kind == TicketKind.EPIC
-
-    children = service.list_children(epic.id)
-    assert len(children) == 3
-    assert all(c.kind == TicketKind.TASK for c in children)
-    assert all(c.parent_id == epic.id for c in children)
-
-    # Dependency ordering: at least one child depends on a sibling
-    # (the linear C0 -> C1 -> C2 chain).
-    assert any(c.depends_on for c in children)
-
-    # Decision + rationale recorded in history.
-    history = service.history(epic.id)
-    notes = " ".join(e.note for e in history if e.note)
-    assert "auto-classified as epic" in notes
-    assert "Three independent channels" in notes
-
-
-def test_ingest_narrow_report_stays_task(client, service):
-    """A report classified TASK proceeds unchanged as a single task."""
-    with (
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.run_scope_classify_agent",
-            return_value=_scope_verdict("TASK", 0.1, "One focused fix."),
-        ),
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
-            return_value=True,
-        ),
-    ):
-        r = client.post("/tickets/ingest", json=_ingest_payload())
-
+    # Ticket created in CLASSIFYING state — classification happens async.
     assert r.status_code == 201
     body = r.json()
     assert body["deduped"] is False
 
     ticket = service.get(body["ticket_id"])
     assert ticket is not None
+    assert ticket.state == "classifying"
     assert ticket.kind == TicketKind.TASK
-    # No epic was created — the single task is the only ticket.
-    assert all(t.kind == TicketKind.TASK for t in service.list())
+
+
+def test_ingest_narrow_report_stays_task(client, service):
+    """The ingest route creates tickets in CLASSIFYING state — scope
+    classification is now handled by the classify stage."""
+    r = client.post("/tickets/ingest", json=_ingest_payload())
+
+    # Ticket created in CLASSIFYING state — classification happens async.
+    assert r.status_code == 201
+    body = r.json()
+    assert body["deduped"] is False
+
+    ticket = service.get(body["ticket_id"])
+    assert ticket is not None
+    assert ticket.state == "classifying"
+    assert ticket.kind == TicketKind.TASK
 
 
 def test_ingest_borderline_epic_below_threshold_stays_task(client, service):
-    """An EPIC verdict below the confidence threshold stays a single
-    task (conservative promotion)."""
-    with (
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.run_scope_classify_agent",
-            return_value=_scope_verdict("EPIC", 0.5, "Borderline."),
-        ),
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
-            return_value=True,
-        ),
-    ):
-        r = client.post("/tickets/ingest", json=_broad_payload())
+    """The ingest route creates tickets in CLASSIFYING state — scope
+    classification is now handled by the classify stage."""
+    r = client.post("/tickets/ingest", json=_broad_payload())
 
+    # Ticket created in CLASSIFYING state — classification happens async.
     assert r.status_code == 201
     ticket = service.get(r.json()["ticket_id"])
     assert ticket is not None
+    assert ticket.state == "classifying"
     assert ticket.kind == TicketKind.TASK
 
 
 def test_ingest_scope_classify_disabled(client, service, settings):
-    """When auto_epic_enabled is False, the classifier is never called
-    and the report proceeds as a single task."""
+    """The ingest route creates tickets in CLASSIFYING state regardless
+    of auto_epic_enabled — scope classification is now handled by the
+    classify stage."""
     settings.auto_epic_enabled = False
-    with patch(
-        "robotsix_mill.runtime.routes._tickets_ingest.run_scope_classify_agent",
-    ) as mock_scope:
-        r = client.post("/tickets/ingest", json=_broad_payload())
+    r = client.post("/tickets/ingest", json=_broad_payload())
 
+    # Ticket created in CLASSIFYING state — classification happens async.
     assert r.status_code == 201
-    mock_scope.assert_not_called()
     ticket = service.get(r.json()["ticket_id"])
     assert ticket is not None
+    assert ticket.state == "classifying"
     assert ticket.kind == TicketKind.TASK
 
 
@@ -836,40 +615,13 @@ def test_ingest_reingest_epic_is_idempotent(client, service):
     """Re-ingesting the same broad report is deduped by the title
     fingerprint — the scope classifier is not re-run and no new
     children are created (idempotency preserved)."""
-    from robotsix_mill.agents.epic_breakdown import EpicBreakdownResult
+    # First ingest — creates ticket in CLASSIFYING state.
+    r1 = client.post("/tickets/ingest", json=_broad_payload())
+    assert r1.status_code == 201
+    ticket_id = r1.json()["ticket_id"]
 
-    breakdown = EpicBreakdownResult(
-        child_titles=["Child A", "Child B"],
-        child_bodies=["A body.", "B body."],
-    )
-    with (
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.run_scope_classify_agent",
-            return_value=_scope_verdict("EPIC", 0.9, "Broad."),
-        ) as mock_scope,
-        patch(
-            "robotsix_mill.runtime.routes._tickets_ingest.emit_diagnostic_event",
-            return_value=True,
-        ),
-        patch(
-            "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
-            return_value=breakdown,
-        ) as mock_breakdown,
-    ):
-        r1 = client.post("/tickets/ingest", json=_broad_payload())
-        assert r1.status_code == 201
-        epic_id = r1.json()["ticket_id"]
-
-        # Second identical ingest.
-        r2 = client.post("/tickets/ingest", json=_broad_payload())
-
+    # Second identical ingest — fingerprint match, deduped.
+    r2 = client.post("/tickets/ingest", json=_broad_payload())
     assert r2.status_code == 200
     assert r2.json()["deduped"] is True
-    assert r2.json()["ticket_id"] == epic_id
-
-    # Classifier + breakdown each ran exactly once (first ingest only).
-    assert mock_scope.call_count == 1
-    assert mock_breakdown.call_count == 1
-
-    # Still exactly two children — no double decomposition.
-    assert len(service.list_children(epic_id)) == 2
+    assert r2.json()["ticket_id"] == ticket_id
