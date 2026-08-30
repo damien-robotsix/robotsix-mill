@@ -237,6 +237,56 @@ def test_user_facing_no_changes_skips_commit(ctx_factory, monkeypatch):
     assert any("recommendation-only" in note for note in step_events)
 
 
+# --- rate-limit degradation → distinct observable marker --------------
+
+
+def test_degraded_result_emits_distinct_marker(ctx_factory, monkeypatch):
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
+    t = _ticket(ctx)
+
+    step_events = []
+    orig_add_step = ctx.service.add_step_event
+
+    def _spy_add_step_event(ticket_id, note):
+        step_events.append(note)
+        return orig_add_step(ticket_id, note)
+
+    monkeypatch.setattr(ctx.service, "add_step_event", _spy_add_step_event)
+
+    def _fake_doc(
+        self,
+        *,
+        settings,
+        repo_dir,
+        diff,
+        spec,
+        extra_roots=None,
+        board_id="",
+        reference_files=None,
+    ):
+        del self, settings, repo_dir, diff, spec
+        return (
+            DocResult(
+                user_facing=True,
+                summary="Documentation degraded due to rate limit: ...",
+                degraded=True,
+            ),
+            None,
+        )
+
+    monkeypatch.setattr(DocumentStage, "_run_doc_agent", _fake_doc)
+
+    out = DocumentStage().run(t, ctx)
+    # Passes through (a doc hiccup must not sink a finished implementation).
+    assert out.next_state is State.DELIVERABLE
+    # The note distinguishes a rate-limit degradation from a clean run.
+    assert out.note.startswith("degraded due to rate limit:")
+    # A distinct step event marks the degradation for monitoring — NOT the
+    # generic recommendation-only marker.
+    assert any("degraded due to rate limit" in note for note in step_events)
+    assert not any("recommendation-only" in note for note in step_events)
+
+
 # --- empty diff → pass-through without agent --------------------------
 
 

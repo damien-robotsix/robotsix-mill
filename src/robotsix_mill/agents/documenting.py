@@ -22,6 +22,49 @@ from ..config import Settings
 log = logging.getLogger(__name__)
 
 
+class _DocRateLimitCeiling(Exception):
+    """Internal sentinel: the doc run hit a rate-limit / usage ceiling.
+
+    Raised from inside the run callback so the shared ``run_agent`` retry
+    machinery sees a non-transient, non-tier-unavailable error and re-raises
+    it immediately — no transient backoff, no tier fallback re-runs. The doc
+    run loop catches it and degrades to a recommendation-only deliverable
+    instead of burning further cycles on a guaranteed-to-fail retry loop.
+    """
+
+
+def _is_rate_limit_ceiling(exc: BaseException) -> bool:
+    """True when *exc* (or a cause/context in its chain) is a rate-limit /
+    usage ceiling that further retries cannot clear.
+
+    Recognises the pydantic-ai ``UsageLimitExceeded`` family
+    (``is_rate_limited``), the Claude SDK session/weekly caps
+    (``ClaudeSDKUsageExhaustedError`` via ``is_tier_unavailable``), and any
+    "token limit exceeded"-style message the transports surface as plain
+    text. Once any of these fires, the ceiling is real — the doc agent
+    should degrade rather than retry.
+    """
+    from .retry import is_rate_limited, is_tier_unavailable
+
+    if is_rate_limited(exc) or is_tier_unavailable(exc):
+        return True
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    for _ in range(10):
+        if cur is None or id(cur) in seen:
+            break
+        seen.add(id(cur))
+        msg = str(cur).lower()
+        if (
+            "token limit exceeded" in msg
+            or "usagelimitexceeded" in msg
+            or "usage limit" in msg
+        ):
+            return True
+        cur = cur.__cause__ or cur.__context__
+    return False
+
+
 class DocClassifierResult(BaseModel):
     """Structured output from the cheap doc-classifier gate.
 
@@ -67,6 +110,14 @@ class DocResult(BaseModel):
         "doc agents read this ledger so they don't have to "
         "explore the structure from scratch. Empty = no "
         "updates (incoming memory was complete).",
+    )
+    degraded: bool = Field(
+        default=False,
+        description="Set by the harness (never the agent) when the doc "
+        "run was cut short by a rate-limit ceiling and the "
+        "result is a recommendation-only fallback rather than a "
+        "completed pass. Distinguishes 'completed successfully' "
+        "from 'degraded due to rate limit' for monitoring.",
     )
 
 
@@ -252,11 +303,41 @@ def run_doc_agent(
                 run_kwargs["message_history"] = preseed
                 run_user_prompt = None
 
-        result = run_agent(
-            agent,
-            lambda h: h.run_sync(run_user_prompt, **run_kwargs),
-            what="document",
-        )
+        def _run(h: Any) -> Any:
+            try:
+                return h.run_sync(run_user_prompt, **run_kwargs)
+            except Exception as e:
+                # Convert a rate-limit ceiling into a sentinel BEFORE
+                # run_agent's transient-retry / tier-fallback machinery can
+                # act on it — re-running the whole doc agent against a hit
+                # ceiling only burns more credits for the same failure.
+                if _is_rate_limit_ceiling(e):
+                    raise _DocRateLimitCeiling(str(e)) from e
+                raise
+
+        try:
+            result = run_agent(agent, _run, what="document")
+        except _DocRateLimitCeiling as e:
+            # Degrade gracefully: finalize with a lightweight
+            # recommendation-only deliverable instead of retrying through
+            # exhaustion. The ``degraded`` flag keeps the pattern observable.
+            log.warning(
+                "document agent hit a rate-limit ceiling (%s) — degrading to "
+                "a recommendation-only deliverable instead of retrying",
+                e,
+            )
+            degraded = DocResult(
+                user_facing=True,
+                summary=(
+                    "Documentation degraded due to rate limit: the doc agent "
+                    "reached a rate-limit/usage ceiling before it could "
+                    "generate documentation, so no file edits were applied. "
+                    "Re-run the document stage once the limit resets to "
+                    f"produce the docs. (ceiling: {e})"
+                ),
+                degraded=True,
+            )
+            return degraded, None
         output: DocResult = result.output
         try:
             new_msgs = result.new_messages_json()

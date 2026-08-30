@@ -1302,3 +1302,155 @@ class TestRunDocAgent:
             "www/",
             "src/",
         ]
+
+
+# ---------------------------------------------------------------------------
+# rate-limit early degradation
+# ---------------------------------------------------------------------------
+
+
+class _RaisingAgent:
+    """Agent stand-in whose ``run_sync`` raises *exc* to simulate a
+    rate-limit ceiling hit mid-run."""
+
+    def __init__(self, exc):
+        self.exc = exc
+        self.closed = False
+        self.calls = 0
+
+    def run_sync(self, prompt, **kwargs):
+        self.calls += 1
+        raise self.exc
+
+    def close(self):
+        self.closed = True
+
+
+class TestRunDocAgentRateLimitDegradation:
+    DIFF = "diff --git a/src/app.py b/src/app.py"
+    SPEC = "## Problem\nAdd rate-limiting middleware."
+
+    @pytest.fixture
+    def repo_dir(self, tmp_path):
+        d = tmp_path / "repo"
+        d.mkdir()
+        return d
+
+    def _patch(self, monkeypatch, fake_agent):
+        """Patch run_doc_agent's collaborators; ``run_agent`` is replaced
+        with a single ``make_run`` invocation so the test asserts NO retry
+        loop runs around a rate-limit ceiling."""
+        _patch_build_agent_from_definition(
+            monkeypatch,
+            lambda *a, tools=None, **kw: fake_agent,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.yaml_loader.load_agent_definition",
+            lambda path: _make_definition(system_prompt="Doc system prompt."),
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.fs_tools.build_fs_tools",
+            lambda repo_dir, settings, extra_roots=None, **kwargs: [],
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.explore.make_explore_tool",
+            lambda *a, **kw: _dummy_fs_tool("explore"),
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.explore.make_parallel_explore_tool",
+            lambda *a, **kw: _dummy_fs_tool("parallel_explore"),
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.runners.pass_runner.load_memory",
+            lambda path, max_chars=None: "",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.runners.pass_runner.persist_memory",
+            lambda path, text: None,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.fs_tools.build_preseed_history",
+            lambda repo_dir, paths, user_prompt=None: [],
+        )
+
+    def test_usage_limit_exceeded_degrades(self, settings, repo_dir, monkeypatch):
+        """A pydantic-ai ``UsageLimitExceeded`` mid-run yields a
+        recommendation-only ``DocResult`` flagged ``degraded=True`` — no
+        exception escapes and the run is not retried."""
+        from pydantic_ai.exceptions import UsageLimitExceeded
+
+        agent = _RaisingAgent(
+            UsageLimitExceeded("The next request would exceed the request_limit of 50")
+        )
+        self._patch(monkeypatch, agent)
+
+        result, new_msgs = run_doc_agent(
+            settings=settings,
+            repo_dir=repo_dir,
+            diff=self.DIFF,
+            spec=self.SPEC,
+            board_id="test-board",
+        )
+
+        assert isinstance(result, DocResult)
+        assert result.degraded is True
+        assert result.user_facing is True
+        assert "rate limit" in result.summary.lower()
+        assert new_msgs is None
+        # Single run — the ceiling short-circuits before any retry.
+        assert agent.calls == 1
+        assert agent.closed is True
+
+    def test_claude_sdk_usage_exhausted_degrades(
+        self, settings, repo_dir, monkeypatch
+    ):
+        """A Claude SDK session/weekly cap
+        (``ClaudeSDKUsageExhaustedError``) degrades rather than triggering
+        the tier-fallback re-run machinery."""
+        from robotsix_llmio.claude_sdk._errors import ClaudeSDKUsageExhaustedError
+
+        agent = _RaisingAgent(ClaudeSDKUsageExhaustedError("session usage exhausted"))
+        self._patch(monkeypatch, agent)
+
+        result, _ = run_doc_agent(
+            settings=settings,
+            repo_dir=repo_dir,
+            diff=self.DIFF,
+            spec=self.SPEC,
+            board_id="test-board",
+        )
+
+        assert result.degraded is True
+        assert agent.calls == 1
+
+    def test_token_limit_message_degrades(self, settings, repo_dir, monkeypatch):
+        """A plain error whose message says 'token limit exceeded' is
+        recognised via the string fallback and degrades."""
+        agent = _RaisingAgent(RuntimeError("input token limit exceeded for model"))
+        self._patch(monkeypatch, agent)
+
+        result, _ = run_doc_agent(
+            settings=settings,
+            repo_dir=repo_dir,
+            diff=self.DIFF,
+            spec=self.SPEC,
+            board_id="test-board",
+        )
+
+        assert result.degraded is True
+
+    def test_non_rate_limit_error_propagates(self, settings, repo_dir, monkeypatch):
+        """A non-rate-limit failure is NOT swallowed — it propagates so the
+        stage's warn-and-pass handler still sees it."""
+        agent = _RaisingAgent(RuntimeError("model produced malformed output"))
+        self._patch(monkeypatch, agent)
+
+        with pytest.raises(RuntimeError, match="malformed output"):
+            run_doc_agent(
+                settings=settings,
+                repo_dir=repo_dir,
+                diff=self.DIFF,
+                spec=self.SPEC,
+                board_id="test-board",
+            )
+        assert agent.closed is True
