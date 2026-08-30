@@ -755,7 +755,8 @@
             "could not turn CI green within its iteration budget",
             "tests still failing after",
             "review rounds exhausted",
-            "Infrastructure: LLM model outage"
+            "Infrastructure: LLM model outage",
+            "scope-triage agent error"
           ],
           "description": "Regexes (case-insensitive) matched against the latest BLOCKED note; a match makes the block auto-resumable. Spec-fingerprint and upstream-CI parks are always excluded.",
           "items": {

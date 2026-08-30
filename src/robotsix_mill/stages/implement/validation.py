@@ -702,6 +702,25 @@ class ValidationMixin(_ImplementStageBase):
                 diff_summaries=diff_summaries,
             )
         except Exception as exc:
+            from ...runtime.transient_errors import (
+                is_model_unavailable_error,
+                reraise_if_transient,
+            )
+
+            # Infrastructure failures (provider 5xx/429/timeout, a model
+            # outage, Claude quota exhaustion, an llmio tier in cooldown
+            # with its fallback chain exhausted) say nothing about the
+            # ticket's scope: the triage never ran. Let them reach the
+            # worker, which retries transients with backoff and PARKS
+            # model outages until the quota/cooldown lifts (#3054) —
+            # swallowing them here turned each one into a BLOCKED
+            # "scope-triage agent error" needing a manual resume (seen
+            # 2026-08-29/30). Genuine agent failures (malformed
+            # structured output after retries) still fall through to
+            # ESCALATE below, since no amount of waiting fixes those.
+            reraise_if_transient(exc)
+            if is_model_unavailable_error(exc):
+                raise
             log.error("%s: scope-triage agent failed: %s", ticket.id, exc)
             triage_error = f"{type(exc).__name__}: {exc}"
             verdict = None  # fall through to ESCALATE
