@@ -57,6 +57,36 @@ TRANSIENT_PATTERNS: list[re.Pattern[str]] = [
         r"Temporary failure resolving|Could not resolve host",
         re.IGNORECASE,
     ),
+    # Runner / action-setup infra flakes.  A GitHub action-setup step that
+    # dies fetching its version manifest or binary emits a bare
+    # ``##[error]fetch failed`` marker, often on a different log line from
+    # the ``Run <action>@<ref>`` group header — so a single-line
+    # ``setup-uv.*failed`` pattern misses it.  Match the marker directly.
+    re.compile(r"##\[error\][^\n]*fetch failed", re.IGNORECASE),
+    re.compile(
+        r"(?:astral-sh/setup-uv|actions/setup-python|actions/checkout)"
+        r"[^\n]*(?:fetch failed|failed to download|unable to download)",
+        re.IGNORECASE,
+    ),
+    # Action reference cannot be resolved (registry/manifest fetch flake).
+    re.compile(r"Unable to resolve action", re.IGNORECASE),
+    # The hosted runner lost communication with the GitHub Actions service.
+    re.compile(r"lost communication with the server", re.IGNORECASE),
+    # Rate limiting surfaced as an HttpError from the API/registry.
+    re.compile(r"HttpError:\s*rate limit", re.IGNORECASE),
+    # Docker Hub throttled / 5xx image pulls.
+    re.compile(
+        r"toomanyrequests|429 Too Many Requests|"
+        r"received unexpected HTTP status:\s*5\d\d",
+        re.IGNORECASE,
+    ),
+    # apt / PyPI mirror 5xx while installing packages.
+    re.compile(
+        r"(?:apt-get|apt|pip|uv|pypi|pythonhosted)[^\n]*"
+        r"(?:HTTP error 5\d\d|5\d\d\s+(?:Server Error|Bad Gateway|"
+        r"Service Unavailable))",
+        re.IGNORECASE,
+    ),
 ]
 
 
