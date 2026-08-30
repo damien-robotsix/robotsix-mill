@@ -1439,6 +1439,15 @@
           "title": "Explore Max Tokens",
           "type": "integer"
         },
+        "explore_model_level": {
+          "advanced": true,
+          "default": 2,
+          "description": "Capability tier for the exploration sub-agent (2 = haiku on the Claude subscription).",
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Explore Model Level",
+          "type": "integer"
+        },
         "explore_request_limit": {
           "advanced": true,
           "default": 100,

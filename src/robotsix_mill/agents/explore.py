@@ -275,7 +275,7 @@ async def _run_single_explore_attempt(
     *,
     agent: Any,
     prompt: str,
-    limits: object,
+    limits: object | None,
     settings: Settings,
 ) -> str:
     """Run one explore agent attempt, handling truncation and budget exhaustion.
@@ -289,11 +289,15 @@ async def _run_single_explore_attempt(
 
     from .retry import acall_with_retry
 
+    # ``limits`` is None on Claude tiers (the SDK tool loop warns on and
+    # drops ``usage_limits``); only forward it when there is one.
+    run_kwargs: dict[str, Any] = {} if limits is None else {"usage_limits": limits}
+
     with trace_stage("explore"):
         try:
 
             async def _call_explore() -> Any:
-                return await agent.run(prompt, usage_limits=limits)
+                return await agent.run(prompt, **run_kwargs)
 
             result = await acall_with_retry(
                 _call_explore,
@@ -345,14 +349,14 @@ async def _run_single_explore_attempt(
                 "Do not repeat anything already said. "
                 "Start from the last incomplete sentence.",
                 message_history=history,
-                usage_limits=limits,
+                **run_kwargs,
             )
         else:
             continuation_result = await agent.run(
                 "Continue exactly from where you were cut off. "
                 "Do not repeat anything already said. "
                 "Start from the last incomplete sentence.",
-                usage_limits=limits,
+                **run_kwargs,
             )
         output += "\n" + str(continuation_result.output).strip()
 
@@ -417,7 +421,11 @@ async def run_explore(
     via pydantic-ai's async ``agent.run`` rather than ``run_sync`` (which
     would call ``asyncio.run`` and raise "event loop is already running").
     """
-    if not get_secrets().openrouter_api_key:
+    from .base import build_subagent, level_uses_claude
+
+    level = settings.explore_model_level
+    on_claude = level_uses_claude(level)
+    if not on_claude and not get_secrets().openrouter_api_key:
         return "explore unavailable: OPENROUTER_API_KEY is not set"
     if not repo_dir.exists():
         return "explore unavailable: workspace repo directory does not exist — the repository has not been cloned yet"
@@ -431,8 +439,6 @@ async def run_explore(
         )
 
     # lazy: keep core import-light / the suite hermetic
-    from pydantic_ai import Agent
-    from pydantic_ai.settings import ModelSettings
     from pydantic_ai.usage import UsageLimits
 
     from .fs_tools import build_fs_tools
@@ -445,9 +451,14 @@ async def run_explore(
         if t.__name__ in ("read_file", "list_dir", "run_command", "parallel_commands")
     ]
 
-    from .base import _aclose_async_client, build_openrouter_model
+    from .base import _aclose_async_client
 
-    limits = UsageLimits(request_limit=settings.explore_request_limit)
+    # The Claude SDK tool path runs its own agent loop and cannot honour
+    # pydantic-ai ``usage_limits`` (it warns and drops them); the wall-clock
+    # timeout below and the SDK's turn cap bound those runs instead.
+    limits = (
+        None if on_claude else UsageLimits(request_limit=settings.explore_request_limit)
+    )
 
     from pydantic_ai.exceptions import UsageLimitExceeded
 
@@ -472,14 +483,14 @@ async def run_explore(
             current_question, current_known_context, pre_seeded_paths
         )
 
-        model, main_client = build_openrouter_model(1)
-        agent = Agent(
-            model=model,
+        agent, main_client = build_subagent(
+            settings,
+            level=level,
             system_prompt=_SYSTEM_PROMPT,
-            output_type=str,
             tools=ro_tools,
             name="explore",
-            model_settings=ModelSettings(max_tokens=settings.explore_max_tokens),
+            max_tokens=settings.explore_max_tokens,
+            workspace_root=repo_dir,
         )
 
         try:
@@ -540,7 +551,8 @@ async def run_explore(
                 # continue to next attempt
             # else: final attempt failed — fall through to return below
         finally:
-            await _aclose_async_client(main_client)
+            if main_client is not None:
+                await _aclose_async_client(main_client)
 
     return f"explore failed after {_EXPLORE_MAX_ATTEMPTS} attempts: {last_error}"
 

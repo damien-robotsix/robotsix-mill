@@ -481,6 +481,21 @@ class _CoreSettings(BaseModel):
         description="Wall-clock timeout (seconds) for a single explore sub-agent call.",
         json_schema_extra={"advanced": True},
     )
+    # The scout used to be hard-wired to level 1 (paid OpenRouter flash,
+    # ~23 s median per generation — it timed out constantly).  Level 2
+    # (haiku on the Claude subscription, ~6.6 s median) spends quota, not
+    # cash.  Claude tiers run the scout through the SDK tool loop, so
+    # ``explore_request_limit`` only bounds OpenRouter tiers there.
+    explore_model_level: int = Field(
+        default=2,
+        ge=1,
+        le=5,
+        description=(
+            "Capability tier for the exploration sub-agent "
+            "(2 = haiku on the Claude subscription)."
+        ),
+        json_schema_extra={"advanced": True},
+    )
     # Per-call cap for the refine agent's tool loop. The refine agent
     # delegates deep search to the cheap ``explore`` sub-agent (which
     # has its own 100-call budget), so the top-level refine loop should
