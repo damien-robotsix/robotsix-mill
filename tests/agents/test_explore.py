@@ -3,6 +3,9 @@
 import asyncio
 import contextlib
 
+import pytest
+from pydantic import ValidationError
+
 from robotsix_mill.agents import explore
 from robotsix_mill.agents.explore import make_explore_tool
 from robotsix_mill.config import Secrets, Settings, _reset_secrets
@@ -10,6 +13,10 @@ from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 def _settings(tmp_path, **env):
     env.setdefault("data_dir", str(tmp_path))
+    # The scout defaults to level 2 (Claude haiku); the tests below that
+    # patch ``pydantic_ai.Agent`` / ``build_openrouter_model`` exercise the
+    # OpenRouter path, so pin level 1 unless a test picks a tier itself.
+    env.setdefault("explore_model_level", 1)
     # Mirror openrouter_api_key into Secrets so get_secrets() works
     key = env.get("OPENROUTER_API_KEY")
     if key is not None:
@@ -1212,3 +1219,183 @@ class TestExploreServedFiles:
         expected_utils = str((tmp_path / "src" / "utils.py").resolve())
         assert expected_app in served
         assert expected_utils in served
+
+
+# ---------------------------------------------------------------------------
+# explore_model_level — the scout runs on a configurable tier (default haiku)
+# ---------------------------------------------------------------------------
+
+
+def test_explore_model_level_defaults_to_haiku_tier(tmp_path):
+    """Default tier is 2 — haiku on the Claude subscription, not paid flash."""
+    s = Settings(data_dir=str(tmp_path))
+    assert s.explore_model_level == 2
+    for bad in (0, 6):
+        with pytest.raises(ValidationError):
+            Settings(data_dir=str(tmp_path), explore_model_level=bad)
+
+
+def test_explore_openrouter_tier_uses_configured_level(tmp_path, monkeypatch):
+    """A non-Claude ``explore_model_level`` reaches ``build_openrouter_model``
+    (the scout is no longer hard-wired to level 1)."""
+    (tmp_path / "a.txt").write_text("hi")
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_model_level="3")
+    cap = {}
+
+    from robotsix_mill.agents import base as bmod
+
+    def fake_build_openrouter_model(level=1, *, online=False):
+        cap["level"] = level
+        return object(), object()
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            pass
+
+        async def run(self, q, *, usage_limits=None):
+            cap["limit"] = usage_limits.request_limit
+            return type("R", (), {"output": "answer"})()
+
+    import pydantic_ai
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(bmod, "build_openrouter_model", fake_build_openrouter_model)
+    out = asyncio.run(
+        explore.run_explore(
+            settings=s, repo_dir=tmp_path, question="a test question long enough"
+        )
+    )
+    assert out == "answer"
+    assert cap["level"] == 3
+    assert cap["limit"] == s.explore_request_limit
+
+
+class _FakeClaudeProvider:
+    """Stands in for llmio's ``ClaudeSDKProvider`` at the provider seam."""
+
+    def __init__(self, cap, output="haiku answer", error=None):
+        self._cap = cap
+        self._output = output
+        self._error = error
+
+    def build_agent(self, **kw):
+        self._cap["build"] = kw
+        cap, output, error = self._cap, self._output, self._error
+
+        class Handle:
+            async def run(self, prompt, **run_kw):
+                cap["prompt"] = prompt
+                cap["run_kwargs"] = run_kw
+                if error is not None:
+                    raise error
+                return type("R", (), {"output": output})()
+
+            def close(self):
+                pass
+
+        return Handle()
+
+
+def _patch_claude_provider(monkeypatch, provider):
+    """Patch llmio's ``get_provider_for_level`` (the seam ``build_subagent``
+    resolves at call time) so no ``claude`` CLI is ever spawned."""
+    import robotsix_llmio
+
+    calls = {}
+
+    def fake_get_provider_for_level(level, **kw):
+        calls["level"] = level
+        calls["kwargs"] = kw
+        return provider
+
+    monkeypatch.setattr(
+        robotsix_llmio, "get_provider_for_level", fake_get_provider_for_level
+    )
+    return calls
+
+
+def test_explore_claude_tier_builds_via_provider_with_read_only_tools(
+    tmp_path, monkeypatch
+):
+    """On a Claude tier the scout is built through the llmio provider (a raw
+    pydantic-ai Agent cannot carry tools there): the configured level and the
+    read-only tool subset reach ``provider.build_agent``, the SDK's built-in
+    tools are denied, the handle is wrapped in the Claude concurrency bound,
+    and no OpenRouter key or ``usage_limits`` is required."""
+    (tmp_path / "a.txt").write_text("hi")
+    # No OPENROUTER_API_KEY: the Claude tier is keyless.
+    s = _settings(tmp_path, explore_model_level="2", explore_max_tokens="600")
+    cap = {}
+    calls = _patch_claude_provider(monkeypatch, _FakeClaudeProvider(cap))
+
+    from robotsix_mill.agents import claude_concurrency
+
+    claude_concurrency.reset_for_tests()
+    seen = {}
+    real_bound = claude_concurrency.bound_claude_handle
+
+    def spy_bound(handle, limit):
+        seen["limit"] = limit
+        return real_bound(handle, limit)
+
+    monkeypatch.setattr(claude_concurrency, "bound_claude_handle", spy_bound)
+
+    out = asyncio.run(
+        explore.run_explore(
+            settings=s, repo_dir=tmp_path, question="a test question long enough"
+        )
+    )
+    assert out == "haiku answer"
+    assert calls["level"] == 2
+    assert calls["kwargs"] == {"max_tokens": 600}
+    build = cap["build"]
+    assert build["level"] == 2
+    assert build["name"] == "explore"
+    assert build["output_type"] is str
+    assert build["builtin_tools"] is False
+    assert build["workspace_root"] == tmp_path
+    assert sorted(t.__name__ for t in build["tools"]) == [
+        "list_dir",
+        "parallel_commands",
+        "read_file",
+        "run_command",
+    ]  # NO write/edit/delete
+    # The SDK tool loop cannot honour usage_limits — none is forwarded.
+    assert cap["run_kwargs"] == {}
+    assert seen["limit"] == s.claude_max_concurrency
+
+
+def test_explore_claude_usage_exhausted_surfaces_without_paid_fallback(
+    tmp_path, monkeypatch
+):
+    """Subscription quota exhaustion is non-transient: the scout fails once,
+    does not fall back to a paid tier, and the failure surfaces to the caller
+    like any other explore failure (the worker parks at stage level)."""
+    from robotsix_llmio.claude_sdk._errors import ClaudeSDKUsageExhaustedError
+
+    (tmp_path / "a.txt").write_text("hi")
+    s = _settings(tmp_path, explore_model_level="2")
+    cap = {}
+    err = ClaudeSDKUsageExhaustedError("You've hit your usage limit")
+    _patch_claude_provider(monkeypatch, _FakeClaudeProvider(cap, error=err))
+    from robotsix_mill.agents import base as bmod
+
+    def no_openrouter(*a, **k):
+        raise AssertionError("must not fall back to a paid OpenRouter tier")
+
+    monkeypatch.setattr(bmod, "build_openrouter_model", no_openrouter)
+    sleeps = []
+
+    async def fake_sleep(d):
+        sleeps.append(d)
+
+    monkeypatch.setattr(explore.asyncio, "sleep", fake_sleep)
+
+    out = asyncio.run(
+        explore.run_explore(
+            settings=s, repo_dir=tmp_path, question="a test question long enough"
+        )
+    )
+    assert out.startswith("explore failed")
+    assert "usage limit" in out
+    assert sleeps == []  # non-transient: no retry ladder

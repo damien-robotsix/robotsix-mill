@@ -95,6 +95,14 @@ def _no_real_claude_cli(monkeypatch):
 
     monkeypatch.setattr(_claude_model.ClaudeSDKModel, "request", _blocked)
     monkeypatch.setattr(_claude_model.ClaudeSDKModel, "_invoke", _blocked)
+    # The tool-bearing Claude path (``provider.build_agent(tools=...)``,
+    # used by build_agent and the explore scout) bypasses ClaudeSDKModel and
+    # drives the SDK loop itself — block its transport too.
+    from robotsix_llmio.claude_sdk import _tool_agent as _claude_tool_agent
+
+    monkeypatch.setattr(
+        _claude_tool_agent._SdkToolAgentHandle, "_invoke_query", _blocked
+    )
 
 
 @pytest.fixture(autouse=True)

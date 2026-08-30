@@ -132,6 +132,67 @@ def build_openrouter_model(level: int | str = 1, *, online: bool = False):
     return new_openrouter_model(model_name, level_int)
 
 
+def build_subagent(
+    settings: Settings,
+    *,
+    level: int,
+    system_prompt: str,
+    tools: list[Any],
+    name: str,
+    max_tokens: int | None = None,
+    workspace_root: Path | None = None,
+) -> tuple[Any, Any]:
+    """``(agent, http_client)`` for a tool-bearing, text-output sub-agent
+    (the explore scout) at capability *level*, bypassing :func:`build_agent`'s
+    mill-tool injection and prompt composition.
+
+    A raw ``pydantic_ai.Agent`` on a Claude tier cannot carry function tools
+    (``ClaudeSDKModel`` rejects them — the SDK runs its own tool loop), so
+    Claude levels go through the llmio provider's ``build_agent`` exactly like
+    :func:`build_agent` does: *tools* become injected MCP tools, the SDK's
+    built-in Bash/Read/Edit/… are denied (``builtin_tools=False``) so the
+    sub-agent stays as read-only as its tool list, and the handle shares the
+    process-wide Claude concurrency bound. ``max_tokens`` rides on the
+    provider constructor there. The returned client is ``None`` on Claude
+    tiers (the CLI is the transport); OpenRouter tiers return the httpx client
+    the caller must close (pair with :func:`_aclose_async_client`).
+    """
+    if level_uses_claude(level):
+        from robotsix_llmio import get_provider_for_level
+
+        from .claude_concurrency import bound_claude_handle
+
+        provider_kwargs: dict[str, Any] = {}
+        if max_tokens is not None:
+            provider_kwargs["max_tokens"] = max_tokens
+        provider = get_provider_for_level(level, **provider_kwargs)
+        handle = provider.build_agent(
+            level=level,
+            system_prompt=system_prompt,
+            tools=list(tools),
+            output_type=str,
+            name=name,
+            workspace_root=workspace_root,  # type: ignore[call-arg]  # ClaudeSDKProvider accepts this
+            builtin_tools=False,
+        )
+        return bound_claude_handle(handle, settings.claude_max_concurrency), None
+
+    from pydantic_ai import Agent
+    from pydantic_ai.settings import ModelSettings
+
+    model, http_client = build_openrouter_model(level)
+    agent_kwargs: dict[str, Any] = {
+        "model": model,
+        "system_prompt": system_prompt,
+        "output_type": str,
+        "tools": tools,
+        "name": name,
+    }
+    if max_tokens is not None:
+        agent_kwargs["model_settings"] = ModelSettings(max_tokens=max_tokens)
+    return Agent(**agent_kwargs), http_client
+
+
 class AgentHandle:
     """Wraps a pydantic-ai Agent with its httpx client so callers can
     deterministically close the client after use.
