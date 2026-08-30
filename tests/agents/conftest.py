@@ -3,6 +3,7 @@
 import pytest
 
 from robotsix_mill.agents import dedup, refining
+from robotsix_mill.agents.pre_refine_classifier import PreRefineClassifierResult
 from robotsix_mill.agents.refining import (
     ChildSpec,
     RefineResult,
@@ -106,6 +107,46 @@ def _triage_refine_ok(monkeypatch):
         refining,
         "triage_refine",
         lambda *a, **kw: TriageResult(decision="REFINE", reason="test"),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _pre_refine_classifier_ok(monkeypatch):
+    """All pre-existing tests expect the pre-refine classifier to pass
+    through to refine.  Tests that need a different outcome override
+    this fixture."""
+    from robotsix_mill.agents import pre_refine_classifier
+
+    monkeypatch.setattr(
+        pre_refine_classifier,
+        "run_pre_refine_classifier",
+        lambda **kw: PreRefineClassifierResult(
+            triage_decision="REFINE",
+            triage_reason="test",
+        ),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _post_refine_ok(monkeypatch):
+    """All pre-existing tests expect the post-refine check to pass
+    through (APPROVE).  Tests that need a different outcome override
+    this fixture."""
+    from robotsix_mill.agents import post_refine
+    from robotsix_mill.agents.post_refine import PostRefineResult
+
+    def _passthrough_post_refine(*, settings, spec, reviewer_comments=None, **kw):
+        return PostRefineResult(
+            concise_spec=spec,
+            stripped_summary="test passthrough",
+            auto_approve="APPROVE",
+            auto_approve_reason="test",
+        )
+
+    monkeypatch.setattr(
+        post_refine,
+        "run_post_refine_check",
+        _passthrough_post_refine,
     )
 
 

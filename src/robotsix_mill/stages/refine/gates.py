@@ -26,7 +26,10 @@ from ._gates_dedup import (
     _run_inflight_advisory,
     _verify_advisory_dedup,
 )
+from ._triage import _MIGRATE_NOTE_PREFIX
 from .helpers import (
+    DEDUP_ALREADY_DONE_PREFIX,
+    DEDUP_DUPLICATE_PREFIX,
     FRESHNESS_STALE_PREFIX,
     OBSOLESCENCE_GAP_PREFIX,
     SCOPE_TRIAGE_REPO_AWARENESS_GATE_PREFIX,
@@ -515,3 +518,338 @@ class RefineGatesMixin:
             State.READY,
             "Documentation-only change; no code review needed",
         )
+
+    @staticmethod
+    def _run_pre_refine_classifier(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        repo_dir: Path | None,
+        extra_roots: list[Path] | None,
+        title: str,
+        ws: Workspace,
+        s: Settings,
+        reviewer_comments: str | None,
+    ) -> Outcome | None:
+        """Run the combined pre-refine classifier (single LLM call).
+
+        Replaces the serial standards_gate + triage + dedup calls with
+        a single structured-output LLM call.  Returns an :class:`Outcome`
+        to short-circuit, or ``None`` to fall through to the refine agent.
+
+        The classifier returns:
+        - standards_violation: if True, short-circuit to DONE
+        - triage_decision: SKIP/NO_CHANGE/REFINE/MIGRATE
+        - duplicate_of/already_done: if set, short-circuit to DONE
+        - complexity/trivial_scope: persisted for the refine agent
+        """
+        from ...agents.pre_refine_classifier import run_pre_refine_classifier
+        from ...agents.standards import fetch_standards_context
+
+        # Gather standards context (best-effort).
+        standards_ctx = ""
+        repo_config = ctx.repo_config
+        if (
+            s.standards_gate_enabled
+            and repo_config is not None
+            and repo_config.follows_robotsix_standards()
+            and ticket.source != SourceKind.USER
+            and draft
+            and len(draft) >= 50
+        ):
+            standards_ctx = fetch_standards_context(s)
+
+        # Gather dedup candidates (reusing existing logic).
+        candidates_json = ""
+        if len(draft) >= 100:
+            try:
+                from ._gates_dedup import _build_candidates_block
+                from ...agents import dedup
+                from ...core.datetime_utils import _as_utc
+                from datetime import UTC, datetime
+
+                all_tickets = ctx.service.list()
+                now = datetime.now(UTC)
+                lookback_cutoff = datetime.fromtimestamp(
+                    now.timestamp() - s.dedup_lookback_days * 86400, tz=UTC
+                )
+                non_terminal = {State.CLOSED, State.ERRORED}
+                candidates = [
+                    t
+                    for t in all_tickets
+                    if t.id != ticket.id
+                    and (
+                        t.state not in non_terminal
+                        or (t.state == State.CLOSED and _as_utc(t.updated_at) >= lookback_cutoff)
+                    )
+                ]
+                if ticket.parent_id is not None:
+                    candidates = [
+                        t
+                        for t in candidates
+                        if t.parent_id == ticket.parent_id
+                        or t.id == ticket.parent_id
+                        or t.parent_id is None
+                        or t.state == State.CLOSED
+                    ]
+                from ...core.models import TicketKind
+
+                candidates = [
+                    t for t in candidates if t.kind != TicketKind.EPIC or t.id == ticket.parent_id
+                ]
+                candidates = dedup.rank_candidates_by_similarity(
+                    draft_title=ticket.title,
+                    draft_body=draft,
+                    candidates=candidates,
+                    max_candidates=s.dedup_max_candidates,
+                )
+                if candidates:
+                    candidates_json = _build_candidates_block(candidates, ctx)
+            except Exception:
+                log.debug(
+                    "%s: dedup candidate gathering failed, proceeding without candidates",
+                    ticket.id,
+                    exc_info=True,
+                )
+
+        # Run the combined classifier.
+        result = run_pre_refine_classifier(
+            settings=s,
+            title=title,
+            draft=draft,
+            standards_context=standards_ctx,
+            candidates_json=candidates_json,
+            reviewer_comments=reviewer_comments,
+        )
+
+        # --- Handle reviewer agreement (pre-refine short-circuit) ---
+        if reviewer_comments and result.reviewer_agreement is not None:
+            agreement = result.reviewer_agreement
+            agreement_reason = result.reviewer_agreement_reason or ""
+            short = agreement_reason[:400] + ("…" if len(agreement_reason) > 400 else "")
+
+            if agreement == "AGREE":
+                # Reviewer confirms the draft's conclusion.
+                from ...core.models import TicketKind
+
+                if ticket.kind == TicketKind.TASK and not ticket.branch:
+                    (ws.artifacts_dir / "draft-original.md").write_text(
+                        draft if draft else "(title-only ticket, no body provided)",
+                        encoding="utf-8",
+                    )
+                    _reconcile.write_file_map(ws, [], only_if_absent=True)
+                    from . import _result_paths
+
+                    return _result_paths.resolved_outcome(
+                        ctx,
+                        draft,
+                        ticket.id,
+                        f"reviewer agreement — routing to implement: {short}",
+                        source=ticket.source,
+                    )
+                return Outcome(
+                    State.DONE,
+                    f"reviewer agreement — no change needed: {short}",
+                )
+
+            if agreement == "ADMIN_ONLY":
+                (ws.artifacts_dir / "draft-original.md").write_text(
+                    draft if draft else "(title-only ticket, no body provided)",
+                    encoding="utf-8",
+                )
+                _reconcile.write_file_map(ws, [], only_if_absent=True)
+                from . import _result_paths
+
+                return _result_paths.resolved_outcome(
+                    ctx,
+                    draft,
+                    ticket.id,
+                    f"reviewer agreement — administrative feedback, routing to implement: {short}",
+                    source=ticket.source,
+                )
+            # DISAGREE — fall through to the refine agent.
+
+        # --- Handle standards violation ---
+        if result.standards_violation:
+            standard = result.standards_standard or "robotsix-standards"
+            reason = result.standards_reason or "draft goal violates a fleet standard"
+            log.info(
+                "%s: pre-refine classifier flagged standards violation of %s — %s",
+                ticket.id,
+                standard,
+                reason,
+            )
+            return Outcome(
+                State.DONE,
+                f"{STANDARDS_GATE_PREFIX} draft conflicts with {standard} — {reason}",
+            )
+
+        # --- Handle dedup ---
+        dup_id = result.duplicate_of
+        if dup_id:
+            from ._gates_dedup import _is_valid_dedup_target
+
+            if _is_valid_dedup_target(ctx, ticket, dup_id, repo_dir, draft=draft):
+                return Outcome(
+                    State.DONE,
+                    f"{DEDUP_DUPLICATE_PREFIX}{dup_id}: {result.dedup_reason}",
+                )
+            log.info(
+                "%s: pre-refine classifier named duplicate_of=%s but it is not a valid target — proceeding",
+                ticket.id,
+                dup_id,
+            )
+        done_id = result.already_done
+        if done_id:
+            from ._gates_dedup import _is_valid_dedup_target
+            from .helpers import verify_claim
+            from ...core.dedup import _extract_paths
+
+            reason_text = result.dedup_reason
+            draft_paths = _extract_paths(draft)
+            if (
+                draft_paths
+                and reason_text
+                and not verify_claim(reason_text, draft_paths, repo_dir)
+            ):
+                log.info(
+                    "%s: pre-refine classifier already_done claim (%s) could not be verified — proceeding",
+                    ticket.id,
+                    reason_text[:120],
+                )
+            elif _is_valid_dedup_target(ctx, ticket, done_id, repo_dir, draft=draft):
+                return Outcome(
+                    State.DONE,
+                    f"{DEDUP_ALREADY_DONE_PREFIX}{done_id}: {reason_text}",
+                )
+
+        # --- Persist triage complexity for the refine agent ---
+        from . import _reconcile
+
+        complexity = result.complexity or "needs-exploration"
+        _reconcile.write_triage_complexity(
+            ws,
+            complexity,
+            trivial_scope=result.trivial_scope,
+            findings=result.exploration_findings,
+        )
+
+        # --- Handle triage decision ---
+        decision = result.triage_decision
+        if decision == "SKIP":
+            # Write artifacts for traceability.
+            (ws.artifacts_dir / "draft-original.md").write_text(
+                draft if draft else "(title-only ticket, no body provided)",
+                encoding="utf-8",
+            )
+            _reconcile.write_file_map(ws, [], only_if_absent=True)
+            log.info(
+                "%s: pre-refine classifier SKIP — %s",
+                ticket.id,
+                result.triage_reason,
+            )
+            from . import _result_paths
+
+            return _result_paths.resolved_outcome(
+                ctx,
+                draft,
+                ticket.id,
+                f"triage SKIP: {result.triage_reason}",
+                source=ticket.source,
+                triage_note=result.triage_reason,
+            )
+
+        if decision == "NO_CHANGE":
+            short_reason = result.triage_reason[:400] + (
+                "…" if len(result.triage_reason) > 400 else ""
+            )
+            from ...core.models import TicketKind
+            from ._triage import _verify_branch_merged
+
+            if ticket.kind == TicketKind.TASK and (
+                not ticket.branch or not _verify_branch_merged(repo_dir, ticket)
+            ):
+                (ws.artifacts_dir / "draft-original.md").write_text(
+                    draft if draft else "(title-only ticket, no body provided)",
+                    encoding="utf-8",
+                )
+                _reconcile.write_file_map(ws, [], only_if_absent=True)
+                from . import _result_paths
+
+                return _result_paths.resolved_outcome(
+                    ctx,
+                    draft,
+                    ticket.id,
+                    f"triage NO_CHANGE — routing to implement: {short_reason}",
+                    source=ticket.source,
+                )
+            (ws.artifacts_dir / "draft-original.md").write_text(
+                draft if draft else "(title-only ticket, no body provided)",
+                encoding="utf-8",
+            )
+            _reconcile.write_file_map(ws, [], only_if_absent=True)
+            return Outcome(
+                State.DONE,
+                f"triage NO_CHANGE: {short_reason}",
+            )
+
+        if decision == "MIGRATE":
+            target_board = result.target_board
+            if target_board:
+                log.info(
+                    "%s: pre-refine classifier MIGRATE to %s — %s",
+                    ticket.id,
+                    target_board,
+                    result.triage_reason,
+                )
+                # Delegate to the existing migration logic.
+                from ._triage import _anti_bounce_escalate, _triage_outcome
+
+                # Build a mock triage result for the migration handler.
+                class _MockTriage:
+                    decision = "MIGRATE"
+                    reason = result.triage_reason
+                    target_board = target_board
+
+                anti_bounce = _anti_bounce_escalate(
+                    ctx, ws, draft, ticket, _MockTriage(), target_board
+                )
+                if anti_bounce is not None:
+                    return anti_bounce
+                # Perform the migration.
+                from ...config import get_repos_config
+
+                try:
+                    repos = get_repos_config()
+                    for rc in repos.repos.values():
+                        if rc.board_id == target_board:
+                            ctx.service.migrate_board(
+                                ticket.id,
+                                target_board,
+                                note=f"{_MIGRATE_NOTE_PREFIX}{target_board} (was {ticket.board_id}): {result.triage_reason}",
+                            )
+                            return _triage_outcome(
+                                ctx,
+                                ws,
+                                draft,
+                                ticket.id,
+                                f"migrated to {target_board}: {result.triage_reason}",
+                                source=ticket.source,
+                                triage_note=result.triage_reason,
+                            )
+                except Exception:
+                    log.warning(
+                        "%s: migration to %s failed",
+                        ticket.id,
+                        target_board,
+                        exc_info=True,
+                    )
+            # Fall through to REFINE if migration fails.
+
+        # REFINE — proceed to the refine agent.
+        log.debug(
+            "%s: pre-refine classifier REFINE — %s",
+            ticket.id,
+            result.triage_reason,
+        )
+        return None

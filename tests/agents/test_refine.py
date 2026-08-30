@@ -4063,16 +4063,28 @@ def test_reviewer_agreement_routes_to_ready_for_task_without_branch(
     assert ticket.state == State.DRAFT
     assert ticket.branch is None
 
-    # Enable the reviewer-agreement gate and make the triage return AGREE.
+    # Enable the reviewer-agreement gate and make the pre-refine classifier
+    # return AGREE.
     ctx.settings.reviewer_agreement_gate_enabled = True
     ctx.settings.refine_triage_enabled = True
 
-    def fake_triage(*, settings, draft, reviewer_comments, **kwargs):
-        from robotsix_mill.agents.refining import ReviewerAgreementResult
+    from robotsix_mill.agents.pre_refine_classifier import (
+        PreRefineClassifierResult,
+        run_pre_refine_classifier,
+    )
 
-        return ReviewerAgreementResult(decision="AGREE", reason="The draft looks good.")
+    def fake_pre_refine(**kwargs):
+        return PreRefineClassifierResult(
+            triage_decision="REFINE",
+            triage_reason="test",
+            reviewer_agreement="AGREE",
+            reviewer_agreement_reason="The draft looks good.",
+        )
 
-    monkeypatch.setattr(refining, "triage_reviewer_agreement", fake_triage)
+    monkeypatch.setattr(
+        "robotsix_mill.agents.pre_refine_classifier.run_pre_refine_classifier",
+        fake_pre_refine,
+    )
 
     # Simulate reviewer comments existing (the guard only fires when there
     # are reviewer comments).

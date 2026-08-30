@@ -33,6 +33,70 @@ from .helpers import (
 # -- shared outcome / thread / artifact helpers -------------------------
 
 
+def _run_post_refine_check(
+    ctx: StageContext,
+    ticket: Ticket,
+    spec: str,
+    ws: Workspace,
+    s: Settings,
+    reviewer_comments: str | None,
+) -> str:
+    """Run the post-refine check (single LLM call).
+
+    Replaces the serial spec-conciseness review + auto-approve with a
+    single structured-output call.  Returns the (possibly concise) spec.
+    The auto-approve decision is applied via ``_resolve_next_state``
+    using the post-refine result's ``auto_approve`` field.
+    """
+    from ...agents.post_refine import run_post_refine_check
+
+    try:
+        result = run_post_refine_check(
+            settings=s,
+            spec=spec,
+            reviewer_comments=reviewer_comments,
+        )
+    except Exception:
+        log.warning(
+            "%s: post-refine check failed, using original spec",
+            ticket.id,
+            exc_info=True,
+        )
+        return spec
+
+    # Use the concise spec if available and non-degenerate.
+    concise = result.concise_spec
+    if concise and concise.strip() and not _spec_is_degenerate(concise):
+        (ws.artifacts_dir / "refine-verbose.md").write_text(
+            spec, encoding="utf-8"
+        )
+        log.info(
+            "%s: post-refine check: %s",
+            ticket.id,
+            result.stripped_summary,
+        )
+        spec = concise
+    else:
+        log.warning(
+            "%s: post-refine check returned empty/degenerate concise spec, using original",
+            ticket.id,
+        )
+
+    # Store the auto-approve decision for resolved_outcome to use.
+    # We write it as an artifact so _resolve_next_state can read it.
+    import json
+
+    (ws.artifacts_dir / "post_refine_auto_approve.json").write_text(
+        json.dumps({
+            "decision": result.auto_approve,
+            "reason": result.auto_approve_reason,
+        }),
+        encoding="utf-8",
+    )
+
+    return spec
+
+
 def resolved_outcome(
     ctx: StageContext,
     spec: str,
@@ -41,6 +105,7 @@ def resolved_outcome(
     *,
     source: str | None = None,
     triage_note: str | None = None,
+    ws: object | None = None,
 ) -> Outcome:
     """Resolve the next state for *spec* and build the closing Outcome.
 
@@ -49,7 +114,7 @@ def resolved_outcome(
     split-child, triage-skip, single-scope, and split paths.
     """
     next_state, auto_note = _resolve_next_state(
-        ctx, spec, ticket_id, source=source, triage_note=triage_note
+        ctx, spec, ticket_id, source=source, triage_note=triage_note, _ws=ws
     )
     note = base_note
     if auto_note:
@@ -459,15 +524,18 @@ def single_scope_path(
         )
         return _degenerate_spec_outcome(ctx, ticket, draft, spec_reason=spec_reason)
 
-    if s.spec_review_enabled and not reviewer_comments:
-        spec = review_spec_conciseness(s, ws, ticket, spec, "refine-verbose.md")
+    # Post-refine check: single LLM call replacing spec-conciseness +
+    # auto-approve.  When the post-refine check is enabled, run it;
+    # otherwise fall back to the legacy spec-review + resolved_outcome.
+    if s.spec_review_enabled:
+        spec = _run_post_refine_check(ctx, ticket, spec, ws, s, reviewer_comments)
 
     new_hash = ws.write_description(spec)
     ctx.service.set_content_hash(ticket.id, new_hash)
 
     ack_threads(ctx, ticket, reviewer_comments, open_thread_ids)
 
-    return resolved_outcome(ctx, spec, ticket.id, "refined", source=ticket.source)
+    return resolved_outcome(ctx, spec, ticket.id, "refined", source=ticket.source, ws=ws)
 
 
 # -- phase: multi-scope split -------------------------------------------
@@ -505,8 +573,8 @@ def multi_scope_path(
                 spec_reason=spec_reason,
             )
 
-        if s.spec_review_enabled and not reviewer_comments:
-            spec = review_spec_conciseness(s, ws, ticket, spec, "refine-verbose.md")
+        if s.spec_review_enabled:
+            spec = _run_post_refine_check(ctx, ticket, spec, ws, s, reviewer_comments)
 
         new_hash = ws.write_description(spec)
         ctx.service.set_content_hash(ticket.id, new_hash)
@@ -519,6 +587,7 @@ def multi_scope_path(
             ticket.id,
             "refined (split degraded — no valid children)",
             source=ticket.source,
+            ws=ws,
         )
 
     # Validate and collect valid children.
@@ -544,15 +613,10 @@ def multi_scope_path(
         ack_threads(ctx, ticket, reviewer_comments, open_thread_ids)
         return Outcome(State.BLOCKED, "refiner produced no valid split children")
 
-    if s.spec_review_enabled and not reviewer_comments:
+    if s.spec_review_enabled:
         for i, child in enumerate(valid_children):
-            child["spec_markdown"] = review_spec_conciseness(
-                s,
-                ws,
-                ticket,
-                child["spec_markdown"],
-                f"refine-verbose-child-{i + 1}.md",
-                child_index=i + 1,
+            child["spec_markdown"] = _run_post_refine_check(
+                ctx, ticket, child["spec_markdown"], ws, s, reviewer_comments
             )
 
     if len(valid_children) == 1:
@@ -570,6 +634,7 @@ def multi_scope_path(
             ticket.id,
             "refined (single child, no split)",
             source=ticket.source,
+            ws=ws,
         )
 
     # Create child tickets.
