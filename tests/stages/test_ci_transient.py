@@ -256,3 +256,123 @@ class TestIsTransientCiFailure:
             "FAILED tests/test_http.py::test_post - assert 200 == 400\n"
         )
         assert is_transient_ci_failure(summary) is False
+
+    # --- runner / action-setup fetch failures ---
+
+    def test_detects_setup_uv_fetch_failed_marker(self):
+        """AC #1: a setup-uv step that dies with ``##[error]fetch failed`` on
+        a log line separate from the ``Run astral-sh/setup-uv`` header is
+        still classified infra-transient."""
+        summary = (
+            "## ❌ FAILED: Baseline (shared) / Modules drift\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "Run astral-sh/setup-uv@v6\n"
+            "Downloading uv from ...\n"
+            "##[error]fetch failed\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_detects_setup_python_fetch_failed(self):
+        summary = (
+            "## ❌ FAILED: Tests\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "actions/setup-python fetch failed while downloading manifest\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_detects_checkout_failed_to_download(self):
+        summary = (
+            "## ❌ FAILED: Build\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "actions/checkout failed to download the repository archive\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_detects_unable_to_resolve_action(self):
+        summary = (
+            "## ❌ FAILED: setup\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "##[error]Unable to resolve action `astral-sh/setup-uv@v6`\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_detects_hosted_runner_lost_communication(self):
+        summary = (
+            "## ❌ FAILED: Build\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "The hosted runner: GitHub Actions 5 lost communication with "
+            "the server.\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_detects_httperror_rate_limit(self):
+        summary = (
+            "## ❌ FAILED: publish\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "HttpError: rate limit hit while querying the API\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_detects_docker_hub_too_many_requests(self):
+        summary = (
+            "## ❌ FAILED: release-image\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "toomanyrequests: You have reached your pull rate limit.\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_detects_docker_registry_5xx_pull(self):
+        summary = (
+            "## ❌ FAILED: release-image\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "failed to pull image: received unexpected HTTP status: 503 "
+            "Service Unavailable\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_detects_pypi_mirror_5xx(self):
+        summary = (
+            "## ❌ FAILED: install\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "uv failed to fetch from pypi: 502 Bad Gateway\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_detects_apt_mirror_5xx(self):
+        summary = (
+            "## ❌ FAILED: setup\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "apt-get update failed: 503 Service Unavailable\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_plain_fetch_failed_without_marker_not_misclassified(self):
+        """A test that prints 'fetch failed' without the runner ``##[error]``
+        marker or an action name must not be classified transient."""
+        summary = (
+            "## ❌ FAILED: unit tests\n\n"
+            "**Details:**\n"
+            "FAILED tests/test_client.py::test_fetch - AssertionError: "
+            "fetch failed for stub response\n"
+        )
+        assert is_transient_ci_failure(summary) is False
