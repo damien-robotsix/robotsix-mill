@@ -83,7 +83,11 @@ class ClassifyStage(Stage):
         # Check if this ticket is a semantic duplicate of an existing one.
         dup_id = self._run_llm_dedup(ticket, title, body, board_id, ctx)
         if dup_id is not None:
-            log.info("%s: LLM dedup match found — closing (duplicate of %s)", ticket.id, dup_id)
+            log.info(
+                "%s: LLM dedup match found — closing (duplicate of %s)",
+                ticket.id,
+                dup_id,
+            )
             # Record the dedup hit on the existing ticket.
             try:
                 ctx.service.add_history_note(
@@ -92,7 +96,9 @@ class ClassifyStage(Stage):
                     f"(LLM dedup match from {ticket.id})",
                 )
             except Exception:
-                log.warning("failed to add dedup history note to %s", dup_id, exc_info=True)
+                log.warning(
+                    "failed to add dedup history note to %s", dup_id, exc_info=True
+                )
             return Outcome(
                 State.CLOSED,
                 f"duplicate of {dup_id}"[:200],
@@ -100,7 +106,9 @@ class ClassifyStage(Stage):
 
         # --- Phase 3: scope_classify ---
         # Promote broad multi-concern reports to auto-decomposed epics.
-        epic_outcome = self._maybe_promote_to_epic(ticket, title, body, board_id, ctx, s)
+        epic_outcome = self._maybe_promote_to_epic(
+            ticket, title, body, board_id, ctx, s
+        )
         if epic_outcome is not None:
             return epic_outcome
 
@@ -230,7 +238,9 @@ class ClassifyStage(Stage):
                 repo_dir=None,
             )
         except Exception as exc:
-            log.warning("%s: dedup LLM failed, proceeding (fail-open): %s", ticket.id, exc)
+            log.warning(
+                "%s: dedup LLM failed, proceeding (fail-open): %s", ticket.id, exc
+            )
             return None
 
         return verdict.get("duplicate_of")

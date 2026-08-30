@@ -307,7 +307,6 @@ def ingest_ticket(
     return _create_ticket_guarded(body, board_id, board_svc, worker, settings)
 
 
-
 def _count_open_tickets(board_svc: TicketService, board_id: str) -> int:
     """Count non-terminal tickets on *board_id*.
 

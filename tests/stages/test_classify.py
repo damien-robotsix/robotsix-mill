@@ -23,7 +23,9 @@ def service(settings) -> TicketService:
     return TicketService(settings, board_id="test-board")
 
 
-def _make_classifying_ticket(service: TicketService, title: str = "Test", body: str = "Body"):
+def _make_classifying_ticket(
+    service: TicketService, title: str = "Test", body: str = "Body"
+):
     """Create a ticket in CLASSIFYING state."""
     ticket = service.create(
         title=title,
@@ -54,15 +56,18 @@ def test_classify_operational_closes_ticket(classify_stage, service, settings):
 
     ticket = _make_classifying_ticket(service, "Rotate PAT token", "Rotate the PAT.")
 
-    with patch(
-        "robotsix_mill.stages.classify.run_ops_classify_agent",
-        return_value=OpsClassifyVerdict(
-            classification="OPERATIONAL",
-            reason="Manual credential rotation.",
+    with (
+        patch(
+            "robotsix_mill.stages.classify.run_ops_classify_agent",
+            return_value=OpsClassifyVerdict(
+                classification="OPERATIONAL",
+                reason="Manual credential rotation.",
+            ),
         ),
-    ), patch(
-        "robotsix_mill.stages.classify.emit_diagnostic_event",
-        return_value=True,
+        patch(
+            "robotsix_mill.stages.classify.emit_diagnostic_event",
+            return_value=True,
+        ),
     ):
         ctx = _make_ctx(service, settings)
         outcome = classify_stage.run(ticket, ctx)
@@ -77,21 +82,26 @@ def test_classify_code_proceeds(classify_stage, service, settings):
 
     ticket = _make_classifying_ticket(service, "Fix bug", "Fix the bug in code.")
 
-    with patch(
-        "robotsix_mill.stages.classify.run_ops_classify_agent",
-        return_value=OpsClassifyVerdict(
-            classification="CODE",
-            reason="Code defect.",
+    with (
+        patch(
+            "robotsix_mill.stages.classify.run_ops_classify_agent",
+            return_value=OpsClassifyVerdict(
+                classification="CODE",
+                reason="Code defect.",
+            ),
         ),
-    ), patch(
-        "robotsix_mill.stages.classify.emit_diagnostic_event",
-        return_value=True,
-    ), patch(
-        "robotsix_mill.stages.classify.run_dedup_check",
-        return_value={"duplicate_of": None},
-    ), patch(
-        "robotsix_mill.stages.classify.any_candidate_overlap",
-        return_value=False,
+        patch(
+            "robotsix_mill.stages.classify.emit_diagnostic_event",
+            return_value=True,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.run_dedup_check",
+            return_value={"duplicate_of": None},
+        ),
+        patch(
+            "robotsix_mill.stages.classify.any_candidate_overlap",
+            return_value=False,
+        ),
     ):
         ctx = _make_ctx(service, settings)
         outcome = classify_stage.run(ticket, ctx)
@@ -103,15 +113,19 @@ def test_classify_ops_fail_open(classify_stage, service, settings):
     """When ops_classify fails, the ticket proceeds (fail-open)."""
     ticket = _make_classifying_ticket(service)
 
-    with patch(
-        "robotsix_mill.stages.classify.run_ops_classify_agent",
-        side_effect=RuntimeError("LLM timeout"),
-    ), patch(
-        "robotsix_mill.stages.classify.run_dedup_check",
-        return_value={"duplicate_of": None},
-    ), patch(
-        "robotsix_mill.stages.classify.any_candidate_overlap",
-        return_value=False,
+    with (
+        patch(
+            "robotsix_mill.stages.classify.run_ops_classify_agent",
+            side_effect=RuntimeError("LLM timeout"),
+        ),
+        patch(
+            "robotsix_mill.stages.classify.run_dedup_check",
+            return_value={"duplicate_of": None},
+        ),
+        patch(
+            "robotsix_mill.stages.classify.any_candidate_overlap",
+            return_value=False,
+        ),
     ):
         ctx = _make_ctx(service, settings)
         outcome = classify_stage.run(ticket, ctx)
@@ -133,18 +147,23 @@ def test_classify_dedup_closes_ticket(classify_stage, service, settings):
     )
     ticket = _make_classifying_ticket(service, "Same issue", "Same thing went wrong.")
 
-    with patch(
-        "robotsix_mill.stages.classify.run_ops_classify_agent",
-        return_value=None,
-    ), patch(
-        "robotsix_mill.stages.classify.any_candidate_overlap",
-        return_value=True,
-    ), patch(
-        "robotsix_mill.stages.classify.rank_candidates_by_similarity",
-        return_value=[existing],
-    ), patch(
-        "robotsix_mill.stages.classify.run_dedup_check",
-        return_value={"duplicate_of": existing.id},
+    with (
+        patch(
+            "robotsix_mill.stages.classify.run_ops_classify_agent",
+            return_value=None,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.any_candidate_overlap",
+            return_value=True,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.rank_candidates_by_similarity",
+            return_value=[existing],
+        ),
+        patch(
+            "robotsix_mill.stages.classify.run_dedup_check",
+            return_value={"duplicate_of": existing.id},
+        ),
     ):
         ctx = _make_ctx(service, settings)
         outcome = classify_stage.run(ticket, ctx)
@@ -164,18 +183,23 @@ def test_classify_dedup_miss_proceeds(classify_stage, service, settings):
     )
     ticket = _make_classifying_ticket(service, "New issue", "New thing went wrong.")
 
-    with patch(
-        "robotsix_mill.stages.classify.run_ops_classify_agent",
-        return_value=None,
-    ), patch(
-        "robotsix_mill.stages.classify.any_candidate_overlap",
-        return_value=True,
-    ), patch(
-        "robotsix_mill.stages.classify.rank_candidates_by_similarity",
-        return_value=[],
-    ), patch(
-        "robotsix_mill.stages.classify.run_dedup_check",
-        return_value={"duplicate_of": None},
+    with (
+        patch(
+            "robotsix_mill.stages.classify.run_ops_classify_agent",
+            return_value=None,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.any_candidate_overlap",
+            return_value=True,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.rank_candidates_by_similarity",
+            return_value=[],
+        ),
+        patch(
+            "robotsix_mill.stages.classify.run_dedup_check",
+            return_value={"duplicate_of": None},
+        ),
     ):
         ctx = _make_ctx(service, settings)
         outcome = classify_stage.run(ticket, ctx)
@@ -194,18 +218,23 @@ def test_classify_dedup_fail_open(classify_stage, service, settings):
     )
     ticket = _make_classifying_ticket(service)
 
-    with patch(
-        "robotsix_mill.stages.classify.run_ops_classify_agent",
-        return_value=None,
-    ), patch(
-        "robotsix_mill.stages.classify.any_candidate_overlap",
-        return_value=True,
-    ), patch(
-        "robotsix_mill.stages.classify.rank_candidates_by_similarity",
-        return_value=[],
-    ), patch(
-        "robotsix_mill.stages.classify.run_dedup_check",
-        side_effect=RuntimeError("LLM timeout"),
+    with (
+        patch(
+            "robotsix_mill.stages.classify.run_ops_classify_agent",
+            return_value=None,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.any_candidate_overlap",
+            return_value=True,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.rank_candidates_by_similarity",
+            return_value=[],
+        ),
+        patch(
+            "robotsix_mill.stages.classify.run_dedup_check",
+            side_effect=RuntimeError("LLM timeout"),
+        ),
     ):
         ctx = _make_ctx(service, settings)
         outcome = classify_stage.run(ticket, ctx)
@@ -232,21 +261,29 @@ def test_classify_epic_promotes(classify_stage, service, settings):
         child_bodies=["Email body.", "SMS body."],
     )
 
-    with patch(
-        "robotsix_mill.stages.classify.run_ops_classify_agent",
-        return_value=None,
-    ), patch(
-        "robotsix_mill.stages.classify.any_candidate_overlap",
-        return_value=False,
-    ), patch(
-        "robotsix_mill.stages.classify.run_scope_classify_agent",
-        return_value=ScopeVerdict(classification="EPIC", confidence=0.9, reason="Broad."),
-    ), patch(
-        "robotsix_mill.stages.classify.emit_diagnostic_event",
-        return_value=True,
-    ), patch(
-        "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
-        return_value=breakdown,
+    with (
+        patch(
+            "robotsix_mill.stages.classify.run_ops_classify_agent",
+            return_value=None,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.any_candidate_overlap",
+            return_value=False,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.run_scope_classify_agent",
+            return_value=ScopeVerdict(
+                classification="EPIC", confidence=0.9, reason="Broad."
+            ),
+        ),
+        patch(
+            "robotsix_mill.stages.classify.emit_diagnostic_event",
+            return_value=True,
+        ),
+        patch(
+            "robotsix_mill.agents.epic_breakdown.run_epic_breakdown_agent",
+            return_value=breakdown,
+        ),
     ):
         ctx = _make_ctx(service, settings)
         outcome = classify_stage.run(ticket, ctx)
@@ -264,18 +301,25 @@ def test_classify_epic_below_threshold_stays_task(classify_stage, service, setti
 
     ticket = _make_classifying_ticket(service)
 
-    with patch(
-        "robotsix_mill.stages.classify.run_ops_classify_agent",
-        return_value=None,
-    ), patch(
-        "robotsix_mill.stages.classify.any_candidate_overlap",
-        return_value=False,
-    ), patch(
-        "robotsix_mill.stages.classify.run_scope_classify_agent",
-        return_value=ScopeVerdict(classification="EPIC", confidence=0.5, reason="Borderline."),
-    ), patch(
-        "robotsix_mill.stages.classify.emit_diagnostic_event",
-        return_value=True,
+    with (
+        patch(
+            "robotsix_mill.stages.classify.run_ops_classify_agent",
+            return_value=None,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.any_candidate_overlap",
+            return_value=False,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.run_scope_classify_agent",
+            return_value=ScopeVerdict(
+                classification="EPIC", confidence=0.5, reason="Borderline."
+            ),
+        ),
+        patch(
+            "robotsix_mill.stages.classify.emit_diagnostic_event",
+            return_value=True,
+        ),
     ):
         ctx = _make_ctx(service, settings)
         outcome = classify_stage.run(ticket, ctx)
@@ -292,15 +336,19 @@ def test_classify_scope_disabled(classify_stage, service, settings):
     settings.auto_epic_enabled = False
     ticket = _make_classifying_ticket(service)
 
-    with patch(
-        "robotsix_mill.stages.classify.run_ops_classify_agent",
-        return_value=None,
-    ), patch(
-        "robotsix_mill.stages.classify.any_candidate_overlap",
-        return_value=False,
-    ), patch(
-        "robotsix_mill.stages.classify.run_scope_classify_agent",
-    ) as mock_scope:
+    with (
+        patch(
+            "robotsix_mill.stages.classify.run_ops_classify_agent",
+            return_value=None,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.any_candidate_overlap",
+            return_value=False,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.run_scope_classify_agent",
+        ) as mock_scope,
+    ):
         ctx = _make_ctx(service, settings)
         outcome = classify_stage.run(ticket, ctx)
 
@@ -312,15 +360,19 @@ def test_classify_scope_fail_open(classify_stage, service, settings):
     """When scope_classify fails, the ticket proceeds as a task."""
     ticket = _make_classifying_ticket(service)
 
-    with patch(
-        "robotsix_mill.stages.classify.run_ops_classify_agent",
-        return_value=None,
-    ), patch(
-        "robotsix_mill.stages.classify.any_candidate_overlap",
-        return_value=False,
-    ), patch(
-        "robotsix_mill.stages.classify.run_scope_classify_agent",
-        side_effect=RuntimeError("LLM timeout"),
+    with (
+        patch(
+            "robotsix_mill.stages.classify.run_ops_classify_agent",
+            return_value=None,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.any_candidate_overlap",
+            return_value=False,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.run_scope_classify_agent",
+            side_effect=RuntimeError("LLM timeout"),
+        ),
     ):
         ctx = _make_ctx(service, settings)
         outcome = classify_stage.run(ticket, ctx)
@@ -335,14 +387,18 @@ def test_classify_no_candidates_skips_dedup(classify_stage, service, settings):
     """When there are no candidates, LLM dedup is skipped."""
     ticket = _make_classifying_ticket(service)
 
-    with patch(
-        "robotsix_mill.stages.classify.run_ops_classify_agent",
-        return_value=None,
-    ), patch(
-        "robotsix_mill.stages.classify.run_dedup_check",
-    ) as mock_dedup, patch(
-        "robotsix_mill.stages.classify.any_candidate_overlap",
-        return_value=False,
+    with (
+        patch(
+            "robotsix_mill.stages.classify.run_ops_classify_agent",
+            return_value=None,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.run_dedup_check",
+        ) as mock_dedup,
+        patch(
+            "robotsix_mill.stages.classify.any_candidate_overlap",
+            return_value=False,
+        ),
     ):
         ctx = _make_ctx(service, settings)
         outcome = classify_stage.run(ticket, ctx)
@@ -365,14 +421,18 @@ def test_classify_no_overlap_skips_dedup(classify_stage, service, settings):
     )
     ticket = _make_classifying_ticket(service, "abcdef", "ghijkl")
 
-    with patch(
-        "robotsix_mill.stages.classify.run_ops_classify_agent",
-        return_value=None,
-    ), patch(
-        "robotsix_mill.stages.classify.run_dedup_check",
-    ) as mock_dedup, patch(
-        "robotsix_mill.stages.classify.any_candidate_overlap",
-        return_value=False,
+    with (
+        patch(
+            "robotsix_mill.stages.classify.run_ops_classify_agent",
+            return_value=None,
+        ),
+        patch(
+            "robotsix_mill.stages.classify.run_dedup_check",
+        ) as mock_dedup,
+        patch(
+            "robotsix_mill.stages.classify.any_candidate_overlap",
+            return_value=False,
+        ),
     ):
         ctx = _make_ctx(service, settings)
         outcome = classify_stage.run(ticket, ctx)
