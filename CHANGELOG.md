@@ -1,5 +1,71 @@
 # Changelog
 
+## [0.12.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.11.0...v0.12.0) (2026-08-31)
+
+
+### Features
+
+* Add dependency-resolution gate to refine stage to short-circuit blocked epic children (20260821T144144Z-add-dependency-resolution-gate-to-refine-7b5e) ([#3025](https://github.com/damien-robotsix/robotsix-mill/issues/3025)) ([e8bbc98](https://github.com/damien-robotsix/robotsix-mill/commit/e8bbc98e5c19d82add331c7310d24ca8cfb96e06))
+* adopt the five-tier llmio level map (haiku as level 2) ([#3043](https://github.com/damien-robotsix/robotsix-mill/issues/3043)) ([10cf7a7](https://github.com/damien-robotsix/robotsix-mill/commit/10cf7a782930d6590c5bc78088a7cfa61a0f73ff))
+* **agents:** run_command refuses full-suite pytest — the stage gate owns the whole run ([#3059](https://github.com/damien-robotsix/robotsix-mill/issues/3059)) ([83b2c02](https://github.com/damien-robotsix/robotsix-mill/commit/83b2c025b22fd4c7fb8d7ae60f0facccbc4b5707))
+* Cap scope-triage EXPAND cycles per ticket — force a split proposal instead of re-queueing (20260824T225847Z-cap-scope-triage-expand-cycles-per-ticke-e5ed) ([#2991](https://github.com/damien-robotsix/robotsix-mill/issues/2991)) ([1ec0e8d](https://github.com/damien-robotsix/robotsix-mill/commit/1ec0e8de4abd586328460a3b6b7895fb29ceaa0e))
+* **ci:** build sdist + wheel on PRs and assert bundled resources ship ([#3028](https://github.com/damien-robotsix/robotsix-mill/issues/3028)) ([c82890d](https://github.com/damien-robotsix/robotsix-mill/commit/c82890d6fe58c36495f1e64c1bbfaadc2b30903d))
+* Config cleanup follow-up: rename surviving UPPERCASE env-style keys to lowercase (config-standard compliance) (20260826T230136Z-config-cleanup-follow-up-rename-survivin-4ccd) ([#3004](https://github.com/damien-robotsix/robotsix-mill/issues/3004)) ([7987a80](https://github.com/damien-robotsix/robotsix-mill/commit/7987a800ef1f6e91a9c554380dff7e982aa4611a))
+* **config:** per-stage llmio capability level via agent_levels ([#3031](https://github.com/damien-robotsix/robotsix-mill/issues/3031)) ([f19518b](https://github.com/damien-robotsix/robotsix-mill/commit/f19518bcd04d1f5935e6e7f28371d45485ece013))
+* Delete completed one-time migration script scripts/remove_periodic_bools.py (20260826T071936Z-delete-completed-one-time-migration-scri-789f) ([#3016](https://github.com/damien-robotsix/robotsix-mill/issues/3016)) ([766f3cd](https://github.com/damien-robotsix/robotsix-mill/commit/766f3cd16c01b44274e63661ea169b01ea32d21f))
+* **diagnostics:** report priority tickets stalled at implement_complete (20260825T052251Z-proactive-root-cause-diagnosis-when-prio-85f5) ([#3017](https://github.com/damien-robotsix/robotsix-mill/issues/3017)) ([ea45b35](https://github.com/damien-robotsix/robotsix-mill/commit/ea45b353dda7d0b683aa9755cbd9a88e38a05780))
+* **diagnostic:** turn recurring CI failures into prevention rules in the implement memory ledger ([#3064](https://github.com/damien-robotsix/robotsix-mill/issues/3064)) ([88f5021](https://github.com/damien-robotsix/robotsix-mill/commit/88f5021349d1077442697e507214c8cb67167ae9))
+* **explore:** run the exploration sub-agent on a configurable tier (default haiku) ([#3063](https://github.com/damien-robotsix/robotsix-mill/issues/3063)) ([9dc1cd9](https://github.com/damien-robotsix/robotsix-mill/commit/9dc1cd9990ea249aa2d3a045bd631bf11c38345c))
+* **retrospect:** skip the LLM retrospect for uneventful (first-time-green) tickets ([#3061](https://github.com/damien-robotsix/robotsix-mill/issues/3061)) ([80ed99d](https://github.com/damien-robotsix/robotsix-mill/commit/80ed99dc4af6cb11855eea3ff933ed2e51978258))
+* **worker:** blocked auto-resume pass — retry resumable blocks once after a cooldown ([#3062](https://github.com/damien-robotsix/robotsix-mill/issues/3062)) ([5aa5492](https://github.com/damien-robotsix/robotsix-mill/commit/5aa54921b5c880821d148bf1774f108da2b0f21f))
+* **worker:** park on Claude usage exhaustion instead of blocking or paying for a fallback tier ([#3054](https://github.com/damien-robotsix/robotsix-mill/issues/3054)) ([04f87e7](https://github.com/damien-robotsix/robotsix-mill/commit/04f87e71f63939ab7f12ee287d5d8b31c044f350))
+
+
+### Bug Fixes
+
+* [diagnostic] recurring CI failure: key=c0dff799 (31 tickets) (20260826T065604Z-diagnostic-recurring-ci-failure-key-c0df-ec59) ([#3003](https://github.com/damien-robotsix/robotsix-mill/issues/3003)) ([4d70a84](https://github.com/damien-robotsix/robotsix-mill/commit/4d70a84839d0c31933f646e9a0fb9f7aca11ee8d))
+* **agents:** a Claude-backed start never falls back onto a paid tier unless opted in ([#3058](https://github.com/damien-robotsix/robotsix-mill/issues/3058)) ([63e5e65](https://github.com/damien-robotsix/robotsix-mill/commit/63e5e65eb8a00283c5d0b7d4cd3dde501002c37a))
+* **agents:** fall back to an OpenRouter tier when the Claude tier is unavailable ([#3044](https://github.com/damien-robotsix/robotsix-mill/issues/3044)) ([5aeb8e1](https://github.com/damien-robotsix/robotsix-mill/commit/5aeb8e1aa692760f28ec2a37867aca1b8aff035c))
+* **api:** GET /tickets reported cost_usd 0.0 for every ticket (20260825T...-e4a6) ([#3020](https://github.com/damien-robotsix/robotsix-mill/issues/3020)) ([0e8197d](https://github.com/damien-robotsix/robotsix-mill/commit/0e8197de8def2882dcef4c42d63d71e21e0413b3))
+* **ci_fix:** auto-resume tickets parked on a red target branch ([#3008](https://github.com/damien-robotsix/robotsix-mill/issues/3008)) ([6d2e969](https://github.com/damien-robotsix/robotsix-mill/commit/6d2e969e3a162b52c539ac9deb40a4e2f2d5409a))
+* Closure stage must verify repo state before asserting a gap is 'already fixed' (20260827T152458Z-closure-stage-must-verify-repo-state-bef-8df5) ([#3033](https://github.com/damien-robotsix/robotsix-mill/issues/3033)) ([e981ad8](https://github.com/damien-robotsix/robotsix-mill/commit/e981ad854dacc209bee21e0243f22763323a73e5))
+* **deps:** bump robotsix-http to clear the permanent TokenMintError ([#3027](https://github.com/damien-robotsix/robotsix-mill/issues/3027)) ([a05233b](https://github.com/damien-robotsix/robotsix-mill/commit/a05233b31b196fe7b3048faabcb4aeedd74b75f4))
+* **deps:** bump robotsix-llmio so level-2 provider routing applies to mimo ([#3029](https://github.com/damien-robotsix/robotsix-mill/issues/3029)) ([fa02293](https://github.com/damien-robotsix/robotsix-mill/commit/fa022939a0e9dc635ffbf7a88e0506b6ffdebfb5))
+* **deps:** bump robotsix-llmio so wrapped finish_reason=error is retried ([#3034](https://github.com/damien-robotsix/robotsix-mill/issues/3034)) ([84f7267](https://github.com/damien-robotsix/robotsix-mill/commit/84f7267013f0c66061a552653aab94c81ba22707))
+* **deps:** bump robotsix-llmio to a valid level-1 model and a workable level-2 cap ([#3007](https://github.com/damien-robotsix/robotsix-mill/issues/3007)) ([da7f6be](https://github.com/damien-robotsix/robotsix-mill/commit/da7f6be9bea1aa016bf305c04032d05fb153a369))
+* **deps:** bump robotsix-llmio to pick up session-limit fallback ([#3015](https://github.com/damien-robotsix/robotsix-mill/issues/3015)) ([ea6edc9](https://github.com/damien-robotsix/robotsix-mill/commit/ea6edc97a57f14385f09f07ef934eeecd527ed3d))
+* **diagnostic:** do not file tickets for runs interrupted by a process restart ([#3011](https://github.com/damien-robotsix/robotsix-mill/issues/3011)) ([138ae91](https://github.com/damien-robotsix/robotsix-mill/commit/138ae91973d50a91a9af6278443fc98a01f34804))
+* document reset-fingerprint in the chat skill, and stop pointing at DELETE for it ([#3024](https://github.com/damien-robotsix/robotsix-mill/issues/3024)) ([82b3fac](https://github.com/damien-robotsix/robotsix-mill/commit/82b3fac217b8575ff7362433fb63f7cf4c9f84bb))
+* Fix document agent's AttributeError when handling SDK tool result objects (20260829T102018Z-fix-document-agent-s-attributeerror-when-579e) ([#3047](https://github.com/damien-robotsix/robotsix-mill/issues/3047)) ([498d87e](https://github.com/damien-robotsix/robotsix-mill/commit/498d87ef9106f570a9387e78e0d2b66f964b2293))
+* Fix: git push fails with invalid credential despite healthy GitHub App installation token (20260824T193107Z-fix-git-push-fails-with-invalid-credenti-fa09) ([#2983](https://github.com/damien-robotsix/robotsix-mill/issues/2983)) ([a0e5b28](https://github.com/damien-robotsix/robotsix-mill/commit/a0e5b284055ec6176292d1761a109a19693fd68d))
+* GET /tickets list endpoint returns cost_usd 0.0 while GET /tickets/{id} returns the real value (20260824T225853Z-get-tickets-list-endpoint-returns-cost-u-f27e) ([#2995](https://github.com/damien-robotsix/robotsix-mill/issues/2995)) ([93b96fb](https://github.com/damien-robotsix/robotsix-mill/commit/93b96fbe0f2ab0ab4289c0972d4e502915ef32b3))
+* **implement:** a scope-triage REJECT send-back must not arm the spec-fingerprint guard ([#3048](https://github.com/damien-robotsix/robotsix-mill/issues/3048)) ([8a53f51](https://github.com/damien-robotsix/robotsix-mill/commit/8a53f511fc48ed389fd041ca344bd339b645d40c))
+* **implement:** never record a spec fingerprint for a provider/model failure ([#3009](https://github.com/damien-robotsix/robotsix-mill/issues/3009)) ([9bd2860](https://github.com/damien-robotsix/robotsix-mill/commit/9bd286045f832e57bd5dc96be330f440148009ef))
+* **implement:** resolve bare-basename summary claims against branch changes ([#3010](https://github.com/damien-robotsix/robotsix-mill/issues/3010)) ([6a9bb51](https://github.com/damien-robotsix/robotsix-mill/commit/6a9bb51254a48e386a38850d04cecf22e0249eae))
+* **implement:** scope-triage lets infrastructure errors reach the worker (park) instead of blocking ([#3066](https://github.com/damien-robotsix/robotsix-mill/issues/3066)) ([e247440](https://github.com/damien-robotsix/robotsix-mill/commit/e24744005abfb6d91fa917a6ad8b0b618d0a10d4))
+* **merge,ci_fix:** stop blocking tickets on CI that can never report ([#2985](https://github.com/damien-robotsix/robotsix-mill/issues/2985)) ([52317b2](https://github.com/damien-robotsix/robotsix-mill/commit/52317b22ea9502265558310d4620efcfd2842b21))
+* **merge:** a branch-added file the target already carries is superseded, not dropped ([#3053](https://github.com/damien-robotsix/robotsix-mill/issues/3053)) ([5b80ca0](https://github.com/damien-robotsix/robotsix-mill/commit/5b80ca01e4668a4e1c10dbec999117ade733d933))
+* Migrate web_knowledge_model off dead base slug deepseek/deepseek-v4-flash to pinned snapshot deepseek/deepseek-v4-flash-20260731 (20260826T231424Z-migrate-web-knowledge-model-off-dead-bas-0c4a) ([#3005](https://github.com/damien-robotsix/robotsix-mill/issues/3005)) ([b9c6540](https://github.com/damien-robotsix/robotsix-mill/commit/b9c654086fb326ef14f39e2f69aa655ab2719be3))
+* **pin_bump:** substitute the rev with a function, not a template ([#3006](https://github.com/damien-robotsix/robotsix-mill/issues/3006)) ([1e4eb23](https://github.com/damien-robotsix/robotsix-mill/commit/1e4eb2337e33348421806b65e86e1a572c27a5d8))
+* **refine:** a failed triage classifier falls through to refine instead of parking at the human gate ([#3055](https://github.com/damien-robotsix/robotsix-mill/issues/3055)) ([39aec13](https://github.com/damien-robotsix/robotsix-mill/commit/39aec133702e543058c55c3509fabbf1c88d95de))
+* **refine:** a triage classifier that exhausts its request budget falls through to refine ([#3037](https://github.com/damien-robotsix/robotsix-mill/issues/3037)) ([304b5c1](https://github.com/damien-robotsix/robotsix-mill/commit/304b5c1e26a189c4e8692da1bca521d63f479daa))
+* **sandbox:** stop sandboxes inheriting the mill image HEALTHCHECK (20260825T...-b74c) ([#3021](https://github.com/damien-robotsix/robotsix-mill/issues/3021)) ([109c49f](https://github.com/damien-robotsix/robotsix-mill/commit/109c49f45e6a6830cd4c956814262c393af1567a))
+* trace-review: 2 finding(s) for trace `31c0409f` (session: robotsix-board · trace_review-20260828T212901Z-425276c1) (20260828T221600Z-trace-review-2-finding-s-for-trace-31c04-ccdb) ([#3041](https://github.com/damien-robotsix/robotsix-mill/issues/3041)) ([75d8e81](https://github.com/damien-robotsix/robotsix-mill/commit/75d8e81188b8e9de130b3fcd01f6ac087ab03385))
+* **tracing:** record the exception so Langfuse shows a real error message ([#2987](https://github.com/damien-robotsix/robotsix-mill/issues/2987)) ([108bbd1](https://github.com/damien-robotsix/robotsix-mill/commit/108bbd176f5543fb4805ec1dd43fc27d63fb3ecb))
+* **vcs:** recognise the mill's GitHub App in the divergence check ([#2993](https://github.com/damien-robotsix/robotsix-mill/issues/2993)) ([26478b5](https://github.com/damien-robotsix/robotsix-mill/commit/26478b53cd8189fa7ea16d5e0397693aaccfd50a))
+* **worker:** a failing retrospect closes the merged ticket instead of blocking it ([#3042](https://github.com/damien-robotsix/robotsix-mill/issues/3042)) ([a6af6cc](https://github.com/damien-robotsix/robotsix-mill/commit/a6af6cc61efb99e44e4a655caedd24c3d7382c60))
+* **worker:** guard against duplicate ticket+stage dispatch (20260825T...-8ec0) ([#3022](https://github.com/damien-robotsix/robotsix-mill/issues/3022)) ([8fcda1e](https://github.com/damien-robotsix/robotsix-mill/commit/8fcda1edd1f4e0f45d02e8358167de4b1843bf65))
+
+
+### Performance Improvements
+
+* **sandbox:** install pip extras once into the shared cache, not per run_command ([#3056](https://github.com/damien-robotsix/robotsix-mill/issues/3056)) ([4756557](https://github.com/damien-robotsix/robotsix-mill/commit/47565573b3b74ad13d2a41797057452362c67bf6))
+
+
+### Documentation
+
+* Update _ticket_to_card docstring and _chat_skill API docs for board_id field (20260829T195919Z-update-ticket-to-card-docstring-and-chat-e370) ([#3052](https://github.com/damien-robotsix/robotsix-mill/issues/3052)) ([39802e4](https://github.com/damien-robotsix/robotsix-mill/commit/39802e45f737eddd21189b8507180110e423d7de))
+
 ## [0.11.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.10.1...v0.11.0) (2026-08-24)
 
 
