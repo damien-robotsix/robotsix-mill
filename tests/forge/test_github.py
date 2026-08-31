@@ -543,6 +543,131 @@ def test_check_status_happy_path(tmp_path, monkeypatch):
     assert result["jobs"] == [{"name": "CI / test", "conclusion": "success"}]
 
 
+def test_check_status_parse_failed_workflow_fails_gate(tmp_path, monkeypatch):
+    """A workflow that fails at PARSE registers no check-run, so check-runs
+    read green — but its failing Actions-API run must still fail the gate.
+
+    Regression for cost-monitor 27a2: ci.yml/release.yml failed at parse
+    (invalid ``uses:``), so zero of their jobs ran; only lint-workflows +
+    CodeQL registered check-runs (both green) and the gate flagged CI-green
+    + mergeable.
+    """
+    list_resp = [{"number": 3}]
+    detail_resp = {
+        "number": 3,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/3",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    # Only the workflows that PARSED registered check-runs — both green.
+    check_runs_resp = {
+        "check_runs": [
+            {
+                "id": 101,
+                "name": "lint-workflows",
+                "status": "completed",
+                "conclusion": "success",
+                "output": {"summary": None, "text": None, "annotations": []},
+            },
+            {
+                "id": 102,
+                "name": "CodeQL",
+                "status": "completed",
+                "conclusion": "success",
+                "output": {"summary": None, "text": None, "annotations": []},
+            },
+        ]
+    }
+    # The Actions API DOES show the parse-failed run — its name is the
+    # workflow file path (GitHub cannot read the ``name:`` field it failed
+    # to parse).
+    runs_resp = {
+        "workflow_runs": [
+            {
+                "id": 9,
+                "name": ".github/workflows/ci.yml",
+                "workflow_id": 55,
+                "head_sha": "abc123",
+                "conclusion": "failure",
+                "html_url": "http://run/9",
+                "created_at": "2025-01-01T00:00:00Z",
+                "event": "pull_request",
+                "head_branch": "feature/x",
+            }
+        ]
+    }
+    get_map = {
+        "repos/o/r/pulls/3": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+        "commits/abc123/check-runs": _make_response(200, check_runs_resp),
+        "commits/abc123/status": _make_response(200, {"statuses": []}),
+        "actions/runs": _make_response(200, runs_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.check_status(source_branch="feature/x")
+    assert result is not None
+    assert result["conclusion"] == "failure"
+    names = [f["name"] for f in result["failing"]]
+    assert ".github/workflows/ci.yml" in names
+
+
+def test_check_status_green_workflow_run_stays_green(tmp_path, monkeypatch):
+    """A workflow RUN that concluded success must not flip a green gate."""
+    list_resp = [{"number": 3}]
+    detail_resp = {
+        "number": 3,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/3",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    check_runs_resp = {
+        "check_runs": [
+            {
+                "id": 101,
+                "name": "CI / test",
+                "status": "completed",
+                "conclusion": "success",
+                "output": {"summary": None, "text": None, "annotations": []},
+            }
+        ]
+    }
+    runs_resp = {
+        "workflow_runs": [
+            {
+                "id": 9,
+                "name": "CI",
+                "workflow_id": 55,
+                "head_sha": "abc123",
+                "conclusion": "success",
+                "html_url": "http://run/9",
+                "created_at": "2025-01-01T00:00:00Z",
+                "event": "pull_request",
+                "head_branch": "feature/x",
+            }
+        ]
+    }
+    get_map = {
+        "repos/o/r/pulls/3": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+        "commits/abc123/check-runs": _make_response(200, check_runs_resp),
+        "commits/abc123/status": _make_response(200, {"statuses": []}),
+        "actions/runs": _make_response(200, runs_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.check_status(source_branch="feature/x")
+    assert result is not None
+    assert result["conclusion"] == "success"
+    assert result["failing"] == []
+
+
 # ---------------------------------------------------------------------------
 # list_workflow_runs
 # ---------------------------------------------------------------------------
