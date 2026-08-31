@@ -27,6 +27,7 @@ from .helpers import (
     _draft_has_complete_spec,
     _fast_path_scope_checks,
     _summarize_spec_for_auto_approve,
+    _triage_note_signals_wrong_repo,
     _verify_branch_merged,
     log,
 )
@@ -685,6 +686,17 @@ def triage_skip(
                     # approval gate to skip.
                     if not s.require_approval:
                         pass  # fall through to full refine
+                    # Wrong-repo hard gate: when triage detected a
+                    # repository mismatch, auto-approve MUST NOT
+                    # override — fall through to full refine which
+                    # will route to human approval via
+                    # _resolve_next_state.
+                    elif _triage_note_signals_wrong_repo(triage.reason):
+                        log.info(
+                            "%s: mechanical fast-path blocked by "
+                            "wrong-repo signal from triage",
+                            ticket.id,
+                        )
                     else:
                         auto = refining.triage_auto_approve(
                             settings=s,
