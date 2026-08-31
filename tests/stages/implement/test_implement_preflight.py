@@ -2075,7 +2075,9 @@ def test_external_scope_gate_blocks_with_multiple_external_repos(
         ),
     )
 
-    registry = _make_repos_registry("test-repo", "robotsix_llmio", "robotsix-github-workflows")
+    registry = _make_repos_registry(
+        "test-repo", "robotsix_llmio", "robotsix-github-workflows"
+    )
     monkeypatch.setattr(
         "robotsix_mill.config.repos.get_repos_config",
         lambda: registry,
@@ -2090,9 +2092,7 @@ def test_external_scope_gate_blocks_with_multiple_external_repos(
     assert "robotsix-github-workflows" in out.note
 
 
-def test_external_scope_gate_skips_for_meta_board(
-    ctx_factory, tmp_path, monkeypatch
-):
+def test_external_scope_gate_skips_for_meta_board(ctx_factory, tmp_path, monkeypatch):
     """Meta-board tickets are cross-repo by design — the gate must not
     block them."""
     from robotsix_mill.config import RepoConfig
