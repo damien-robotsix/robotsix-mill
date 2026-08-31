@@ -23,7 +23,7 @@ jobs:
     permissions:
       contents: write       # push bump branch
       pull-requests: write  # create/update PR
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/deps-bump.yml@2d57525b51c301fef15576f9d1e962e1c0f18055  # main
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/deps-bump.yml@a0acaefb921fd35792df8345a7150b0140b05ebc  # main
     with:
       packages: "robotsix-llmio robotsix-board robotsix-yaml-config robotsix-modules"
       app-id: ${{ vars.RELEASE_APP_ID }}
