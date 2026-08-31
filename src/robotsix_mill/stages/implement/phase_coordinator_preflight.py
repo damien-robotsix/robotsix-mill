@@ -137,7 +137,14 @@ def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
     no external repos are referenced, or when detection is
     inapplicable (no registry, no repo_id).
     """
-    from ...config import get_repos_config
+    from ...config.repos import get_repos_config
+
+    # The meta board is a synthetic cross-repo board — its tickets
+    # (extraction / alignment proposals) reference other repos by
+    # design and are never implemented against a single workspace.
+    # Skip the gate so meta tickets aren't spuriously blocked.
+    if ctx.repo_config is not None and ctx.repo_config.board_id == "meta":
+        return None
 
     current_repo_id = ctx.repo_config.repo_id if ctx.repo_config else ""
     if not current_repo_id:
