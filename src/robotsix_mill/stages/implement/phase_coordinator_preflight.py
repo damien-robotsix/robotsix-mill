@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 
 from robotsix_mill._resources import (
     effective_language_instructions_dir,
@@ -19,6 +20,7 @@ from robotsix_mill._resources import (
 from ..._resources import agent_definitions_dir
 from ...agents.runners.diagnostic_events import emit_diagnostic_event
 from ...agents.yaml_loader import load_agent_definition
+from ...core.constants import EXTERNAL_SCOPE_PREFIX
 from ...core.models import Ticket, TicketKind
 from ...core.states import State
 from ...core.workspace import (
@@ -124,6 +126,93 @@ def _capture_tool_outputs_from_conversation_state(
     return tail[-800:]
 
 
+def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
+    """Detect when a spec's actionable sections reference only external repos.
+
+    Parses the ``## Scope`` and ``## Acceptance criteria`` sections of
+    the spec and looks for references to known repo IDs (from the
+    repos registry).  If *every* referenced repo is external (i.e.
+    not the current workspace repo), returns a BLOCKED note string.
+    Returns ``None`` when the spec references the current repo, when
+    no external repos are referenced, or when detection is
+    inapplicable (no registry, no repo_id).
+    """
+    from ...config import get_repos_config
+
+    current_repo_id = ctx.repo_config.repo_id if ctx.repo_config else ""
+    if not current_repo_id:
+        return None
+
+    # Build the set of known external repo IDs.
+    try:
+        registry = get_repos_config()
+    except Exception:
+        # Cannot load registry — skip detection rather than blocking
+        # on a config issue.
+        return None
+    external_ids: set[str] = {rid for rid in registry.repos if rid != current_repo_id}
+    if not external_ids:
+        return None
+
+    # Extract the Scope and Acceptance criteria sections from the spec.
+    # These are the actionable parts — references in the Problem section
+    # may describe external context without implying the fix lives there.
+    actionable = _extract_actionable_sections(spec)
+    if not actionable:
+        return None
+
+    # Find which external repos are referenced in the actionable sections.
+    referenced_external: set[str] = set()
+    for rid in external_ids:
+        if re.search(rf"\b{re.escape(rid)}\b", actionable):
+            referenced_external.add(rid)
+
+    if not referenced_external:
+        return None
+
+    # Check whether the current repo is ALSO referenced in the
+    # actionable sections.  If it is, the spec has mixed scope —
+    # the implement agent may have local work to do.
+    if re.search(rf"\b{re.escape(current_repo_id)}\b", actionable):
+        return None
+
+    # Every referenced repo is external — the implement agent cannot
+    # produce a diff in this workspace.
+    repos_str = ", ".join(sorted(referenced_external))
+    return (
+        f"{EXTERNAL_SCOPE_PREFIX} the spec's Scope / Acceptance criteria "
+        f"reference only external repos ({repos_str}) — no changes target "
+        f"this workspace ({current_repo_id}).  The implement agent cannot "
+        "produce a diff here.  Re-route the ticket to the correct board "
+        "or split the external work into a separate ticket."
+    )
+
+
+def _extract_actionable_sections(spec: str) -> str:
+    """Extract Scope and Acceptance criteria sections from a spec.
+
+    Returns the concatenated text of ``## Scope`` and
+    ``## Acceptance criteria`` (or ``## Acceptance``) headings through
+    to the next ``##`` heading or end-of-text.  Returns ``""`` when
+    neither section is found.
+    """
+    parts: list[str] = []
+    # Match ## Scope ... and ## Acceptance criteria ... / ## Acceptance ...
+    for heading in ("Scope", "Acceptance criteria", "Acceptance"):
+        pattern = re.compile(
+            rf"^##\s+{re.escape(heading)}\b.*$",
+            re.IGNORECASE | re.MULTILINE,
+        )
+        m = pattern.search(spec)
+        if m:
+            start = m.end()
+            # Find the next ## heading or end of text.
+            next_heading = re.search(r"^##\s", spec[start:], re.MULTILINE)
+            end = start + next_heading.start() if next_heading else len(spec)
+            parts.append(spec[start:end])
+    return "\n".join(parts)
+
+
 def run_preflight_checks(
     ticket: Ticket,
     ctx: StageContext,
@@ -175,6 +264,16 @@ def run_preflight_checks(
                 State.BLOCKED,
                 "empty or missing specification — cannot implement without a spec",
             )
+
+    # 1.2. External-scope gate: when the spec's Scope / Acceptance
+    #      criteria sections reference ONLY external repos (repos
+    #      other than the one this workspace implements), the
+    #      implement agent cannot produce a diff here.  Block
+    #      immediately instead of burning a full trace cycle.
+    if spec and ctx.repo_config is not None:
+        block_note = _detect_external_scope(spec, ctx)
+        if block_note is not None:
+            return Outcome(State.BLOCKED, block_note)
 
     # 1.5. Spawn-kill recovery: detect a stale in-flight marker from
     #      a previous process lifetime BEFORE the spawn-limit check.

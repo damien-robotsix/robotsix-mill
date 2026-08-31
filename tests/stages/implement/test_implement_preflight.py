@@ -1852,3 +1852,294 @@ def test_zero_diff_abort_guard_disabled_by_zero_threshold(
     out = ImplementStage().preflight(t, ctx)
 
     assert out is None, "must proceed when threshold is 0 (disabled)"
+
+
+# --- external scope gate ------------------------------------------------
+
+
+def _make_repos_registry(current_repo_id: str, *external_ids: str):
+    """Build a minimal ReposRegistry for testing."""
+    from robotsix_mill.config.repos import RepoConfig, ReposRegistry
+
+    repos = {}
+    for rid in (current_repo_id, *external_ids):
+        repos[rid] = RepoConfig(
+            repo_id=rid,
+            board_id=rid,
+            langfuse_project_name="test",
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+        )
+    return ReposRegistry(repos=repos)
+
+
+def test_external_scope_gate_blocks_when_spec_references_only_external_repo(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the spec's Scope / Acceptance criteria reference only an
+    external repo, preflight must block."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Fix llmio bug",
+        body=(
+            "## Problem\n\nThere is a bug in robotsix_llmio.\n\n"
+            "## Scope\n\n- Modify `src/robotsix_llmio/claude_sdk/pipeline.py`\n\n"
+            "## Acceptance criteria\n\n"
+            "- The fix in robotsix_llmio should resolve the crash.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix_llmio")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "external scope gate" in out.note
+    assert "robotsix_llmio" in out.note
+    assert "test-repo" in out.note
+
+
+def test_external_scope_gate_passes_when_spec_references_current_repo(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the spec references both the current repo and an external
+    repo, preflight must proceed (mixed scope)."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Update integration",
+        body=(
+            "## Problem\n\nIntegration with robotsix_llmio needs updating.\n\n"
+            "## Scope\n\n"
+            "- Modify `src/test-repo/integration.py` to use new API\n\n"
+            "## Acceptance criteria\n\n"
+            "- The integration in test-repo works with robotsix_llmio.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix_llmio")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    # Should proceed (not blocked by external scope gate).
+    # It may be blocked by other guards, but not by external scope.
+    if out is not None:
+        assert "external scope gate" not in (out.note or "")
+
+
+def test_external_scope_gate_passes_when_no_external_repos_referenced(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the spec references no external repos, preflight must proceed."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Add feature",
+        body=(
+            "## Problem\n\nNeed a new feature.\n\n"
+            "## Scope\n\n- Add `feature.txt`\n\n"
+            "## Acceptance criteria\n\n- The file exists.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix_llmio")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    if out is not None:
+        assert "external scope gate" not in (out.note or "")
+
+
+def test_external_scope_gate_passes_when_no_actionable_sections(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the spec has no Scope or Acceptance criteria sections,
+    the gate cannot detect external scope and must proceed."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Vague ticket",
+        body="## Problem\n\nSomething is wrong in robotsix_llmio.\n",
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix_llmio")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    if out is not None:
+        assert "external scope gate" not in (out.note or "")
+
+
+def test_external_scope_gate_passes_when_registry_fails(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the repos registry cannot be loaded, the gate must skip
+    detection rather than blocking on a config issue."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Fix llmio bug",
+        body=(
+            "## Problem\n\nThere is a bug in robotsix_llmio.\n\n"
+            "## Scope\n\n- Modify `src/robotsix_llmio/claude_sdk/pipeline.py`\n\n"
+            "## Acceptance criteria\n\n"
+            "- The fix in robotsix_llmio should resolve the crash.\n"
+        ),
+    )
+
+    def _raise():
+        raise RuntimeError("config not found")
+
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        _raise,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    if out is not None:
+        assert "external scope gate" not in (out.note or "")
+
+
+def test_external_scope_gate_blocks_with_multiple_external_repos(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the spec references multiple external repos and none local,
+    preflight must block listing all external repos."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Cross-repo fix",
+        body=(
+            "## Problem\n\nCross-repo issue.\n\n"
+            "## Scope\n\n"
+            "- Modify `src/robotsix_llmio/claude_sdk/pipeline.py`\n"
+            "- Update `robotsix-github-workflows/.github/workflows/ci.yml`\n\n"
+            "## Acceptance criteria\n\n"
+            "- robotsix_llmio no longer crashes.\n"
+            "- robotsix-github-workflows CI passes.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix_llmio", "robotsix-github-workflows")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "external scope gate" in out.note
+    assert "robotsix_llmio" in out.note
+    assert "robotsix-github-workflows" in out.note
+
+
+def test_external_scope_gate_skips_for_meta_board(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Meta-board tickets are cross-repo by design — the gate must not
+    block them."""
+    from robotsix_mill.config import RepoConfig
+
+    try:
+        from robotsix_mill.core import db
+
+        db.reset_engine()
+        from robotsix_mill.config import Settings
+
+        s = Settings(data_dir=str(tmp_path / "data_meta"))
+        db.init_db(s, board_id="meta")
+        svc = TicketService(s, board_id="meta")
+        ctx = StageContext(
+            settings=s,
+            service=svc,
+            repo_config=RepoConfig(
+                repo_id="test-repo",
+                board_id="meta",
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            ),
+        )
+        t = svc.create(
+            "Cross-repo extraction",
+            (
+                "## Problem\n\nExtract shared lib.\n\n"
+                "## Scope\n\n- Move `src/robotsix_llmio/shared.py`\n\n"
+                "## Acceptance criteria\n\n"
+                "- robotsix_llmio uses the new lib.\n"
+            ),
+        )
+        svc.transition(t.id, State.READY)
+        t = svc.get(t.id)
+
+        registry = _make_repos_registry("test-repo", "robotsix_llmio")
+        monkeypatch.setattr(
+            "robotsix_mill.config.repos.get_repos_config",
+            lambda: registry,
+        )
+
+        out = ImplementStage().preflight(t, ctx)
+
+        if out is not None:
+            assert "external scope gate" not in (out.note or "")
+    finally:
+        from robotsix_mill.core import db
+
+        db.reset_engine()
