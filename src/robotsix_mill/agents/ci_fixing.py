@@ -66,13 +66,10 @@ def run_ci_fix_agent(
     scoped to *repo_dir*, plus bridged git tools that execute host-side
     with *remote_url* and *token* so the agent can drive fetch + push.
 
-    When *ci_status_fn* is provided, the agent also gets the ``wait_for_ci``
-    tool: after pushing a fix it blocks on that tool until the latest CI run
-    finishes, then either reports DONE (green) or fixes the fresh failure and
-    re-checks — up to ``settings.ci_fix_max_iterations`` waits. This replaces
-    the old one-shot-per-cycle model. *ci_status_fn* is the host-side forge
-    probe taking the 1-based attempt number and returning
-    ``(conclusion, failing_summary)``.
+    The agent is ONE-SHOT: it fixes the failure, pushes, and reports DONE.
+    It does NOT wait for CI verification — the orchestrator re-checks CI on
+    the next poll cycle.  If CI is still failing, the agent will be
+    re-invoked with the new failure summary.
 
     When *ci_log_fetch_fn* is provided, the agent also gets the
     ``fetch_ci_logs`` tool: it can fetch the logs for any workflow run by
@@ -137,26 +134,6 @@ def run_ci_fix_agent(
         )
     )
 
-    # Give the agent ownership of the fix→push→verify loop: after pushing it
-    # calls wait_for_ci to block on the freshly-triggered CI run, then either
-    # reports DONE (green) or fixes the new failure and re-checks. The
-    # iteration budget lives inside the tool's call counter. The tool is
-    # always wired so the prompt's call directive resolves; when ci_status_fn
-    # is None (multi-repo merge path / tests) it returns
-    # CI_VERIFICATION_UNAVAILABLE and the caller re-checks CI externally.
-    from .ci_wait_tool import build_ci_wait_tool
-
-    tools.append(
-        build_ci_wait_tool(
-            branch=branch,
-            ci_status_fn=ci_status_fn,
-            max_iterations=settings.ci_fix_max_iterations,
-            max_consecutive_pending=settings.ci_fix_max_consecutive_pending,
-            poll_interval_s=settings.ci_fix_wait_poll_interval_s,
-            timeout_s=settings.ci_fix_wait_timeout_s,
-        )
-    )
-
     # Give the agent a tool to fetch CI logs on demand — the failure summary
     # includes truncated logs, but the agent may need the full log for a
     # specific run or a run the summary didn't include.  The tool is always
@@ -186,8 +163,7 @@ def run_ci_fix_agent(
             "## Previous attempts on this ticket\n\n"
             "The following is a compacted history of prior ci-fix attempts "
             "on this ticket.  Use it to avoid repeating approaches that "
-            "already failed.\n\n"
-            + previous_attempts
+            "already failed.\n\n" + previous_attempts
         )
     if memory:
         user_prompt_parts.append(section("memory", memory))

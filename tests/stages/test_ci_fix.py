@@ -1892,9 +1892,9 @@ def test_agent_crash_blocks(tmp_path, monkeypatch):
     assert out.next_state is State.BLOCKED
 
 
-def test_ci_status_fn_passed_to_agent(tmp_path, monkeypatch):
-    """The stage wires a host-side ci_status_fn into the agent so its
-    wait_for_ci tool can probe the forge."""
+def test_ci_status_fn_not_passed_to_agent(tmp_path, monkeypatch):
+    """The stage does NOT wire ci_status_fn into the agent — the agent is
+    one-shot (fix + push, no CI waiting)."""
     ctx = _gh(tmp_path)
     _failing_check_status(monkeypatch)
     captured = {}
@@ -1913,7 +1913,8 @@ def test_ci_status_fn_passed_to_agent(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
     out = CIFixStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
-    assert callable(captured["ci_status_fn"])
+    # ci_status_fn is no longer passed — the agent is one-shot.
+    assert captured["ci_status_fn"] is None
 
 
 def test_make_ci_status_fn_maps_conclusions(tmp_path, monkeypatch):

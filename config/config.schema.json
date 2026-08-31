@@ -851,7 +851,7 @@
         "ci_fix_max_consecutive_pending": {
           "advanced": true,
           "default": 2,
-          "description": "Early bail-out threshold: return CI_STUCK after this many consecutive CI_STILL_PENDING results. 0 disables.",
+          "description": "Multi-repo merge path only: early bail-out threshold \u2014 return CI_STUCK after this many consecutive CI_STILL_PENDING results. 0 disables.",
           "minimum": 0,
           "title": "Ci Fix Max Consecutive Pending",
           "type": "integer"
@@ -875,7 +875,7 @@
         "ci_fix_max_iterations": {
           "advanced": true,
           "default": 3,
-          "description": "Maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
+          "description": "Multi-repo merge path only: maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
           "minimum": 0,
           "title": "Ci Fix Max Iterations",
           "type": "integer"
@@ -905,7 +905,7 @@
         "ci_fix_wait_poll_interval_s": {
           "advanced": true,
           "default": 30.0,
-          "description": "Seconds between CI conclusion polls during wait_for_ci.",
+          "description": "Multi-repo merge path only: seconds between CI conclusion polls during wait_for_ci.",
           "exclusiveMinimum": 0,
           "title": "Ci Fix Wait Poll Interval S",
           "type": "number"
@@ -913,7 +913,7 @@
         "ci_fix_wait_timeout_s": {
           "advanced": true,
           "default": 900.0,
-          "description": "Maximum seconds a single wait_for_ci call blocks before returning still-pending.",
+          "description": "Multi-repo merge path only: maximum seconds a single wait_for_ci call blocks before returning still-pending.",
           "exclusiveMinimum": 0,
           "title": "Ci Fix Wait Timeout S",
           "type": "number"

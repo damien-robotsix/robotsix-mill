@@ -344,11 +344,12 @@ class CIFixStage(Stage):
         if conflict_outcome is not None:
             return conflict_outcome
 
-        # Agent phase: the ci-fix agent now OWNS the fix→push→verify loop —
-        # it fixes, pushes, and calls wait_for_ci to re-check, iterating up to
-        # ci_fix_max_iterations before giving up. There is no external
-        # FIXING_CI ⇄ IMPLEMENT_COMPLETE retry loop and no per-ticket cycle
-        # counter: the iteration budget lives inside the wait_for_ci tool.
+        # Agent phase: the ci-fix agent is ONE-SHOT — it fixes the failure
+        # and pushes, then reports DONE (or FAILED/OUT_OF_SCOPE). It does NOT
+        # wait for CI verification. The external FIXING_CI ⇄ IMPLEMENT_COMPLETE
+        # polling loop handles iteration: on DONE the stage returns
+        # IMPLEMENT_COMPLETE so the merge stage re-checks CI; if CI is still
+        # failing, the ticket re-enters ci_fix with the new failure summary.
         log.info(
             "%s: CI failing — running ci-fix agent (owns fix/verify loop)",
             ticket.id,
@@ -685,12 +686,12 @@ class CIFixStage(Stage):
         head_sha: str = "",
         failing_run_urls: list[str] | None = None,
     ) -> Outcome:
-        """Reconcile, run the agent (which owns the loop), and route its verdict.
+        """Reconcile, run the agent (one-shot), and route its verdict.
 
-        The agent fixes, pushes, and verifies on real CI via wait_for_ci,
-        iterating internally until CI is green (DONE) or its budget is spent
-        (FAILED). There is no external retry loop here — DONE → re-poll,
-        FAILED/crash → BLOCKED, OUT_OF_SCOPE → dependency fix.
+        The agent fixes and pushes, then reports DONE (fix pushed) or
+        FAILED (could not fix). There is no internal CI verification —
+        DONE → re-poll (merge stage re-checks CI), FAILED/crash → BLOCKED,
+        OUT_OF_SCOPE → dependency fix.
         """
         s = ctx.settings
 
@@ -891,8 +892,7 @@ class CIFixStage(Stage):
             entry_lines: list[str] = []
             entry_lines.append("## Attempt\n")
             entry_lines.append(
-                "**Failure:** "
-                + (failing_summary.strip()[:200] or "(no detail)")
+                "**Failure:** " + (failing_summary.strip()[:200] or "(no detail)")
             )
             if result is not None:
                 entry_lines.append(f"**Verdict:** {result.status}")
@@ -965,8 +965,8 @@ class CIFixStage(Stage):
         s = ctx.settings
         self._last_agent_timed_out = False
         self._last_agent_timeout_elapsed = 0.0
-        # Derived, not the raw field: the agent must get at least the
-        # time ci_fix_max_iterations x ci_fix_wait_timeout_s promises it.
+        # The agent is one-shot (no CI waiting), so the timeout covers
+        # only the LLM/edit/push work.
         timeout_s = s.ci_fix_agent_timeout_effective
         try:
             # ci_fix is traced=False, so wrap the LLM agent in the
@@ -1008,7 +1008,6 @@ class CIFixStage(Stage):
                         remote_url=remote_url,
                         token_provider=_token_provider,
                         token_cache_clear=_token_cache_clear,
-                        ci_status_fn=self._make_ci_status_fn(ticket, ctx, branch),
                         ci_log_fetch_fn=self._make_ci_log_fetch_fn(ctx, branch),
                         sandbox_image=ctx.repo_config.sandbox_image
                         if ctx.repo_config
@@ -1173,8 +1172,8 @@ class CIFixStage(Stage):
         if in_scope_alerts:
             # OUT_OF_SCOPE is wrong for these alerts — suppress the spawn and
             # re-poll so the ci-fix agent re-runs against the in-scope-labelled
-            # failing_summary. The agent's own wait_for_ci iteration budget
-            # bounds an agent that keeps refusing, so the loop stays safe.
+            # failing_summary. The identical-failure guard bounds repeated
+            # attempts, so the loop stays safe.
             try:
                 ctx.service.add_history_note(
                     ticket.id,
@@ -1500,9 +1499,9 @@ class CIFixStage(Stage):
         and clobbered no foreign commits, then return to IMPLEMENT_COMPLETE so
         the merge stage re-verifies CI and promotes to HUMAN_MR_APPROVAL.
 
-        The agent already confirmed CI green via wait_for_ci, so this is a
-        cheap safety net (foreign-push / lost-push detection), not a retry
-        loop. On a clean landing the refresh counter is reset so a later,
+        The agent is one-shot (no CI verification), so this is a cheap
+        safety net (foreign-push / lost-push detection), not a retry loop.
+        On a clean landing the refresh counter is reset so a later,
         independent staleness can rebase once more.
         """
         s = ctx.settings
