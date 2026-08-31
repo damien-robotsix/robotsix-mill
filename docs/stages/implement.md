@@ -85,6 +85,21 @@ Before the main agent trace opens (to avoid wasted Langfuse costs):
 
 - **Epic guard**: ticket with no spec and a parent epic short-circuits.
 - **Empty-spec guard**: ticket with an empty spec body blocks.
+- **External-scope gate**: parses the spec's `## Scope` and
+  `## Acceptance criteria` sections for references to known repo IDs
+  (from the repos registry). If *every* referenced repo is external
+  (other than the current workspace repo), the ticket is short-circuited
+  to `BLOCKED` — the implement agent cannot produce a diff in this
+  workspace, so a full trace cycle would be wasted. The gate is skipped
+  when the spec references the current repo (mixed scope), when no
+  external repos are referenced, when the repos registry cannot be
+  loaded, or when the current repo is a **meta board** (synthetic
+  cross-repo extraction/alignment tickets are external by design).
+  Repo IDs are matched with `-`/`_` treated as interchangeable, so a
+  hyphenated registered repo ID (e.g. `robotsix-mill`) matches its
+  underscore package/path form (`robotsix_mill`) in the spec —
+  preventing false blocks on legitimate local tickets and catching the
+  mirror external case.
 - **Spawn-limit guard**: prevents re-spawning subtasks from the same
   ticket beyond a threshold.
 - **Cycle-limit guard**: caps total implement passes across all review

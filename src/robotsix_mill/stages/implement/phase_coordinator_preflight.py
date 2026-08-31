@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 
 from robotsix_mill._resources import (
     effective_language_instructions_dir,
@@ -19,6 +20,7 @@ from robotsix_mill._resources import (
 from ..._resources import agent_definitions_dir
 from ...agents.runners.diagnostic_events import emit_diagnostic_event
 from ...agents.yaml_loader import load_agent_definition
+from ...core.constants import EXTERNAL_SCOPE_PREFIX
 from ...core.models import Ticket, TicketKind
 from ...core.states import State
 from ...core.workspace import (
@@ -124,6 +126,120 @@ def _capture_tool_outputs_from_conversation_state(
     return tail[-800:]
 
 
+def _repo_id_pattern(repo_id: str) -> str:
+    r"""Build a regex that matches *repo_id* with ``-``/``_`` treated as
+    interchangeable.
+
+    Registered repo IDs are hyphenated (e.g. ``robotsix-mill``) but specs
+    routinely reference the same repo by its Python package / path form
+    (``robotsix_mill``).  A literal ``\b<repo_id>\b`` never matches
+    across that split, so the external-scope gate both false-blocks
+    legitimate local tickets and silently misses the mirror case.
+
+    Split on any run of ``-``/``_``, escape each part, and rejoin with a
+    ``[-_]`` class.  Anchor with ``(?<!\w)``/``(?!\w)`` lookarounds
+    rather than ``\b`` — an underscore is a word character, so ``\b``
+    would not fire at an ``id_``/``_id`` seam.
+    """
+    parts = re.split(r"[-_]+", repo_id)
+    escaped = r"[-_]".join(re.escape(part) for part in parts)
+    return rf"(?<!\w){escaped}(?!\w)"
+
+
+def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
+    """Detect when a spec's actionable sections reference only external repos.
+
+    Parses the ``## Scope`` and ``## Acceptance criteria`` sections of
+    the spec and looks for references to known repo IDs (from the
+    repos registry).  If *every* referenced repo is external (i.e.
+    not the current workspace repo), returns a BLOCKED note string.
+    Returns ``None`` when the spec references the current repo, when
+    no external repos are referenced, or when detection is
+    inapplicable (no registry, no repo_id).
+    """
+    from ...config.repos import get_repos_config
+
+    # The meta board is a synthetic cross-repo board — its tickets
+    # (extraction / alignment proposals) reference other repos by
+    # design and are never implemented against a single workspace.
+    # Skip the gate so meta tickets aren't spuriously blocked.
+    if ctx.repo_config is not None and ctx.repo_config.board_id == "meta":
+        return None
+
+    current_repo_id = ctx.repo_config.repo_id if ctx.repo_config else ""
+    if not current_repo_id:
+        return None
+
+    # Build the set of known external repo IDs.
+    try:
+        registry = get_repos_config()
+    except Exception:
+        # Cannot load registry — skip detection rather than blocking
+        # on a config issue.
+        return None
+    external_ids: set[str] = {rid for rid in registry.repos if rid != current_repo_id}
+    if not external_ids:
+        return None
+
+    # Extract the Scope and Acceptance criteria sections from the spec.
+    # These are the actionable parts — references in the Problem section
+    # may describe external context without implying the fix lives there.
+    actionable = _extract_actionable_sections(spec)
+    if not actionable:
+        return None
+
+    # Find which external repos are referenced in the actionable sections.
+    referenced_external: set[str] = set()
+    for rid in external_ids:
+        if re.search(_repo_id_pattern(rid), actionable):
+            referenced_external.add(rid)
+
+    if not referenced_external:
+        return None
+
+    # Check whether the current repo is ALSO referenced in the
+    # actionable sections.  If it is, the spec has mixed scope —
+    # the implement agent may have local work to do.
+    if re.search(_repo_id_pattern(current_repo_id), actionable):
+        return None
+
+    # Every referenced repo is external — the implement agent cannot
+    # produce a diff in this workspace.
+    repos_str = ", ".join(sorted(referenced_external))
+    return (
+        f"{EXTERNAL_SCOPE_PREFIX} the spec's Scope / Acceptance criteria "
+        f"reference only external repos ({repos_str}) — no changes target "
+        f"this workspace ({current_repo_id}).  The implement agent cannot "
+        "produce a diff here.  Re-route the ticket to the correct board "
+        "or split the external work into a separate ticket."
+    )
+
+
+def _extract_actionable_sections(spec: str) -> str:
+    """Extract Scope and Acceptance criteria sections from a spec.
+
+    Returns the concatenated text of ``## Scope`` and
+    ``## Acceptance criteria`` (or ``## Acceptance``) headings through
+    to the next ``##`` heading or end-of-text.  Returns ``""`` when
+    neither section is found.
+    """
+    parts: list[str] = []
+    # Match ## Scope ... and ## Acceptance criteria ... / ## Acceptance ...
+    for heading in ("Scope", "Acceptance criteria", "Acceptance"):
+        pattern = re.compile(
+            rf"^##\s+{re.escape(heading)}\b.*$",
+            re.IGNORECASE | re.MULTILINE,
+        )
+        m = pattern.search(spec)
+        if m:
+            start = m.end()
+            # Find the next ## heading or end of text.
+            next_heading = re.search(r"^##\s", spec[start:], re.MULTILINE)
+            end = start + next_heading.start() if next_heading else len(spec)
+            parts.append(spec[start:end])
+    return "\n".join(parts)
+
+
 def run_preflight_checks(
     ticket: Ticket,
     ctx: StageContext,
@@ -175,6 +291,16 @@ def run_preflight_checks(
                 State.BLOCKED,
                 "empty or missing specification — cannot implement without a spec",
             )
+
+    # 1.2. External-scope gate: when the spec's Scope / Acceptance
+    #      criteria sections reference ONLY external repos (repos
+    #      other than the one this workspace implements), the
+    #      implement agent cannot produce a diff here.  Block
+    #      immediately instead of burning a full trace cycle.
+    if spec and ctx.repo_config is not None:
+        block_note = _detect_external_scope(spec, ctx)
+        if block_note is not None:
+            return Outcome(State.BLOCKED, block_note)
 
     # 1.5. Spawn-kill recovery: detect a stale in-flight marker from
     #      a previous process lifetime BEFORE the spawn-limit check.
