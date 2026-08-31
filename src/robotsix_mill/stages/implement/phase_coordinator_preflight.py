@@ -311,7 +311,7 @@ def run_preflight_checks(
         import re as _re
 
         _SRC_PKG_RE = _re.compile(r"`src/([a-zA-Z_][a-zA-Z0-9_]*)/`")
-        _repo_src = Path(s.repo_dir) / "src" if s.repo_dir else None
+        _repo_src = Path(ws.repo_dir) / "src" if ws.repo_dir else None
         if _repo_src and _repo_src.is_dir():
             existing_pkgs = {
                 p.name
