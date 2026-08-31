@@ -2143,3 +2143,92 @@ def test_external_scope_gate_skips_for_meta_board(
         from robotsix_mill.core import db
 
         db.reset_engine()
+
+
+def test_external_scope_gate_matches_hyphen_id_against_underscore_path(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A registered hyphenated current-repo id (``robotsix-mill``) must
+    match the spec's underscore package/path form (``robotsix_mill``) so
+    a legitimate local ticket is not false-blocked as external-only."""
+    from robotsix_mill.config import RepoConfig
+
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    # Current repo is registered hyphenated; the spec references it by
+    # its underscore package path — the previously false-blocked case.
+    ctx.repo_config = RepoConfig(
+        repo_id="robotsix-mill",
+        board_id="test-board",
+        langfuse_project_name="test",
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+    )
+    t = _ticket(
+        ctx,
+        title="Fix mill preflight",
+        body=(
+            "## Problem\n\nBug in the preflight gate.\n\n"
+            "## Scope\n\n"
+            "- Modify `src/robotsix_mill/stages/implement/x.py`\n\n"
+            "## Acceptance criteria\n\n"
+            "- The fix in robotsix_mill resolves the crash.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("robotsix-mill", "robotsix_llmio")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    # Current repo IS referenced (underscore form) — must not be blocked
+    # by the external scope gate.
+    if out is not None:
+        assert "external scope gate" not in (out.note or "")
+
+
+def test_external_scope_gate_blocks_hyphen_external_referenced_by_underscore(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A registered hyphenated external id must match the spec's
+    underscore form so external-only scope is still blocked — the
+    previously-silent mirror case."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Fix workflows",
+        body=(
+            "## Problem\n\nBug elsewhere.\n\n"
+            "## Scope\n\n"
+            "- Modify `src/robotsix_github_workflows/ci.py`\n\n"
+            "## Acceptance criteria\n\n"
+            "- robotsix_github_workflows no longer crashes.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix-github-workflows")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "external scope gate" in out.note
+    assert "robotsix-github-workflows" in out.note

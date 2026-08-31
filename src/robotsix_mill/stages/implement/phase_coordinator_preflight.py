@@ -126,6 +126,26 @@ def _capture_tool_outputs_from_conversation_state(
     return tail[-800:]
 
 
+def _repo_id_pattern(repo_id: str) -> str:
+    r"""Build a regex that matches *repo_id* with ``-``/``_`` treated as
+    interchangeable.
+
+    Registered repo IDs are hyphenated (e.g. ``robotsix-mill``) but specs
+    routinely reference the same repo by its Python package / path form
+    (``robotsix_mill``).  A literal ``\b<repo_id>\b`` never matches
+    across that split, so the external-scope gate both false-blocks
+    legitimate local tickets and silently misses the mirror case.
+
+    Split on any run of ``-``/``_``, escape each part, and rejoin with a
+    ``[-_]`` class.  Anchor with ``(?<!\w)``/``(?!\w)`` lookarounds
+    rather than ``\b`` — an underscore is a word character, so ``\b``
+    would not fire at an ``id_``/``_id`` seam.
+    """
+    parts = re.split(r"[-_]+", repo_id)
+    escaped = r"[-_]".join(re.escape(part) for part in parts)
+    return rf"(?<!\w){escaped}(?!\w)"
+
+
 def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
     """Detect when a spec's actionable sections reference only external repos.
 
@@ -171,7 +191,7 @@ def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
     # Find which external repos are referenced in the actionable sections.
     referenced_external: set[str] = set()
     for rid in external_ids:
-        if re.search(rf"\b{re.escape(rid)}\b", actionable):
+        if re.search(_repo_id_pattern(rid), actionable):
             referenced_external.add(rid)
 
     if not referenced_external:
@@ -180,7 +200,7 @@ def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
     # Check whether the current repo is ALSO referenced in the
     # actionable sections.  If it is, the spec has mixed scope —
     # the implement agent may have local work to do.
-    if re.search(rf"\b{re.escape(current_repo_id)}\b", actionable):
+    if re.search(_repo_id_pattern(current_repo_id), actionable):
         return None
 
     # Every referenced repo is external — the implement agent cannot
