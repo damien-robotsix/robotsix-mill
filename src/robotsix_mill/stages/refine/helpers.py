@@ -788,6 +788,34 @@ _TRIAGE_REJECTION_PATTERNS: list[str] = [
     "no such",
 ]
 
+# Wrong-repository signal patterns — a subset of _TRIAGE_REJECTION_PATTERNS
+# that unambiguously indicate the ticket was filed against the wrong repo.
+# When the triage note matches any of these, auto-approve MUST NOT override
+# the signal: the ticket routes to HUMAN_ISSUE_APPROVAL so a human can
+# re-file it on the correct board.
+_WRONG_REPO_PATTERNS: list[str] = [
+    "different repositor",
+    "different repo",
+    "wrong repositor",
+    "wrong repo",
+    "belongs to a different",
+    "lives in a different",
+    "migrated from board",
+]
+
+
+def _triage_note_signals_wrong_repo(triage_note: str | None) -> bool:
+    """Return ``True`` when *triage_note* contains a wrong-repository signal.
+
+    These patterns are unambiguous: they mean the ticket's scope belongs
+    to a different repository.  Auto-approve must never override this
+    signal — the ticket needs a human to re-file on the correct board.
+    """
+    if not triage_note:
+        return False
+    lower = triage_note.lower()
+    return any(p in lower for p in _WRONG_REPO_PATTERNS)
+
 
 def _summarize_spec_for_auto_approve(spec: str, max_chars: int = 2000) -> str:
     """Return a bounded summary of *spec* for the auto-approve classifier.
@@ -887,6 +915,15 @@ def _resolve_next_state(
         return State.READY, (
             f"auto-approve: APPROVE — {source} (deterministic rule: "
             "mill-internal periodic-agent proposal, no design risk)"
+        )
+    # Wrong-repo hard gate: when triage detected a repository mismatch,
+    # auto-approve MUST NOT override — route to human approval so the
+    # ticket can be re-filed on the correct board.
+    if _triage_note_signals_wrong_repo(triage_note):
+        return (
+            State.HUMAN_ISSUE_APPROVAL,
+            "auto-approve: NEEDS_APPROVAL — wrong-repository signal "
+            f"from triage: {triage_note}",
         )
     try:
         result = refining.triage_auto_approve(

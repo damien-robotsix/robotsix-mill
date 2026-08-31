@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from pathlib import Path
 
 from robotsix_mill._resources import (
     effective_language_instructions_dir,
@@ -301,6 +302,33 @@ def run_preflight_checks(
         block_note = _detect_external_scope(spec, ctx)
         if block_note is not None:
             return Outcome(State.BLOCKED, block_note)
+
+    # 1.3. Wrong-repo guard: if the spec references top-level packages
+    #      under ``src/`` that do not exist in this repository, the
+    #      ticket was likely filed against the wrong repo.  Block
+    #      instead of pushing a PR that creates foreign packages.
+    if spec:
+        import re as _re
+
+        _SRC_PKG_RE = _re.compile(r"`src/([a-zA-Z_][a-zA-Z0-9_]*)/`")
+        _repo_src = Path(s.repo_dir) / "src" if s.repo_dir else None
+        if _repo_src and _repo_src.is_dir():
+            existing_pkgs = {
+                p.name
+                for p in _repo_src.iterdir()
+                if p.is_dir() and not p.name.startswith(".")
+            }
+            referenced_pkgs = set(_SRC_PKG_RE.findall(spec))
+            foreign = referenced_pkgs - existing_pkgs
+            if foreign:
+                foreign_list = ", ".join(sorted(foreign))
+                return Outcome(
+                    State.BLOCKED,
+                    f"wrong-repository guard: spec references top-level "
+                    f"package(s) that do not exist in this repo: "
+                    f"{foreign_list}.  This ticket likely belongs to a "
+                    f"different repository — re-file on the correct board.",
+                )
 
     # 1.5. Spawn-kill recovery: detect a stale in-flight marker from
     #      a previous process lifetime BEFORE the spawn-limit check.
