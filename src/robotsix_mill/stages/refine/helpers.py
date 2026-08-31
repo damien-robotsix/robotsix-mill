@@ -922,8 +922,10 @@ def _resolve_next_state(
     if _triage_note_signals_wrong_repo(triage_note):
         return (
             State.HUMAN_ISSUE_APPROVAL,
-            "auto-approve: NEEDS_APPROVAL — wrong-repository signal "
-            f"from triage: {triage_note}",
+            (
+                "auto-approve: NEEDS_APPROVAL — wrong-repository signal "
+                f"from triage: {triage_note}"
+            ),
         )
     try:
         result = refining.triage_auto_approve(

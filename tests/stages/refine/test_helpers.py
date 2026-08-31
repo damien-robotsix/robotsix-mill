@@ -30,6 +30,7 @@ from robotsix_mill.stages.refine.helpers import (
     _draft_is_near_empty,
     _fast_path_scope_checks,
     _strip_advisory_block,
+    _triage_note_signals_wrong_repo,
     verify_claim,
 )
 
@@ -276,15 +277,20 @@ def test_suspicious_pattern_defers_to_classifier(pattern, monkeypatch):
             decision="NEEDS_APPROVAL", reason="classifier says so"
         ),
     )
+    triage_note = f"SKIP: the entire gap assertion is {pattern}"
     state, note = refine_module._resolve_next_state(
         _ctx(),
         "## Problem\nA genuine, real spec body",
         "t1",
         source="test_gap",  # deterministic source — shortcut must be skipped
-        triage_note=f"SKIP: the entire gap assertion is {pattern}",
+        triage_note=triage_note,
     )
     assert state is State.HUMAN_ISSUE_APPROVAL
-    assert "classifier says so" in (note or "")
+    if _triage_note_signals_wrong_repo(triage_note):
+        # Wrong-repo hard gate fires before the classifier.
+        assert "wrong-repository signal" in (note or "")
+    else:
+        assert "classifier says so" in (note or "")
 
 
 def test_suspicious_pattern_still_reaches_ready_when_classifier_approves(monkeypatch):
