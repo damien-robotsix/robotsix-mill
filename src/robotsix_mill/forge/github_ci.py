@@ -311,9 +311,7 @@ def _merge_workflow_run_failures(
         return
     if result.get("conclusion") == "failure":
         return
-    existing = {
-        (f.get("name") or "").strip() for f in result.get("failing", []) or []
-    }
+    existing = {(f.get("name") or "").strip() for f in result.get("failing", []) or []}
     for run in failing_runs:
         name = (run.get("name") or run.get("path") or "workflow").strip()
         if name in existing:
