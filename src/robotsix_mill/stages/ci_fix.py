@@ -1393,11 +1393,13 @@ class CIFixStage(Stage):
         artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
         refresh_path = artifacts_dir / _CI_REFRESH_COUNTER
 
-        # Deterministic title so the spawn is idempotent across cycles.
-        title = (
-            f"ci_fix: out-of-scope CI failure — "
-            f"{result.failing_check} in {result.required_change_area}"
-        )
+        # Deterministic title so the spawn is idempotent across cycles AND
+        # across parent tickets. It must NOT embed LLM output
+        # (result.failing_check / required_change_area vary in wording
+        # between agent runs, so the title dedup never matched — 6 duplicate
+        # dependency tickets for one repo-level parse failure, 2026-09-01).
+        check_names = _extract_check_names(failing_summary)
+        title = f"ci_fix: out-of-scope CI failure — {check_names}"
         description = (
             f"## Out-of-scope CI failure routed from {ticket.id}\n\n"
             f"**Failing check:** {result.failing_check}\n\n"
@@ -1413,10 +1415,17 @@ class CIFixStage(Stage):
             )
         block_reason = "CI failure is out of scope for this ticket"
 
+        # Dedup fingerprint from the failing CHECK NAMES only — an
+        # out-of-scope failure is a repo-level condition. The raw summary
+        # embeds per-branch detail (the run's html_url) and the
+        # consecutive-identical backstop's fingerprint additionally embeds
+        # head_sha, so every parent ticket parked on its own branch hashed
+        # differently and the label dedup never matched across parents:
+        # each spawned its own duplicate fix ticket for the same repo-wide
+        # failure (6 duplicates in 35 minutes, 2026-09-01).
         fingerprint = _ci_failure_fingerprint(
-            failing_summary,
+            check_names,
             ctx.repo_config.board_id if ctx.repo_config else "",
-            head_sha,
         )
         outcome = dependency_fix.spawn_dependency_fix(
             ticket,

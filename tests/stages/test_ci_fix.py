@@ -1007,6 +1007,59 @@ def test_out_of_scope_is_idempotent_across_cycles(tmp_path, monkeypatch):
     assert len(fixes) == 1
 
 
+def test_out_of_scope_dedups_across_parent_tickets(tmp_path, monkeypatch):
+    """Parents failing on the same repo-level check share ONE fix ticket.
+
+    Regression (2026-09-01): the dedup fingerprint hashed the raw summary
+    (embedding per-branch head_sha/URLs) and the title embedded LLM
+    wording, so six parents parked on one repo-wide parse failure each
+    spawned their own duplicate dependency ticket.  The fingerprint and
+    title now derive from the failing check names, which are identical
+    across parents regardless of branch head or verdict wording.
+    """
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
+    )
+
+    t1 = _fixing_ci(ctx)
+    _setup_repo(ctx, t1)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    out1 = CIFixStage().run(t1, ctx)
+    assert out1.next_state is State.BLOCKED
+
+    # Second parent: different branch head, different LLM wording.
+    t2 = _fixing_ci(ctx)
+    _setup_repo(ctx, t2)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "def456"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(
+            failing_check="the CodeQL clear-text-logging alert",
+            required_change_area="the shared logging helper (already correct here)",
+        ),
+    )
+    out2 = CIFixStage().run(t2, ctx)
+    assert out2.next_state is State.BLOCKED
+
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert len(fixes) == 1
+    # Deterministic title from the check names, not the LLM verdict wording.
+    assert "CodeQL" in fixes[0].title
+    assert "shared logging helper" not in fixes[0].title
+    # Both parents auto-resume when the single fix ticket completes.
+    assert set(json.loads(fixes[0].unblocks)) == {t1.id, t2.id}
+
+
 def test_out_of_scope_fix_done_auto_resumes_original(tmp_path, monkeypatch):
     """When the spawned fix ticket reaches DONE, the existing _fire_unblocks
     path moves the parked original BLOCKED → DRAFT."""
