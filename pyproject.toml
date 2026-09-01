@@ -85,7 +85,7 @@ exclude-newer-package = { pypdf = "2026-08-07T00:00:00Z" }
 override-dependencies = ["robotsix-http @ git+https://github.com/damien-robotsix/robotsix-http.git@cdfd4d1c42679fef73081439562872792e202dc4"]
 
 [tool.uv.sources]
-robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "0d2429a133ed7284f964f89042ad549317565b65" }
+robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "f45db0af019712f257e2622a8a4e5e20ce297951" }
 robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "214eba160408b3d9e9d5775bc84d1531a2063d4f" }
 robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
 robotsix-config = { git = "https://github.com/damien-robotsix/robotsix-config", rev = "d29de204db62910f062456e5055fc2fe232e04a9" }
