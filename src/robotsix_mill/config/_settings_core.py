@@ -757,8 +757,8 @@ class _CoreSettings(BaseModel):
     # tickets here — investigations are run as chat subsession agents
     # instead.  Ingests whose ``source_tag`` matches an entry here are
     # rejected with 400, so these sources can no longer create mill
-    # tickets.  Override with MILL_INGEST_BLOCKED_SOURCE_TAGS
-    # (comma-separated).
+    # tickets.  Override with MILL_INGEST_BLOCKED_SOURCE_TAGS as a JSON
+    # array of source tags, e.g. `["caretaker", "pin_bump"]`.
     ingest_blocked_source_tags: tuple[str, ...] = Field(
         default=(
             "caretaker",

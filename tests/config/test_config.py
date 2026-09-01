@@ -514,6 +514,13 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         '["repo-a", "repo-b"]',
         ["repo-a", "repo-b"],
     ),
+    # --- ingest blocked source tags (JSON-array env override) ---
+    (
+        "ingest_blocked_source_tags",
+        "MILL_INGEST_BLOCKED_SOURCE_TAGS",
+        '["caretaker", "my-investigation"]',
+        ("caretaker", "my-investigation"),
+    ),
     # --- scope_triage_max_files ---
     ("scope_triage_max_files", "MILL_SCOPE_TRIAGE_MAX_FILES", "25", 25),
     # --- periodic bc_check ---

@@ -39,6 +39,9 @@ docker-compose.override.yml
 actionlint
 # Mill agent output artifacts (diagnostic/periodic agent runs)
 .mill-output.json
+# Stray full-suite pytest output file accidentally committed (see
+# investigation-ticket capability-removal ticket): `pytest > pyt_full.out`.
+pyt_full.out
 # Stray doc-agent scratch artifacts — the real ledger is runtime-managed
 # via settings.memory_file_for("doc", board_id). These are one-off commits.
 /doc_agent_output.json
