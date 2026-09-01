@@ -446,18 +446,22 @@ class TestAuditTraceHealthEndpoints:
 
         monkeypatch.setattr(periodic_runner, "run_audit_pass", _fail)
 
+        import threading
+
         r = client.post("/passes/audit/run")
         assert r.status_code == 202
 
-        # Poll for the background thread to finish
-        deadline = time.monotonic() + 5.0
-        runs: list[dict] = []
-        while time.monotonic() < deadline:
-            runs = client.get("/runs").json()
-            if runs and runs[0]["status"] != "running":
-                break
-            time.sleep(0.05)
+        # Deterministically wait for the background pass thread to record
+        # its terminal state instead of racing a timed poll.  The endpoint
+        # starts a daemon thread named "<pass_id>-pass" before returning
+        # 202, so joining it here removes the window where the run is still
+        # "running" when the assertion below runs (which intermittently
+        # tripped `assert 'running' == 'error'`).
+        for t in threading.enumerate():
+            if t.name == "audit-pass":
+                t.join(timeout=5.0)
 
+        runs = client.get("/runs").json()
         assert len(runs) >= 1
         run = runs[0]
         assert run["kind"] == "audit"
