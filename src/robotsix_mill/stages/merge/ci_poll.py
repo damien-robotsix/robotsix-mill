@@ -770,6 +770,20 @@ class CIPollMixin(_MergeStageBase):
                         encoding="utf-8",
                     )
                     _write_counter(er_path, 0)
+                    # Record the self-heal in ticket history so triage can
+                    # see that the empty rollup was detected and acted on.
+                    try:
+                        ctx.service.add_history_note(
+                            ticket.id,
+                            "merge: empty CI rollup detected — closed and "
+                            "reopened PR to trigger the pull_request event; "
+                            "re-polling",
+                        )
+                    except Exception:
+                        log.warning(
+                            "%s: failed to record empty-rollup self-heal note",
+                            ticket.id,
+                        )
                     # Post a PR comment documenting the self-heal.
                     forge.post_pr_comment(
                         source_branch=branch,

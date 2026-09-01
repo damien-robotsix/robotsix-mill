@@ -3025,12 +3025,12 @@ def test_empty_rollup_self_heal_closes_and_reopens_pr(tmp_path, monkeypatch):
     monkeypatch.setattr(
         github.GitHubForge,
         "close_pr",
-        lambda self, *, source_branch: (closed_branches.append(source_branch) or True),
+        lambda self, *, source_branch: closed_branches.append(source_branch) or True,
     )
     monkeypatch.setattr(
         github.GitHubForge,
         "reopen_pr",
-        lambda self, *, source_branch: (reopened_branches.append(source_branch) or True),
+        lambda self, *, source_branch: reopened_branches.append(source_branch) or True,
     )
     monkeypatch.setattr(
         github.GitHubForge,
@@ -3042,11 +3042,15 @@ def test_empty_rollup_self_heal_closes_and_reopens_pr(tmp_path, monkeypatch):
 
     out = stage.run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
-    assert "close/reopen" in out.note.lower() or "closed and reopened" in out.note.lower()
+    assert (
+        "close/reopen" in out.note.lower() or "closed and reopened" in out.note.lower()
+    )
     assert len(closed_branches) == 1
     assert len(reopened_branches) == 1
     assert len(comments) == 1
     assert "pull_request" in comments[0][1] or "CI" in comments[0][1]
+    notes = [e.note or "" for e in ctx.service.history(t.id)]
+    assert any("empty CI rollup" in n and "closed and reopened" in n for n in notes)
 
 
 def test_empty_rollup_parks_after_failed_self_heal(tmp_path, monkeypatch):
@@ -3086,7 +3090,9 @@ def test_empty_rollup_parks_after_failed_self_heal(tmp_path, monkeypatch):
     # Next poll should park BLOCKED with the self-heal note.
     out = stage.run(t, ctx)
     assert out.next_state is State.BLOCKED
-    assert "close/reopen" in out.note.lower() or "closed and reopened" in out.note.lower()
+    assert (
+        "close/reopen" in out.note.lower() or "closed and reopened" in out.note.lower()
+    )
     assert "already attempted" in out.note.lower()
 
 
@@ -3144,9 +3150,7 @@ def test_empty_rollup_resets_when_jobs_appear(tmp_path, monkeypatch):
         assert out.next_state is State.IMPLEMENT_COMPLETE
 
 
-def test_empty_rollup_close_fails_falls_through_to_unpromotable(
-    tmp_path, monkeypatch
-):
+def test_empty_rollup_close_fails_falls_through_to_unpromotable(tmp_path, monkeypatch):
     """If close_pr fails, fall through to the normal unpromotable check."""
     ctx = _empty_rollup_ctx(tmp_path, monkeypatch)
     t = _implement_complete(ctx)
