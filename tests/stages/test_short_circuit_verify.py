@@ -712,3 +712,37 @@ def test_cited_fix_not_ancestor_blocks(tmp_path):
     diag = scv.cited_fix_unverified(repo, f"already merged in {later}")
     assert diag is not None
     assert later in diag
+
+
+def test_cited_fix_stale_clone_fetches_before_verdict(tmp_path):
+    # A stale clone has origin/main pinned at an old commit, but the remote
+    # has since advanced. A commit that is present on the remote but absent
+    # locally must NOT produce a missing-commit verdict after a fresh fetch.
+    remote = tmp_path / "remote.git"
+    remote.mkdir()
+    _git(remote, "init", "--bare", "-q")
+
+    seed = tmp_path / "seed"
+    _init_repo(seed)
+    _git(seed, "branch", "-M", "main")
+    _git(seed, "remote", "add", "origin", str(remote))
+    _commit(seed, "a.txt", "hello")
+    _git(seed, "push", "-q", "-u", "origin", "main")
+
+    clone = tmp_path / "clone"
+    _git(tmp_path, "clone", "-q", str(remote), str(clone))
+
+    # Advance the remote after the clone was made — the clone is now stale.
+    later = _commit(seed, "b.txt", "world")
+    _git(seed, "push", "-q", "origin", "main")
+
+    # The cited commit exists on the remote but is absent from the stale
+    # clone's object store. A fresh fetch must make this a non-verdict.
+    assert scv.cited_fix_unverified(clone, f"already fixed in commit {later}") is None
+
+    # A commit genuinely absent from the remote still fails verification.
+    absent = "e09b8958"
+    diag = scv.cited_fix_unverified(clone, f"already fixed in commit {absent}")
+    assert diag is not None
+    assert absent in diag
+    assert "NOT present at origin/main" in diag

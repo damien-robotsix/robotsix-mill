@@ -26,6 +26,7 @@ from ...core.constants import BINARY_EXTENSIONS
 from ...core.models import Ticket
 from ...core.states import State
 from ...core.text_noop import is_degenerate_body
+from ...vcs import git_ops
 from ..base import StageContext
 
 # Re-export prefix constants for backward compatibility
@@ -486,6 +487,9 @@ def _verify_cited_fix_at_head(repo_dir: Path | None, rationale: str) -> bool:
     shas = _COMMIT_SHA_RE.findall((rationale or "").lower())
     if not shas:
         return False
+    # Refresh origin/main before the ancestry assertion so a stale clone
+    # cannot report a cited commit as missing just because it never fetched.
+    git_ops.refresh_origin_target(repo_dir, "main")
     try:
         for sha in shas:
             type_check = subprocess.run(
@@ -546,6 +550,10 @@ def _verify_branch_merged(repo_dir: Path | None, ticket: Ticket) -> bool:
         return True
 
     branch = ticket.branch
+    # Refresh origin/main first: every "unmerged" verdict below compares
+    # against origin/main, and a stale clone must not turn a freshly merged
+    # branch into a false BLOCKED ticket.
+    git_ops.refresh_origin_target(repo_dir, "main")
     try:
         subprocess.run(
             ["git", "-C", str(repo_dir), "fetch", "origin", branch],
@@ -1066,6 +1074,10 @@ def verify_claim(
     # every git subcommand will fail and we cannot prove anything.
     if not (repo_dir / ".git").exists():
         return True
+
+    # Refresh origin/main before any PR/SHA lookups so a stale clone cannot
+    # prove a cited artifact "absent" when the remote has actually advanced.
+    git_ops.refresh_origin_target(repo_dir, "main")
 
     pr_numbers: list[str] = _PR_MR_REF_RE.findall(claim_text or "")
     commit_shas: list[str] = _COMMIT_SHA_RE.findall(claim_text or "")

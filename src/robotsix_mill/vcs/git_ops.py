@@ -730,6 +730,45 @@ def fetch(repo: Path, *, remote_url: str, token: str | None, branch: str) -> Non
     )
 
 
+def refresh_origin_target(repo: Path, target_branch: str = "main") -> str | None:
+    """Best-effort ``git fetch origin --prune <target_branch>`` and resolve
+    ``origin/<target_branch>`` to its commit SHA.
+
+    Returns the SHA, or ``None`` when the fetch or resolution fails (no
+    ``origin`` remote, no network, or the ref does not exist).  Callers
+    that assert a commit/branch is ABSENT from the remote must call this
+    first so a stale local clone can never fabricate a "missing" verdict:
+    if a fresh fetch is impossible, the caller must fall back to the
+    pre-existing local ref (returned here when it already exists) rather
+    than concluding anything is absent.
+    """
+    with contextlib.suppress(Exception):
+        subprocess.run(
+            ["git", "-C", str(repo), "fetch", "origin", "--prune", target_branch],
+            capture_output=True,
+            text=True,
+            timeout=NETWORK_GIT_TIMEOUT,
+        )
+    with contextlib.suppress(Exception):
+        out = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                f"origin/{target_branch}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        sha = out.stdout.strip()
+        if sha:
+            return sha
+    return None
+
+
 def _range_commit_emails(
     repo: Path, base: str, tip: str
 ) -> list[tuple[str, str]] | None:

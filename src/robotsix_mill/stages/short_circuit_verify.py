@@ -31,6 +31,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from ..vcs import git_ops
+
 log = logging.getLogger(__name__)
 
 
@@ -600,6 +602,12 @@ def cited_fix_unverified(repo_dir: Path | str | None, text: str | None) -> str |
     if not shas:
         return None
 
+    # A missing-commit verdict is only trustworthy after a fresh fetch.
+    # Refresh origin/main before asserting anything is absent so a stale
+    # workspace clone (origin/main not yet advanced past a merged PR) can
+    # never produce a false "commit missing" block.
+    origin_main_sha = git_ops.refresh_origin_target(Path(repo_dir), "main")
+
     unverified: list[str] = []
     for sha in shas:
         try:
@@ -636,11 +644,16 @@ def cited_fix_unverified(repo_dir: Path | str | None, text: str | None) -> str |
 
     if not unverified:
         return None
+    verified_ref = (
+        f"origin/main @ {origin_main_sha[:12]}"
+        if origin_main_sha
+        else "origin/main (unresolved)"
+    )
     return (
         "closure rationale claims an already-shipped fix citing commit(s) "
         + ", ".join(unverified)
-        + " that are NOT present at origin/main (not a valid commit object, or "
-        "not an ancestor of origin/main). This is an unverified "
-        "merge/completion claim — the work was not actually done. Routing back "
-        "for the real fix instead of closing as done."
+        + f" that are NOT present at origin/main (verified against {verified_ref}; "
+        "not a valid commit object, or not an ancestor of origin/main). This is an "
+        "unverified merge/completion claim — the work was not actually done. "
+        "Routing back for the real fix instead of closing as done."
     )

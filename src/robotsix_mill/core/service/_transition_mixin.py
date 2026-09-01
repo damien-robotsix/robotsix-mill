@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from ...config import Settings
+from ...vcs import git_ops
 from ..db import retry_on_db_full
 from ..models import (
     Comment,
@@ -323,6 +324,11 @@ def _verify_citations(note: str, repo_dir: Path | None) -> str:
     if not note or not note.strip():
         return note
 
+    # A "not found on origin/main" warning is only trustworthy after a
+    # fresh fetch.  Refresh origin/main first so a stale workspace clone
+    # cannot turn a merged PR/commit into a false citation warning.
+    origin_main_sha = git_ops.refresh_origin_target(repo_dir, "main")
+
     warnings: list[str] = []
 
     # --- PR citations: git log --grep="#N" origin/main ------------------
@@ -388,6 +394,10 @@ def _verify_citations(note: str, repo_dir: Path | None) -> str:
         return note
 
     lines: list[str] = []
+    if origin_main_sha:
+        lines.append(
+            f"origin/main verified @ {origin_main_sha[:12]} before citation check."
+        )
     for w in sorted(set(warnings)):
         lines.append(
             f"⚠️ {w} not found on origin/main at time of closure — verify manually."
