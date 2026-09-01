@@ -43,6 +43,14 @@ _FAILING_CONCLUSIONS = frozenset(
     }
 )
 
+# Workflow-RUN conclusions (Actions API) that terminally fail the merge gate.
+# ``startup_failure`` is what GitHub records for a run it could not start —
+# the signature of a workflow that failed to PARSE (invalid ``uses:``,
+# malformed YAML). Such a run registers NO check-runs and posts NO commit
+# status, so it is invisible to the check-runs/statuses aggregation and must
+# be caught by cross-checking the Actions API (see _merge_workflow_run_failures).
+_WORKFLOW_FAILING_CONCLUSIONS = frozenset({"failure", "startup_failure"})
+
 # Inconclusive conclusions: the check produced NO verdict because a newer
 # run superseded it (GitHub Actions ``concurrency: cancel-in-progress``
 # marks the old run ``cancelled``; ``stale`` is the equivalent for status
@@ -252,6 +260,81 @@ def _derive_check_conclusion(
     return result
 
 
+def _latest_failing_workflow_runs(
+    runs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Latest completed run per ``workflow_id`` that concluded a failure.
+
+    The most recent completed run per ``workflow_id`` wins (compared by the
+    ``created_at`` string), so a later green re-run supersedes an earlier
+    red one for the same workflow (and vice-versa). Runs with a ``None``
+    conclusion (still in-flight) are ignored — they cannot mask a completed
+    failure. Returns the winning runs whose ``conclusion`` is in
+    ``_WORKFLOW_FAILING_CONCLUSIONS``.
+    """
+    latest: dict[Any, dict[str, Any]] = {}
+    for run in runs:
+        if run.get("conclusion") is None:
+            continue  # skip in-progress runs — only completed runs count
+        wid = run.get("workflow_id")
+        if wid not in latest or run.get("created_at", "") > latest[wid].get(
+            "created_at", ""
+        ):
+            latest[wid] = run
+    return [
+        r
+        for r in latest.values()
+        if r.get("conclusion") in _WORKFLOW_FAILING_CONCLUSIONS
+    ]
+
+
+def _merge_workflow_run_failures(
+    result: dict[str, Any], runs: list[dict[str, Any]]
+) -> None:
+    """Fold Actions-API workflow-run failures into a check-runs *result*.
+
+    A workflow that fails to PARSE never registers a check-run, so the
+    check-runs/statuses aggregation reads ``"success"`` while the workflow
+    ran zero jobs (live: cost-monitor 27a2, where ``ci.yml`` and
+    ``release.yml`` both failed at parse yet the PR flagged CI-green +
+    mergeable). This mutates *result* in place to fail the gate when a
+    workflow run for the head SHA concluded failure/startup_failure but is
+    not already reflected in the check-runs failure detail.
+
+    When the check-runs aggregation ALREADY reads ``"failure"``, the concrete
+    per-job detail there is richer, so *result* is left untouched. Otherwise
+    a failing entry is synthesized per uncaught workflow (named by its
+    ``name``, which for a parse failure is the workflow file path).
+    """
+    failing_runs = _latest_failing_workflow_runs(runs)
+    if not failing_runs:
+        return
+    if result.get("conclusion") == "failure":
+        return
+    existing = {(f.get("name") or "").strip() for f in result.get("failing", []) or []}
+    for run in failing_runs:
+        name = (run.get("name") or run.get("path") or "workflow").strip()
+        if name in existing:
+            continue
+        existing.add(name)
+        result.setdefault("failing", []).append(
+            {
+                "name": name,
+                "summary": (
+                    f"Workflow run concluded {run.get('conclusion')!r} but "
+                    "registered no check-run — likely a workflow parse "
+                    "failure (invalid uses:/YAML). "
+                    f"{run.get('html_url', '')}"
+                ).strip(),
+                "text": None,
+                "annotations": [],
+                "conclusion": run.get("conclusion"),
+            }
+        )
+    result["conclusion"] = "failure"
+    result["pending"] = []
+
+
 class GitHubForgeCIMixin:
     """CI/checks operations for GitHub — mixed into ``GitHubForge``.
 
@@ -416,26 +499,57 @@ class GitHubForgeCIMixin:
             # caller keeps waiting rather than false-passing.
             if not check_runs and not status_runs:
                 if require_checks:
-                    return {
+                    result = {
                         "conclusion": "pending",
                         "failing": [],
                         "pending": [],
                         "jobs": [],
                         "_no_checks": True,
-                        "_sha": sha,
                     }
-                return {
-                    "conclusion": "success",
-                    "failing": [],
-                    "pending": [],
-                    "jobs": [],
-                    "_sha": sha,
-                }
+                else:
+                    result = {
+                        "conclusion": "success",
+                        "failing": [],
+                        "pending": [],
+                        "jobs": [],
+                    }
+            else:
+                result = _derive_check_conclusion(
+                    c, api, owner, repo, headers, check_runs
+                )
 
-            result = _derive_check_conclusion(c, api, owner, repo, headers, check_runs)
+            # A workflow that fails to PARSE (invalid ``uses:``, malformed
+            # YAML) registers ZERO check-runs and posts NO commit status, so
+            # its failure is invisible to the aggregation above — the gate
+            # reads "success" while the workflow ran not one job (live:
+            # cost-monitor 27a2). Cross-check the Actions API: any workflow
+            # RUN for this head SHA that concluded failure/startup_failure
+            # fails the gate, including runs whose name is the workflow file
+            # path (the parse-failure signature).
+            _merge_workflow_run_failures(
+                result, self._safe_list_workflow_runs(owner, repo, sha)
+            )
             result["_sha"] = sha
             return result
         return None
+
+    def _safe_list_workflow_runs(
+        self, owner: str, repo: str, sha: str
+    ) -> list[dict[str, Any]]:
+        """Best-effort ``_list_workflow_runs`` for the parse-failure gate.
+
+        Any error (App missing ``actions: read``, transport failure, an
+        empty SHA) resolves to an empty list, so a flaky Actions API can
+        never *add* a false failure to the CI gate.
+        """
+        if not sha:
+            return []
+        try:
+            return self._list_workflow_runs(
+                owner=owner, repo=repo, branch=None, head_sha=sha
+            )
+        except Exception:
+            return []
 
     def _list_workflow_runs(
         self,
