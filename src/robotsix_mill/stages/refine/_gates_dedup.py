@@ -22,6 +22,7 @@ from ...core.datetime_utils import _as_utc
 from ...core.dedup import _extract_paths, _scope_paths
 from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.states import State
+from ...vcs import git_ops
 from ..base import Outcome, StageContext
 from .helpers import (
     DEDUP_ALREADY_DONE_PREFIX,
@@ -286,6 +287,9 @@ def _is_valid_dedup_target(
             # the commit is an ancestor of origin/main when possible.
             if repo_dir is None:
                 return True
+            # Refresh origin/main before the ancestry assertion so a stale
+            # clone cannot reject a commit that is actually merged upstream.
+            git_ops.refresh_origin_target(repo_dir, "main")
             try:
                 result = subprocess.run(
                     [

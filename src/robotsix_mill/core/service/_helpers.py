@@ -173,6 +173,7 @@ def verify_merge_before_done(
                 str(repo_dir),
                 "fetch",
                 "origin",
+                "--prune",
                 forge_target_branch,
             ],
             check=True,
@@ -193,6 +194,7 @@ def verify_merge_before_done(
         return  # best-effort: git unavailable
     if ref_check.returncode != 0:
         return  # target ref not available — can't verify, allow
+    target_sha = ref_check.stdout.strip()
 
     # Fast path: ancestor check.
     try:
@@ -281,10 +283,11 @@ def verify_merge_before_done(
         if show.returncode == 0 and ticket_id in show.stdout:
             return  # content evidence found
 
+    verified_ref = f"{target} @ {target_sha[:12]}" if target_sha else target
     raise TransitionError(
         f"{ticket_id}: cannot mark done — "
         f"branch {branch} has not been merged to {target}. "
-        f"Merge the PR first, then retry."
+        f"Verified against {verified_ref}; merge the PR first, then retry."
     )
 
 
