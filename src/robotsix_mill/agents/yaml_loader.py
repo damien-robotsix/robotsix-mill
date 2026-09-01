@@ -352,27 +352,29 @@ def load_and_run_agent(
 
     # A provider can be unavailable for reasons that have nothing to do with
     # this agent — an outage, or a Claude subscription whose usage credits
-    # are exhausted until they reset. llmio's failover loop rebuilds the
-    # agent on the OTHER provider slot at the SAME level and retries, so the
-    # run lands somewhere instead of dying. The agent is rebuilt inside the
-    # factory, not reused: the slot selects the provider, so a new slot
-    # needs a new agent and a new HTTP client — ``tier_binding`` forces the
-    # attempted slot's binding (active-slot resolution would rebuild the
-    # provider that just failed).
+    # are exhausted until they reset. llmio's failover loop owns slot
+    # bookkeeping end-to-end: each attempt resolves the level's provider
+    # slot (arming the sticky window on a provider-shaped failure) and
+    # rebuilds the agent fresh for that slot — the loop hands the resolved
+    # binding here as *tlc*, from which mill derives the explicit slot so
+    # ``build_agent`` can use llmio's ``slot=`` resolution. The agent is
+    # rebuilt inside the factory, not reused: the slot selects the provider,
+    # so a new slot needs a new agent and a new HTTP client. This run MUST
+    # NOT trigger ``run_agent``'s nested ``_run_at_fallback_slot`` layer
+    # (``tier_fallback=False``): a nested fallback would swallow the
+    # exhaustion and return success on the default-slot attempt, so the loop
+    # would record a *default* success and clear the freshly-armed window.
     def _slot_factory(tlc: TierLevelConfig) -> Callable[[], Any]:
+        fallback_tlc = default_tier_config().for_level(start_level, slot="fallback")
+        slot = "fallback" if tlc.model == fallback_tlc.model else "default"
+
         def _build_and_run() -> Any:
-            # Only force the binding when the attempted slot differs from
-            # what active-slot resolution would give (the loop's cross-slot
-            # attempt before the sticky window arms); the normal attempt
-            # keeps the plain level-resolution path.
-            active = default_tier_config().for_level(start_level)
-            binding = None if tlc.model == active.model else tlc
             agent = build_agent_from_definition(
                 settings,
                 definition,
                 tools=tools or [],
                 level=start_level,
-                tier_binding=binding,
+                slot=slot,
                 repo_dir=repo_dir,
                 **build_overrides,
             )
@@ -381,6 +383,7 @@ def load_and_run_agent(
                     agent,
                     lambda h: h.run_sync(prompt, **(run_kwargs or {})),
                     what=what,
+                    tier_fallback=False,
                 )
                 if validate is not None:
                     # Raising here is deliberate: a result that parsed but is

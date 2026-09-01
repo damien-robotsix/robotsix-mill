@@ -873,9 +873,11 @@ def test_build_agent_from_definition_attaches_rebuild_hook(monkeypatch):
     )
 
     handle._failover_rebuild()
-    # Same level both times; the rebuild forces the fallback slot's binding.
+    # Same level both times; the rebuild no longer forces a slot binding —
+    # it relies on llmio's active-slot resolution (the caller arms the
+    # fallback slot on the tracker before invoking this hook).
     assert [k["level"] for k in captured] == [2, 2]
-    assert captured[1]["tier_binding"].provider == "openrouter"
+    assert "tier_binding" not in captured[1]
     assert captured[1]["name"] == "implement"
 
 

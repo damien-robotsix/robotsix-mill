@@ -69,7 +69,7 @@ def fake_ai(monkeypatch):
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
     monkeypatch.setattr(
         "robotsix_mill.agents.base.new_openrouter_model",
-        lambda model_name, level: (FakeModel(model_name), object()),
+        lambda model_name, level, **kw: (FakeModel(model_name), object()),
     )
     return box
 

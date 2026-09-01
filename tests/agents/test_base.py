@@ -690,7 +690,7 @@ def test_build_openrouter_handle_constructs_agent(monkeypatch, settings):
     fake_client = MagicMock()
     captured_call: dict = {}
 
-    def fake_new_openrouter(model_name, level):
+    def fake_new_openrouter(model_name, level, **kw):
         captured_call["model_name"] = model_name
         captured_call["level"] = level
         return fake_model, fake_client
@@ -743,7 +743,7 @@ def test_build_openrouter_handle_with_max_tokens(monkeypatch, settings):
     monkeypatch.setattr(
         bmod,
         "new_openrouter_model",
-        lambda model_name, level: (MagicMock(), MagicMock()),
+        lambda model_name, level, **kw: (MagicMock(), MagicMock()),
     )
 
     bmod._build_openrouter_handle(
