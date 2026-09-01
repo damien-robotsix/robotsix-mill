@@ -85,11 +85,11 @@ exclude-newer-package = { pypdf = "2026-08-07T00:00:00Z" }
 override-dependencies = ["robotsix-http @ git+https://github.com/damien-robotsix/robotsix-http.git@cdfd4d1c42679fef73081439562872792e202dc4"]
 
 [tool.uv.sources]
-robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "c560664922fb5b40d8427eafaf8d0da8a21a62d8" }
-robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "214eba160408b3d9e9d5775bc84d1531a2063d4f" }
-robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d56fd5d0ae36e2226a471ef276a38faa5d611e6b" }
+robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "61ca95d6bebd95cc740aebf8b6fd9c775d77c7dd" }
+robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "7fc8e9d4cc27ee128c474f36147af87296359215" }
+robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d916d1c14198dd00bb136605224177289c73352c" }
 robotsix-config = { git = "https://github.com/damien-robotsix/robotsix-config", rev = "d29de204db62910f062456e5055fc2fe232e04a9" }
-robotsix-github-auth = { git = "https://github.com/damien-robotsix/robotsix-github-auth.git", rev = "15e2df0a725df0146289f4f8dfca957be430b924" }
+robotsix-github-auth = { git = "https://github.com/damien-robotsix/robotsix-github-auth.git", rev = "5cfa953ecf346144e98b84b1fea58b8fcfc3c17f" }
 
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"
