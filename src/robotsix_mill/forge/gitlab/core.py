@@ -237,6 +237,26 @@ class GitLabForge(
             )
             return False
 
+    def reopen_pr(self, *, source_branch: str) -> bool:
+        """Reopen a closed MR for *source_branch*.
+
+        Returns ``True`` on success, ``False`` when the MR is not found
+        or already open.  Never raises.
+        """
+        try:
+            project_path = _parse_gitlab_project_path(self._remote_url)
+            mr = self._find_mr(project_path=project_path, source_branch=source_branch)
+            if mr is None:
+                return False
+            return self._reopen_mr(project_path, mr["iid"])
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "reopen_pr failed for branch %s", source_branch
+            )
+            return False
+
     def dismiss_review(self, *, source_branch: str, review_id: int) -> bool:
         """Dismiss a single MR review by its *review_id*.
 
@@ -861,6 +881,35 @@ class GitLabForge(
         except Exception:
             logger.exception(
                 "close_pr failed for %s MR !%d",
+                project_path,
+                mr_iid,
+            )
+            return False
+
+    def _reopen_mr(self, project_path: str, mr_iid: int) -> bool:
+        """PUT /projects/:id/merge_requests/:iid with state_event=reopen."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            pid = self._resolve_project_id(project_path)
+            r = self._http.put(
+                f"/projects/{pid}/merge_requests/{mr_iid}",
+                json={"state_event": "reopen"},
+            )
+            if r.status_code == 200:
+                return True
+            logger.info(
+                "reopen_pr HTTP %s for %s MR !%d: %s",
+                r.status_code,
+                project_path,
+                mr_iid,
+                r.text[:200],
+            )
+            return False
+        except Exception:
+            logger.exception(
+                "reopen_pr failed for %s MR !%d",
                 project_path,
                 mr_iid,
             )

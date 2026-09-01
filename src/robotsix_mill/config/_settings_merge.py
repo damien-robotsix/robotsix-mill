@@ -323,6 +323,18 @@ class _MergeSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
+    # Ceiling on consecutive merge polls where CI reports success with zero
+    # check runs (empty rollup) and mergeable_state is "blocked".  This is
+    # the signature of a PR whose pull_request event never fired on GitHub.
+    # After this many polls the mill closes and reopens the PR once to
+    # trigger the event, then re-polls.  Set to 0 to disable the self-heal.
+    empty_rollup_max_polls: int = Field(
+        description="Consecutive empty-rollup polls before close/reopen self-heal. 0 disables.",
+        default=3,
+        ge=0,
+        json_schema_extra={"advanced": True},
+    )
+
     # Maximum review-revision attempts per ticket before escalating to BLOCKED.
     review_revision_max_attempts: int = Field(
         description="Maximum review-revision attempts per ticket before escalating to BLOCKED.",

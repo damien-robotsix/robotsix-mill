@@ -27,6 +27,8 @@ from ._shared import (
     _APPROVED_DIFF_HASH,
     _AUTO_FIX_CYCLES,
     _CI_POLL_REFRESH_SHA,
+    _EMPTY_ROLLUP_COUNT,
+    _EMPTY_ROLLUP_SELF_HEAL_DONE,
     _GREEN_UNPROMOTABLE_COUNT,
     _LAST_AUTO_FIX_STAGE,
     _PING_PONG_COUNT,
@@ -666,7 +668,7 @@ class CIPollMixin(_MergeStageBase):
         )
 
         stuck = self._check_green_unpromotable(
-            ticket, ctx, pr, branch, conclusion, ms, pending_checks
+            ticket, ctx, pr, branch, conclusion, ms, pending_checks, ci_status
         )
         if stuck is not None:
             return stuck
@@ -682,6 +684,7 @@ class CIPollMixin(_MergeStageBase):
         conclusion: str | None,
         mergeable_state: str | None,
         pending_checks: list[str],
+        ci_status: dict[str, Any] | None = None,
     ) -> Outcome | None:
         """Bound the "CI green but the forge won't promote" re-poll.
 
@@ -695,6 +698,14 @@ class CIPollMixin(_MergeStageBase):
         and the ticket eventually blocks with "stage merge timed out after
         Ns" — a note that names neither the PR nor the missing check.
 
+        Also detects the *empty-rollup* case: CI reports ``"success"``
+        with zero check runs and ``mergeable_state="blocked"`` — the
+        signature of a PR whose ``pull_request`` event never fired.
+        After a bounded number of polls the mill closes and reopens the
+        PR once to trigger the event, then re-polls.  If the rollup is
+        still empty afterwards, the ticket is parked with a note naming
+        the close/reopen remedy already attempted.
+
         Returns a BLOCKED ``Outcome`` naming the unsatisfiable contexts once
         the ceiling is reached, else ``None`` (keep polling).
         """
@@ -706,7 +717,128 @@ class CIPollMixin(_MergeStageBase):
         # A pending check, or CI that is not success, is genuine settling.
         if conclusion != "success" or pending_checks:
             _write_counter(counter_path, 0)
+            _write_counter(artifacts_dir / _EMPTY_ROLLUP_COUNT, 0)
             return None
+
+        # --- Empty-rollup detection ---
+        # CI reports "success" with zero check runs and mergeable_state
+        # is "blocked": the pull_request event never fired, so no workflow
+        # was triggered at the PR level.  Attempt a close/reopen self-heal.
+        jobs = ci_status.get("jobs", []) if ci_status else []
+        if not jobs and mergeable_state == "blocked" and s.empty_rollup_max_polls > 0:
+            er_path = artifacts_dir / _EMPTY_ROLLUP_COUNT
+            heal_path = artifacts_dir / _EMPTY_ROLLUP_SELF_HEAL_DONE
+            er_polls = _read_counter(er_path) + 1
+            _write_counter(er_path, er_polls)
+
+            if er_polls < s.empty_rollup_max_polls:
+                # Below the self-heal threshold: keep waiting.  This is a
+                # *distinct* signature from green-but-unpromotable (zero check
+                # runs vs. all green but the merge stalls), so it must not
+                # consume the green-unpromotable budget.
+                return None
+
+            # At the threshold — the empty rollup has persisted long enough
+            # to attempt the self-heal.
+            if heal_path.exists():
+                # Already attempted self-heal?  Park with an explicit note.
+                _write_counter(er_path, 0)
+                log.warning(
+                    "%s: empty rollup persists after close/reopen "
+                    "self-heal — parking BLOCKED",
+                    ticket.id,
+                )
+                return Outcome(
+                    State.BLOCKED,
+                    f"CI is green but {pr.get('url') or branch} cannot "
+                    f"be merged: the PR reports zero check runs and "
+                    f"mergeable_state='blocked' — the pull_request event "
+                    f"likely never fired. A close/reopen self-heal was "
+                    f"already attempted without success. Manually close "
+                    f"and reopen the PR (or push an empty commit) to "
+                    f"trigger CI, then resume.",
+                )
+
+            # Attempt self-heal: close and reopen the PR once.  Write the
+            # marker BEFORE any forge call so a later poll can never retry
+            # close/reopen — the guard holds whether the calls succeed or
+            # fail ("at most one self-heal per PR").
+            heal_path.write_text(
+                datetime.datetime.now(datetime.UTC).isoformat(),
+                encoding="utf-8",
+            )
+            forge = get_forge(s, repo_config=ctx.repo_config)
+            log.info(
+                "%s: empty rollup detected (%d polls) — attempting "
+                "close/reopen self-heal",
+                ticket.id,
+                er_polls,
+            )
+            closed = forge.close_pr(source_branch=branch)
+            reopened = False
+            if closed:
+                reopened = forge.reopen_pr(source_branch=branch)
+            _write_counter(er_path, 0)
+            if closed and reopened:
+                # Record the self-heal in ticket history so triage can
+                # see that the empty rollup was detected and acted on.
+                try:
+                    ctx.service.add_history_note(
+                        ticket.id,
+                        "merge: empty CI rollup detected — closed and "
+                        "reopened PR to trigger the pull_request event; "
+                        "re-polling",
+                    )
+                except Exception:
+                    log.warning(
+                        "%s: failed to record empty-rollup self-heal note",
+                        ticket.id,
+                    )
+                # Post a PR comment documenting the self-heal.
+                forge.post_pr_comment(
+                    source_branch=branch,
+                    body=(
+                        "The mill detected that no CI workflows were "
+                        "triggered for this PR (empty status check rollup "
+                        "with mergeable_state='blocked'). This sometimes "
+                        "happens when GitHub's pull_request event is not "
+                        "delivered. The PR was closed and reopened to "
+                        "trigger the event and re-run CI."
+                    ),
+                )
+                return Outcome(
+                    State.IMPLEMENT_COMPLETE,
+                    "Empty CI rollup detected — closed and reopened PR "
+                    "to trigger pull_request event; re-polling.",
+                )
+            # Close or reopen failed, or only partly succeeded.  Park BLOCKED
+            # immediately with an explicit note — do not fall through to the
+            # green-unpromotable counter (which would burn a second budget and
+            # let a later poll retry the self-heal the marker already forbids).
+            stranded = (
+                " The PR may have been left closed by the partial "
+                "close/reopen — reopen it manually before resuming."
+                if closed and not reopened
+                else ""
+            )
+            log.warning(
+                "%s: close/reopen self-heal failed (closed=%s, "
+                "reopened=%s) — parking BLOCKED",
+                ticket.id,
+                closed,
+                reopened,
+            )
+            return Outcome(
+                State.BLOCKED,
+                f"CI is green but {pr.get('url') or branch} cannot be "
+                f"merged: the PR reports zero check runs and "
+                f"mergeable_state='blocked' — the pull_request event "
+                f"likely never fired. A close/reopen self-heal was "
+                f"attempted (closed={closed}, reopened={reopened}) but "
+                f"did not complete.{stranded} Close and reopen the PR "
+                f"manually (or push an empty commit) to trigger CI, "
+                f"then resume.",
+            )
 
         if s.green_unpromotable_max_polls <= 0:
             return None

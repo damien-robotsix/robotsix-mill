@@ -284,6 +284,22 @@ class GitHubForgePRMixin:
             pull_number=pr["number"],
         )
 
+    def reopen_pr(self, *, source_branch: str) -> bool:
+        """Reopen a closed PR for *source_branch*.
+
+        Returns ``True`` on success, ``False`` when the PR is not found
+        or already open.  Never raises.
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        if pr is None:
+            return False
+        return self._reopen_pr(
+            owner=owner,
+            repo=repo,
+            pull_number=pr["number"],
+        )
+
     def post_pr_comment(self, *, source_branch: str, body: str) -> bool:
         """Post a plain comment on the open PR for *source_branch*.
 
@@ -662,6 +678,41 @@ class GitHubForgePRMixin:
         except Exception:
             logger.exception(
                 "close_pr failed for %s/%s PR #%d",
+                owner,
+                repo,
+                pull_number,
+            )
+            return False
+
+    def _reopen_pr(
+        self,
+        *,
+        owner: str,
+        repo: str,
+        pull_number: int,
+    ) -> bool:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            r = self._http.patch(  # type: ignore[attr-defined]
+                f"/repos/{owner}/{repo}/pulls/{pull_number}",
+                json={"state": "open"},
+            )
+            if r.status_code == 200:
+                return True
+            logger.info(
+                "reopen_pr HTTP %s for %s/%s PR #%d: %s",
+                r.status_code,
+                owner,
+                repo,
+                pull_number,
+                r.text[:200],
+            )
+            return False
+        except Exception:
+            logger.exception(
+                "reopen_pr failed for %s/%s PR #%d",
                 owner,
                 repo,
                 pull_number,

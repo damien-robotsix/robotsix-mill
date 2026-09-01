@@ -126,16 +126,29 @@ def _merge_rejection_outcome(
 
 __all__ = [
     "_APPROVED_DIFF_HASH",
+    "_AUTO_FIX_CYCLES",
     "_CI_POLL_REFRESH_SHA",
+    "_EMPTY_ROLLUP_COUNT",
+    "_EMPTY_ROLLUP_SELF_HEAL_DONE",
+    "_GREEN_UNPROMOTABLE_COUNT",
+    "_LAST_AUTO_FIX_STAGE",
     "_MERGE_MAX_RETRIES",
     "_MERGE_RETRY_COUNTER",
+    "_PING_PONG_COUNT",
+    "_REBASE_COUNTER",
     "_REBASE_DROPPED",
+    "_REBASE_FROM_STATE",
     "_REBASE_LAST_TS",
+    "_ci_truly_green",
+    "_is_pr_check_run",
+    "_latest_failing_workflows",
     "_merge_rejection_outcome",
     "_read_counter",
     "_read_dropped_files",
     "_reconcile_with_remote_pr",
     "_refresh_branch_for_ci",
+    "_verify_merge_ancestor",
+    "_workspace_repo_dir",
     "_write_counter",
     "_write_dropped_files",
 ]
@@ -152,6 +165,14 @@ _PING_PONG_COUNT = "ping_pong_count.txt"
 # Consecutive merge polls that saw fully-green CI but a PR the forge still
 # refuses to promote. Bounded by ``green_unpromotable_max_polls``.
 _GREEN_UNPROMOTABLE_COUNT = "green_unpromotable_polls.txt"
+# Consecutive merge polls where CI reports success with zero check runs
+# (empty rollup) and mergeable_state is "blocked".  This is the signature
+# of a PR whose pull_request event never fired.  Bounded by
+# ``empty_rollup_max_polls``.
+_EMPTY_ROLLUP_COUNT = "empty_rollup_polls.txt"
+# Marker written after a close/reopen self-heal attempt so it runs at most
+# once per PR.
+_EMPTY_ROLLUP_SELF_HEAL_DONE = "empty_rollup_self_heal_done.txt"
 # Bounded retries for a *retryable* forge merge rejection (see
 # ``_merge_rejection_outcome``). Small on purpose: the case it exists for
 # resolves within a minute or two, so anything that survives this many
