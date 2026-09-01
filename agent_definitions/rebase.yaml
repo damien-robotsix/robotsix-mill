@@ -7,7 +7,7 @@ description: >-
 
 category: sandboxed
 
-level: 4
+level: 2
 tools:
   - read_file
   - write_file

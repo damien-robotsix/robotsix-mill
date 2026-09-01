@@ -570,6 +570,33 @@
   }
 
   // =========================================================================
+  // Provider failover status
+  // =========================================================================
+  async function fetchProviderStatus() {
+    var s = await jget("/provider-status");
+    var banner = document.getElementById("provider-status");
+    if (!banner) return;
+    if (!s || !s.failover_active) {
+      banner.style.display = "none";
+      banner.innerHTML = "";
+      return;
+    }
+    var until = "";
+    if (s.failover_until) {
+      try { until = new Date(s.failover_until).toLocaleTimeString(); } catch (e) { until = esc(String(s.failover_until)); }
+    }
+    var mins = s.seconds_remaining != null ? Math.max(1, Math.round(s.seconds_remaining / 60)) : null;
+    banner.style.display = "block";
+    banner.innerHTML =
+      '<span class="lf-badge">⇄ Provider failover active</span> ' +
+      'Running on the fallback provider (OpenRouter). ' +
+      'Back to the default provider' +
+      (until ? ' at ' + until : '') +
+      (mins != null ? ' (~' + mins + ' min left)' : '') + '.' +
+      (s.last_failure_reason ? ' · Last failure: ' + esc(String(s.last_failure_reason).slice(0, 160)) : '');
+  }
+
+  // =========================================================================
   // Active labels
   // =========================================================================
   async function fetchActive() {
@@ -2155,6 +2182,7 @@
     fetchCredentialStatus();
     fetchLangfuseStatus();
     fetchCreditStatus();
+    fetchProviderStatus();
     refreshCandidateBadge();
 
     // Update the board refresh URL to include the repo filter
@@ -2210,6 +2238,7 @@
     fetchCredentialStatus();
     fetchLangfuseStatus();
     fetchCreditStatus();
+    fetchProviderStatus();
     refreshCandidateBadge();
     applyPassColors();
 

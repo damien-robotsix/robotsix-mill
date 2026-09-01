@@ -238,10 +238,10 @@ def test_screenshot_not_attached_when_vision_gate_off(tmp_path, monkeypatch):
         settings=s,
         diff="diff --git a/x b/x",
         spec="Fix x",
-        # level=4 routes to Claude (vision-capable transport), proving it is
+        # level=2 routes to Claude (vision-capable transport), proving it is
         # the vision *gate* (default False) — not the level — that blocks the
         # attach.
-        level=4,
+        level=2,
         screenshot_path=png,
     )
     assert isinstance(result, ReviewVerdict)
@@ -276,7 +276,7 @@ def test_screenshot_attached_when_vision_gate_on(tmp_path, monkeypatch):
         settings=s,
         diff="diff --git a/x b/x",
         spec="Fix x",
-        level=4,  # Claude (vision-capable) transport
+        level=2,  # Claude (vision-capable) transport
         screenshot_path=png,
     )
     assert isinstance(result, ReviewVerdict)
@@ -339,7 +339,7 @@ def test_missing_screenshot_falls_back_to_text(tmp_path, monkeypatch):
         settings=s,
         diff="diff --git a/x b/x",
         spec="Fix x",
-        level=4,  # Claude (vision-capable) transport
+        level=2,  # Claude (vision-capable) transport
         screenshot_path=Path(tmp_path) / "does-not-exist.png",
     )
     assert isinstance(result, ReviewVerdict)

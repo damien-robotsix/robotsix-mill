@@ -9,6 +9,12 @@ from robotsix_mill.agents.ci_patterns import CiPatternEntry
 from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 
+@pytest.fixture(autouse=True)
+def _openrouter_slot(fallback_slot_active):
+    """These tests capture agent assembly through the OpenRouter seam; arm
+    llmio's failover window so plain levels resolve the OpenRouter slot."""
+
+
 def _s(tmp_path):
     import robotsix_mill.config as _cfg
 

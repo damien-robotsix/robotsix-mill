@@ -425,8 +425,9 @@ class _CoreSettings(BaseModel):
     # resets 9:20am (UTC)"). The quota comes back by itself, so the ticket
     # PARKS (model-outage shaped, retry budget untouched) until the stated
     # reset — or claude_usage_exhausted_retry_seconds when the message has
-    # no reset hint. Falling back onto a keyed OpenRouter level instead is
-    # real money per token; it is opt-in via claude_exhaustion_paid_fallback.
+    # no reset hint. Failing over to the keyed OpenRouter provider slot
+    # instead is real money per token; it is opt-in via
+    # provider_failover_enabled.
     claude_usage_exhausted_retry_seconds: int = Field(
         default=900,
         ge=60,
@@ -449,11 +450,12 @@ class _CoreSettings(BaseModel):
         ),
         json_schema_extra={"advanced": True},
     )
-    claude_exhaustion_paid_fallback: bool = Field(
+    provider_failover_enabled: bool = Field(
         default=False,
         description=(
-            "When a Claude-backed level reports usage exhaustion or an auth "
-            "failure, rebuild the agent on the nearest keyed (paid) level "
+            "Enable automatic provider failover: when the default (Anthropic) "
+            "provider fails or is exhausted, rerun the SAME capability level "
+            "on the paid OpenRouter fallback slot for llmio's failover window "
             "instead of parking the ticket until the quota resets."
         ),
         json_schema_extra={"advanced": True},
@@ -486,18 +488,17 @@ class _CoreSettings(BaseModel):
         description="Wall-clock timeout (seconds) for a single explore sub-agent call.",
         json_schema_extra={"advanced": True},
     )
-    # The scout used to be hard-wired to level 1 (paid OpenRouter flash,
-    # ~23 s median per generation — it timed out constantly).  Level 2
-    # (haiku on the Claude subscription, ~6.6 s median) spends quota, not
-    # cash.  Claude tiers run the scout through the SDK tool loop, so
-    # ``explore_request_limit`` only bounds OpenRouter tiers there.
+    # The scout runs at the cheap level (haiku on the Claude subscription,
+    # ~6.6 s median): it spends quota, not cash.  Claude-backed levels run
+    # the scout through the SDK tool loop, so ``explore_request_limit``
+    # only bounds the OpenRouter fallback slot there.
     explore_model_level: int = Field(
-        default=2,
+        default=1,
         ge=1,
-        le=5,
+        le=3,
         description=(
-            "Capability tier for the exploration sub-agent "
-            "(2 = haiku on the Claude subscription)."
+            "Capability level for the exploration sub-agent "
+            "(1 = haiku on the Claude subscription)."
         ),
         json_schema_extra={"advanced": True},
     )
@@ -969,7 +970,7 @@ class _CoreSettings(BaseModel):
     # disables the timeout for that stage.
     #
     # Built-in default: refine caps at 900 s (15 min).  A sampled
-    # legitimate refine run on model_level 4 (Claude SDK / Opus)
+    # legitimate refine run on model_level 2 (Claude SDK / Opus)
     # clocked 736 s (~12 min); 900 s leaves headroom while still
     # catching multi-hour runaway refine traces.  Operators can
     # override or disable (value 0) via the env var / JSON key.

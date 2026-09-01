@@ -10,7 +10,7 @@ description: >-
 
 category: sub_agent
 
-level: 2
+level: 1
 tools:
   - read_file
   - list_dir

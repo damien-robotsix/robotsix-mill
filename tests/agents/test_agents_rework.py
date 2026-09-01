@@ -11,6 +11,12 @@ from robotsix_mill.agents.coordinating import ImplementResult, ValidationResult
 from robotsix_mill.config import Settings
 
 
+@pytest.fixture(autouse=True)
+def _openrouter_slot(fallback_slot_active):
+    """These tests capture agent assembly through the OpenRouter seam; arm
+    llmio's failover window so plain levels resolve the OpenRouter slot."""
+
+
 def _settings(tmp_path, **env):
     env.setdefault("data_dir", str(tmp_path))
     env.setdefault("OPENROUTER_API_KEY", "k")
@@ -65,8 +71,9 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
         settings=s, repo_dir=tmp_path, spec="build a thing"
     )
     assert out.summary == "did it"
-    # implement.yaml declares level 2 → MiMo v2.5 pro via llmio tier defaults.
-    assert fake_ai["model"] == "deepseek/deepseek-v4-pro-0813"
+    # implement.yaml declares level 2 → the workhorse binding of the
+    # OpenRouter (fallback) slot these tests arm: flash with xhigh reasoning.
+    assert fake_ai["model"] == "deepseek/deepseek-v4-flash-20260731"
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [
         "ask_user",
@@ -414,7 +421,7 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
 
     s = _settings(
         tmp_path,
-        agent_levels={"run_tests": 3, "audit": 3},
+        agent_levels={"run_tests": 2, "audit": 2},
         test_command="pytest",
     )
     monkeypatch.setattr(
@@ -450,8 +457,9 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     passed, fb = testing.run_test_agent(settings=s, repo_dir=tmp_path)
     assert passed is False
     assert fb == "fix the assertion in foo.py"  # distilled, not raw log
-    # run_tests.yaml declares level 2 → MiMo v2.5 pro via llmio tier defaults.
-    assert cap["model"] == "deepseek/deepseek-v4-pro-0813"
+    # agent_levels pins run_tests to level 2 → the workhorse binding of the
+    # OpenRouter (fallback) slot these tests arm: flash with xhigh reasoning.
+    assert cap["model"] == "deepseek/deepseek-v4-flash-20260731"
     assert cap["got_output"]
     assert cap["name"] == "run_tests"
 
@@ -597,7 +605,7 @@ def test_test_agent_normal_failure_still_distills(tmp_path, monkeypatch):
     from robotsix_mill import sandbox
 
     s = _settings(
-        tmp_path, test_command="pytest", agent_levels={"run_tests": 3, "audit": 3}
+        tmp_path, test_command="pytest", agent_levels={"run_tests": 2, "audit": 2}
     )
     monkeypatch.setattr(
         sandbox,
@@ -793,7 +801,7 @@ def test_audit_agent_tool_set(tmp_path, monkeypatch):
         lambda model_name, level: (FakeModel(model_name), object()),
     )
 
-    s = _settings(tmp_path, agent_levels={"run_tests": 3, "audit": 3})
+    s = _settings(tmp_path, agent_levels={"run_tests": 2, "audit": 2})
     auditing.run_audit_agent(settings=s, repo_dir=tmp_path, memory="")
 
     assert cap["tools"] == [
@@ -865,7 +873,7 @@ def test_test_agent_distill_injects_file_map_scope(tmp_path, monkeypatch):
     from robotsix_mill import sandbox
 
     s = _settings(
-        tmp_path, test_command="pytest", agent_levels={"run_tests": 3, "audit": 3}
+        tmp_path, test_command="pytest", agent_levels={"run_tests": 2, "audit": 2}
     )
 
     # Write file_map.json at repo_dir.parent / "artifacts" / "file_map.json"
@@ -943,7 +951,7 @@ def test_test_agent_distill_no_file_map_unaffected(tmp_path, monkeypatch):
         fp.unlink()
 
     s = _settings(
-        tmp_path, test_command="pytest", agent_levels={"run_tests": 3, "audit": 3}
+        tmp_path, test_command="pytest", agent_levels={"run_tests": 2, "audit": 2}
     )
 
     monkeypatch.setattr(
@@ -989,7 +997,7 @@ def test_test_agent_distill_explicit_file_map_override(tmp_path, monkeypatch):
     from robotsix_mill import sandbox
 
     s = _settings(
-        tmp_path, test_command="pytest", agent_levels={"run_tests": 3, "audit": 3}
+        tmp_path, test_command="pytest", agent_levels={"run_tests": 2, "audit": 2}
     )
 
     # Write a DIFFERENT file_map.json (should be ignored when explicit passed)

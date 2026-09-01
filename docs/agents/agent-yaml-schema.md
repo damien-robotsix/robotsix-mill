@@ -109,19 +109,20 @@ Which class of agent this is:
 |-----------|-------|
 | Type | `integer` |
 | Required | **yes** |
-| Constraints | `ge=1, le=4` |
+| Constraints | `ge=1, le=3` |
 | Example | `level: 2` |
 
-The agent's capability tier, used by `build_agent` to resolve a
-concrete `(transport, model)` pair via llmio's tier defaults. Four
-levels are defined:
+The agent's capability level, used by `build_agent` to resolve a
+concrete `(transport, model)` pair via llmio's tier defaults. Three
+levels are defined, each served by whichever provider slot llmio's
+failover currently designates (default: Anthropic via the Claude SDK;
+fallback: DeepSeek via OpenRouter):
 
-| Level | Label   | Resolved model |
-|-------|---------|----------------|
-| 1 | flash   | Cheapest, fastest model (DeepSeek flash or equivalent) |
-| 2 | pro     | Balanced cost/capability (DeepSeek pro or equivalent) |
-| 3 | opus    | Most capable model (Claude opus or equivalent) |
-| 4 | fable-5 | Cost-effective Claude model for structured-output tasks |
+| Level | Label     | Resolved model (default slot / fallback slot) |
+|-------|-----------|-----------------------------------------------|
+| 1 | cheap     | haiku / deepseek flash (no reasoning) |
+| 2 | workhorse | opus / deepseek flash (xhigh reasoning) |
+| 3 | frontier  | claude-fable-5 / deepseek pro |
 
 The mapping from `level` to concrete model is **not** defined in
 the YAML file — it lives in `Settings` and the tier-resolution
@@ -596,7 +597,7 @@ refine agent — the most feature-rich agent in the system. It
 demonstrates:
 
 - A multi-line `system_prompt` using YAML block-scalar syntax
-- `level: 3` — opus-tier capability
+- `level: 2` — workhorse-tier capability
 - A tool list (`explore`, `parallel_explore`, `read_file`, `list_dir`, `run_command`, …)
 - `web_knowledge: true` and `report_issue: true` (the defaults for pipeline agents)
 - `output_type: RefineResult` and `retries: 2`

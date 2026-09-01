@@ -10,6 +10,12 @@ from robotsix_mill.agents.yaml_loader import AgentDefinition, load_agent_definit
 # ── helpers ──────────────────────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _openrouter_slot(fallback_slot_active):
+    """These tests capture agent assembly through the OpenRouter seam; arm
+    llmio's failover window so plain levels resolve the OpenRouter slot."""
+
+
 def _make_definition(**overrides) -> AgentDefinition:
     """Minimal valid AgentDefinition with *overrides* applied."""
     defaults: dict = {
@@ -98,7 +104,7 @@ def test_happy_path_passes_all_fields(monkeypatch):
     captured = _capture_build_agent_kwargs(monkeypatch)
     definition = _make_definition(
         name="refine",
-        level=4,
+        level=3,
         system_prompt="Refine tickets.",
         web_knowledge=True,
         report_issue=True,
@@ -114,7 +120,7 @@ def test_happy_path_passes_all_fields(monkeypatch):
 
     assert kwargs["name"] == "refine"
     assert kwargs["system_prompt"] == "Refine tickets."
-    assert kwargs["level"] == 4
+    assert kwargs["level"] == 3
     assert kwargs["web_knowledge"] is True
     assert kwargs["report_issue"] is True
     assert kwargs["retries"] == 3
@@ -144,8 +150,8 @@ def test_real_refine_yaml_builds(monkeypatch):
 
     assert kwargs["name"] == "refine"
     assert kwargs["system_prompt"] == definition.system_prompt
-    # refine runs on capability level 4 (Claude SDK opus).
-    assert kwargs["level"] == definition.level == 4
+    # refine runs on capability level 2 (the Claude SDK workhorse, opus).
+    assert kwargs["level"] == definition.level == 2
     assert kwargs["web_knowledge"] is True
     assert kwargs["report_issue"] is True
     assert kwargs["retries"] == 2

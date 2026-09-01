@@ -8,7 +8,7 @@ description: >-
 
 category: pipeline
 
-level: 2
+level: 1
 tools:
   - explore
   - read_file

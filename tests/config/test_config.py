@@ -64,7 +64,7 @@ def test_agent_levels_default_empty_and_validated():
 
     assert Settings().agent_levels == {}
     assert Settings(agent_levels={"implement": 3}).agent_levels == {"implement": 3}
-    with pytest.raises(ValueError, match=r"1\.\.5"):
+    with pytest.raises(ValueError, match=r"1\.\.3"):
         Settings(agent_levels={"implement": 6})
 
 

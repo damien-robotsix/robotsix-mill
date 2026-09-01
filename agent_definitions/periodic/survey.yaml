@@ -10,7 +10,7 @@ category: periodic
 interval: 14d
 enabled: true
 
-level: 2
+level: 1
 max_tokens: 50000
 
 tools:

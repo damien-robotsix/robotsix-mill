@@ -13,19 +13,42 @@ from robotsix_mill.stages import StageContext
 
 
 @pytest.fixture
-def level1_model() -> str:
-    """The level-1 model name, read from llmio's tier defaults.
+def level1_model(fallback_slot_active) -> str:
+    """The level-1 model name of the OpenRouter (fallback) slot.
 
-    Tests assert mill's *wiring* — that level 1 reaches the cheap tier — not
-    llmio's choice of slug. llmio re-pins the DeepSeek snapshot whenever
-    upstream reprices or retires one, and hardcoding the literal here turned
-    every such bump into a mill CI failure. Worse, when llmio briefly shipped
-    the unroutable ``deepseek/deepseek-v4-flash-latest``, these assertions were
-    updated to match it — so a green mill CI certified a slug OpenRouter 400s.
+    Tests using this fixture exercise mill's OpenRouter wiring, so it also
+    arms provider failover (via ``fallback_slot_active``) so level
+    resolution actually lands on the OpenRouter slot. The slug itself is
+    read from llmio's tier defaults, not hardcoded: llmio re-pins the
+    DeepSeek snapshot whenever upstream reprices or retires one, and
+    hardcoding the literal here turned every such bump into a mill CI
+    failure.
     """
     from robotsix_llmio.core.factory import default_tier_config
 
-    return default_tier_config().for_level(1).model_name
+    return default_tier_config().for_level(1, slot="fallback").model_name
+
+
+@pytest.fixture
+def fallback_slot_active():
+    """Arm llmio's failover window so levels resolve the OpenRouter slot.
+
+    The default slot is Claude-SDK-backed; tests that exercise mill's
+    OpenRouter paths at plain levels need the fallback slot active, exactly
+    as it is in production while provider failover is running.
+    """
+    from robotsix_llmio.core.failover import (
+        get_failover_tracker,
+        reset_failover_tracker,
+    )
+    from robotsix_llmio.exceptions import ProviderExhaustedError
+
+    reset_failover_tracker()
+    get_failover_tracker().record_failure(
+        "default", ProviderExhaustedError("test: default slot down")
+    )
+    yield
+    reset_failover_tracker()
 
 
 def _single(spec: str, file_map=None) -> RefineResult:

@@ -91,7 +91,7 @@ def test_triage_refine_agent_config(monkeypatch, tmp_path):
     assert seen_kwargs["web_knowledge"] is False
     assert seen_kwargs["report_issue"] is False
     assert (
-        seen_kwargs["level"] == 2
+        seen_kwargs["level"] == 1
     )  # triage.yaml level (haiku: subscription, not keyed)
     assert seen_kwargs["name"] == "triage"
     assert seen_kwargs["ask_user"] is False

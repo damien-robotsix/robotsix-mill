@@ -138,7 +138,7 @@ _TRANSIENT_MESSAGE_RE = [
 # comes back by itself at the stated reset, so this is a PARK (model-outage
 # shaped: infrastructure, retry budget untouched), never a BLOCK — and,
 # per the operator's cost preference, never a silent fallback onto a paid
-# OpenRouter tier unless ``claude_exhaustion_paid_fallback`` is on. Seen
+# OpenRouter provider slot unless ``provider_failover_enabled`` is on. Seen
 # 2026-08-29: 6 tickets BLOCKED "agent error — resumable: You've hit your
 # session limit" needing a manual resume after the window reset.
 _CLAUDE_USAGE_EXHAUSTED_RE = re.compile(

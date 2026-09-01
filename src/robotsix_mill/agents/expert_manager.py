@@ -107,7 +107,7 @@ class ExpertManager:
         The ``report_issue`` tool is always injected by ``build_agent``
         (default ``report_issue=True``).
 
-        Model: resolved from ``definition.level`` (default level 3).
+        Model: resolved from ``definition.level`` (default level 2).
 
         ``output_type`` — when non-None, forwarded to ``build_agent`` so
         the expert returns structured output (e.g. ``PromptedOutput

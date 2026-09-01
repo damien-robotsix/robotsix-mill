@@ -11,6 +11,12 @@ from robotsix_mill.agents.rebasing import RebaseResult, run_rebase_agent
 from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 
+@pytest.fixture(autouse=True)
+def _openrouter_slot(fallback_slot_active):
+    """These tests capture agent assembly through the OpenRouter seam; arm
+    llmio's failover window so plain levels resolve the OpenRouter slot."""
+
+
 def _s(tmp_path, **kw):
     kw.setdefault("OPENROUTER_API_KEY", "k")
     kw.setdefault("data_dir", str(tmp_path))

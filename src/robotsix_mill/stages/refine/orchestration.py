@@ -559,7 +559,7 @@ class RefineAgentMixin:
                     "refine.dynamic_limit_effective", request_limit_override
                 )
 
-            if resolved_level == 4:
+            if resolved_level == 2:
                 set_current_span_attribute(
                     "refine.model_alias", refine_model if refine_model else "opus"
                 )

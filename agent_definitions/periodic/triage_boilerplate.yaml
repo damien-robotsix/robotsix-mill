@@ -11,7 +11,7 @@ category: periodic
 interval: 14d
 enabled: true
 
-level: 4
+level: 2
 # Read-only tools for board review.
 tools:
   - explore

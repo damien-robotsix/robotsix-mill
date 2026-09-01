@@ -13,10 +13,19 @@ from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 def _settings(tmp_path, **env):
     env.setdefault("data_dir", str(tmp_path))
-    # The scout defaults to level 2 (Claude haiku); the tests below that
-    # patch ``pydantic_ai.Agent`` / ``build_openrouter_model`` exercise the
-    # OpenRouter path, so pin level 1 unless a test picks a tier itself.
-    env.setdefault("explore_model_level", 1)
+    # The scout defaults to level 1 on the Claude default slot; the tests
+    # below that patch ``pydantic_ai.Agent`` / ``build_openrouter_model``
+    # exercise the OpenRouter path, so when the test picks no level itself,
+    # arm llmio's failover window so level resolution lands on the
+    # OpenRouter slot (the root autouse fixture resets the tracker).
+    if "explore_model_level" not in env:
+        env["explore_model_level"] = 1
+        from robotsix_llmio.core.failover import get_failover_tracker
+        from robotsix_llmio.exceptions import ProviderExhaustedError
+
+        get_failover_tracker().record_failure(
+            "default", ProviderExhaustedError("test: exercise the OpenRouter path")
+        )
     # Mirror openrouter_api_key into Secrets so get_secrets() works
     key = env.get("OPENROUTER_API_KEY")
     if key is not None:
@@ -1227,10 +1236,10 @@ class TestExploreServedFiles:
 
 
 def test_explore_model_level_defaults_to_haiku_tier(tmp_path):
-    """Default tier is 2 — haiku on the Claude subscription, not paid flash."""
+    """Default level is 1 — haiku on the Claude subscription, not paid flash."""
     s = Settings(data_dir=str(tmp_path))
-    assert s.explore_model_level == 2
-    for bad in (0, 6):
+    assert s.explore_model_level == 1
+    for bad in (0, 4):
         with pytest.raises(ValidationError):
             Settings(data_dir=str(tmp_path), explore_model_level=bad)
 
@@ -1240,6 +1249,13 @@ def test_explore_openrouter_tier_uses_configured_level(tmp_path, monkeypatch):
     (the scout is no longer hard-wired to level 1)."""
     (tmp_path / "a.txt").write_text("hi")
     s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_model_level="3")
+    # Explicit level: arm the failover window so 3 resolves the OpenRouter slot.
+    from robotsix_llmio.core.failover import get_failover_tracker
+    from robotsix_llmio.exceptions import ProviderExhaustedError
+
+    get_failover_tracker().record_failure(
+        "default", ProviderExhaustedError("test: exercise the OpenRouter path")
+    )
     cap = {}
 
     from robotsix_mill.agents import base as bmod
@@ -1390,16 +1406,16 @@ def test_explore_claude_usage_exhausted_surfaces_without_paid_fallback(
 def test_explore_claude_usage_exhausted_falls_back_with_paid_flag(
     tmp_path, monkeypatch
 ):
-    """With ``claude_exhaustion_paid_fallback=true``, an exhausted Claude
-    explore call is rebuilt at the nearest keyed (non-Claude) level and
-    the same question is retried once — the caller gets a real answer."""
+    """With ``provider_failover_enabled=true``, an exhausted Claude explore
+    call arms llmio's failover window and is rebuilt at the SAME level on
+    the OpenRouter fallback slot — the caller gets a real answer."""
     from robotsix_llmio.claude_sdk._errors import ClaudeSDKUsageExhaustedError
 
     (tmp_path / "a.txt").write_text("hi")
     s = _settings(
         tmp_path,
         explore_model_level="2",
-        claude_exhaustion_paid_fallback=True,
+        provider_failover_enabled=True,
         OPENROUTER_API_KEY="fallback-key",
     )
 
@@ -1409,7 +1425,7 @@ def test_explore_claude_usage_exhausted_falls_back_with_paid_flag(
         monkeypatch, _FakeClaudeProvider(claude_cap, error=claude_err)
     )
 
-    # Level-1 (fallback) agent that succeeds.
+    # Fallback-slot agent (same level, OpenRouter provider) that succeeds.
     fallback_cap: dict = {}
 
     class FallbackAgent:
@@ -1441,8 +1457,8 @@ def test_explore_claude_usage_exhausted_falls_back_with_paid_flag(
         )
     )
     assert out == "fallback answer"
-    # The fallback was level 1 (nearest non-Claude).
-    assert fallback_cap["level"] == 1
+    # The fallback stayed at the SAME level — only the provider changed.
+    assert fallback_cap["level"] == 2
     assert fallback_cap["name"] == "explore"
     # The same question was forwarded (not simplified).
     assert "a test question long enough" in fallback_cap["prompt"]

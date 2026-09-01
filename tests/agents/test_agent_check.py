@@ -123,7 +123,7 @@ def test_agent_check_uses_normal_not_cheap_model():
     from robotsix_mill.agents.yaml_loader import load_agent_definition
 
     d = load_agent_definition(Path("agent_definitions/periodic/agent_check.yaml"))
-    assert d.level == 4
+    assert d.level == 2
 
 
 def test_agent_check_result_model():

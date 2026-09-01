@@ -596,7 +596,7 @@
             "type": "integer"
           },
           "advanced": true,
-          "description": "Per-stage llmio capability level (1-5) keyed by agent definition name; unset stages keep their YAML default.",
+          "description": "Per-stage llmio capability level (1-3) keyed by agent definition name; unset stages keep their YAML default.",
           "title": "Agent Levels",
           "type": "object"
         },
@@ -962,13 +962,6 @@
           "minimum": 0,
           "title": "Ci Transient Max Retries",
           "type": "integer"
-        },
-        "claude_exhaustion_paid_fallback": {
-          "advanced": true,
-          "default": false,
-          "description": "When a Claude-backed level reports usage exhaustion or an auth failure, rebuild the agent on the nearest keyed (paid) level instead of parking the ticket until the quota resets.",
-          "title": "Claude Exhaustion Paid Fallback",
-          "type": "boolean"
         },
         "claude_max_concurrency": {
           "advanced": true,
@@ -1451,9 +1444,9 @@
         },
         "explore_model_level": {
           "advanced": true,
-          "default": 2,
-          "description": "Capability tier for the exploration sub-agent (2 = haiku on the Claude subscription).",
-          "maximum": 5,
+          "default": 1,
+          "description": "Capability level for the exploration sub-agent (1 = haiku on the Claude subscription).",
+          "maximum": 3,
           "minimum": 1,
           "title": "Explore Model Level",
           "type": "integer"
@@ -2118,6 +2111,13 @@
           "title": "Prerequisite Gate Enabled",
           "type": "boolean"
         },
+        "provider_failover_enabled": {
+          "advanced": true,
+          "default": false,
+          "description": "Enable automatic provider failover: when the default (Anthropic) provider fails or is exhausted, rerun the SAME capability level on the paid OpenRouter fallback slot for llmio's failover window instead of parking the ticket until the quota resets.",
+          "title": "Provider Failover Enabled",
+          "type": "boolean"
+        },
         "prune_clone_on_close": {
           "advanced": true,
           "default": true,
@@ -2312,9 +2312,9 @@
         },
         "refine_trivial_model_level": {
           "advanced": true,
-          "default": 4,
-          "description": "Model level for trivial-scope refines (1=flash, 2=haiku, 3=mimo, 4=subscription).",
-          "maximum": 5,
+          "default": 2,
+          "description": "Model level for trivial-scope refines (1=haiku/flash, 2=opus/pro, 3=fable).",
+          "maximum": 3,
           "minimum": 1,
           "title": "Refine Trivial Model Level",
           "type": "integer"
@@ -3151,9 +3151,9 @@
         },
         "trace_review_model_level": {
           "advanced": true,
-          "default": 2,
-          "description": "Model tier for the trace inspector (1=flash, 2=haiku, 3=mimo, 4=opus).",
-          "maximum": 5,
+          "default": 1,
+          "description": "Model level for the trace inspector (1=haiku/flash, 2=opus/pro, 3=fable).",
+          "maximum": 3,
           "minimum": 1,
           "title": "Trace Review Model Level",
           "type": "integer"

@@ -27,7 +27,7 @@ class _DocRateLimitCeiling(Exception):
 
     Raised from inside the run callback so the shared ``run_agent`` retry
     machinery sees a non-transient, non-tier-unavailable error and re-raises
-    it immediately — no transient backoff, no tier fallback re-runs. The doc
+    it immediately — no transient backoff, no provider-failover re-runs. The doc
     run loop catches it and degrades to a recommendation-only deliverable
     instead of burning further cycles on a guaranteed-to-fail retry loop.
     """
@@ -328,7 +328,7 @@ def run_doc_agent(
                 return h.run_sync(run_user_prompt, **run_kwargs)
             except Exception as e:
                 # Convert a rate-limit ceiling into a sentinel BEFORE
-                # run_agent's transient-retry / tier-fallback machinery can
+                # run_agent's transient-retry / failover machinery can
                 # act on it — re-running the whole doc agent against a hit
                 # ceiling only burns more credits for the same failure.
                 if _is_rate_limit_ceiling(e):

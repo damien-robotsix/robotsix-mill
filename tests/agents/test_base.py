@@ -118,49 +118,50 @@ def test_safe_close_swallows_exceptions_from_close():
 
 
 def test_default_tier_config_maps_levels():
-    """Each capability level maps to the backend family mill's code assumes:
-    L1 → DeepSeek flash on OpenRouter, L2 → Xiaomi MiMo pro on OpenRouter,
-    L2 → Claude SDK haiku, L3 → OpenRouter deepseek-v4-pro, L4 → Claude SDK opus.
+    """Both provider slots map to the backend families mill's code assumes:
+    the default slot is entirely Claude SDK (haiku/opus/fable), the fallback
+    slot entirely OpenRouter DeepSeek (flash/flash/pro).
 
     Asserts the *provider* exactly and the model *family* by prefix, not the
     full slug. The exact slug is llmio's to choose — it re-pins the DeepSeek
     snapshot whenever upstream reprices or retires one — and mill has no
-    behaviour keyed to which snapshot is current. Pinning the literal here
-    only red-lit mill's CI on every llmio bump, and worse: this assertion
-    spent two days certifying ``deepseek/deepseek-v4-flash-latest``, a slug
-    OpenRouter 400s as "not a valid model ID".
+    behaviour keyed to which snapshot is current.
     """
     from robotsix_llmio.core.factory import default_tier_config
     from robotsix_llmio.core.identifier import parse_model_identifier
 
-    parsed1 = parse_model_identifier(default_tier_config().for_level(1).model)
-    assert parsed1.provider == "openrouter"
-    assert parsed1.model_name.startswith("deepseek/deepseek-v4-flash")
-
-    parsed2 = parse_model_identifier(default_tier_config().for_level(2).model)
-    assert parsed2.provider == "claudeSDK"
-
-    parsed3 = parse_model_identifier(default_tier_config().for_level(3).model)
-    assert parsed3.provider == "openrouter"
-    assert parsed3.model_name.startswith("deepseek/deepseek-v4-pro")
-
-    parsed4 = parse_model_identifier(default_tier_config().for_level(4).model)
-    assert parsed4.provider == "claudeSDK"
-
-    parsed5 = parse_model_identifier(default_tier_config().for_level(5).model)
-    assert parsed5.provider == "claudeSDK"
-    assert parsed4.model_name == "opus"
+    cfg = default_tier_config()
+    for level in (1, 2, 3):
+        assert (
+            parse_model_identifier(cfg.for_level(level, slot="default").model).provider
+            == "claudeSDK"
+        )
+        assert (
+            parse_model_identifier(cfg.for_level(level, slot="fallback").model).provider
+            == "openrouter"
+        )
+    assert cfg.for_level(2, slot="default").model_name == "opus"
+    fb3 = cfg.for_level(3, slot="fallback").model_name
+    assert fb3.startswith("deepseek/deepseek-v4-pro")
 
 
-def test_level_uses_claude_only_for_claude_sdk_levels():
-    """level_uses_claude is True only for the Claude-SDK tiers (L2/L4/L5)."""
+def test_level_uses_claude_follows_active_slot(fallback_slot_active):
+    """level_uses_claude reflects the ACTIVE slot: with failover armed every
+    level resolves the OpenRouter fallback slot."""
     from robotsix_mill.agents.base import level_uses_claude
 
-    assert level_uses_claude(2) is True
-    assert level_uses_claude(4) is True
-    assert level_uses_claude(5) is True
     assert level_uses_claude(1) is False
+    assert level_uses_claude(2) is False
     assert level_uses_claude(3) is False
+
+
+def test_level_uses_claude_default_slot():
+    """Without failover armed, every level is Claude-SDK-backed."""
+    from robotsix_mill.agents.base import level_uses_claude
+
+    assert level_uses_claude(1) is True
+    assert level_uses_claude(2) is True
+    assert level_uses_claude(3) is True
 
 
 # ---------------------------------------------------------------------------
@@ -318,8 +319,10 @@ def test_build_agent_resolves_level_1_to_flash(monkeypatch, settings, level1_mod
     assert captured_kwargs[0]["effective_model"] == level1_model
 
 
-def test_build_agent_resolves_level_3_to_pro(monkeypatch, settings):
-    """build_agent level 2 (the default) resolves to the concrete pro model."""
+def test_build_agent_resolves_level_3_to_pro(
+    monkeypatch, settings, fallback_slot_active
+):
+    """build_agent level 3 on the fallback slot resolves the pro model."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
 
@@ -349,7 +352,9 @@ def test_build_agent_resolves_level_3_to_pro(monkeypatch, settings):
     assert captured_kwargs[0]["effective_model"] == "deepseek/deepseek-v4-pro-0813"
 
 
-def test_build_agent_injects_report_issue_tool_by_default(monkeypatch, settings):
+def test_build_agent_injects_report_issue_tool_by_default(
+    monkeypatch, settings, fallback_slot_active
+):
     """When report_issue=True (default), the report_issue tool is appended."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
@@ -381,7 +386,9 @@ def test_build_agent_injects_report_issue_tool_by_default(monkeypatch, settings)
     assert len(captured_tools[0]) >= 2
 
 
-def test_build_agent_report_issue_false_omits_tool(monkeypatch, settings):
+def test_build_agent_report_issue_false_omits_tool(
+    monkeypatch, settings, fallback_slot_active
+):
     """When report_issue=False, only the explicit tools are passed."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
@@ -418,7 +425,7 @@ def test_build_agent_report_issue_false_omits_tool(monkeypatch, settings):
     assert captured_tools[0] == [explicit_tool]
 
 
-def test_build_agent_composes_prompt(monkeypatch, settings):
+def test_build_agent_composes_prompt(monkeypatch, settings, fallback_slot_active):
     """build_agent calls compose_prompt with the right arguments."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import Secrets, _reset_secrets
@@ -462,7 +469,9 @@ def test_build_agent_composes_prompt(monkeypatch, settings):
     assert captured_compose[0]["workflows"] is False
 
 
-def test_build_agent_unregistered_tool_in_prompt_raises(monkeypatch, settings):
+def test_build_agent_unregistered_tool_in_prompt_raises(
+    monkeypatch, settings, fallback_slot_active
+):
     """When the composed prompt references a tool not in the agent's
     tool set, build_agent raises ValueError."""
     from robotsix_mill.agents import base as bmod
@@ -507,9 +516,11 @@ def test_build_agent_unregistered_tool_in_prompt_raises(monkeypatch, settings):
         ToolRegistry._tools.update(saved_tools)
 
 
-def test_build_agent_missing_api_key_raises(monkeypatch, settings):
+def test_build_agent_missing_api_key_raises(
+    monkeypatch, settings, fallback_slot_active
+):
     """When OPENROUTER_API_KEY is not set, build_agent raises RuntimeError
-    on the DeepSeek path."""
+    on the OpenRouter (fallback-slot) path."""
     from robotsix_mill.agents import base as bmod
     from robotsix_mill.config import _reset_secrets
 
@@ -530,8 +541,8 @@ def test_build_agent_missing_api_key_raises(monkeypatch, settings):
 
 
 def test_build_agent_claude_sdk_path(monkeypatch):
-    """When the resolved transport is the Claude SDK (level 3), build_agent
-    delegates to robotsix-llmio's ClaudeSDKProvider via get_provider_for_level."""
+    """When the resolved transport is the Claude SDK (the default slot),
+    build_agent delegates to robotsix-llmio's ClaudeSDKProvider."""
     from robotsix_llmio.claude_sdk.provider import (
         ClaudeSDKProvider as RealClaudeSDKProvider,
     )
@@ -548,25 +559,24 @@ def test_build_agent_claude_sdk_path(monkeypatch):
     fake_provider = MagicMock(spec=RealClaudeSDKProvider)
     fake_provider.build_agent.return_value = fake_claude_handle
 
-    # Mock get_provider_for_level so the Claude path receives our fake.
+    # Mock the identifier factory so the Claude path receives our fake.
     monkeypatch.setattr(
-        "robotsix_llmio.core.factory.get_provider_for_level",
-        lambda level, tier_config=None, **kwargs: fake_provider,
+        "robotsix_llmio.core.factory.get_provider_for_identifier",
+        lambda identifier, **kwargs: fake_provider,
     )
 
     result = bmod.build_agent(
         s,
         system_prompt="Test prompt.",
-        level=4,  # level 4 resolves to the Claude SDK transport
+        level=2,  # default slot → Claude SDK transport
         name="claude-agent",
         tools=[],
     )
 
     # The provider handle is returned as-is (no concurrency wrapper).
     assert result is fake_claude_handle
-    # build_agent was called on the provider with level=3.
     fake_provider.build_agent.assert_called_once()
-    assert fake_provider.build_agent.call_args.kwargs["level"] == 4
+    assert fake_provider.build_agent.call_args.kwargs["level"] == 2
     assert fake_provider.build_agent.call_args.kwargs["system_prompt"] == "test prompt"
 
 
@@ -671,7 +681,9 @@ def test_build_openrouter_handle_with_max_tokens(monkeypatch, settings):
     assert agent_kwargs["model_settings"]["max_tokens"] == 4096
 
 
-def test_build_openrouter_handle_requires_api_key(monkeypatch, settings):
+def test_build_openrouter_handle_requires_api_key(
+    monkeypatch, settings, fallback_slot_active
+):
     """_build_openrouter_handle raises RuntimeError when no API key is set —
     new_openrouter_model guards on the key."""
     from robotsix_mill.agents import base as bmod
