@@ -155,23 +155,6 @@ class RefineAgentMixin:
         """Delegate to :func:`_checkpoint.clear_refine_checkpoint`."""
         return _checkpoint.clear_refine_checkpoint(ws)
 
-    @staticmethod
-    def _triage_skip(
-        ctx: StageContext,
-        ticket: Ticket,
-        draft: str,
-        repo_dir: Path | None,
-        extra_roots: list[Path] | None,
-        title: str,
-        ws: Workspace,
-        s: Settings,
-        reviewer_comments: str | None,
-    ) -> Outcome | None:
-        """Delegate to :func:`_triage.triage_skip`."""
-        return _triage.triage_skip(
-            ctx, ticket, draft, repo_dir, extra_roots, title, ws, s, reviewer_comments
-        )
-
     # -- main orchestrator --------------------------------------------------
 
     @staticmethod
@@ -207,39 +190,14 @@ class RefineAgentMixin:
             and _triage.is_sendback_reentry(ctx.service, ticket.id)
         )
 
-        if not _is_delta_reuse:
-            outcome = cast(
-                Outcome | None,
-                _reconcile.reviewer_agreement_guard(
-                    ctx, ticket, draft, ws, s, reviewer_comments
-                ),
-            )
-            if outcome is not None:
-                return outcome
+        # Reviewer-agreement and triage-skip are now handled by the
+        # pre-refine classifier in core.py — no separate LLM calls here.
 
         outcome = _triage.split_child_fast_path(
             ctx, ticket, draft, ws, reviewer_comments
         )
         if outcome is not None:
             return outcome
-
-        if (
-            not _is_delta_reuse
-            and not (ws.artifacts_dir / "triage_complexity.json").exists()
-        ):
-            outcome = _triage.triage_skip(
-                ctx,
-                ticket,
-                draft,
-                repo_dir,
-                extra_roots,
-                title,
-                ws,
-                s,
-                reviewer_comments,
-            )
-            if outcome is not None:
-                return outcome
 
         outcome = cast(
             Outcome | None,

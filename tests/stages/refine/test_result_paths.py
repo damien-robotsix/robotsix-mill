@@ -106,7 +106,7 @@ class TestResolvedOutcome:
         """When _resolve_next_state returns no auto_note, only base_note is used."""
         ctx = ctx_factory()
 
-        def _fake_resolve(ctx, spec, ticket_id, *, source=None, triage_note=None):
+        def _fake_resolve(ctx, spec, ticket_id, *, source=None, triage_note=None, **kw):
             return (State.READY, None)
 
         monkeypatch.setattr(_result_paths, "_resolve_next_state", _fake_resolve)
@@ -122,7 +122,7 @@ class TestResolvedOutcome:
         """auto_note is appended with ' | ' separator."""
         ctx = ctx_factory()
 
-        def _fake_resolve(ctx, spec, ticket_id, *, source=None, triage_note=None):
+        def _fake_resolve(ctx, spec, ticket_id, *, source=None, triage_note=None, **kw):
             return (State.HUMAN_ISSUE_APPROVAL, "gated: design decision")
 
         monkeypatch.setattr(_result_paths, "_resolve_next_state", _fake_resolve)
@@ -139,7 +139,7 @@ class TestResolvedOutcome:
         ctx = ctx_factory()
         captured: dict = {}
 
-        def _fake_resolve(ctx, spec, ticket_id, *, source=None, triage_note=None):
+        def _fake_resolve(ctx, spec, ticket_id, *, source=None, triage_note=None, **kw):
             captured["source"] = source
             captured["triage_note"] = triage_note
             return (State.READY, None)
@@ -548,7 +548,7 @@ class TestNoChangePath:
         monkeypatch.setattr(
             _result_paths,
             "_resolve_next_state",
-            lambda ctx, spec, tid, *, source=None, triage_note=None: (
+            lambda ctx, spec, tid, *, source=None, triage_note=None, **kw: (
                 State.READY,
                 None,
             ),
@@ -851,7 +851,7 @@ class TestSingleScopePath:
         monkeypatch.setattr(
             _result_paths,
             "_resolve_next_state",
-            lambda ctx, spec, tid, *, source=None, triage_note=None: (
+            lambda ctx, spec, tid, *, source=None, triage_note=None, **kw: (
                 State.READY,
                 None,
             ),
@@ -894,7 +894,7 @@ class TestSingleScopePath:
         monkeypatch.setattr(
             _result_paths,
             "_resolve_next_state",
-            lambda ctx, spec, tid, *, source=None, triage_note=None: (
+            lambda ctx, spec, tid, *, source=None, triage_note=None, **kw: (
                 State.READY,
                 None,
             ),
@@ -1085,17 +1085,18 @@ class TestSingleScopePath:
         monkeypatch.setattr(
             _result_paths,
             "_resolve_next_state",
-            lambda ctx, spec, tid, *, source=None, triage_note=None: (
+            lambda ctx, spec, tid, *, source=None, triage_note=None, **kw: (
                 State.READY,
                 None,
             ),
         )
-        # Mock review_spec_conciseness to return concise
+        # Mock the combined post-refine check (replaces the legacy
+        # review_spec_conciseness call) to return the concise spec.
         review_called: list = []
         monkeypatch.setattr(
             _result_paths,
-            "review_spec_conciseness",
-            lambda s, ws, ticket, spec, vfn, child_index=None: (
+            "_run_post_refine_check",
+            lambda ctx, ticket, spec, ws, s, reviewer_comments, **kw: (
                 review_called.append(spec) or _CONCISE_SPEC
             ),
         )
@@ -1132,7 +1133,7 @@ class TestSingleScopePath:
         monkeypatch.setattr(
             _result_paths,
             "_resolve_next_state",
-            lambda ctx, spec, tid, *, source=None, triage_note=None: (
+            lambda ctx, spec, tid, *, source=None, triage_note=None, **kw: (
                 State.READY,
                 None,
             ),
@@ -1188,7 +1189,7 @@ class TestMultiScopePath:
         monkeypatch.setattr(
             _result_paths,
             "_resolve_next_state",
-            lambda ctx, spec, tid, *, source=None, triage_note=None: (
+            lambda ctx, spec, tid, *, source=None, triage_note=None, **kw: (
                 State.READY,
                 None,
             ),
@@ -1229,7 +1230,7 @@ class TestMultiScopePath:
         monkeypatch.setattr(
             _result_paths,
             "_resolve_next_state",
-            lambda ctx, spec, tid, *, source=None, triage_note=None: (
+            lambda ctx, spec, tid, *, source=None, triage_note=None, **kw: (
                 State.READY,
                 None,
             ),
@@ -1271,7 +1272,7 @@ class TestMultiScopePath:
         monkeypatch.setattr(
             _result_paths,
             "_resolve_next_state",
-            lambda ctx, spec, tid, *, source=None, triage_note=None: (
+            lambda ctx, spec, tid, *, source=None, triage_note=None, **kw: (
                 State.READY,
                 None,
             ),
@@ -1316,7 +1317,7 @@ class TestMultiScopePath:
         monkeypatch.setattr(
             _result_paths,
             "_resolve_next_state",
-            lambda ctx, spec, tid, *, source=None, triage_note=None: (
+            lambda ctx, spec, tid, *, source=None, triage_note=None, **kw: (
                 State.READY,
                 None,
             ),
@@ -1366,7 +1367,7 @@ class TestMultiScopePath:
         monkeypatch.setattr(
             _result_paths,
             "_resolve_next_state",
-            lambda ctx, spec, tid, *, source=None, triage_note=None: (
+            lambda ctx, spec, tid, *, source=None, triage_note=None, **kw: (
                 State.READY,
                 None,
             ),
@@ -1414,7 +1415,7 @@ class TestMultiScopePath:
         monkeypatch.setattr(
             _result_paths,
             "_resolve_next_state",
-            lambda ctx, spec, tid, *, source=None, triage_note=None: (
+            lambda ctx, spec, tid, *, source=None, triage_note=None, **kw: (
                 State.READY,
                 None,
             ),
@@ -1494,7 +1495,7 @@ class TestMultiScopePath:
         monkeypatch.setattr(
             _result_paths,
             "_resolve_next_state",
-            lambda ctx, spec, tid, *, source=None, triage_note=None: (
+            lambda ctx, spec, tid, *, source=None, triage_note=None, **kw: (
                 State.READY,
                 None,
             ),
@@ -1507,9 +1508,9 @@ class TestMultiScopePath:
         review_calls: list = []
         monkeypatch.setattr(
             _result_paths,
-            "review_spec_conciseness",
-            lambda s, ws, ticket, spec, vfn, child_index=None: (
-                review_calls.append(child_index) or _CONCISE_SPEC
+            "_run_post_refine_check",
+            lambda ctx, ticket, spec, ws, s, reviewer_comments, **kw: (
+                review_calls.append(spec) or _CONCISE_SPEC
             ),
         )
 
@@ -1526,4 +1527,4 @@ class TestMultiScopePath:
         )
 
         assert len(review_calls) == 2
-        assert review_calls == [1, 2]
+        assert review_calls == [_REAL_SPEC, _REAL_SPEC]

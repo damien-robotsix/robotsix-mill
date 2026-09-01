@@ -848,6 +848,7 @@ def _resolve_next_state(
     source: str | None = None,
     *,
     triage_note: str | None = None,
+    _ws: object | None = None,
 ) -> tuple[State, str | None]:
     """Return (next_state, auto_approve_note_or_None).
 
@@ -856,6 +857,11 @@ def _resolve_next_state(
     decision found), HUMAN_ISSUE_APPROVAL otherwise (or on error).
     Empty/whitespace specs skip the triage entirely and go to
     HUMAN_ISSUE_APPROVAL when gated, mirroring the original behaviour.
+
+    When the post-refine check has written a
+    ``post_refine_auto_approve.json`` artifact (via
+    ``_result_paths._run_post_refine_check``), reads the decision from
+    there instead of making a separate LLM call.
 
     Test-gap tickets (``source == "test_gap"``) auto-approve
     deterministically — they only add test coverage with no
@@ -875,38 +881,8 @@ def _resolve_next_state(
         return State.READY, None
     if _spec_is_degenerate(spec):
         return State.BLOCKED, "refine produced no spec"
-    # Auto-approve is always-on: a cheap LLM triage call inspects the
-    # refined spec and skips the human gate for obviously-safe changes.
     # Deterministic auto-approve for sources whose drafts are
-    # internal-only by construction: they're proposed by mill's own
-    # periodic agents (audit, agent_check, bc_check, …) whose scope
-    # is dead-code removal, prompt updates, memory ledger structure,
-    # config cleanup, docstring additions — no behavioural risk a
-    # human reviewer can meaningfully veto. test_gap (the original
-    # rule in 28a6b02) joins the same family. Three rounds of
-    # rubber-stamping all 21+ tickets from these sources without
-    # rejection (see 09cc) made the LLM hop pure toil.
-    # A matched pattern DOWNGRADES to the LLM classifier — it does not
-    # decide by itself.
-    #
-    # These patterns are substrings of free-form LLM prose, and the same
-    # phrase carries opposite meanings depending on what it refers to:
-    #
-    #   "Grounding is confirmed — the source file exists, the test file
-    #    does not exist"            → healthy: that's the work to do
-    #   "'mail-ingester' does not exist anywhere in this repository"
-    #                               → genuinely ungrounded
-    #
-    # Deciding on the substring alone rejected the first kind too. Live,
-    # that parked healthy tickets in HUMAN_ISSUE_APPROVAL — a state with
-    # no automated stage, which nothing ever closes — and they piled up
-    # for days (verified false positives: a test-coverage ticket whose
-    # target module exists, a devcontainer fix rejected over an unrelated
-    # footnote, a NO_CHANGE audit describing its desired end state).
-    #
-    # So a match now only means "suspicious — do not take the
-    # deterministic auto-approve shortcut". The classifier below reads
-    # the actual spec and can tell the two cases apart.
+    # internal-only by construction.
     suspicious = False
     if triage_note:
         triage_lower = triage_note.lower()
@@ -927,6 +903,35 @@ def _resolve_next_state(
                 f"from triage: {triage_note}"
             ),
         )
+
+    # Check for post-refine auto-approve artifact (written by
+    # _result_paths._run_post_refine_check).
+    import json as _json
+    from pathlib import Path as _Path
+
+    if _ws is not None:
+        artifact_path = getattr(_ws, "artifacts_dir", None)
+        if artifact_path is not None:
+            auto_approve_path = _Path(artifact_path) / "post_refine_auto_approve.json"
+            if auto_approve_path.exists():
+                try:
+                    data = _json.loads(auto_approve_path.read_text(encoding="utf-8"))
+                    decision = data.get("decision", "NEEDS_APPROVAL")
+                    reason = data.get("reason", "")
+                    if decision == "APPROVE":
+                        return State.READY, f"auto-approve: APPROVE — {reason}"
+                    return (
+                        State.HUMAN_ISSUE_APPROVAL,
+                        f"auto-approve: NEEDS_APPROVAL — {reason}",
+                    )
+                except Exception:
+                    log.warning(
+                        "post_refine_auto_approve.json unreadable, falling back to LLM",
+                        exc_info=True,
+                    )
+
+    # Fallback: legacy LLM call (for paths that don't go through
+    # the post-refine check, e.g. multi-scope split children).
     try:
         result = refining.triage_auto_approve(
             settings=ctx.settings,
@@ -934,8 +939,6 @@ def _resolve_next_state(
         )
         if result.decision == "APPROVE":
             return State.READY, f"auto-approve: APPROVE — {result.reason}"
-        # NEEDS_APPROVAL — return the reason as a structured history
-        # note (no side-effect comment; this is the sole surface).
         return (
             State.HUMAN_ISSUE_APPROVAL,
             f"auto-approve: NEEDS_APPROVAL — {result.reason}",
@@ -943,13 +946,6 @@ def _resolve_next_state(
     except Exception as exc:
         from ...runtime.transient_errors import is_model_unavailable_error
 
-        # A model outage (provider "unavailable"/overloaded, Claude quota
-        # exhaustion) is infrastructure: the same call succeeds once the
-        # model is back. Surface it so the worker PARKS the ticket (retry
-        # budget untouched) instead of parking the human — a refine re-run
-        # is served from the stage cache. Anything else (malformed
-        # structured output after retries, a genuine 4xx) still degrades
-        # to the gate, since no amount of waiting fixes it.
         if is_model_unavailable_error(exc):
             raise
         log.warning(

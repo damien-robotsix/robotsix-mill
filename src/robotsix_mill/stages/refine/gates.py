@@ -26,7 +26,10 @@ from ._gates_dedup import (
     _run_inflight_advisory,
     _verify_advisory_dedup,
 )
+from ._triage import is_sendback_reentry
 from .helpers import (
+    DEDUP_ALREADY_DONE_PREFIX,
+    DEDUP_DUPLICATE_PREFIX,
     FRESHNESS_STALE_PREFIX,
     OBSOLESCENCE_GAP_PREFIX,
     SCOPE_TRIAGE_REPO_AWARENESS_GATE_PREFIX,
@@ -392,95 +395,6 @@ class RefineGatesMixin:
         return None
 
     @staticmethod
-    def _run_standards_gate(
-        ctx: StageContext,
-        ticket: Ticket,
-        draft: str,
-        title: str,
-        s: Settings,
-    ) -> Outcome | None:
-        """Run the LLM-based fleet-standards gate (best-effort).
-
-        For repos that follow robotsix-standards
-        (:meth:`RepoConfig.follows_robotsix_standards`), a single cheap
-        LLM call judges whether the draft's GOAL conflicts with an
-        explicit standards prohibition — e.g. "publish @robotsix/ui to
-        npm" against distribution-packaging.md's no-registry rule.  A
-        clear violation is short-circuited to ``DONE`` with the citation
-        before any refine LLM budget is spent.
-
-        Returns ``None`` (proceed) when the gate is disabled, the repo
-        does not follow the standards, the draft is trivial or
-        user-authored, the check fails, or no violation is found.
-        User-authored drafts reflect deliberate human intent and are
-        never auto-closed — the operator can consciously depart from a
-        standard; the gate targets the agent-spawned drafts
-        (retrospect, trace-review, chat) that propose off-standards
-        work nobody asked for.
-        """
-        if not s.standards_gate_enabled:
-            return None
-
-        repo_config = ctx.repo_config
-        if repo_config is None or not repo_config.follows_robotsix_standards():
-            return None
-
-        if not draft or len(draft) < 50:
-            log.debug(
-                "%s: trivial draft (%d chars), skipping standards gate",
-                ticket.id,
-                len(draft or ""),
-            )
-            return None
-
-        if ticket.source == SourceKind.USER:
-            log.debug(
-                "%s: user-authored draft, skipping standards gate",
-                ticket.id,
-            )
-            return None
-
-        from ...agents import standards_gate
-
-        try:
-            result = standards_gate.run_standards_gate_check(
-                settings=s,
-                draft_title=title,
-                draft_body=draft,
-            )
-        except Exception:
-            log.warning(
-                "%s: standards gate check failed, proceeding with refine",
-                ticket.id,
-                exc_info=True,
-            )
-            return None
-
-        if result.get("violates"):
-            standard = result.get("standard", "robotsix-standards")
-            reason = result.get("reason", "draft goal violates a fleet standard")
-            log.info(
-                "%s: standards gate flagged violation of %s — %s",
-                ticket.id,
-                standard,
-                reason,
-            )
-            # Discarded drafts go to DONE so retrospect still analyses
-            # them — same pattern as the freshness/dedup/obsolescence
-            # gates.
-            return Outcome(
-                State.DONE,
-                f"{STANDARDS_GATE_PREFIX} draft conflicts with {standard} — {reason}",
-            )
-
-        log.debug(
-            "%s: standards gate passed — %s",
-            ticket.id,
-            result.get("reason", ""),
-        )
-        return None
-
-    @staticmethod
     def _run_doc_only_gate(
         ctx: StageContext,
         ticket: Ticket,
@@ -515,3 +429,329 @@ class RefineGatesMixin:
             State.READY,
             "Documentation-only change; no code review needed",
         )
+
+    @staticmethod
+    def _run_pre_refine_classifier(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        repo_dir: Path | None,
+        extra_roots: list[Path] | None,
+        title: str,
+        ws: Workspace,
+        s: Settings,
+        reviewer_comments: str | None,
+    ) -> Outcome | None:
+        """Run the combined pre-refine classifier (single LLM call).
+
+        Replaces the serial standards_gate + triage + dedup calls with
+        a single structured-output LLM call.  Returns an :class:`Outcome`
+        to short-circuit, or ``None`` to fall through to the refine agent.
+
+        The classifier returns:
+        - standards_violation: if True, short-circuit to DONE
+        - triage_decision: SKIP/NO_CHANGE/REFINE/MIGRATE
+        - duplicate_of/already_done: if set, short-circuit to DONE
+        - complexity/trivial_scope: persisted for the refine agent
+        """
+        from ...agents.pre_refine_classifier import run_pre_refine_classifier
+        from ...agents.refine_triage import TriageResult
+        from ...agents.standards import fetch_standards_context
+        from . import _reconcile
+
+        # LLM-free deterministic pre-checks (doc-only draft, prior
+        # triage-SKIP verdict, prescriptive code-complete spec) — same
+        # gating as the legacy triage: only for enabled triage and no
+        # reviewer sendback (human-flagged changes always refine).
+        from ._triage import deterministic_triage_pre_checks
+
+        if s.refine_triage_enabled and not reviewer_comments:
+            outcome = deterministic_triage_pre_checks(ctx, ticket, draft, ws, s)
+            if outcome is not None:
+                return outcome
+
+        # Honor the legacy config gates for the reviewer-agreement guard:
+        # it can be disabled outright, and a delta-reuse sendback must
+        # reach the delta refine pass instead of being short-circuited —
+        # in either case the classifier is not asked to assess agreement.
+        _reviewer_agreement_active = s.reviewer_agreement_gate_enabled and not (
+            s.refine_delta_reuse_enabled and is_sendback_reentry(ctx.service, ticket.id)
+        )
+
+        if reviewer_comments and not _reviewer_agreement_active:
+            # Delta-reuse sendback (or agreement gate disabled): every
+            # verdict the classifier could produce is unusable here —
+            # triage decisions are gated off by the sendback, dedup by
+            # the operator-iteration guard, and the agreement
+            # short-circuit is inactive.  Skip the LLM call and proceed
+            # straight to the (delta) refine pass.
+            return None
+
+        # Gather standards context (best-effort).  The same conditions
+        # gate the violation short-circuit below: a repo that opted out,
+        # a user-authored draft, or a disabled gate must never be
+        # standards-blocked, even if the classifier claims a violation.
+        standards_ctx = ""
+        repo_config = ctx.repo_config
+        standards_gate_active = (
+            s.standards_gate_enabled
+            and repo_config is not None
+            and repo_config.follows_robotsix_standards()
+            and ticket.source != SourceKind.USER
+            and bool(draft)
+            and len(draft) >= 50
+        )
+        if standards_gate_active:
+            standards_ctx = fetch_standards_context(s)
+
+        # Operator-iteration guard: if a human has sent this ticket back
+        # with "changes requested" feedback, they are actively shaping it —
+        # do NOT let dedup auto-close it as a duplicate/already-done (that
+        # discards their intent; see the auto-mail board-columns incident).
+        from .helpers import OPERATOR_SENDBACK_PREFIX
+
+        operator_iterating = False
+        try:
+            operator_iterating = any(
+                ev.note and ev.note.startswith(OPERATOR_SENDBACK_PREFIX)
+                for ev in ctx.service.history(ticket.id)  # type: ignore[attr-defined]
+            )
+        except Exception:
+            log.debug("%s: dedup sendback-check skipped", ticket.id, exc_info=True)
+
+        # Gather dedup candidates (reusing existing logic).
+        candidates_json = ""
+        if len(draft) >= 100 and not operator_iterating:
+            try:
+                from datetime import UTC, datetime
+
+                from ...agents import dedup
+                from ...core.datetime_utils import _as_utc
+                from .helpers import _build_candidates_block
+
+                all_tickets = ctx.service.list()
+                now = datetime.now(UTC)
+                lookback_cutoff = datetime.fromtimestamp(
+                    now.timestamp() - s.dedup_lookback_days * 86400, tz=UTC
+                )
+                non_terminal = {State.CLOSED, State.ERRORED}
+                candidates = [
+                    t
+                    for t in all_tickets
+                    if t.id != ticket.id
+                    and (
+                        t.state not in non_terminal
+                        or (
+                            t.state == State.CLOSED
+                            and _as_utc(t.updated_at) >= lookback_cutoff
+                        )
+                    )
+                ]
+                if ticket.parent_id is not None:
+                    candidates = [
+                        t
+                        for t in candidates
+                        if t.parent_id == ticket.parent_id
+                        or t.id == ticket.parent_id
+                        or t.parent_id is None
+                        or t.state == State.CLOSED
+                    ]
+                from ...core.models import TicketKind
+
+                candidates = [
+                    t
+                    for t in candidates
+                    if t.kind != TicketKind.EPIC or t.id == ticket.parent_id
+                ]
+                candidates = dedup.rank_candidates_by_similarity(
+                    draft_title=ticket.title,
+                    draft_body=draft,
+                    candidates=candidates,
+                    max_candidates=s.dedup_max_candidates,
+                )
+                # Zero-overlap short-circuit (legacy dedup_skip_on_no_overlap):
+                # when no candidate shares a meaningful token with the
+                # draft, none can plausibly be a duplicate — leave the
+                # candidates block empty so no dedup work reaches the LLM.
+                if candidates and s.dedup_skip_on_no_overlap:
+                    candidate_texts: list[str] = []
+                    for t in candidates:
+                        try:
+                            body = ctx.service.workspace(t).read_description()
+                        except Exception:
+                            body = ""
+                        candidate_texts.append(f"{t.title} {body}")
+                    if not dedup.any_candidate_overlap(
+                        draft_title=ticket.title,
+                        draft_body=draft,
+                        candidates_texts=candidate_texts,
+                    ):
+                        log.debug(
+                            "%s: no candidate token overlap (%d candidates) — skipping dedup LLM call",
+                            ticket.id,
+                            len(candidates),
+                        )
+                        candidates = []
+                if candidates:
+                    candidates_json = _build_candidates_block(candidates, ctx)
+            except Exception:
+                log.debug(
+                    "%s: dedup candidate gathering failed, proceeding without candidates",
+                    ticket.id,
+                    exc_info=True,
+                )
+
+        # Run the combined classifier.
+        result = run_pre_refine_classifier(
+            settings=s,
+            title=title,
+            draft=draft,
+            standards_context=standards_ctx,
+            candidates_json=candidates_json,
+            reviewer_comments=reviewer_comments,
+        )
+
+        # --- Handle reviewer agreement (pre-refine short-circuit) ---
+        if (
+            reviewer_comments
+            and result.reviewer_agreement is not None
+            and _reviewer_agreement_active
+        ):
+            agreement = result.reviewer_agreement
+            agreement_reason = result.reviewer_agreement_reason or ""
+            short = agreement_reason[:400] + (
+                "…" if len(agreement_reason) > 400 else ""
+            )
+
+            if agreement == "AGREE":
+                # Reviewer confirms the draft's conclusion.
+                from ...core.models import TicketKind
+
+                if ticket.kind == TicketKind.TASK and not ticket.branch:
+                    (ws.artifacts_dir / "draft-original.md").write_text(
+                        draft if draft else "(title-only ticket, no body provided)",
+                        encoding="utf-8",
+                    )
+                    _reconcile.write_file_map(ws, [], only_if_absent=True)
+                    from . import _result_paths
+
+                    return _result_paths.resolved_outcome(
+                        ctx,
+                        draft,
+                        ticket.id,
+                        f"reviewer agreement — routing to implement: {short}",
+                        source=ticket.source,
+                    )
+                return Outcome(
+                    State.DONE,
+                    f"reviewer agreement — no change needed: {short}",
+                )
+
+            if agreement == "ADMIN_ONLY":
+                (ws.artifacts_dir / "draft-original.md").write_text(
+                    draft if draft else "(title-only ticket, no body provided)",
+                    encoding="utf-8",
+                )
+                _reconcile.write_file_map(ws, [], only_if_absent=True)
+                from . import _result_paths
+
+                return _result_paths.resolved_outcome(
+                    ctx,
+                    draft,
+                    ticket.id,
+                    f"reviewer agreement — administrative feedback, routing to implement: {short}",
+                    source=ticket.source,
+                )
+            # DISAGREE — fall through to the refine agent.
+
+        # --- Handle standards violation ---
+        if result.standards_violation and standards_gate_active:
+            standard = result.standards_standard or "robotsix-standards"
+            reason = result.standards_reason or "draft goal violates a fleet standard"
+            log.info(
+                "%s: pre-refine classifier flagged standards violation of %s — %s",
+                ticket.id,
+                standard,
+                reason,
+            )
+            return Outcome(
+                State.DONE,
+                f"{STANDARDS_GATE_PREFIX} draft conflicts with {standard} — {reason}",
+            )
+
+        # --- Handle dedup ---
+        dup_id = None if operator_iterating else result.duplicate_of
+        if dup_id:
+            from ._gates_dedup import _is_valid_dedup_target
+
+            if _is_valid_dedup_target(ctx, ticket, dup_id, repo_dir, draft=draft):
+                return Outcome(
+                    State.DONE,
+                    f"{DEDUP_DUPLICATE_PREFIX}{dup_id}: {result.dedup_reason}",
+                )
+            log.info(
+                "%s: pre-refine classifier named duplicate_of=%s but it is not a valid target — proceeding",
+                ticket.id,
+                dup_id,
+            )
+        done_id = None if operator_iterating else result.already_done
+        if done_id:
+            from ...core.dedup import _extract_paths
+            from ._gates_dedup import _is_valid_dedup_target
+            from .helpers import verify_claim
+
+            reason_text = result.dedup_reason
+            draft_paths = _extract_paths(draft)
+            if (
+                draft_paths
+                and reason_text
+                and not verify_claim(reason_text, draft_paths, repo_dir)
+            ):
+                log.info(
+                    "%s: pre-refine classifier already_done claim (%s) could not be verified — proceeding",
+                    ticket.id,
+                    reason_text[:120],
+                )
+            elif _is_valid_dedup_target(ctx, ticket, done_id, repo_dir, draft=draft):
+                return Outcome(
+                    State.DONE,
+                    f"{DEDUP_ALREADY_DONE_PREFIX}{done_id}: {reason_text}",
+                )
+
+        # --- Persist triage complexity for the refine agent, then
+        # delegate the decision handling (NO_CHANGE / SKIP / MIGRATE
+        # short-circuits, target validation, anti-bounce, and the
+        # mechanical draft fast-path) to the shared legacy handler so
+        # the collapsed classifier keeps the original semantics and
+        # note formats. ---
+        from ._triage import handle_triage_decision
+
+        triage_verdict = TriageResult(
+            decision=result.triage_decision,
+            reason=result.triage_reason,
+            target_board=result.target_board,
+            complexity=result.complexity,
+            trivial_scope=result.trivial_scope,
+            exploration_findings=result.exploration_findings,
+        )
+        # Same gating as the legacy triage_skip: honor triage verdicts
+        # (and the mechanical fast-path) only when triage is enabled and
+        # there is no reviewer sendback — human-flagged changes always
+        # take the full refine pass.
+        if s.refine_triage_enabled and not reviewer_comments:
+            outcome = handle_triage_decision(
+                ctx, ticket, draft, repo_dir, ws, s, triage_verdict
+            )
+            if outcome is not None:
+                return outcome
+        # When triage is disabled or a reviewer sendback is in play the
+        # legacy flow wrote no complexity artifact — leave any verdict
+        # persisted by an earlier pass untouched.
+
+        # REFINE — proceed to the refine agent.
+        log.debug(
+            "%s: pre-refine classifier REFINE — %s",
+            ticket.id,
+            result.triage_reason,
+        )
+        return None

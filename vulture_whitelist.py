@@ -513,3 +513,14 @@ _build_edit_claim_diagnostic
 implement_memory_path
 refine_memory_path
 retrospect_memory_path
+
+# Legacy refine gate entry points kept during the gate-chain collapse
+# (stan-2619): triage_skip is the tested legacy composition of the
+# extracted pre-check/decision helpers, and run_standards_gate_check was
+# replaced by the pre-refine classifier.  Both are scheduled for removal
+# together with their direct tests in a follow-up cleanup.
+from robotsix_mill.agents.standards_gate import run_standards_gate_check
+from robotsix_mill.stages.refine._triage import triage_skip
+
+run_standards_gate_check
+triage_skip

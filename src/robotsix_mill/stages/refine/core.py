@@ -151,33 +151,17 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
                 ctx, ticket, ra_gate, ws, input_hash
             )
 
-        # Phase 2.17: standards gate — a single cheap LLM call that
-        # discards agent-spawned drafts whose GOAL violates an explicit
-        # robotsix-standards prohibition (fleet repos only).  Runs
-        # before the triage classifier so a violating draft cannot
-        # slip through as SKIP (already-precise spec).
-        std_gate = RefineStage._run_standards_gate(ctx, ticket, draft, title, s)
-        if std_gate is not None:
-            return RefineStage._guard_implementation_done(
-                ctx, ticket, std_gate, ws, input_hash
-            )
-
-        # Phase 2.2: triage classifier — a single cheap LLM call that
-        # classifies the draft as SKIP / NO_CHANGE / REFINE.
-        # REFINE.  Run BEFORE any expensive LLM gates (obsolescence,
-        # dedup) so tickets that are already satisfied on disk
-        # (NO_CHANGE) or already-precise specs (SKIP) short-circuit
-        # without wasting LLM budget on the dedup check or full refine
-        # agent.  Collect reviewer comments first so we don't run triage
-        # on sendback drafts (human feedback always goes through full
-        # refine).
+        # Phase 2.17: pre-refine classifier — a single LLM call that
+        # replaces the serial standards_gate + triage + dedup checks.
+        # Returns None to proceed to the refine agent, or an Outcome
+        # to short-circuit.
         reviewer_comments, _ = RefineStage._collect_reviewer_comments(ctx, ticket)
-        triage = RefineStage._triage_skip(
+        pre_result = RefineStage._run_pre_refine_classifier(
             ctx, ticket, draft, repo_dir, extra_roots, title, ws, s, reviewer_comments
         )
-        if triage is not None:
+        if pre_result is not None:
             return RefineStage._guard_implementation_done(
-                ctx, ticket, triage, ws, input_hash
+                ctx, ticket, pre_result, ws, input_hash
             )
 
         # Phase 2.5: obsolescence gate — for *spawned* follow-up drafts,
@@ -191,33 +175,13 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
                 ctx, ticket, obsolete, ws, input_hash
             )
 
-        # Phase 3: dedup guard
-        dup = RefineStage._run_dedup_guard(ctx, ticket, draft, repo_dir, s)
-        if dup is not None:
-            return RefineStage._guard_implementation_done(
-                ctx, ticket, dup, ws, input_hash
-            )
-
-        # Phase 3.5: advisory dedup against CONCURRENT in-flight tickets.
-        # The dedup guard above can only close against a genuinely-DONE
-        # candidate, so two drafts that converge while both in flight both
-        # survive it.  This best-effort pass flags (never closes) such an
-        # overlap so refine/the operator can decide.
-        draft = RefineStage._run_inflight_advisory(ctx, ticket, draft, ws, s)
-
-        # Phase 3.6: cheap verification of any carried advisory. Short-circuit
-        # to DONE on a confirmed valid duplicate; otherwise clear the advisory
-        # and proceed to the full refine.
-        verified = RefineStage._verify_advisory_dedup(
-            ctx, ticket, draft, repo_dir, ws, s
-        )
-        if isinstance(verified, Outcome):
-            return RefineStage._guard_implementation_done(
-                ctx, ticket, verified, ws, input_hash
-            )
-        draft = verified
-
         # Phase 4: refine agent + result handling
+
+        # Advisory pre-refine dedup against CONCURRENT in-flight tickets:
+        # prepends a [!warning] advisory naming an overlapping in-flight
+        # ticket to the draft (never auto-closes). Restored after the
+        # gate-chain collapse dropped its call site.
+        draft = RefineStage._run_inflight_advisory(ctx, ticket, draft, ws, s)
 
         # --- refine pass-cap gate: escalate when the per-ticket ceiling
         # is exhausted without convergence.  Guards against unbounded

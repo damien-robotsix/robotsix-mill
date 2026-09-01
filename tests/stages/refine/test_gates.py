@@ -1523,7 +1523,6 @@ def test_doc_only_gate_mixed_code_and_docs_returns_none(ctx_factory):
 # 8. _run_standards_gate
 # ===========================================================================
 
-import robotsix_mill.agents.standards_gate as standards_gate_mod
 from robotsix_mill.stages.refine.helpers import STANDARDS_GATE_PREFIX
 
 
@@ -1539,70 +1538,75 @@ def _fleet_repo_config():
     )
 
 
-def test_standards_gate_disabled_returns_none(ctx_factory, monkeypatch):
-    ctx = ctx_factory(standards_gate_enabled=False)
-    ctx.repo_config = _fleet_repo_config()
-    t = _ticket(ctx, source="agent_check")
+def _classifier_result(**kw):
+    from robotsix_mill.agents.pre_refine_classifier import PreRefineClassifierResult
+
+    return PreRefineClassifierResult(**kw)
+
+
+def _mock_classifier(monkeypatch, **kw):
+    from robotsix_mill.agents import pre_refine_classifier
 
     calls: list = []
-    monkeypatch.setattr(
-        standards_gate_mod, "run_standards_gate_check", lambda **k: calls.append(1)
+
+    def _run(**call_kw):
+        calls.append(call_kw)
+        return _classifier_result(**kw)
+
+    monkeypatch.setattr(pre_refine_classifier, "run_pre_refine_classifier", _run)
+    return calls
+
+
+def _run_classifier_gate(ctx, t):
+    ws = ctx.service.workspace(t)
+    return RefineStage._run_pre_refine_classifier(
+        ctx, t, _DEDUP_DRAFT, None, None, t.title, ws, ctx.settings, None
     )
 
-    out = RefineStage._run_standards_gate(ctx, t, _DEDUP_DRAFT, t.title, ctx.settings)
 
-    assert out is None
-    assert calls == []
+_VIOLATION_KW = {
+    "standards_violation": True,
+    "standards_standard": "distribution-packaging.md",
+    "standards_reason": "asks to publish to npm; the standard mandates no registry publish step",
+}
+
+
+def test_standards_gate_disabled_returns_none(ctx_factory, monkeypatch):
+    """standards_gate_enabled=False: a classifier violation claim is ignored."""
+    ctx = ctx_factory(standards_gate_enabled=False, refine_triage_enabled="false")
+    ctx.repo_config = _fleet_repo_config()
+    t = _ticket(ctx, source="agent_check")
+    _mock_classifier(monkeypatch, **_VIOLATION_KW)
+
+    assert _run_classifier_gate(ctx, t) is None
 
 
 def test_standards_gate_non_fleet_repo_returns_none(ctx_factory, monkeypatch):
-    ctx = ctx_factory()  # repo_id="test-repo" — not a robotsix-* fleet repo
+    ctx = ctx_factory(refine_triage_enabled="false")  # test-repo: not fleet
     t = _ticket(ctx, source="agent_check")
+    _mock_classifier(monkeypatch, **_VIOLATION_KW)
 
-    calls: list = []
-    monkeypatch.setattr(
-        standards_gate_mod, "run_standards_gate_check", lambda **k: calls.append(1)
-    )
-
-    out = RefineStage._run_standards_gate(ctx, t, _DEDUP_DRAFT, t.title, ctx.settings)
-
-    assert out is None
-    assert calls == []
+    assert _run_classifier_gate(ctx, t) is None
 
 
 def test_standards_gate_user_authored_returns_none(ctx_factory, monkeypatch):
-    ctx = ctx_factory()
+    """A USER-authored draft must never be standards-blocked."""
+    ctx = ctx_factory(refine_triage_enabled="false")
     ctx.repo_config = _fleet_repo_config()
     t = _ticket(ctx)
     assert t.source == SourceKind.USER
+    _mock_classifier(monkeypatch, **_VIOLATION_KW)
 
-    calls: list = []
-    monkeypatch.setattr(
-        standards_gate_mod, "run_standards_gate_check", lambda **k: calls.append(1)
-    )
-
-    out = RefineStage._run_standards_gate(ctx, t, _DEDUP_DRAFT, t.title, ctx.settings)
-
-    assert out is None
-    assert calls == []
+    assert _run_classifier_gate(ctx, t) is None
 
 
 def test_standards_gate_violation_routes_to_done(ctx_factory, monkeypatch):
-    ctx = ctx_factory()
+    ctx = ctx_factory(refine_triage_enabled="false")
     ctx.repo_config = _fleet_repo_config()
     t = _ticket(ctx, source="agent_check")
+    _mock_classifier(monkeypatch, **_VIOLATION_KW)
 
-    monkeypatch.setattr(
-        standards_gate_mod,
-        "run_standards_gate_check",
-        lambda *, settings, draft_title, draft_body: {
-            "violates": True,
-            "standard": "distribution-packaging.md",
-            "reason": "asks to publish to npm; the standard mandates no registry publish step",
-        },
-    )
-
-    out = RefineStage._run_standards_gate(ctx, t, _DEDUP_DRAFT, t.title, ctx.settings)
+    out = _run_classifier_gate(ctx, t)
 
     assert out is not None
     assert out.next_state is State.DONE
@@ -1611,53 +1615,35 @@ def test_standards_gate_violation_routes_to_done(ctx_factory, monkeypatch):
 
 
 def test_standards_gate_no_violation_returns_none(ctx_factory, monkeypatch):
-    ctx = ctx_factory()
+    ctx = ctx_factory(refine_triage_enabled="false")
     ctx.repo_config = _fleet_repo_config()
     t = _ticket(ctx, source="agent_check")
+    _mock_classifier(monkeypatch, standards_violation=False)
 
-    monkeypatch.setattr(
-        standards_gate_mod,
-        "run_standards_gate_check",
-        lambda *, settings, draft_title, draft_body: {
-            "violates": False,
-            "standard": "",
-            "reason": "goal is standards-compliant",
-        },
-    )
-
-    out = RefineStage._run_standards_gate(ctx, t, _DEDUP_DRAFT, t.title, ctx.settings)
-
-    assert out is None
+    assert _run_classifier_gate(ctx, t) is None
 
 
 def test_standards_gate_check_raises_is_swallowed(ctx_factory, monkeypatch):
-    ctx = ctx_factory()
+    """run_pre_refine_classifier degrades internally on failure; the gate
+    treats the degraded REFINE/no-violation result as a pass-through."""
+    ctx = ctx_factory(refine_triage_enabled="false")
     ctx.repo_config = _fleet_repo_config()
     t = _ticket(ctx, source="agent_check")
+    _mock_classifier(
+        monkeypatch,
+        triage_decision="REFINE",
+        triage_reason="classifier failed — proceeding with refine",
+    )
 
-    def _boom(**k):
-        raise RuntimeError("standards boom")
-
-    monkeypatch.setattr(standards_gate_mod, "run_standards_gate_check", _boom)
-
-    out = RefineStage._run_standards_gate(ctx, t, _DEDUP_DRAFT, t.title, ctx.settings)
-
-    assert out is None
+    assert _run_classifier_gate(ctx, t) is None
 
 
 def test_standards_gate_explicit_optout_returns_none(ctx_factory, monkeypatch):
-    ctx = ctx_factory()
+    ctx = ctx_factory(refine_triage_enabled="false")
     repo_config = _fleet_repo_config()
     repo_config.follows_standards = False
     ctx.repo_config = repo_config
     t = _ticket(ctx, source="agent_check")
+    _mock_classifier(monkeypatch, **_VIOLATION_KW)
 
-    calls: list = []
-    monkeypatch.setattr(
-        standards_gate_mod, "run_standards_gate_check", lambda **k: calls.append(1)
-    )
-
-    out = RefineStage._run_standards_gate(ctx, t, _DEDUP_DRAFT, t.title, ctx.settings)
-
-    assert out is None
-    assert calls == []
+    assert _run_classifier_gate(ctx, t) is None

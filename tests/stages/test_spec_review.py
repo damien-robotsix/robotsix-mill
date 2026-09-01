@@ -13,6 +13,46 @@ from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.refine import RefineStage
 
+
+@pytest.fixture(autouse=True)
+def _bridge_post_refine(monkeypatch):
+    """Delegate the collapsed post-refine seam to the legacy
+    review/auto-approve seams these tests patch (read at call time, so
+    per-test monkeypatches keep working; an unmocked seam raises into
+    _run_post_refine_check's degrade path, matching the legacy flow)."""
+    from robotsix_mill.agents import post_refine
+    from robotsix_mill.agents import refining as _refining
+    from robotsix_mill.agents.post_refine import PostRefineResult
+
+    def _bridge(*, settings, spec, reviewer_comments=None, **kw):
+        review = _refining.review_spec_for_conciseness(
+            settings=settings, spec_markdown=spec
+        )
+        try:
+            approve = _refining.triage_auto_approve(settings=settings, spec=spec)
+            decision, reason = approve.decision, approve.reason
+        except RuntimeError as exc:
+            # An unmocked seam hits the real-call guard: keep the review
+            # result and fall back to human approval, as the legacy flow
+            # did when auto-approve failed. Deliberate mock exceptions
+            # (non-guard) propagate into _run_post_refine_check's
+            # degrade path so the legacy fallback re-raises them.
+            if "Blocked real" not in str(exc):
+                raise
+            decision, reason = (
+                "NEEDS_APPROVAL",
+                "auto-approve triage failed — falling back to human approval",
+            )
+        return PostRefineResult(
+            concise_spec=review.concise_spec,
+            stripped_summary=review.stripped_summary,
+            auto_approve=decision,
+            auto_approve_reason=reason,
+        )
+
+    monkeypatch.setattr(post_refine, "run_post_refine_check", _bridge)
+
+
 VERBOSE_SPEC = """## Problem
 
 The frobnicate function has no docstring, making it hard for new

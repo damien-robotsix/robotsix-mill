@@ -319,6 +319,7 @@ modules:
       - tests/stages/test_deliver.py
       - tests/stages/test_document.py
       - tests/stages/test_review.py
+      - tests/stages/refine/conftest.py
       - tests/stages/refine/test_stage.py
       - tests/stages/refine/test_helpers.py
       - tests/stages/refine/test_orchestration.py

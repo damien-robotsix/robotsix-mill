@@ -206,15 +206,35 @@ def _apply_default_mocks(monkeypatch, **overrides):
 
 
 def _run_agent(ctx, ticket, tmp_path, *, draft=None, epic_ctx=None, title=None):
-    """Invoke ``_run_refine_agent`` with real workspace + repo_dir."""
+    """Invoke the pre-refine classifier gate then ``_run_refine_agent``,
+    mirroring ``RefineStage.run``'s ordering after the gate-chain
+    collapse moved triage out of the agent phase.  The package conftest
+    bridges the collapsed classifier back onto the legacy triage/dedup
+    seams these tests mock."""
     ws = ctx.service.workspace(ticket)
+    _draft = draft if draft is not None else "raw draft body for the ticket"
+    _title = title if title is not None else ticket.title
+    reviewer_comments, _ = RefineStage._collect_reviewer_comments(ctx, ticket)
+    outcome = RefineStage._run_pre_refine_classifier(
+        ctx,
+        ticket,
+        _draft,
+        tmp_path,
+        None,
+        _title,
+        ws,
+        ctx.settings,
+        reviewer_comments,
+    )
+    if outcome is not None:
+        return outcome
     return RefineStage._run_refine_agent(
         ctx,
         ticket,
-        draft if draft is not None else "raw draft body for the ticket",
+        _draft,
         tmp_path,
         epic_ctx,
-        title if title is not None else ticket.title,
+        _title,
         ws,
         ctx.settings,
     )
