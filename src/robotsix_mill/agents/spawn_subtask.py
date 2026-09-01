@@ -56,7 +56,7 @@ async def run_spawn_subtask(
             hint. The sub-agent still has full read/write fs tools —
             this is guidance, not enforcement.
         level: Optional capability-level override; defaults to
-            level 3 (the implement tier).
+            level 2 (the workhorse/implement tier).
 
     Returns:
         The sub-agent's final string output (its summary). On budget
@@ -118,7 +118,7 @@ async def run_spawn_subtask(
         settings,
         name=f"subtask:{name}",
         system_prompt=system_prompt,
-        level=level or 3,
+        level=level or 2,
         tools=[make_explore_tool(settings, repo_dir), *fs_tools],
         web_knowledge=False,
         report_issue=False,

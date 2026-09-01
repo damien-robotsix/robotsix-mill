@@ -1,5 +1,5 @@
 # Audit agent — frontier orchestrator for meta-audit that identifies
-# gaps in quality/security tooling coverage. Runs at level 2 and
+# gaps in quality/security tooling coverage. Runs at the workhorse level and
 # coordinates sub-agent explorers for a structured, deep audit.
 
 name: audit
@@ -15,7 +15,7 @@ category: periodic
 interval: 14d
 enabled: true
 
-level: 4
+level: 2
 tools:
   - explore
   - parallel_explore

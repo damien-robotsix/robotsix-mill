@@ -22,7 +22,7 @@ enabled: true
 
 # Compression of an already-structured digest into a few sentences — a
 # small tier is plenty and keeps a daily per-board pass cheap.
-level: 2
+level: 1
 tools: []
 
 report_issue: false

@@ -77,28 +77,55 @@ _CLAUDE_SDK_PROVIDER = "claudeSDK"
 
 
 def level_uses_claude(level: int) -> bool:
-    """Whether *level* routes to the Claude SDK provider (L2/L4/L5 by default)."""
+    """Whether *level* currently routes to the Claude SDK provider.
+
+    Reflects the ACTIVE provider slot: llmio's ``for_level`` resolves the
+    slot the failover tracker designates, so this flips to ``False`` for
+    every level while provider failover is running on the OpenRouter slot.
+    """
     from robotsix_llmio.core.factory import default_tier_config
 
     tlc = default_tier_config().for_level(level)
     return tlc.model.startswith(_CLAUDE_SDK_PROVIDER)
 
 
+def _provider_for_binding(tlc: Any, level: int) -> Any:
+    """Instantiate the provider for an explicit slot *binding* (a llmio
+    ``TierLevelConfig``), bypassing active-slot resolution.
+
+    Used by the failover loop's second attempt: the loop hands mill the
+    OTHER slot's binding before the tracker has armed the sticky window, so
+    resolving ``for_level(level)`` again would rebuild the same provider
+    that just failed.
+    """
+    from robotsix_llmio.core.factory import get_provider_for_identifier
+
+    kwargs: dict[str, Any] = dict(tlc.provider_kwargs)
+    if tlc.max_tokens is not None:
+        kwargs.setdefault("max_tokens", tlc.max_tokens)
+    if not tlc.model.startswith(_CLAUDE_SDK_PROVIDER):
+        if not get_secrets().openrouter_api_key:
+            raise RuntimeError("OPENROUTER_API_KEY is not set")
+        kwargs["api_key"] = get_secrets().openrouter_api_key
+    return get_provider_for_identifier(tlc.model, **kwargs)
+
+
 def new_openrouter_model(model_name: str, level: int):
     """Build a direct ``(model, http_client)`` for *level* via llmio.
 
-    llmio's ``get_provider_for_level`` resolves the provider from the baked tier
-    defaults (L1/L3 → OpenRouter providers; L2/L4/L5 → keyless Claude SDK). Cost recording, the provider pin,
-    and the per-level reasoning policy (level 1 → reasoning off, else xhigh)
-    are all baked into the provider. The caller owns closing the returned
-    client (pair with :func:`_aclose_async_client`).
+    llmio's ``get_provider_for_level`` resolves the provider from the
+    ACTIVE slot of the baked tier defaults (default slot → keyless Claude
+    SDK; fallback slot → keyed OpenRouter). Cost recording, the provider
+    pin, and the per-level reasoning policy (level 1 → reasoning off, else
+    xhigh) are all baked into the provider. The caller owns closing the
+    returned client (pair with :func:`_aclose_async_client`).
     """
     from robotsix_llmio import get_provider_for_level
 
     if level_uses_claude(level):
-        # Keyless Claude SDK tier (level 2 haiku, 4 opus, 5 fable): no
-        # OpenRouter key, no ``api_key`` kwarg (the provider rejects it), and
-        # ``http_client`` comes back ``None`` (the CLI is the transport).
+        # Keyless Claude SDK level: no OpenRouter key, no ``api_key`` kwarg
+        # (the provider rejects it), and ``http_client`` comes back ``None``
+        # (the CLI is the transport).
         provider = get_provider_for_level(level)
         return provider.new_model(model=model_name, level=level)
     if not get_secrets().openrouter_api_key:
@@ -319,19 +346,25 @@ def build_agent_from_definition(
 
     handle = build_agent(settings, **kwargs)
 
-    # Remember how to rebuild this agent at another capability level so
-    # :func:`~robotsix_mill.agents.retry.run_agent` can switch tiers when the
-    # one it was built for is unavailable (Claude subscription session limit,
-    # dead OAuth credential). Opt-in: the fallback levels are the keyed
-    # OpenRouter ones, i.e. real money per token, whereas the subscription
+    # Remember how to rebuild this agent on the FALLBACK provider slot (same
+    # capability level) so :func:`~robotsix_mill.agents.retry.run_agent` can
+    # switch providers when the default one is unavailable (Claude
+    # subscription cap, dead OAuth credential). Opt-in: the fallback slot is
+    # keyed OpenRouter, i.e. real money per token, whereas the subscription
     # quota comes back by itself — so by default the exhaustion propagates
     # and the worker PARKS the ticket until the stated reset (see
     # ``runtime.transient_errors.is_claude_usage_exhausted``). Operators who
-    # would rather pay than wait flip ``claude_exhaustion_paid_fallback``.
-    if settings.claude_exhaustion_paid_fallback:
-        rebuild_overrides = {k: v for k, v in overrides.items() if k != "level"}
+    # would rather pay than wait flip ``provider_failover_enabled``.
+    if settings.provider_failover_enabled:
+        rebuild_overrides = {
+            k: v for k, v in overrides.items() if k not in ("level", "tier_binding")
+        }
+        rebuild_level = kwargs["level"]
 
-        def _tier_rebuild(new_level: int) -> AgentHandle:
+        def _failover_rebuild() -> AgentHandle:
+            from robotsix_llmio.core.factory import default_tier_config
+
+            binding = default_tier_config().for_level(rebuild_level, slot="fallback")
             return build_agent_from_definition(
                 settings,
                 definition,
@@ -339,30 +372,14 @@ def build_agent_from_definition(
                 repo_dir=repo_dir,
                 current_ticket_id=current_ticket_id,
                 web_knowledge_block_reason=web_knowledge_block_reason,
-                level=new_level,
+                level=rebuild_level,
+                tier_binding=binding,
                 **rebuild_overrides,
             )
 
-        try:
-            handle._tier_level = kwargs["level"]
-            handle._tier_rebuild = _tier_rebuild
-        except AttributeError, TypeError:
-            pass
+        with contextlib.suppress(AttributeError, TypeError):
+            handle._failover_rebuild = _failover_rebuild
     return handle
-
-
-def tier_fallback_levels(level: int) -> list[int]:
-    """Levels to try when *level* is unavailable, nearest non-Claude first.
-
-    Claude-backed levels share ONE subscription and ONE credential, so when one
-    of them reports usage exhaustion or an auth failure the others are dead
-    too — only the OpenRouter-backed levels can serve. Ties prefer the lower
-    (cheaper) level.
-    """
-    return sorted(
-        (n for n in (1, 2, 3, 4, 5) if n != level and not level_uses_claude(n)),
-        key=lambda n: (abs(n - level), n),
-    )
 
 
 def claude_sdk_supports_inline_image(settings: Settings) -> bool:
@@ -522,18 +539,23 @@ def _build_openrouter_handle(
     name: str | None,
     retries: int,
     max_tokens: int | None = None,
+    tier_binding: Any | None = None,
 ) -> AgentHandle:
     """Build the OpenRouter ``AgentHandle`` for an agent.
 
     The model (cost recording + provider pin + per-level reasoning policy)
-    comes from llmio via :func:`new_openrouter_model`; this function only
-    assembles the pydantic-ai ``Agent`` so per-agent
+    comes from llmio via the binding (or :func:`new_openrouter_model`);
+    this function only assembles the pydantic-ai ``Agent`` so per-agent
     ``max_tokens``/tools/name are preserved.
     """
     from pydantic_ai import Agent
     from pydantic_ai.settings import ModelSettings
 
-    model, http_client = new_openrouter_model(effective_model, level)
+    if tier_binding is not None:
+        provider = _provider_for_binding(tier_binding, level)
+        model, http_client = provider.new_model(model=effective_model, level=level)
+    else:
+        model, http_client = new_openrouter_model(effective_model, level)
     agent_kwargs: dict[str, Any] = {
         "model": model,
         "system_prompt": composed_system,
@@ -564,7 +586,7 @@ def build_agent(
     close_thread: bool = True,
     list_threads: bool = True,
     ask_user: bool = True,
-    level: int = 3,
+    level: int = 2,
     model: str | None = None,
     name: str | None = None,
     retries: int = 2,
@@ -575,11 +597,14 @@ def build_agent(
     board_id: str = "",
     repo_dir: Path | None = None,
     web_knowledge_block_reason: str | None = None,
-):
-    """Construct a pydantic-ai Agent for a capability ``level`` (1/2/3/4/5).
+    tier_binding: Any | None = None,
+) -> Any:
+    """Construct a pydantic-ai Agent for a capability ``level`` (1/2/3).
 
-    The level resolves to ``(transport, model)`` via llmio's baked tier
-    defaults (see llmio tier config for current mapping).
+    The level resolves to ``(transport, model)`` via the ACTIVE provider
+    slot of llmio's baked tier defaults; pass *tier_binding* (a llmio
+    ``TierLevelConfig``) to force a specific slot's binding instead — the
+    failover loop does this for its cross-provider attempt.
     The transport is what selects the backend — there is no separate toggle.
 
     Set ``report_issue=False`` for agents that already emit draft
@@ -690,13 +715,12 @@ def build_agent(
     # llmio levels are the single source of provider+model: the baked
     # tier config maps levels to providers and models.  The tier
     # config is read from llmio — mill no longer re-implements it.
-    from robotsix_llmio import get_provider_for_level
     from robotsix_llmio.core.factory import default_tier_config
 
-    tlc = default_tier_config().for_level(level)
+    tlc = tier_binding or default_tier_config().for_level(level)
 
     if tlc.model.startswith(_CLAUDE_SDK_PROVIDER):
-        provider = get_provider_for_level(level)
+        provider = _provider_for_binding(tlc, level)
         try:
             handle = provider.build_agent(
                 level=level,
@@ -710,7 +734,7 @@ def build_agent(
                 # Confine the SDK's built-in Write/Edit tools to the ticket's
                 # workspace clone. repo_dir is None for board-less agents → no
                 # confinement, unchanged behavior.
-                workspace_root=repo_dir,  # type: ignore[call-arg]  # ClaudeSDKProvider accepts this
+                workspace_root=repo_dir,  # ClaudeSDKProvider accepts this
             )
         except TypeError:
             import logging
@@ -725,15 +749,16 @@ def build_agent(
                 output_type=output_type,
                 name=name,
                 retries=retries,
-                workspace_root=repo_dir,  # type: ignore[call-arg]
+                workspace_root=repo_dir,
             )
         return handle
 
-    # --- OpenRouter (L1/L2) ------------------------------------------------
+    # --- OpenRouter slot ---------------------------------------------------
     return _build_openrouter_handle(
         settings,
         effective_model=tlc.model_name,
         level=level,
+        tier_binding=tier_binding,
         composed_system=composed_system,
         all_tools=all_tools,
         output_type=output_type,

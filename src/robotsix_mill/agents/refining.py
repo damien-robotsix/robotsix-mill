@@ -479,7 +479,7 @@ def _build_refine_overrides(
 ) -> dict[str, Any]:
     """Assemble the ``build_agent_from_definition`` overrides for refine:
     the reviewer-sendback prompt + thread flags when handling feedback.
-    The model comes from the definition's ``level`` (refine is level 4
+    The model comes from the definition's ``level`` (refine is level 2
     → Claude Opus).
     """
     overrides: dict[str, Any] = {}
@@ -700,14 +700,14 @@ def run_refine_agent(
     if refine_level is not None:
         overrides["level"] = refine_level
 
-    # Right-size the level-4 Claude model (subscription transport unchanged).
-    # Skip when downgraded to an OpenRouter level (1/3), which ignores `model`.
+    # Right-size the level-2 Claude model (subscription transport unchanged).
+    # Only the Claude-SDK workhorse branch consumes the alias.
     resolved_level = (
         refine_level
         if refine_level is not None
         else resolve_agent_level(settings, definition)
     )
-    if resolved_level == 4 and refine_model is not None:
+    if resolved_level == 2 and refine_model is not None:
         overrides["model"] = refine_model
 
     # When exploration sub-agents are gated off (triage ruled the ticket
@@ -824,7 +824,7 @@ def run_refine_agent(
     # the agent knows they're there.
     _vision = (
         bool(screenshot_paths)
-        and level_uses_claude(4)  # refine is level 4 → Claude SDK
+        and level_uses_claude(2)  # refine is level 2 → Claude SDK
         and claude_sdk_supports_inline_image(settings)
     )
     binary_contents: list[Any] = []

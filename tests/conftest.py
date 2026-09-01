@@ -12,6 +12,16 @@ from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 
 
+@pytest.fixture(autouse=True)
+def _reset_failover_tracker():
+    """Isolate every test from llmio's process-wide failover singleton."""
+    from robotsix_llmio.core.failover import reset_failover_tracker
+
+    reset_failover_tracker()
+    yield
+    reset_failover_tracker()
+
+
 @pytest.fixture(autouse=True, scope="session")
 def _isolate_default_data_dir(tmp_path_factory):
     """Redirect bare ``Settings()`` constructions to a session tmp dir.

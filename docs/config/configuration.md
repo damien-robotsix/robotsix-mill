@@ -72,7 +72,7 @@ chmod 600 config/config.json          # it now holds real credentials
 ### Change which model an agent uses
 
 Models are not configured per-agent in the JSON config file. Each agent definition
-(`agent_definitions/<name>.yaml`) declares a capability `level: 1|2|3|4`,
+(`agent_definitions/<name>.yaml`) declares a capability `level: 1|2|3`,
 which resolves to a `(transport, model)` via robotsix-llmio's tier
 defaults (see [§1 Capability levels](#1-capability-levels-model-selection)).
 To change an agent's model, change its `level` in the definition; to change
@@ -355,24 +355,27 @@ Every setting below shows:
 ### 1. Capability levels (model selection)
 
 Per-agent model selection is declared in each **agent definition's**
-`level: 1|2|3|4` field. `build_agent` resolves a level to a
-`(transport, model)` pair via robotsix-llmio's baked tier defaults — there
-is no per-agent model config in the JSON config file and no global backend
-toggle. The level *is* the backend choice.
+`level: 1|2|3` field — a pure capability axis. `build_agent` resolves a
+level via robotsix-llmio's two provider slots: the **default** slot
+(Anthropic via the Claude SDK: haiku / opus / claude-fable-5) serves
+normal operation, and the **fallback** slot (DeepSeek via OpenRouter:
+flash / flash-with-reasoning / pro) serves the same levels while llmio's
+automatic provider failover is active. Levels never fall back to one
+another; providers do (opt-in via `provider_failover_enabled`, visible in
+the board UI banner and `GET /provider-status`).
 
-| Level | Transport | Intent |
-|-------|-----------|--------|
-| 1 | `openrouter` | cheap, repetitive (triage, audit, dedup, periodic scanners, …) |
-| 2 | `openrouter` | intermediate — implement, ci_fix, review, test, … |
-| 3 | `claude-sdk` | high-level planning — refine, meta_triage |
-| 4 | `claude-sdk` | intermediate planning — epic_breakdown |
+| Level | Intent |
+|-------|--------|
+| 1 | cheap, frequent — triage, dedup, classifiers, periodic scanners, … |
+| 2 | workhorse — implement, ci_fix, review, refine, test, … |
+| 3 | frontier — epic_breakdown, hardest reasoning |
 
 > **Note:** The concrete model behind each level is owned by robotsix-llmio's
 > tier defaults and may change without notice in mill.  To see or override the
 > current binding, consult llmio's tier configuration.
 
-Level-3 agents run on the Claude Agent SDK (subscription auth; needs Node +
-the `claude` CLI in the container). These knobs govern that path:
+Default-slot agents run on the Claude Agent SDK (subscription auth; needs
+Node + the `claude` CLI in the container). These knobs govern that path:
 
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
@@ -387,7 +390,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.explore_requests` | `MILL_EXPLORE_REQUEST_LIMIT` | `100` | Per-call request cap for the explore sub-agent |
 | `core.limits.explore_max_tokens` | `MILL_EXPLORE_MAX_TOKENS` | `4096` | Output token cap for explore sub-agent responses |
 | `core.limits.explore_timeout_seconds` | `MILL_EXPLORE_TIMEOUT_SECONDS` | `30.0` | Wall-clock timeout (seconds) for a single explore sub-agent call. Default 30 s. Minimum 1 s |
-| `core.limits.explore_model_level` | `MILL_EXPLORE_MODEL_LEVEL` | `2` | Capability tier for the exploration sub-agent (2 = haiku on the Claude subscription). Claude tiers (2/4/5) run the scout through the SDK tool loop, so `explore_request_limit` only bounds OpenRouter tiers; the wall-clock timeout applies to both. Range 1–5 |
+| `core.limits.explore_model_level` | `MILL_EXPLORE_MODEL_LEVEL` | `1` | Capability level for the exploration sub-agent (1 = haiku on the Claude subscription). Claude-backed levels run the scout through the SDK tool loop, so `explore_request_limit` only bounds the OpenRouter fallback slot; the wall-clock timeout applies to both. Range 1–3 |
 | `core.limits.consult_requests` | `MILL_CONSULT_REQUEST_LIMIT` | `15` | Per-call request cap for the domain-expert consultation sub-agent |
 | `core.limits.test_requests` | `MILL_TEST_REQUEST_LIMIT` | `30` | Per-call request cap for the test sub-agent |
 | `core.limits.web_research_requests` | `MILL_WEB_RESEARCH_REQUEST_LIMIT` | `16` | Per-call request cap for the web-research sub-agent |
@@ -447,7 +450,7 @@ the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.model_outage_retry_seconds` | `MILL_MODEL_OUTAGE_RETRY_SECONDS` | `120` | Seconds between re-polls during a detected LLM model outage ("model unavailable" / overloaded / 503). Like the network/disk parks, a model outage re-polls without consuming a retry attempt. |
 | `core.limits.model_outage_max_parks` | `MILL_MODEL_OUTAGE_MAX_PARKS` | `20` | Maximum consecutive model-outage parks before escalating to BLOCKED (guards against a permanently bad model id). |
 | `core.limits.claude_usage_exhausted_retry_seconds` | `MILL_CLAUDE_USAGE_EXHAUSTED_RETRY_SECONDS` | `900` | Seconds to park a ticket after a Claude usage-exhaustion error whose message carries no reset time. When the message says `resets 9:20am (UTC)` the park runs straight through to that reset instead. |
-| `core.limits.claude_exhaustion_paid_fallback` | `MILL_CLAUDE_EXHAUSTION_PAID_FALLBACK` | `false` | When a Claude-backed level reports usage exhaustion or an auth failure, rebuild the agent on the nearest keyed (paid) level instead of parking the ticket until the quota resets. Off by default: the subscription quota comes back by itself, paid tokens do not. |
+| `core.limits.provider_failover_enabled` | `MILL_PROVIDER_FAILOVER_ENABLED` | `false` | Enable automatic provider failover: when the default (Anthropic) provider fails or is exhausted, rerun the SAME capability level on the paid OpenRouter fallback slot for llmio's failover window instead of parking the ticket until the quota resets. Off by default: the subscription quota comes back by itself, paid tokens do not. |
 | `core.limits.run_command_refuse_full_suite` | `MILL_RUN_COMMAND_REFUSE_FULL_SUITE` | `true` | Refuse agent `run_command` pytest invocations that would run the whole suite (no path below the suite root, no `-k`/`-m`/`--lf`); the stage-owned gate runs the full suite once the agent stops. |
 | `core.limits.refine_dynamic_limit_multiplier` | `MILL_REFINE_DYNAMIC_LIMIT_MULTIPLIER` | `1.5` | Dynamic request_limit multiplier applied when draft exceeds `refine_dynamic_limit_spec_chars` chars; must be > 1.0 |
 | `core.limits.refine_dynamic_limit_min` | `MILL_REFINE_DYNAMIC_LIMIT_MIN` | `12` | Floor for dynamic request_limit (never lower than this even if base × multiplier is lower) |
@@ -658,8 +661,8 @@ refinement pass.
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `gates.refine_trivial_routing_enabled` | `MILL_REFINE_TRIVIAL_ROUTING_ENABLED` | `true` | Route trivial-scope tickets to a cheaper model instead of the full refinement model |
-| `gates.refine_trivial_model_level` | `MILL_REFINE_TRIVIAL_MODEL_LEVEL` | `4` | Model level for trivial-scope refines (4 = Claude opus on the subscription — operator preference is subscription quota over pay-per-token OpenRouter tickets; 1 = flash cheapest; 2 = flat-cost Claude haiku; 4 = flat-cost Claude opus). Code default is `3`; config.example.json overrides to `4` for flat-cost Claude subscription. |
-| `gates.refine_trivial_subscription_model` | `MILL_REFINE_TRIVIAL_SUBSCRIPTION_MODEL` | `sonnet` | Claude alias for trivial/forced-cheap refines routed to the level-3 subscription |
+| `gates.refine_trivial_model_level` | `MILL_REFINE_TRIVIAL_MODEL_LEVEL` | `2` | Model level for trivial-scope refines (1 = haiku/flash cheap tier; 2 = opus/pro workhorse; 3 = fable frontier). |
+| `gates.refine_trivial_subscription_model` | `MILL_REFINE_TRIVIAL_SUBSCRIPTION_MODEL` | `sonnet` | Claude alias for trivial/forced-cheap refines routed to the level-2 subscription workhorse |
 | `gates.refine_subscription_tier_routing_enabled` | `MILL_REFINE_SUBSCRIPTION_TIER_ROUTING_ENABLED` | `true` | Complexity-gated Claude alias routing for level-3 refines (set `false` for Opus-always rollback) |
 | `gates.refine_subscription_model_default` | `MILL_REFINE_SUBSCRIPTION_MODEL_DEFAULT` | `sonnet` | Claude alias for non-escalated (simple) level-3 refines |
 | `gates.refine_subscription_model_complex` | `MILL_REFINE_SUBSCRIPTION_MODEL_COMPLEX` | `opus` | Claude alias for escalated (needs-exploration) level-3 refines |
@@ -750,7 +753,7 @@ variable and its dotted YAML path.
 | `periodic.trace_review.max_repeated_tool` | `MILL_TRACE_REVIEW_MAX_REPEATED_TOOL` | `50` | Absolute cap on repeated tool calls before flagging |
 | `periodic.trace_review.max_tool_calls` | `MILL_TRACE_REVIEW_MAX_TOOL_CALLS` | `100` | Hard cap on total tool calls per trace inspection |
 | `periodic.trace_review.max_errors` | `MILL_TRACE_REVIEW_MAX_ERRORS` | `20` | Hard cap on tool-call errors before auto-termination |
-| `periodic.trace_review.model_level` | `MILL_TRACE_REVIEW_MODEL_LEVEL` | `2` | Model tier for the trace inspector (1–5; 2 = haiku on the subscription) |
+| `periodic.trace_review.model_level` | `MILL_TRACE_REVIEW_MODEL_LEVEL` | `1` | Model level for the trace inspector (1–3; 1 = haiku on the subscription) |
 | `periodic.trace_review.inspector_min_requests` | `MILL_TRACE_REVIEW_INSPECTOR_MIN_REQUESTS` | `20` | Floor for the tools-on request budget |
 | `periodic.trace_review.inspector_max_requests` | `MILL_TRACE_REVIEW_INSPECTOR_MAX_REQUESTS` | `80` | Ceiling for the tools-on request budget |
 | `periodic.trace_review.inspector_requests_per_obs` | `MILL_TRACE_REVIEW_INSPECTOR_REQUESTS_PER_OBS` | `0.1` | Requests granted per observation before clamping |

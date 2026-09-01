@@ -134,6 +134,7 @@ margin-left:4px" title="Component-owned config (Settings panel)">
 <div id="credential-status" style="display:none;background:#4a1414;border-bottom:1px solid #a12b2b;color:#fca5a5;padding:8px 12px;font-size:13px"></div>
 <div id="lf-status" style="display:none;background:#3a2418;border-bottom:1px solid #6b3320;color:#e8b08a;padding:6px 12px;font-size:12px"></div>
 <div id="credit-status" style="display:none;background:#3a2418;border-bottom:1px solid #6b3320;color:#e8b08a;padding:6px 12px;font-size:12px"></div>
+<div id="provider-status" style="display:none;background:#1d2a3a;border-bottom:1px solid #2a4a6b;color:#8ab8e8;padding:6px 12px;font-size:12px"></div>
 {BOARD_SKELETON}
 <div id="drawer"><div id="d"><div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div></div>
 <div id="settings-panel" style="display:none"></div></div>

@@ -355,9 +355,9 @@ class TestRunTraceInspector:
         passed to ``build_openrouter_model`` — so a single Settings knob
         governs the inspector tier for both the automated pass and the
         ``langfuse_inspect_trace`` tool (AC1)."""
-        # Default settings → level 2
+        # Default settings → level 1
         s = _settings_with_api_key()
-        assert s.trace_review_model_level == 2
+        assert s.trace_review_model_level == 1
 
         # Override to level 2 and confirm the field propagates.
         s2 = _settings_with_api_key(trace_review_model_level=2)

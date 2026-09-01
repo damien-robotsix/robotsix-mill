@@ -23,6 +23,12 @@ from robotsix_mill.agents.prompt_tool_consistency import (
 from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 
+@pytest.fixture(autouse=True)
+def _openrouter_slot(fallback_slot_active):
+    """These tests capture agent assembly through the OpenRouter seam; arm
+    llmio's failover window so plain levels resolve the OpenRouter slot."""
+
+
 def _settings(tmp_path, **env):
     env.setdefault("data_dir", str(tmp_path))
     env.setdefault("OPENROUTER_API_KEY", "k")

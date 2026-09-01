@@ -421,7 +421,7 @@ async def run_explore(
     via pydantic-ai's async ``agent.run`` rather than ``run_sync`` (which
     would call ``asyncio.run`` and raise "event loop is already running").
     """
-    from .base import build_subagent, level_uses_claude, tier_fallback_levels
+    from .base import build_subagent, level_uses_claude
 
     level = settings.explore_model_level
     on_claude = level_uses_claude(level)
@@ -534,27 +534,30 @@ async def run_explore(
                     type(e).__name__,
                     e,
                 )
-                # Claude exhaustion / auth error with paid fallback enabled:
-                # rebuild the scout at the nearest keyed (non-Claude) level
-                # and retry the same question once, mirroring
-                # ``run_agent``'s ``_run_at_fallback_tier``.
+                # Claude exhaustion / auth error with provider failover
+                # enabled: record the failure so llmio's tracker routes the
+                # process to the fallback slot, then rebuild the scout at
+                # the SAME level (which now resolves the fallback provider)
+                # and retry the same question once — mirroring
+                # ``run_agent``'s ``_run_at_fallback_slot``.
                 if (
                     on_claude
-                    and settings.claude_exhaustion_paid_fallback
+                    and settings.provider_failover_enabled
                     and is_tier_unavailable(e)
                 ):
-                    for next_level in tier_fallback_levels(level):
+                    from robotsix_llmio.core.failover import get_failover_tracker
+
+                    get_failover_tracker().record_failure("default", e)
+                    if not level_uses_claude(level):
                         log.warning(
-                            "explore: level%d unavailable (%s: %s) — "
-                            "falling back to level%d",
-                            level,
+                            "explore: default provider unavailable (%s: %s) — "
+                            "retrying on the fallback provider slot",
                             type(e).__name__,
                             str(e)[:160],
-                            next_level,
                         )
                         fallback_agent, fallback_client = build_subagent(
                             settings,
-                            level=next_level,
+                            level=level,
                             system_prompt=_SYSTEM_PROMPT,
                             tools=ro_tools,
                             name="explore",
@@ -562,12 +565,8 @@ async def run_explore(
                             workspace_root=repo_dir,
                         )
                         try:
-                            fb_limits = (
-                                None
-                                if level_uses_claude(next_level)
-                                else UsageLimits(
-                                    request_limit=settings.explore_request_limit
-                                )
+                            fb_limits = UsageLimits(
+                                request_limit=settings.explore_request_limit
                             )
                             return await asyncio.wait_for(
                                 _run_single_explore_attempt(

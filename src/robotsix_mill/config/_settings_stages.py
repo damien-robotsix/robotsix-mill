@@ -293,7 +293,7 @@ class _StagesSettings(BaseModel):
     # refine trivial route) still apply on top.
     agent_levels: dict[str, int] = Field(
         description=(
-            "Per-stage llmio capability level (1-5) keyed by agent definition "
+            "Per-stage llmio capability level (1-3) keyed by agent definition "
             "name; unset stages keep their YAML default."
         ),
         default_factory=dict,
@@ -303,42 +303,40 @@ class _StagesSettings(BaseModel):
     @field_validator("agent_levels")
     @classmethod
     def _validate_agent_levels(cls, value: dict[str, int]) -> dict[str, int]:
-        bad = {k: v for k, v in value.items() if not (1 <= int(v) <= 5)}
+        bad = {k: v for k, v in value.items() if not (1 <= int(v) <= 3)}
         if bad:
-            raise ValueError(f"agent_levels values must be 1..5, got {bad}")
+            raise ValueError(f"agent_levels values must be 1..3, got {bad}")
         return {k: int(v) for k, v in value.items()}
 
     trace_review_model_level: int = Field(
-        description="Model tier for the trace inspector (1=flash, 2=haiku, 3=mimo, 4=opus).",
-        default=2,
+        description="Model level for the trace inspector (1=haiku/flash, 2=opus/pro, 3=fable).",
+        default=1,
         ge=1,
-        le=5,
+        le=3,
         json_schema_extra={"advanced": True},
     )
     # When True (default), triage-trivial tickets are routed to
-    # ``refine_trivial_model_level`` instead of the YAML default (4 / Opus).
+    # ``refine_trivial_model_level`` instead of the YAML default (2 / Opus).
     # Set False to force all refines through the default level.
     refine_trivial_routing_enabled: bool = Field(
         description="When true, triage-trivial tickets route to refine_trivial_model_level instead of the YAML default.",
         default=True,
         json_schema_extra={"advanced": True},
     )
-    # Model level used for trivial-scope refines.  Default 3 =
-    # pay-per-token level-3 model (OpenRouter mimo, ~$0.001+/run) — cheap
-    # enough for straightforward gap-fill tickets while still capable.
-    # Set to 4 for the flat-cost Claude subscription (sonnet, marginal $0),
-    # 2 for haiku, or 1 for the cheapest flash model.
+    # Model level used for trivial-scope refines. Default 2 keeps the
+    # workhorse (opus on the flat-cost subscription; deepseek-pro on the
+    # fallback slot); set 1 for the cheap tier (haiku/flash).
     refine_trivial_model_level: int = Field(
-        description="Model level for trivial-scope refines (1=flash, 2=haiku, 3=mimo, 4=subscription).",
-        default=4,
+        description="Model level for trivial-scope refines (1=haiku/flash, 2=opus/pro, 3=fable).",
+        default=2,
         ge=1,
-        le=5,
+        le=3,
         json_schema_extra={"advanced": True},
     )
     # Claude model alias used when a trivial/forced-cheap refine routes to
-    # the level-4 subscription.  ``sonnet`` is the cheapest alias already
-    # trusted by the ``"simple"`` path.  Only the Claude-SDK branch (level 4)
-    # consumes this; OpenRouter levels 1/3 ignore it.
+    # the level-2 subscription workhorse.  ``sonnet`` is the cheapest alias
+    # already trusted by the ``"simple"`` path.  Only the Claude-SDK branch
+    # consumes this; the OpenRouter fallback slot ignores it.
     refine_trivial_subscription_model: str = Field(
         description="Claude model alias for trivial/forced-cheap refines on the subscription tier.",
         default="sonnet",

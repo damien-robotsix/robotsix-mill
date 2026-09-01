@@ -28,6 +28,12 @@ RULES = ["Run `ruff format` on changed files before stopping.", "Register new fi
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _openrouter_slot(fallback_slot_active):
+    """These tests capture agent assembly through the OpenRouter seam; arm
+    llmio's failover window so plain levels resolve the OpenRouter slot."""
+
+
 def test_upsert_places_section_at_top_and_preserves_rest_byte_for_byte():
     out = cpr.upsert_section(OTHER, RULES)
     assert out.startswith(cpr.SECTION_HEADING + "\n")
@@ -246,7 +252,7 @@ def test_pass_writes_rules_into_implement_ledger_and_files_no_tickets(
     ((digest, definition),) = seen
     assert "### ruff-format" in digest
     assert definition.name == "ci_prevention_rules"
-    assert definition.level == 2
+    assert definition.level == 1
     assert definition.output_type == "CiPreventionRulesResult"
 
 

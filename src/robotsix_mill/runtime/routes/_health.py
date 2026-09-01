@@ -280,6 +280,20 @@ def credit_status() -> dict[str, object]:
     return get_credit_status()
 
 
+@router.get("/provider-status")
+def provider_status() -> dict[str, Any]:
+    """Return llmio's provider-failover state for the board UI banner.
+
+    Polled by the board UI's ``fetchProviderStatus()``.  While
+    ``failover_active`` is true, agent calls run on the fallback provider
+    slot (paid OpenRouter) and return to the default (Anthropic) when the
+    window expires — the banner makes that visible to the operator.
+    """
+    from robotsix_llmio.core.failover import get_failover_status
+
+    return get_failover_status().model_dump(mode="json")
+
+
 @router.get("/credential-status")
 def credential_status(settings: Settings = Depends(get_settings)) -> dict[str, Any]:
     """Return which required credentials are missing from the live config.

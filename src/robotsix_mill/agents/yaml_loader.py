@@ -2,7 +2,7 @@
 
 Parses ``agent_definitions/<name>.yaml``, validates the result against the
 ``AgentDefinition`` Pydantic model, and returns a structured object. Each
-definition declares a capability ``level`` (1/2/3/4/5) that ``build_agent``
+definition declares a capability ``level`` (1/2/3) that ``build_agent``
 resolves to a ``(transport, model)`` via llmio's tier defaults.
 
 This module is independent of the agent runtime (``build_agent``,
@@ -43,10 +43,10 @@ class AgentDefinition(BaseModel):
     name: str
     description: str | None = None
     category: str | None = None
-    # Capability level (1/2/3/4/5) → resolved to (transport, model) by build_agent
+    # Capability level (1/2/3) → resolved to (transport, model) by build_agent
     # via llmio's tier defaults (see llmio tier config for current mapping).
     # Replaces the old provider-specific ``model`` field.
-    level: int = Field(ge=1, le=5)
+    level: int = Field(ge=1, le=3)
     system_prompt: str
     tools: list[str] = []
     # Single web/library knowledge gateway. When True the agent gets
@@ -291,15 +291,15 @@ def load_and_run_agent(
     3. ``run_agent`` with *prompt* and any ``**run_kwargs``
     4. ``_safe_close`` in a ``finally`` block
 
-    Steps 2-4 run inside llmio's tier-fallback loop, so a tier that is
-    unavailable (provider outage, exhausted subscription credits) is followed
-    by the next one — rebuilding the agent, since the level selects the
-    provider. The definition's ``level`` is the starting tier; the chain
-    prefers a higher tier, then lower ones. Local retry of transient errors
-    still happens inside ``run_agent``; only what survives that escalates.
-    A Claude-backed start does NOT fall back unless
-    ``settings.claude_exhaustion_paid_fallback`` is on — the alternatives
-    are paid tiers, and the worker parks the ticket until the quota resets.
+    Steps 2-4 run inside llmio's provider-failover loop: the capability
+    level NEVER changes, but a provider-shaped failure (outage, rate limit,
+    exhausted subscription credits) on the active provider slot retries the
+    same level on the other slot — rebuilding the agent, since the slot
+    selects the provider. Local retry of transient errors still happens
+    inside ``run_agent``; only what survives that escalates. Failover is
+    OFF unless ``settings.provider_failover_enabled`` is on — the fallback
+    slot is paid OpenRouter, and with it off the worker parks the ticket
+    until the quota resets.
 
     Args:
         settings: Application configuration.
@@ -316,10 +316,10 @@ def load_and_run_agent(
             ``h.run_sync(prompt, **run_kwargs)`` (e.g. ``usage_limits``,
             ``message_history``).
         validate: Optional check run on the agent's result inside the
-            tier-fallback loop. It should raise when the result is
-            unusable, which makes the loop try the next tier instead of
-            returning a hollow success (e.g. a structured output a weaker
-            tier parsed into an empty list).
+            failover loop. It should raise when the result is unusable,
+            so a hollow success surfaces as a real error instead of being
+            returned (a task-shaped failure is never retried on the other
+            provider — re-running a doomed task would just spend twice).
         system_prompt_format_kwargs: When set, ``definition.system_prompt``
             is formatted with these kwargs (via ``str.format(**kwargs)``)
             and passed as ``system_prompt`` to ``build_agent_from_definition``.
@@ -328,9 +328,9 @@ def load_and_run_agent(
             ``build_agent_from_definition``
             (e.g. ``system_prompt``, ``board_id``).
     """
-    from robotsix_llmio.config.tier import TierLevel, TierLevelConfig
+    from robotsix_llmio.config.tier import TierLevelConfig
     from robotsix_llmio.core.factory import default_tier_config
-    from robotsix_llmio.core.tier_fallback import call_with_tier_fallback
+    from robotsix_llmio.core.failover import call_with_failover
 
     from .base import _safe_close, build_agent_from_definition
     from .retry import run_agent
@@ -350,29 +350,29 @@ def load_and_run_agent(
         level if level is not None else resolve_agent_level(settings, definition)
     )
 
-    # A tier can be unavailable for reasons that have nothing to do with this
-    # agent — a provider outage, or a Claude subscription whose usage credits
-    # are exhausted until they reset. llmio's tier loop rebuilds the agent at
-    # the next tier and retries, so the run lands somewhere instead of dying
-    # (observed 2026-08-09: epic-breakdown pinned to level 4 died on exhausted
-    # credits while level 3, a different model with its own limit, was fine).
-    #
-    # The agent is rebuilt inside the factory, not reused: the level selects
-    # the provider, so a new tier needs a new agent and a new HTTP client.
-    tier_config = default_tier_config()
-    level_by_model: dict[str, int] = {}
-    for n in (1, 2, 3, 4, 5):
-        level_by_model.setdefault(getattr(tier_config, f"level{n}").model, n)
-
-    def _tier_factory(tlc: TierLevelConfig) -> Callable[[], Any]:
-        tier_level = level_by_model.get(tlc.model, start_level)
-
+    # A provider can be unavailable for reasons that have nothing to do with
+    # this agent — an outage, or a Claude subscription whose usage credits
+    # are exhausted until they reset. llmio's failover loop rebuilds the
+    # agent on the OTHER provider slot at the SAME level and retries, so the
+    # run lands somewhere instead of dying. The agent is rebuilt inside the
+    # factory, not reused: the slot selects the provider, so a new slot
+    # needs a new agent and a new HTTP client — ``tier_binding`` forces the
+    # attempted slot's binding (active-slot resolution would rebuild the
+    # provider that just failed).
+    def _slot_factory(tlc: TierLevelConfig) -> Callable[[], Any]:
         def _build_and_run() -> Any:
+            # Only force the binding when the attempted slot differs from
+            # what active-slot resolution would give (the loop's cross-slot
+            # attempt before the sticky window arms); the normal attempt
+            # keeps the plain level-resolution path.
+            active = default_tier_config().for_level(start_level)
+            binding = None if tlc.model == active.model else tlc
             agent = build_agent_from_definition(
                 settings,
                 definition,
                 tools=tools or [],
-                level=tier_level,
+                level=start_level,
+                tier_binding=binding,
                 repo_dir=repo_dir,
                 **build_overrides,
             )
@@ -384,9 +384,8 @@ def load_and_run_agent(
                 )
                 if validate is not None:
                     # Raising here is deliberate: a result that parsed but is
-                    # unusable (a structured output a weaker tier mangled into
-                    # nothing) is a tier failure, and the loop should try the
-                    # next tier rather than hand back a hollow success.
+                    # unusable is surfaced as a real error instead of being
+                    # returned as a hollow success.
                     validate(result)
                 return result
             finally:
@@ -394,28 +393,15 @@ def load_and_run_agent(
 
         return _build_and_run
 
-    # llmio's loop walks "higher tier first, then lower" and cannot be told
-    # which tiers are acceptable. From a Claude-backed (subscription) start
-    # every alternative is either another Claude level — dead for the same
-    # reason when the cause is quota exhaustion — or a keyed OpenRouter
-    # level, i.e. real money per token for a quota that comes back by
-    # itself. So unless the operator opted into paying
-    # (``claude_exhaustion_paid_fallback``), a Claude start does not fall
-    # back at all: the failure propagates and the worker parks the ticket
-    # until the stated reset (see ``runtime.transient_errors``). Keyed
-    # starts keep the loop — their fallback lands on a free Claude level
-    # first, and they were paying anyway. Observed live 2026-08-29 22:28Z
-    # right after #3054: "auto-approve triage: level2 failed with
-    # ClaudeSDKUsageExhaustedError — falling back to level3" (mimo, paid).
-    from .base import level_uses_claude
-
-    paid_fallback = bool(getattr(settings, "claude_exhaustion_paid_fallback", False))
-    fallback_enabled = paid_fallback or not level_uses_claude(start_level)
-
-    return call_with_tier_fallback(
-        _tier_factory,
-        tier_config=tier_config,
-        level=TierLevel(f"level{start_level}"),
-        fallback_enabled=fallback_enabled,
+    # The fallback slot is keyed OpenRouter — real money per token for a
+    # subscription quota that comes back by itself. Failover is therefore
+    # opt-in (``provider_failover_enabled``); with it off the failure
+    # propagates and the worker parks the ticket until the stated reset
+    # (see ``runtime.transient_errors``).
+    return call_with_failover(
+        _slot_factory,
+        tier_config=default_tier_config(),
+        level=start_level,
+        failover_enabled=bool(settings.provider_failover_enabled),
         what=what,
     )

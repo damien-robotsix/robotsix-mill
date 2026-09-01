@@ -2,7 +2,7 @@
 
 Parses ``expert_definitions/<domain>.yaml``, validates the result against
 the ``ExpertDefinition`` Pydantic model, and returns a structured object.
-Each definition declares a capability ``level`` (1/2/3/4/5) resolved by
+Each definition declares a capability ``level`` (1/2/3) resolved by
 ``build_agent`` via llmio's tier defaults.
 
 This module is independent of the agent runtime (``build_agent``,
@@ -60,7 +60,7 @@ class ExpertDefinition(BaseModel):
     description: str | None = None
     module_paths: list[str]
     system_prompt: str
-    level: int = 3
+    level: int = 2
     memory: ExpertMemoryConfig = ExpertMemoryConfig()
     skills: list[str] = []
     tools: list[str] = ["explore", "read_file", "list_dir"]

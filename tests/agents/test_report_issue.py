@@ -1,9 +1,17 @@
 """The universal report_issue tool: every agent can file a draft
 ticket about a system issue it hit, dedup-guarded against loop spam."""
 
+import pytest
+
 from robotsix_mill.agents.report_issue import make_report_issue_tool
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
+
+
+@pytest.fixture(autouse=True)
+def _openrouter_slot(fallback_slot_active):
+    """These tests capture agent assembly through the OpenRouter seam; arm
+    llmio's failover window so plain levels resolve the OpenRouter slot."""
 
 
 def test_files_a_draft_with_agent_source(settings):

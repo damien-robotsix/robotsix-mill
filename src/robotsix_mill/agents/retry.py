@@ -465,7 +465,7 @@ def run_agent[T](
     except Exception as exc:
         if not is_tier_unavailable(exc):
             raise
-        result = _run_at_fallback_tier(
+        result = _run_at_fallback_slot(
             agent, make_run, exc, what=what, sleep=sleep, run_isolated=_run_isolated
         )
 
@@ -499,7 +499,7 @@ def is_tier_unavailable(exc: BaseException) -> bool:
     return False
 
 
-def _run_at_fallback_tier[T](
+def _run_at_fallback_slot[T](
     agent: Any,
     make_run: Callable[[Any], T],
     original: Exception,
@@ -508,50 +508,48 @@ def _run_at_fallback_tier[T](
     sleep: Callable[[float], None],
     run_isolated: Callable[[Callable[[], T]], T],
 ) -> T:
-    """Rebuild *agent* at the nearest healthy non-Claude tier and run there.
+    """Rebuild *agent* on the fallback provider slot (same level) and run there.
 
-    Only agents built by ``build_agent_from_definition`` carry the
-    ``_tier_rebuild`` hook; anything else re-raises *original* unchanged. Each
-    fallback tier gets its own bounded retry session; the last failure is
-    chained onto *original* so the ticket note still names the real cause.
+    Only agents built by ``build_agent_from_definition`` under
+    ``provider_failover_enabled`` carry the ``_failover_rebuild`` hook;
+    anything else re-raises *original* unchanged. The fallback run gets its
+    own bounded retry session.
     """
-    from .base import _safe_close, tier_fallback_levels
+    from robotsix_llmio.core.failover import get_failover_tracker
 
-    rebuild = getattr(agent, "_tier_rebuild", None)
-    level = getattr(agent, "_tier_level", None)
-    if not callable(rebuild) or not isinstance(level, int):
+    from .base import _safe_close
+
+    rebuild = getattr(agent, "_failover_rebuild", None)
+    if not callable(rebuild):
         raise original
 
-    last: Exception = original
-    for next_level in tier_fallback_levels(level):
-        log.warning(
-            "%s: level%d unavailable (%s: %s) — falling back to level%d",
-            what,
-            level,
-            type(last).__name__,
-            str(last)[:160],
-            next_level,
-        )
-        try:
-            fallback_agent = rebuild(next_level)
-        except Exception as build_exc:
-            last = build_exc
-            continue
+    # Inform the process-wide failover tracker so subsequent builds resolve
+    # the fallback slot directly (and the UI shows failover as active). Only
+    # reached when ``provider_failover_enabled`` attached the rebuild hook.
+    get_failover_tracker().record_failure("default", original)
 
-        def _fallback_call(h: Any = fallback_agent, lvl: int = next_level) -> T:
-            with closing_scratch_loop():
-                return _lib_call_with_retry(
-                    lambda: make_run(h),
-                    what=f"{what} (level{lvl} fallback)",
-                    sleep=sleep,
-                    is_transient_fn=is_transient,
-                )
+    log.warning(
+        "%s: default provider unavailable (%s: %s) — retrying on the "
+        "fallback provider slot",
+        what,
+        type(original).__name__,
+        str(original)[:160],
+    )
+    try:
+        fallback_agent = rebuild()
+    except Exception as build_exc:
+        raise build_exc from original
 
-        try:
-            return run_isolated(_fallback_call)
-        except Exception as run_exc:
-            last = run_exc
-            level = next_level
-        finally:
-            _safe_close(fallback_agent)
-    raise last from original
+    def _fallback_call(h: Any = fallback_agent) -> T:
+        with closing_scratch_loop():
+            return _lib_call_with_retry(
+                lambda: make_run(h),
+                what=f"{what} (provider-failover)",
+                sleep=sleep,
+                is_transient_fn=is_transient,
+            )
+
+    try:
+        return run_isolated(_fallback_call)
+    finally:
+        _safe_close(fallback_agent)

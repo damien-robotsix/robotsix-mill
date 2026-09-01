@@ -84,7 +84,7 @@ def run_run_health_agent(
         ask_user=False,
         # No per-agent model decision: real-vs-benign judgement runs on the
         # normal/default tier (llmio resolves it per backend).
-        level=3,
+        level=2,
         name="run_health",
     )
 

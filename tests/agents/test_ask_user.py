@@ -1,9 +1,17 @@
 """Tests for the ``ask_user`` tool — pause a ticket and ask the
 operator a clarifying question."""
 
+import pytest
+
 from robotsix_mill.agents.ask_user import make_ask_user_tool
 from robotsix_mill.agents.tool_registry import ToolRegistry
 from robotsix_mill.core.service import TicketService
+
+
+@pytest.fixture(autouse=True)
+def _openrouter_slot(fallback_slot_active):
+    """These tests capture agent assembly through the OpenRouter seam; arm
+    llmio's failover window so plain levels resolve the OpenRouter slot."""
 
 
 def test_writes_comment_with_ask_user_marker(settings, service, monkeypatch):

@@ -14,7 +14,7 @@ category: periodic
 interval: 14d
 enabled: true
 
-level: 2
+level: 1
 
 # Read-only tools for codebase exploration (conditional on repo_dir).
 tools:
