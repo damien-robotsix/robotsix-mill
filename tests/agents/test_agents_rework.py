@@ -66,7 +66,7 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     )
     assert out.summary == "did it"
     # implement.yaml declares level 2 → MiMo v2.5 pro via llmio tier defaults.
-    assert fake_ai["model"] == "xiaomi/mimo-v2.5-pro"
+    assert fake_ai["model"] == "deepseek/deepseek-v4-pro-0813"
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [
         "ask_user",
@@ -451,7 +451,7 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     assert passed is False
     assert fb == "fix the assertion in foo.py"  # distilled, not raw log
     # run_tests.yaml declares level 2 → MiMo v2.5 pro via llmio tier defaults.
-    assert cap["model"] == "xiaomi/mimo-v2.5-pro"
+    assert cap["model"] == "deepseek/deepseek-v4-pro-0813"
     assert cap["got_output"]
     assert cap["name"] == "run_tests"
 
