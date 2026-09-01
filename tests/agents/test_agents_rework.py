@@ -73,7 +73,7 @@ def test_implement_agent_reads_and_edits_itself(tmp_path, fake_ai):
     assert out.summary == "did it"
     # implement.yaml declares level 2 → the workhorse binding of the
     # OpenRouter (fallback) slot these tests arm: flash with xhigh reasoning.
-    assert fake_ai["model"] == "deepseek/deepseek-v4-pro-0813"
+    assert fake_ai["model"] == "deepseek/deepseek-v4-flash-20260731"
     assert fake_ai["limit"] == 9
     assert fake_ai["tools"] == [
         "ask_user",
@@ -459,7 +459,7 @@ def test_test_agent_fail_distills_via_cheap_model(tmp_path, monkeypatch):
     assert fb == "fix the assertion in foo.py"  # distilled, not raw log
     # agent_levels pins run_tests to level 2 → the workhorse binding of the
     # OpenRouter (fallback) slot these tests arm: flash with xhigh reasoning.
-    assert cap["model"] == "deepseek/deepseek-v4-pro-0813"
+    assert cap["model"] == "deepseek/deepseek-v4-flash-20260731"
     assert cap["got_output"]
     assert cap["name"] == "run_tests"
 
