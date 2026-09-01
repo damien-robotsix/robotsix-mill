@@ -120,7 +120,7 @@ def test_safe_close_swallows_exceptions_from_close():
 def test_default_tier_config_maps_levels():
     """Each capability level maps to the backend family mill's code assumes:
     L1 → DeepSeek flash on OpenRouter, L2 → Xiaomi MiMo pro on OpenRouter,
-    L2 → Claude SDK haiku, L3 → OpenRouter mimo, L4 → Claude SDK opus.
+    L2 → Claude SDK haiku, L3 → OpenRouter deepseek-v4-pro, L4 → Claude SDK opus.
 
     Asserts the *provider* exactly and the model *family* by prefix, not the
     full slug. The exact slug is llmio's to choose — it re-pins the DeepSeek
@@ -142,7 +142,7 @@ def test_default_tier_config_maps_levels():
 
     parsed3 = parse_model_identifier(default_tier_config().for_level(3).model)
     assert parsed3.provider == "openrouter"
-    assert parsed3.model_name.startswith("xiaomi/mimo-v2.5-pro")
+    assert parsed3.model_name.startswith("deepseek/deepseek-v4-pro")
 
     parsed4 = parse_model_identifier(default_tier_config().for_level(4).model)
     assert parsed4.provider == "claudeSDK"
@@ -346,7 +346,7 @@ def test_build_agent_resolves_level_3_to_pro(monkeypatch, settings):
         tools=[],
     )
 
-    assert captured_kwargs[0]["effective_model"] == "xiaomi/mimo-v2.5-pro"
+    assert captured_kwargs[0]["effective_model"] == "deepseek/deepseek-v4-pro-0813"
 
 
 def test_build_agent_injects_report_issue_tool_by_default(monkeypatch, settings):
