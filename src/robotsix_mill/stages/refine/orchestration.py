@@ -155,23 +155,6 @@ class RefineAgentMixin:
         """Delegate to :func:`_checkpoint.clear_refine_checkpoint`."""
         return _checkpoint.clear_refine_checkpoint(ws)
 
-    @staticmethod
-    def _triage_skip(
-        ctx: StageContext,
-        ticket: Ticket,
-        draft: str,
-        repo_dir: Path | None,
-        extra_roots: list[Path] | None,
-        title: str,
-        ws: Workspace,
-        s: Settings,
-        reviewer_comments: str | None,
-    ) -> Outcome | None:
-        """Delegate to :func:`_triage.triage_skip`."""
-        return _triage.triage_skip(
-            ctx, ticket, draft, repo_dir, extra_roots, title, ws, s, reviewer_comments
-        )
-
     # -- main orchestrator --------------------------------------------------
 
     @staticmethod
