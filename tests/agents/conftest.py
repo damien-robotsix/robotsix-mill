@@ -115,15 +115,78 @@ def _pre_refine_classifier_ok(monkeypatch):
     """All pre-existing tests expect the pre-refine classifier to pass
     through to refine.  Tests that need a different outcome override
     this fixture."""
+    from robotsix_mill.agents import dedup as _dedup
     from robotsix_mill.agents import pre_refine_classifier
+    from robotsix_mill.agents.refine_triage import TriageResult as _TriageResult
+
+    def _bridge(
+        *, settings, title, draft, candidates_json="", reviewer_comments=None, **kw
+    ):
+        """Delegate the collapsed classifier to the legacy triage/dedup
+        seams so per-test monkeypatches of those seams keep working;
+        degrade to the REFINE/no-duplicate passthrough (the old static
+        default) when a seam is unmocked and hits the real-call guard."""
+        if reviewer_comments:
+            agreement = None
+            reason = ""
+            try:
+                ra = refining.triage_reviewer_agreement(
+                    settings=settings,
+                    draft=draft,
+                    reviewer_comments=reviewer_comments,
+                )
+                agreement, reason = ra.decision, ra.reason
+            except Exception:
+                pass
+            return PreRefineClassifierResult(
+                triage_decision="REFINE",
+                triage_reason="reviewer sendback",
+                reviewer_agreement=agreement,
+                reviewer_agreement_reason=reason,
+            )
+        if getattr(settings, "refine_triage_enabled", True):
+            try:
+                triage = refining.triage_refine(
+                    settings=settings, title=title, draft=draft
+                )
+            except Exception:
+                triage = _TriageResult(decision="REFINE", reason="test")
+        else:
+            triage = _TriageResult(decision="REFINE", reason="triage disabled")
+        if candidates_json:
+            try:
+                verdict = _dedup.run_dedup_check(
+                    settings=settings,
+                    draft_title=title,
+                    draft_body=draft,
+                    candidates_json=candidates_json,
+                )
+            except Exception:
+                verdict = {"duplicate_of": None, "already_done": None, "reason": ""}
+        else:
+            verdict = {"duplicate_of": None, "already_done": None, "reason": ""}
+        if not isinstance(verdict, dict):
+            verdict = {
+                "duplicate_of": getattr(verdict, "duplicate_of", None),
+                "already_done": getattr(verdict, "already_done", None),
+                "reason": getattr(verdict, "reason", ""),
+            }
+        return PreRefineClassifierResult(
+            triage_decision=triage.decision,
+            triage_reason=triage.reason,
+            target_board=triage.target_board,
+            complexity=triage.complexity,
+            trivial_scope=triage.trivial_scope,
+            exploration_findings=triage.exploration_findings,
+            duplicate_of=verdict.get("duplicate_of"),
+            already_done=verdict.get("already_done"),
+            dedup_reason=verdict.get("reason") or "",
+        )
 
     monkeypatch.setattr(
         pre_refine_classifier,
         "run_pre_refine_classifier",
-        lambda **kw: PreRefineClassifierResult(
-            triage_decision="REFINE",
-            triage_reason="test",
-        ),
+        _bridge,
     )
 
 
@@ -135,18 +198,27 @@ def _post_refine_ok(monkeypatch):
     from robotsix_mill.agents import post_refine
     from robotsix_mill.agents.post_refine import PostRefineResult
 
-    def _passthrough_post_refine(*, settings, spec, reviewer_comments=None, **kw):
+    def _bridge_post_refine(*, settings, spec, reviewer_comments=None, **kw):
+        """Delegate to the legacy review/auto-approve seams so per-test
+        monkeypatches keep working.  An unmocked seam raises (the
+        real-call guard), which _run_post_refine_check catches — the
+        legacy fallback in _resolve_next_state then reproduces the
+        pre-collapse behavior exactly."""
+        review = refining.review_spec_for_conciseness(
+            settings=settings, spec_markdown=spec
+        )
+        approve = refining.triage_auto_approve(settings=settings, spec=spec)
         return PostRefineResult(
-            concise_spec=spec,
-            stripped_summary="test passthrough",
-            auto_approve="APPROVE",
-            auto_approve_reason="test",
+            concise_spec=review.concise_spec,
+            stripped_summary=review.stripped_summary,
+            auto_approve=approve.decision,
+            auto_approve_reason=approve.reason,
         )
 
     monkeypatch.setattr(
         post_refine,
         "run_post_refine_check",
-        _passthrough_post_refine,
+        _bridge_post_refine,
     )
 
 

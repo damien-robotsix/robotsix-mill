@@ -1413,6 +1413,22 @@ def test_epic_body_stored_as_artifact_in_gated_mode(
         ),
     )
 
+    # Override the autouse APPROVE passthrough: this test exercises the
+    # gated path, so the auto-approve verdict must be NEEDS_APPROVAL.
+    from robotsix_mill.agents import post_refine
+    from robotsix_mill.agents.post_refine import PostRefineResult
+
+    monkeypatch.setattr(
+        post_refine,
+        "run_post_refine_check",
+        lambda *, settings, spec, reviewer_comments=None, **kw: PostRefineResult(
+            concise_spec=spec,
+            stripped_summary="test passthrough",
+            auto_approve="NEEDS_APPROVAL",
+            auto_approve_reason="design decision present",
+        ),
+    )
+
     gated_settings = Settings(data_dir=str(tmp_path), require_approval="true")
     gated_ctx = StageContext(
         settings=gated_settings, service=service, repo_config=repo_config
@@ -1449,6 +1465,22 @@ def test_epic_body_applied_on_approval_in_gated_mode(
             split=False,
             spec_markdown="## Problem\nAdd login\n## Scope\n- login form\n",
             epic_body="Revised epic strategy: login first.",
+        ),
+    )
+
+    # Override the autouse APPROVE passthrough: this test exercises the
+    # gated path, so the auto-approve verdict must be NEEDS_APPROVAL.
+    from robotsix_mill.agents import post_refine
+    from robotsix_mill.agents.post_refine import PostRefineResult
+
+    monkeypatch.setattr(
+        post_refine,
+        "run_post_refine_check",
+        lambda *, settings, spec, reviewer_comments=None, **kw: PostRefineResult(
+            concise_spec=spec,
+            stripped_summary="test passthrough",
+            auto_approve="NEEDS_APPROVAL",
+            auto_approve_reason="design decision present",
         ),
     )
 
@@ -2865,22 +2897,26 @@ def _simple_agent():
 def test_triage_complexity_simple_suppresses_exploration(ctx, service, monkeypatch):
     """When triage returns REFINE with complexity='simple', run_refine_agent
     is called with include_explore=False and include_parallel_explore=False."""
-    from robotsix_mill.agents.refining import TriageResult
 
     refine_kwargs: dict = {}
 
-    def fake_triage(*, settings, title, draft, repo_dir=None, extra_roots=None):
-        return TriageResult(
-            decision="REFINE",
-            reason="single-file change",
+    from robotsix_mill.agents import pre_refine_classifier
+    from robotsix_mill.agents.pre_refine_classifier import PreRefineClassifierResult
+
+    monkeypatch.setattr(
+        pre_refine_classifier,
+        "run_pre_refine_classifier",
+        lambda **kw: PreRefineClassifierResult(
+            triage_decision="REFINE",
+            triage_reason="single-file change",
             complexity="simple",
-        )
+        ),
+    )
 
     def spy_refine(**kwargs):
         refine_kwargs.update(kwargs)
         return _single("## Problem\nrefined\n")
 
-    monkeypatch.setattr(refining, "triage_refine", fake_triage)
     monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
 
     t = service.create("Fix typo in README", "Change one word in README.md line 3")
@@ -3558,23 +3594,27 @@ def test_split_child_fast_path_sets_simple_complexity(ctx, service, monkeypatch)
 def test_triage_skip_writes_complexity_artifact(ctx, service, monkeypatch):
     """When triage returns REFINE with complexity='simple', the complexity
     artifact is written before falling through to full refine."""
-    from robotsix_mill.agents.refining import TriageResult
 
     refine_called = False
 
-    def fake_triage(*, settings, title, draft, repo_dir=None, extra_roots=None):
-        return TriageResult(
-            decision="REFINE",
-            reason="trivial change",
+    from robotsix_mill.agents import pre_refine_classifier
+    from robotsix_mill.agents.pre_refine_classifier import PreRefineClassifierResult
+
+    monkeypatch.setattr(
+        pre_refine_classifier,
+        "run_pre_refine_classifier",
+        lambda **kw: PreRefineClassifierResult(
+            triage_decision="REFINE",
+            triage_reason="trivial change",
             complexity="simple",
-        )
+        ),
+    )
 
     def spy_refine(**kwargs):
         nonlocal refine_called
         refine_called = True
         return _single("## Problem\nrefined\n")
 
-    monkeypatch.setattr(refining, "triage_refine", fake_triage)
     monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
 
     t = service.create("Simple change", "trivial draft")
@@ -3638,6 +3678,10 @@ def test_auto_approve_receives_summarized_spec(
     gated = Settings(
         data_dir=str(tmp_path),
         require_approval="true",
+        # Disable the combined post-refine check so _resolve_next_state
+        # takes the legacy triage_auto_approve fallback — the
+        # summarization seam this test verifies.
+        spec_review_enabled="false",
     )
     gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
 

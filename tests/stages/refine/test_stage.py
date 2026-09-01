@@ -916,20 +916,19 @@ def test_auto_approve_audit_source_also_short_circuits(
             "gate against the source-based rule.",
             source=source,
         )
-        triage_calls: list = []
-
-        def fail_if_called(_calls=triage_calls, _src=source, **_):
-            _calls.append(True)
-            raise AssertionError(
-                f"triage_auto_approve must not be called for {_src}",
-            )
-
+        # Under the collapsed post-refine check there is no separate
+        # auto-approve LLM call to suppress — the combined call runs for
+        # spec conciseness regardless of source.  What must hold is the
+        # DECISION: the deterministic source rule routes to READY even
+        # when the auto-approve verdict says NEEDS_APPROVAL.
         _apply_default_mocks(
             monkeypatch,
             run_refine_agent=_mock_refine_ok(
                 spec_markdown="## Problem\nDo a thing",
             ),
-            triage_auto_approve=fail_if_called,
+            triage_auto_approve=_mock_auto_approve(
+                decision="NEEDS_APPROVAL", reason="should be overridden"
+            ),
         )
 
         out = RefineStage().run(t, ctx)
@@ -937,8 +936,6 @@ def test_auto_approve_audit_source_also_short_circuits(
             f"{source}: expected READY, got {out.next_state}"
         )
         assert source in (out.note or ""), out.note
-        assert triage_calls == []
-    assert triage_calls == []
 
 
 # ---------------------------------------------------------------------------
@@ -1061,15 +1058,15 @@ def test_refine_triage_skip_no_paths_writes_empty_file_map(ctx_factory, monkeypa
         "run_refine_agent",
         lambda *a, **k: (refine_called.append(1), None)[1],
     )
+    from robotsix_mill.agents import pre_refine_classifier
+    from robotsix_mill.agents.pre_refine_classifier import PreRefineClassifierResult
+
     monkeypatch.setattr(
-        refining,
-        "triage_refine",
-        _mock_triage_refine(decision="SKIP", reason="already precise"),
-    )
-    monkeypatch.setattr(
-        dedup,
-        "run_dedup_check",
-        _mock_dedup(duplicate_of=None, already_done=None, reason="no match"),
+        pre_refine_classifier,
+        "run_pre_refine_classifier",
+        lambda **kw: PreRefineClassifierResult(
+            triage_decision="SKIP", triage_reason="already precise"
+        ),
     )
     monkeypatch.setattr(
         refine_module, "load_memory", lambda memory_file, max_chars=None: ""

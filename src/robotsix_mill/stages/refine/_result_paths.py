@@ -527,7 +527,9 @@ def single_scope_path(
     # Post-refine check: single LLM call replacing spec-conciseness +
     # auto-approve.  When the post-refine check is enabled, run it;
     # otherwise fall back to the legacy spec-review + resolved_outcome.
-    if s.spec_review_enabled:
+    # Reviewer sendbacks skip the conciseness rewrite — the human is
+    # iterating on this exact text (legacy suppression, preserved).
+    if s.spec_review_enabled and not reviewer_comments:
         spec = _run_post_refine_check(ctx, ticket, spec, ws, s, reviewer_comments)
 
     new_hash = ws.write_description(spec)

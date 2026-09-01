@@ -26,7 +26,7 @@ from ._gates_dedup import (
     _run_inflight_advisory,
     _verify_advisory_dedup,
 )
-from ._triage import _MIGRATE_NOTE_PREFIX
+from ._triage import is_sendback_reentry
 from .helpers import (
     DEDUP_ALREADY_DONE_PREFIX,
     DEDUP_DUPLICATE_PREFIX,
@@ -544,8 +544,37 @@ class RefineGatesMixin:
         - complexity/trivial_scope: persisted for the refine agent
         """
         from ...agents.pre_refine_classifier import run_pre_refine_classifier
+        from ...agents.refine_triage import TriageResult
         from ...agents.standards import fetch_standards_context
         from . import _reconcile
+
+        # LLM-free deterministic pre-checks (doc-only draft, prior
+        # triage-SKIP verdict, prescriptive code-complete spec) — same
+        # gating as the legacy triage: only for enabled triage and no
+        # reviewer sendback (human-flagged changes always refine).
+        from ._triage import deterministic_triage_pre_checks
+
+        if s.refine_triage_enabled and not reviewer_comments:
+            outcome = deterministic_triage_pre_checks(ctx, ticket, draft, ws, s)
+            if outcome is not None:
+                return outcome
+
+        # Honor the legacy config gates for the reviewer-agreement guard:
+        # it can be disabled outright, and a delta-reuse sendback must
+        # reach the delta refine pass instead of being short-circuited —
+        # in either case the classifier is not asked to assess agreement.
+        _reviewer_agreement_active = s.reviewer_agreement_gate_enabled and not (
+            s.refine_delta_reuse_enabled and is_sendback_reentry(ctx.service, ticket.id)
+        )
+
+        if reviewer_comments and not _reviewer_agreement_active:
+            # Delta-reuse sendback (or agreement gate disabled): every
+            # verdict the classifier could produce is unusable here —
+            # triage decisions are gated off by the sendback, dedup by
+            # the operator-iteration guard, and the agreement
+            # short-circuit is inactive.  Skip the LLM call and proceed
+            # straight to the (delta) refine pass.
+            return None
 
         # Gather standards context (best-effort).
         standards_ctx = ""
@@ -560,9 +589,24 @@ class RefineGatesMixin:
         ):
             standards_ctx = fetch_standards_context(s)
 
+        # Operator-iteration guard: if a human has sent this ticket back
+        # with "changes requested" feedback, they are actively shaping it —
+        # do NOT let dedup auto-close it as a duplicate/already-done (that
+        # discards their intent; see the auto-mail board-columns incident).
+        from .helpers import OPERATOR_SENDBACK_PREFIX
+
+        operator_iterating = False
+        try:
+            operator_iterating = any(
+                ev.note and ev.note.startswith(OPERATOR_SENDBACK_PREFIX)
+                for ev in ctx.service.history(ticket.id)  # type: ignore[attr-defined]
+            )
+        except Exception:
+            log.debug("%s: dedup sendback-check skipped", ticket.id, exc_info=True)
+
         # Gather dedup candidates (reusing existing logic).
         candidates_json = ""
-        if len(draft) >= 100:
+        if len(draft) >= 100 and not operator_iterating:
             try:
                 from datetime import UTC, datetime
 
@@ -610,6 +654,29 @@ class RefineGatesMixin:
                     candidates=candidates,
                     max_candidates=s.dedup_max_candidates,
                 )
+                # Zero-overlap short-circuit (legacy dedup_skip_on_no_overlap):
+                # when no candidate shares a meaningful token with the
+                # draft, none can plausibly be a duplicate — leave the
+                # candidates block empty so no dedup work reaches the LLM.
+                if candidates and s.dedup_skip_on_no_overlap:
+                    candidate_texts: list[str] = []
+                    for t in candidates:
+                        try:
+                            body = ctx.service.workspace(t).read_description()
+                        except Exception:
+                            body = ""
+                        candidate_texts.append(f"{t.title} {body}")
+                    if not dedup.any_candidate_overlap(
+                        draft_title=ticket.title,
+                        draft_body=draft,
+                        candidates_texts=candidate_texts,
+                    ):
+                        log.debug(
+                            "%s: no candidate token overlap (%d candidates) — skipping dedup LLM call",
+                            ticket.id,
+                            len(candidates),
+                        )
+                        candidates = []
                 if candidates:
                     candidates_json = _build_candidates_block(candidates, ctx)
             except Exception:
@@ -630,7 +697,11 @@ class RefineGatesMixin:
         )
 
         # --- Handle reviewer agreement (pre-refine short-circuit) ---
-        if reviewer_comments and result.reviewer_agreement is not None:
+        if (
+            reviewer_comments
+            and result.reviewer_agreement is not None
+            and _reviewer_agreement_active
+        ):
             agreement = result.reviewer_agreement
             agreement_reason = result.reviewer_agreement_reason or ""
             short = agreement_reason[:400] + (
@@ -694,7 +765,7 @@ class RefineGatesMixin:
             )
 
         # --- Handle dedup ---
-        dup_id = result.duplicate_of
+        dup_id = None if operator_iterating else result.duplicate_of
         if dup_id:
             from ._gates_dedup import _is_valid_dedup_target
 
@@ -708,7 +779,7 @@ class RefineGatesMixin:
                 ticket.id,
                 dup_id,
             )
-        done_id = result.already_done
+        done_id = None if operator_iterating else result.already_done
         if done_id:
             from ...core.dedup import _extract_paths
             from ._gates_dedup import _is_valid_dedup_target
@@ -732,126 +803,35 @@ class RefineGatesMixin:
                     f"{DEDUP_ALREADY_DONE_PREFIX}{done_id}: {reason_text}",
                 )
 
-        # --- Persist triage complexity for the refine agent ---
-        complexity = result.complexity or "needs-exploration"
-        _reconcile.write_triage_complexity(
-            ws,
-            complexity,
+        # --- Persist triage complexity for the refine agent, then
+        # delegate the decision handling (NO_CHANGE / SKIP / MIGRATE
+        # short-circuits, target validation, anti-bounce, and the
+        # mechanical draft fast-path) to the shared legacy handler so
+        # the collapsed classifier keeps the original semantics and
+        # note formats. ---
+        from ._triage import handle_triage_decision
+
+        triage_verdict = TriageResult(
+            decision=result.triage_decision,
+            reason=result.triage_reason,
+            target_board=result.target_board,
+            complexity=result.complexity,
             trivial_scope=result.trivial_scope,
-            findings=result.exploration_findings,
+            exploration_findings=result.exploration_findings,
         )
-
-        # --- Handle triage decision ---
-        decision = result.triage_decision
-        if decision == "SKIP":
-            # Write artifacts for traceability.
-            (ws.artifacts_dir / "draft-original.md").write_text(
-                draft if draft else "(title-only ticket, no body provided)",
-                encoding="utf-8",
+        # Same gating as the legacy triage_skip: honor triage verdicts
+        # (and the mechanical fast-path) only when triage is enabled and
+        # there is no reviewer sendback — human-flagged changes always
+        # take the full refine pass.
+        if s.refine_triage_enabled and not reviewer_comments:
+            outcome = handle_triage_decision(
+                ctx, ticket, draft, repo_dir, ws, s, triage_verdict
             )
-            _reconcile.write_file_map(ws, [], only_if_absent=True)
-            log.info(
-                "%s: pre-refine classifier SKIP — %s",
-                ticket.id,
-                result.triage_reason,
-            )
-            from . import _result_paths
-
-            return _result_paths.resolved_outcome(
-                ctx,
-                draft,
-                ticket.id,
-                f"triage SKIP: {result.triage_reason}",
-                source=ticket.source,
-                triage_note=result.triage_reason,
-            )
-
-        if decision == "NO_CHANGE":
-            short_reason = result.triage_reason[:400] + (
-                "…" if len(result.triage_reason) > 400 else ""
-            )
-            from ...core.models import TicketKind
-            from .helpers import _verify_branch_merged
-
-            if ticket.kind == TicketKind.TASK and (
-                not ticket.branch or not _verify_branch_merged(repo_dir, ticket)
-            ):
-                (ws.artifacts_dir / "draft-original.md").write_text(
-                    draft if draft else "(title-only ticket, no body provided)",
-                    encoding="utf-8",
-                )
-                _reconcile.write_file_map(ws, [], only_if_absent=True)
-                from . import _result_paths
-
-                return _result_paths.resolved_outcome(
-                    ctx,
-                    draft,
-                    ticket.id,
-                    f"triage NO_CHANGE — routing to implement: {short_reason}",
-                    source=ticket.source,
-                )
-            (ws.artifacts_dir / "draft-original.md").write_text(
-                draft if draft else "(title-only ticket, no body provided)",
-                encoding="utf-8",
-            )
-            _reconcile.write_file_map(ws, [], only_if_absent=True)
-            return Outcome(
-                State.DONE,
-                f"triage NO_CHANGE: {short_reason}",
-            )
-
-        if decision == "MIGRATE":
-            target_board = result.target_board
-            if target_board:
-                log.info(
-                    "%s: pre-refine classifier MIGRATE to %s — %s",
-                    ticket.id,
-                    target_board,
-                    result.triage_reason,
-                )
-                # Delegate to the existing migration logic.
-                from ._triage import _anti_bounce_escalate, _triage_outcome
-
-                # Build a mock triage result for the migration handler.
-                class _MockTriage:
-                    decision = "MIGRATE"
-                    reason = result.triage_reason
-                    target_board = target_board
-
-                anti_bounce = _anti_bounce_escalate(
-                    ctx, ws, draft, ticket, _MockTriage(), target_board
-                )
-                if anti_bounce is not None:
-                    return anti_bounce
-                # Perform the migration.
-                from ...config import get_repos_config
-
-                try:
-                    repos = get_repos_config()
-                    for rc in repos.repos.values():
-                        if rc.board_id == target_board:
-                            ctx.service.migrate(
-                                ticket.id,
-                                target_board,
-                                note=f"{_MIGRATE_NOTE_PREFIX}{target_board} (was {ticket.board_id}): {result.triage_reason}",
-                            )
-                            return _triage_outcome(
-                                ctx,
-                                ws,
-                                draft,
-                                ticket.id,
-                                f"migrated to {target_board}: {result.triage_reason}",
-                                source=ticket.source,
-                                triage_note=result.triage_reason,
-                            )
-                except Exception:
-                    log.warning(
-                        "%s: migration to %s failed",
-                        ticket.id,
-                        target_board,
-                        exc_info=True,
-                    )
-            # Fall through to REFINE if migration fails.
+            if outcome is not None:
+                return outcome
+        # When triage is disabled or a reviewer sendback is in play the
+        # legacy flow wrote no complexity artifact — leave any verdict
+        # persisted by an earlier pass untouched.
 
         # REFINE — proceed to the refine agent.
         log.debug(

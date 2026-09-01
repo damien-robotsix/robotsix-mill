@@ -372,36 +372,20 @@ def split_child_fast_path(
 # ---------------------------------------------------------------------------
 
 
-def triage_skip(
+def deterministic_triage_pre_checks(
     ctx: StageContext,
     ticket: Ticket,
     draft: str,
-    repo_dir: Path | None,
-    extra_roots: list[Path] | None,
-    title: str,
     ws: Workspace,
     s: Settings,
-    reviewer_comments: str | None,
 ) -> Outcome | None:
-    """Triage phase 1: LLM classifier (3-way: SKIP / REFINE / NO_CHANGE).
+    """LLM-free triage pre-checks shared by the legacy triage gate and
+    the collapsed pre-refine classifier: doc-only drafts, a prior
+    triage-SKIP verdict in history, and prescriptive (code-complete)
+    specs all route straight to implement without any LLM spend.
 
-    A single cheap LLM call classifies the draft.  If it's
-    already a precise, implementation-ready spec, skip the
-    expensive refine agent entirely.  ONLY run when:
-    - the feature flag is enabled, AND
-    - no reviewer sendback (human-flagged changes always refine).
-
-    Also captures the complexity verdict from the triage classifier
-    and persists it to ``ws.artifacts_dir / "triage_complexity.json"``
-    so ``_run_and_collect`` can read it and pass it to
-    ``run_refine_agent`` for exploration gating.
-
-    Returns an :class:`Outcome` to short-circuit, or ``None`` to fall
-    through to the full refine agent.
+    Returns an :class:`Outcome` to short-circuit, or ``None``.
     """
-    if not (s.refine_triage_enabled and not reviewer_comments):
-        return None
-
     # Deterministic pre-check: documentation-only change.
     # When every file path in the draft is under docs/ or is a .md
     # file (and no code files are touched), skip the LLM triage and
@@ -488,6 +472,302 @@ def triage_skip(
                 extract_paths_from_draft=True,
             )
 
+    return None
+
+
+def handle_triage_decision(
+    ctx: StageContext,
+    ticket: Ticket,
+    draft: str,
+    repo_dir: Path | None,
+    ws: Workspace,
+    s: Settings,
+    triage: refining.TriageResult,
+) -> Outcome | None:
+    """Handle a triage verdict — from the legacy triage LLM or the
+    collapsed pre-refine classifier: the NO_CHANGE / SKIP / MIGRATE
+    short-circuits (with target validation and anti-bounce) and the
+    mechanical draft fast-path, all with their original note formats.
+
+    Returns an :class:`Outcome` to short-circuit, or ``None`` to fall
+    through to the full refine agent.
+    """
+    _reconcile.persist_triage_complexity(ws, triage)
+
+    if triage.decision == "NO_CHANGE":
+        short_reason = triage.reason[:400] + ("…" if len(triage.reason) > 400 else "")
+        # A TASK-kind (implementation) ticket that hasn't produced a
+        # branch, or whose branch is not merged to the base branch,
+        # must not be auto-closed from DRAFT.  Route to READY so
+        # implement can verify the "no change" claim against the
+        # live tree.
+        if ticket.kind == TicketKind.TASK and (
+            not ticket.branch or not _verify_branch_merged(repo_dir, ticket)
+        ):
+            # Deliberately NOT passing triage_note here. A NO_CHANGE
+            # reason says, by definition, "this is already done /
+            # no change is needed" — which is verbatim what
+            # _TRIAGE_REJECTION_PATTERNS looks for. Forwarding it
+            # made the rejection gate fire on the premise of this
+            # very route, converting "route to READY so implement
+            # can verify the claim" into HUMAN_ISSUE_APPROVAL, where
+            # the ticket then sat forever: nothing auto-closes it and
+            # no human ever approves a ticket whose own note says
+            # there is nothing to do. Live, these accumulated for up
+            # to six days. The spec still faces the normal
+            # auto-approve triage below; only the self-referential
+            # rejection match is skipped.
+            return _triage_outcome(
+                ctx,
+                ws,
+                draft,
+                ticket.id,
+                f"triage NO_CHANGE — routing to implement: {short_reason}",
+                source=ticket.source,
+            )
+        return _triage_outcome(
+            ctx,
+            ws,
+            draft,
+            ticket.id,
+            f"triage NO_CHANGE: {short_reason}",
+            state=State.DONE,
+        )
+    if triage.decision == "SKIP":
+        return _triage_outcome(
+            ctx,
+            ws,
+            draft,
+            ticket.id,
+            f"triage SKIP: {triage.reason}",
+            source=ticket.source,
+            triage_note=triage.reason,
+            extract_paths_from_draft=True,
+        )
+
+    if triage.decision == "MIGRATE":
+        from ...config import get_repos_config
+
+        try:
+            repos_config = get_repos_config()
+            known: dict[str, str] = {"meta": "meta"}
+            for rc in repos_config.repos.values():
+                known[rc.repo_id] = rc.board_id
+                known[rc.board_id] = rc.board_id
+        except Exception:
+            log.warning(
+                "%s: could not load repos config for MIGRATE validation, "
+                "escalating to human",
+                ticket.id,
+                exc_info=True,
+            )
+            known = {}
+
+        target = (triage.target_board or "").strip()
+        resolved_board = known.get(target) if known else None
+
+        if not target or resolved_board is None or resolved_board == ticket.board_id:
+            log.info(
+                "%s: MIGRATE target invalid (target=%r, resolved=%r, current=%r) "
+                "— escalating to human",
+                ticket.id,
+                target,
+                resolved_board,
+                ticket.board_id,
+            )
+            return _triage_outcome(
+                ctx,
+                ws,
+                draft,
+                ticket.id,
+                f"triage MIGRATE invalid target: {triage.reason}",
+                source=ticket.source,
+                triage_note=triage.reason,
+            )
+
+        anti_bounce = _anti_bounce_escalate(
+            ctx, ws, draft, ticket, triage, resolved_board
+        )
+        if anti_bounce is not None:
+            return anti_bounce
+
+        try:
+            ctx.service.migrate(
+                ticket.id,
+                resolved_board,
+                note=triage.reason,
+            )
+        except (KeyError, ValueError) as exc:
+            log.warning(
+                "%s: MIGRATE call failed: %s — escalating to human",
+                ticket.id,
+                exc,
+            )
+            return _triage_outcome(
+                ctx,
+                ws,
+                draft,
+                ticket.id,
+                f"triage MIGRATE failed: {exc} — {triage.reason}",
+                source=ticket.source,
+                triage_note=triage.reason,
+            )
+
+        return _triage_outcome(
+            ctx,
+            ws,
+            draft,
+            ticket.id,
+            f"migrated to board {resolved_board!r}: {triage.reason}",
+            state=State.DRAFT,
+        )
+
+    # --- mechanical draft fast-path ---
+    # Empty/whitespace drafts cannot be auto-approved — they'd
+    # create an infinite loop (approve → refine produces empty
+    # body → fast-path approves again).  Fall through to the
+    # full refine agent instead.
+    # Deterministic sources (CI) always fast-path.  For other
+    # sources, the auto-approve pre-check only runs when
+    # require_approval is True (there must be a gate to skip).
+    if draft.strip() and (
+        ticket.source != "ci"
+        or (ticket.source == "ci" and _draft_has_complete_spec(draft))
+    ):
+        # --- fast-path pre-checks: emptiness + scope ---
+        scope_checks = _fast_path_scope_checks(draft)
+        any_fail = any(
+            isinstance(v, str) and v.startswith("fail:") for v in scope_checks.values()
+        )
+        if any_fail:
+            log.info(
+                "%s: mechanical fast-path blocked by pre-checks: %s — "
+                "falling through to full refine",
+                ticket.id,
+                {
+                    k: v
+                    for k, v in scope_checks.items()
+                    if isinstance(v, str) and v.startswith("fail:")
+                },
+            )
+            # Don't return — fall through to full refine below.
+        else:
+            checks_summary = "; ".join(f"{k}: {v}" for k, v in scope_checks.items())
+            try:
+                if ticket.source in _AUTO_APPROVE_SOURCES:
+                    return _triage_outcome(
+                        ctx,
+                        ws,
+                        draft,
+                        ticket.id,
+                        f"mechanical draft fast-path "
+                        f"(deterministic source {ticket.source!r}) "
+                        f"— skipped refine LLM "
+                        f"[checks: {checks_summary}]",
+                        source=ticket.source,
+                        triage_note=(
+                            f"{triage.reason} | fast-path checks: {checks_summary}"
+                        ),
+                        extract_paths_from_draft=True,
+                    )
+
+                # Auto-approve only makes sense when there's an
+                # approval gate to skip.
+                if not s.require_approval:
+                    pass  # fall through to full refine
+                # Wrong-repo hard gate: when triage detected a
+                # repository mismatch, auto-approve MUST NOT
+                # override — fall through to full refine which
+                # will route to human approval via
+                # _resolve_next_state.
+                elif _triage_note_signals_wrong_repo(triage.reason):
+                    log.info(
+                        "%s: mechanical fast-path blocked by "
+                        "wrong-repo signal from triage",
+                        ticket.id,
+                    )
+                else:
+                    auto = refining.triage_auto_approve(
+                        settings=s,
+                        spec=_summarize_spec_for_auto_approve(
+                            f"{ticket.title}\n\n{draft}"
+                        ),
+                    )
+                    if auto.decision == "APPROVE":
+                        return _triage_outcome(
+                            ctx,
+                            ws,
+                            draft,
+                            ticket.id,
+                            f"mechanical draft fast-path — "
+                            f"auto-approve APPROVE: {auto.reason} "
+                            f"[checks: {checks_summary}]",
+                            source=ticket.source,
+                            triage_note=(
+                                f"triage REFINE → auto-approve APPROVE: {auto.reason}"
+                                f" | fast-path checks: {checks_summary}"
+                            ),
+                            extract_paths_from_draft=True,
+                        )
+                    elif auto.decision == "NEEDS_APPROVAL":
+                        return _triage_outcome(
+                            ctx,
+                            ws,
+                            draft,
+                            ticket.id,
+                            f"mechanical draft fast-path — "
+                            f"auto-approve NEEDS_APPROVAL (skipped refine): "
+                            f"{auto.reason} "
+                            f"[checks: {checks_summary}]",
+                            source=ticket.source,
+                            triage_note=(
+                                f"{triage.reason} | fast-path checks: {checks_summary}"
+                            ),
+                            extract_paths_from_draft=True,
+                        )
+            except Exception:
+                log.warning(
+                    "%s: mechanical fast-path auto-approve failed, falling through",
+                    ticket.id,
+                    exc_info=True,
+                )
+    return None
+
+
+def triage_skip(
+    ctx: StageContext,
+    ticket: Ticket,
+    draft: str,
+    repo_dir: Path | None,
+    extra_roots: list[Path] | None,
+    title: str,
+    ws: Workspace,
+    s: Settings,
+    reviewer_comments: str | None,
+) -> Outcome | None:
+    """Triage phase 1: LLM classifier (3-way: SKIP / REFINE / NO_CHANGE).
+
+    A single cheap LLM call classifies the draft.  If it's
+    already a precise, implementation-ready spec, skip the
+    expensive refine agent entirely.  ONLY run when:
+    - the feature flag is enabled, AND
+    - no reviewer sendback (human-flagged changes always refine).
+
+    Also captures the complexity verdict from the triage classifier
+    and persists it to ``ws.artifacts_dir / "triage_complexity.json"``
+    so ``_run_and_collect`` can read it and pass it to
+    ``run_refine_agent`` for exploration gating.
+
+    Returns an :class:`Outcome` to short-circuit, or ``None`` to fall
+    through to the full refine agent.
+    """
+    if not (s.refine_triage_enabled and not reviewer_comments):
+        return None
+
+    outcome = deterministic_triage_pre_checks(ctx, ticket, draft, ws, s)
+    if outcome is not None:
+        return outcome
+
     try:
         triage = refining.triage_refine(
             settings=s,
@@ -496,252 +776,9 @@ def triage_skip(
             repo_dir=repo_dir,
             extra_roots=extra_roots,
         )
-        _reconcile.persist_triage_complexity(ws, triage)
-
-        if triage.decision == "NO_CHANGE":
-            short_reason = triage.reason[:400] + (
-                "…" if len(triage.reason) > 400 else ""
-            )
-            # A TASK-kind (implementation) ticket that hasn't produced a
-            # branch, or whose branch is not merged to the base branch,
-            # must not be auto-closed from DRAFT.  Route to READY so
-            # implement can verify the "no change" claim against the
-            # live tree.
-            if ticket.kind == TicketKind.TASK and (
-                not ticket.branch or not _verify_branch_merged(repo_dir, ticket)
-            ):
-                # Deliberately NOT passing triage_note here. A NO_CHANGE
-                # reason says, by definition, "this is already done /
-                # no change is needed" — which is verbatim what
-                # _TRIAGE_REJECTION_PATTERNS looks for. Forwarding it
-                # made the rejection gate fire on the premise of this
-                # very route, converting "route to READY so implement
-                # can verify the claim" into HUMAN_ISSUE_APPROVAL, where
-                # the ticket then sat forever: nothing auto-closes it and
-                # no human ever approves a ticket whose own note says
-                # there is nothing to do. Live, these accumulated for up
-                # to six days. The spec still faces the normal
-                # auto-approve triage below; only the self-referential
-                # rejection match is skipped.
-                return _triage_outcome(
-                    ctx,
-                    ws,
-                    draft,
-                    ticket.id,
-                    f"triage NO_CHANGE — routing to implement: {short_reason}",
-                    source=ticket.source,
-                )
-            return _triage_outcome(
-                ctx,
-                ws,
-                draft,
-                ticket.id,
-                f"triage NO_CHANGE: {short_reason}",
-                state=State.DONE,
-            )
-        if triage.decision == "SKIP":
-            return _triage_outcome(
-                ctx,
-                ws,
-                draft,
-                ticket.id,
-                f"triage SKIP: {triage.reason}",
-                source=ticket.source,
-                triage_note=triage.reason,
-                extract_paths_from_draft=True,
-            )
-
-        if triage.decision == "MIGRATE":
-            from ...config import get_repos_config
-
-            try:
-                repos_config = get_repos_config()
-                known: dict[str, str] = {"meta": "meta"}
-                for rc in repos_config.repos.values():
-                    known[rc.repo_id] = rc.board_id
-                    known[rc.board_id] = rc.board_id
-            except Exception:
-                log.warning(
-                    "%s: could not load repos config for MIGRATE validation, "
-                    "escalating to human",
-                    ticket.id,
-                    exc_info=True,
-                )
-                known = {}
-
-            target = (triage.target_board or "").strip()
-            resolved_board = known.get(target) if known else None
-
-            if (
-                not target
-                or resolved_board is None
-                or resolved_board == ticket.board_id
-            ):
-                log.info(
-                    "%s: MIGRATE target invalid (target=%r, resolved=%r, current=%r) "
-                    "— escalating to human",
-                    ticket.id,
-                    target,
-                    resolved_board,
-                    ticket.board_id,
-                )
-                return _triage_outcome(
-                    ctx,
-                    ws,
-                    draft,
-                    ticket.id,
-                    f"triage MIGRATE invalid target: {triage.reason}",
-                    source=ticket.source,
-                    triage_note=triage.reason,
-                )
-
-            anti_bounce = _anti_bounce_escalate(
-                ctx, ws, draft, ticket, triage, resolved_board
-            )
-            if anti_bounce is not None:
-                return anti_bounce
-
-            try:
-                ctx.service.migrate(
-                    ticket.id,
-                    resolved_board,
-                    note=triage.reason,
-                )
-            except (KeyError, ValueError) as exc:
-                log.warning(
-                    "%s: MIGRATE call failed: %s — escalating to human",
-                    ticket.id,
-                    exc,
-                )
-                return _triage_outcome(
-                    ctx,
-                    ws,
-                    draft,
-                    ticket.id,
-                    f"triage MIGRATE failed: {exc} — {triage.reason}",
-                    source=ticket.source,
-                    triage_note=triage.reason,
-                )
-
-            return _triage_outcome(
-                ctx,
-                ws,
-                draft,
-                ticket.id,
-                f"migrated to board {resolved_board!r}: {triage.reason}",
-                state=State.DRAFT,
-            )
-
-        # --- mechanical draft fast-path ---
-        # Empty/whitespace drafts cannot be auto-approved — they'd
-        # create an infinite loop (approve → refine produces empty
-        # body → fast-path approves again).  Fall through to the
-        # full refine agent instead.
-        # Deterministic sources (CI) always fast-path.  For other
-        # sources, the auto-approve pre-check only runs when
-        # require_approval is True (there must be a gate to skip).
-        if draft.strip() and (
-            ticket.source != "ci"
-            or (ticket.source == "ci" and _draft_has_complete_spec(draft))
-        ):
-            # --- fast-path pre-checks: emptiness + scope ---
-            scope_checks = _fast_path_scope_checks(draft)
-            any_fail = any(
-                isinstance(v, str) and v.startswith("fail:")
-                for v in scope_checks.values()
-            )
-            if any_fail:
-                log.info(
-                    "%s: mechanical fast-path blocked by pre-checks: %s — "
-                    "falling through to full refine",
-                    ticket.id,
-                    {
-                        k: v
-                        for k, v in scope_checks.items()
-                        if isinstance(v, str) and v.startswith("fail:")
-                    },
-                )
-                # Don't return — fall through to full refine below.
-            else:
-                checks_summary = "; ".join(f"{k}: {v}" for k, v in scope_checks.items())
-                try:
-                    if ticket.source in _AUTO_APPROVE_SOURCES:
-                        return _triage_outcome(
-                            ctx,
-                            ws,
-                            draft,
-                            ticket.id,
-                            f"mechanical draft fast-path "
-                            f"(deterministic source {ticket.source!r}) "
-                            f"— skipped refine LLM "
-                            f"[checks: {checks_summary}]",
-                            source=ticket.source,
-                            triage_note=(
-                                f"{triage.reason} | fast-path checks: {checks_summary}"
-                            ),
-                            extract_paths_from_draft=True,
-                        )
-
-                    # Auto-approve only makes sense when there's an
-                    # approval gate to skip.
-                    if not s.require_approval:
-                        pass  # fall through to full refine
-                    # Wrong-repo hard gate: when triage detected a
-                    # repository mismatch, auto-approve MUST NOT
-                    # override — fall through to full refine which
-                    # will route to human approval via
-                    # _resolve_next_state.
-                    elif _triage_note_signals_wrong_repo(triage.reason):
-                        log.info(
-                            "%s: mechanical fast-path blocked by "
-                            "wrong-repo signal from triage",
-                            ticket.id,
-                        )
-                    else:
-                        auto = refining.triage_auto_approve(
-                            settings=s,
-                            spec=_summarize_spec_for_auto_approve(
-                                f"{ticket.title}\n\n{draft}"
-                            ),
-                        )
-                        if auto.decision == "APPROVE":
-                            return _triage_outcome(
-                                ctx,
-                                ws,
-                                draft,
-                                ticket.id,
-                                f"mechanical draft fast-path — "
-                                f"auto-approve APPROVE: {auto.reason} "
-                                f"[checks: {checks_summary}]",
-                                source=ticket.source,
-                                triage_note=(
-                                    f"triage REFINE → auto-approve APPROVE: {auto.reason}"
-                                    f" | fast-path checks: {checks_summary}"
-                                ),
-                                extract_paths_from_draft=True,
-                            )
-                        elif auto.decision == "NEEDS_APPROVAL":
-                            return _triage_outcome(
-                                ctx,
-                                ws,
-                                draft,
-                                ticket.id,
-                                f"mechanical draft fast-path — "
-                                f"auto-approve NEEDS_APPROVAL (skipped refine): "
-                                f"{auto.reason} "
-                                f"[checks: {checks_summary}]",
-                                source=ticket.source,
-                                triage_note=(
-                                    f"{triage.reason} | fast-path checks: {checks_summary}"
-                                ),
-                                extract_paths_from_draft=True,
-                            )
-                except Exception:
-                    log.warning(
-                        "%s: mechanical fast-path auto-approve failed, falling through",
-                        ticket.id,
-                        exc_info=True,
-                    )
+        outcome = handle_triage_decision(ctx, ticket, draft, repo_dir, ws, s, triage)
+        if outcome is not None:
+            return outcome
     except Exception as exc:
         from pydantic_ai import UsageLimitExceeded
 

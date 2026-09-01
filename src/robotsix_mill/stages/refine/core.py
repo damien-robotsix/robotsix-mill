@@ -177,6 +177,12 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
 
         # Phase 4: refine agent + result handling
 
+        # Advisory pre-refine dedup against CONCURRENT in-flight tickets:
+        # prepends a [!warning] advisory naming an overlapping in-flight
+        # ticket to the draft (never auto-closes). Restored after the
+        # gate-chain collapse dropped its call site.
+        draft = RefineStage._run_inflight_advisory(ctx, ticket, draft, ws, s)
+
         # --- refine pass-cap gate: escalate when the per-ticket ceiling
         # is exhausted without convergence.  Guards against unbounded
         # re-refinement loops burning subscription quota.
