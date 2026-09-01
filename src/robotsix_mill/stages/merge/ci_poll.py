@@ -27,6 +27,8 @@ from ._shared import (
     _APPROVED_DIFF_HASH,
     _AUTO_FIX_CYCLES,
     _CI_POLL_REFRESH_SHA,
+    _EMPTY_ROLLUP_COUNT,
+    _EMPTY_ROLLUP_SELF_HEAL_DONE,
     _GREEN_UNPROMOTABLE_COUNT,
     _LAST_AUTO_FIX_STAGE,
     _PING_PONG_COUNT,
@@ -666,7 +668,7 @@ class CIPollMixin(_MergeStageBase):
         )
 
         stuck = self._check_green_unpromotable(
-            ticket, ctx, pr, branch, conclusion, ms, pending_checks
+            ticket, ctx, pr, branch, conclusion, ms, pending_checks, ci_status
         )
         if stuck is not None:
             return stuck
@@ -682,6 +684,7 @@ class CIPollMixin(_MergeStageBase):
         conclusion: str | None,
         mergeable_state: str | None,
         pending_checks: list[str],
+        ci_status: dict[str, Any] | None = None,
     ) -> Outcome | None:
         """Bound the "CI green but the forge won't promote" re-poll.
 
@@ -695,6 +698,14 @@ class CIPollMixin(_MergeStageBase):
         and the ticket eventually blocks with "stage merge timed out after
         Ns" — a note that names neither the PR nor the missing check.
 
+        Also detects the *empty-rollup* case: CI reports ``"success"``
+        with zero check runs and ``mergeable_state="blocked"`` — the
+        signature of a PR whose ``pull_request`` event never fired.
+        After a bounded number of polls the mill closes and reopens the
+        PR once to trigger the event, then re-polls.  If the rollup is
+        still empty afterwards, the ticket is parked with a note naming
+        the close/reopen remedy already attempted.
+
         Returns a BLOCKED ``Outcome`` naming the unsatisfiable contexts once
         the ceiling is reached, else ``None`` (keep polling).
         """
@@ -706,7 +717,86 @@ class CIPollMixin(_MergeStageBase):
         # A pending check, or CI that is not success, is genuine settling.
         if conclusion != "success" or pending_checks:
             _write_counter(counter_path, 0)
+            _write_counter(artifacts_dir / _EMPTY_ROLLUP_COUNT, 0)
             return None
+
+        # --- Empty-rollup detection ---
+        # CI reports "success" with zero check runs and mergeable_state
+        # is "blocked": the pull_request event never fired, so no workflow
+        # was triggered at the PR level.  Attempt a close/reopen self-heal.
+        jobs = ci_status.get("jobs", []) if ci_status else []
+        if not jobs and mergeable_state == "blocked" and s.empty_rollup_max_polls > 0:
+            er_path = artifacts_dir / _EMPTY_ROLLUP_COUNT
+            heal_path = artifacts_dir / _EMPTY_ROLLUP_SELF_HEAL_DONE
+            er_polls = _read_counter(er_path) + 1
+            _write_counter(er_path, er_polls)
+
+            if er_polls >= s.empty_rollup_max_polls:
+                # Already attempted self-heal?  Park with an explicit note.
+                if heal_path.exists():
+                    _write_counter(er_path, 0)
+                    target = target_branch_for(s, ctx.repo_config)
+                    log.warning(
+                        "%s: empty rollup persists after close/reopen "
+                        "self-heal — parking BLOCKED",
+                        ticket.id,
+                    )
+                    return Outcome(
+                        State.BLOCKED,
+                        f"CI is green but {pr.get('url') or branch} cannot "
+                        f"be merged: the PR reports zero check runs and "
+                        f"mergeable_state='blocked' — the pull_request event "
+                        f"likely never fired. A close/reopen self-heal was "
+                        f"already attempted without success. Manually close "
+                        f"and reopen the PR (or push an empty commit) to "
+                        f"trigger CI, then resume.",
+                    )
+
+                # Attempt self-heal: close and reopen the PR.
+                forge = get_forge(s, repo_config=ctx.repo_config)
+                log.info(
+                    "%s: empty rollup detected (%d polls) — attempting "
+                    "close/reopen self-heal",
+                    ticket.id,
+                    er_polls,
+                )
+                closed = forge.close_pr(source_branch=branch)
+                reopened = False
+                if closed:
+                    reopened = forge.reopen_pr(source_branch=branch)
+                if closed and reopened:
+                    heal_path.write_text(
+                        datetime.datetime.now(datetime.UTC).isoformat(),
+                        encoding="utf-8",
+                    )
+                    _write_counter(er_path, 0)
+                    # Post a PR comment documenting the self-heal.
+                    forge.post_pr_comment(
+                        source_branch=branch,
+                        body=(
+                            "The mill detected that no CI workflows were "
+                            "triggered for this PR (empty status check rollup "
+                            "with mergeable_state='blocked'). This sometimes "
+                            "happens when GitHub's pull_request event is not "
+                            "delivered. The PR was closed and reopened to "
+                            "trigger the event and re-run CI."
+                        ),
+                    )
+                    return Outcome(
+                        State.IMPLEMENT_COMPLETE,
+                        "Empty CI rollup detected — closed and reopened PR "
+                        "to trigger pull_request event; re-polling.",
+                    )
+                # Close or reopen failed — fall through to normal
+                # unpromotable handling below.
+                log.warning(
+                    "%s: close/reopen self-heal failed (closed=%s, "
+                    "reopened=%s) — falling through to unpromotable check",
+                    ticket.id,
+                    closed,
+                    reopened,
+                )
+                _write_counter(er_path, 0)
 
         if s.green_unpromotable_max_polls <= 0:
             return None

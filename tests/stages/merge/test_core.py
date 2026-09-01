@@ -2958,3 +2958,218 @@ def test_green_unpromotable_guard_disabled_by_zero(tmp_path, monkeypatch):
     stage = MergeStage()
     for _ in range(12):
         assert stage.run(t, ctx).next_state is State.IMPLEMENT_COMPLETE
+
+
+# ============================================================
+# Empty-rollup self-heal (close/reopen PR)
+# ============================================================
+
+
+def _empty_rollup_ctx(tmp_path, monkeypatch, **extra):
+    """Forge stubs for 'CI success with zero check runs, mergeable_state blocked'."""
+    ctx = _gh(tmp_path, **extra)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "https://forge/pr/1",
+            "mergeable": True,
+            "mergeable_state": "blocked",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "success",
+            "failing": [],
+            "pending": [],
+            "jobs": [],  # empty rollup — no CI triggered
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "required_status_contexts",
+        lambda self, *, target_branch: [],
+    )
+    return ctx
+
+
+def test_empty_rollup_re_polls_below_threshold(tmp_path, monkeypatch):
+    """Empty rollup keeps re-polling until the threshold is reached."""
+    ctx = _empty_rollup_ctx(tmp_path, monkeypatch)
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+    for _ in range(ctx.settings.empty_rollup_max_polls - 1):
+        out = stage.run(t, ctx)
+        assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_empty_rollup_self_heal_closes_and_reopens_pr(tmp_path, monkeypatch):
+    """At the threshold, the mill closes and reopens the PR once."""
+    ctx = _empty_rollup_ctx(tmp_path, monkeypatch)
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+
+    # Poll up to threshold - 1.
+    for _ in range(ctx.settings.empty_rollup_max_polls - 1):
+        stage.run(t, ctx)
+
+    # Track forge calls.
+    closed_branches: list[str] = []
+    reopened_branches: list[str] = []
+    comments: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "close_pr",
+        lambda self, *, source_branch: (closed_branches.append(source_branch) or True),
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "reopen_pr",
+        lambda self, *, source_branch: (reopened_branches.append(source_branch) or True),
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "post_pr_comment",
+        lambda self, *, source_branch, body: (
+            comments.append((source_branch, body)) or True
+        ),
+    )
+
+    out = stage.run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "close/reopen" in out.note.lower() or "closed and reopened" in out.note.lower()
+    assert len(closed_branches) == 1
+    assert len(reopened_branches) == 1
+    assert len(comments) == 1
+    assert "pull_request" in comments[0][1] or "CI" in comments[0][1]
+
+
+def test_empty_rollup_parks_after_failed_self_heal(tmp_path, monkeypatch):
+    """If the rollup is still empty after self-heal, park BLOCKED with a specific note."""
+    ctx = _empty_rollup_ctx(tmp_path, monkeypatch)
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+
+    # Poll up to threshold - 1.
+    for _ in range(ctx.settings.empty_rollup_max_polls - 1):
+        stage.run(t, ctx)
+
+    # Self-heal succeeds (close + reopen).
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "close_pr",
+        lambda self, *, source_branch: True,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "reopen_pr",
+        lambda self, *, source_branch: True,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "post_pr_comment",
+        lambda self, *, source_branch, body: True,
+    )
+    out = stage.run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+    # Now poll again up to threshold — the rollup is still empty.
+    for _ in range(ctx.settings.empty_rollup_max_polls - 1):
+        out = stage.run(t, ctx)
+        assert out.next_state is State.IMPLEMENT_COMPLETE
+
+    # Next poll should park BLOCKED with the self-heal note.
+    out = stage.run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "close/reopen" in out.note.lower() or "closed and reopened" in out.note.lower()
+    assert "already attempted" in out.note.lower()
+
+
+def test_empty_rollup_self_heal_disabled_by_zero(tmp_path, monkeypatch):
+    """empty_rollup_max_polls=0 disables the self-heal entirely."""
+    ctx = _empty_rollup_ctx(
+        tmp_path, monkeypatch, empty_rollup_max_polls=0, green_unpromotable_max_polls=0
+    )
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+    # Should keep re-polling without attempting self-heal.
+    for _ in range(12):
+        out = stage.run(t, ctx)
+        assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_empty_rollup_resets_when_jobs_appear(tmp_path, monkeypatch):
+    """If jobs appear (CI triggered), the empty-rollup counter resets."""
+    ctx = _empty_rollup_ctx(tmp_path, monkeypatch)
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+
+    # Poll up to threshold - 1.
+    for _ in range(ctx.settings.empty_rollup_max_polls - 1):
+        stage.run(t, ctx)
+
+    # Now CI triggers — jobs appear.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "pending",
+            "failing": [],
+            "pending": ["ci / tests"],
+            "jobs": [{"name": "ci / tests", "conclusion": None}],
+        },
+    )
+    out = stage.run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+    # Switch back to empty rollup — counter should have reset, so we get
+    # a full budget of polls before self-heal.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "success",
+            "failing": [],
+            "pending": [],
+            "jobs": [],
+        },
+    )
+    for _ in range(ctx.settings.empty_rollup_max_polls - 1):
+        out = stage.run(t, ctx)
+        assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_empty_rollup_close_fails_falls_through_to_unpromotable(
+    tmp_path, monkeypatch
+):
+    """If close_pr fails, fall through to the normal unpromotable check."""
+    ctx = _empty_rollup_ctx(tmp_path, monkeypatch)
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+
+    # Poll up to threshold - 1.
+    for _ in range(ctx.settings.empty_rollup_max_polls - 1):
+        stage.run(t, ctx)
+
+    # close_pr fails.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "close_pr",
+        lambda self, *, source_branch: False,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "reopen_pr",
+        lambda self, *, source_branch: True,
+    )
+
+    # Should fall through to the normal green-unpromotable path.
+    # Since green_unpromotable_max_polls is 10 and we've only polled
+    # empty_rollup_max_polls times, it should keep re-polling.
+    out = stage.run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE

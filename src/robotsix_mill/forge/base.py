@@ -240,6 +240,14 @@ class Forge(ABC):
         """
 
     @abstractmethod
+    def reopen_pr(self, *, source_branch: str) -> bool:
+        """Reopen a closed PR for *source_branch*.
+
+        Returns ``True`` on success, ``False`` when the PR is not found
+        or already open.  Never raises.
+        """
+
+    @abstractmethod
     def post_pr_comment(self, *, source_branch: str, body: str) -> bool:
         """Post a plain comment on the open PR for *source_branch*.
 
