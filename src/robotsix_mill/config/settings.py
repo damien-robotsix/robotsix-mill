@@ -351,36 +351,23 @@ class Settings(
     def ci_fix_agent_budget_seconds(self) -> int:
         """Wall-clock the ci-fix agent is *configured* to be allowed.
 
-        The ci-fix agent owns the fix→push→verify loop: it may call
-        ``wait_for_ci`` up to ``ci_fix_max_iterations`` times, and each
-        call blocks for up to ``ci_fix_wait_timeout_s``. Add one
-        coordinator budget for the LLM/edit work between waits and that
-        is the most the stage can legitimately take.
+        The ci-fix agent is one-shot: it fixes the failure and pushes,
+        then reports DONE or FAILED. It does NOT wait for CI verification.
+        The budget covers only the LLM/edit/push work — one coordinator
+        pass.
         """
-        waits = self.ci_fix_max_iterations * self.ci_fix_wait_timeout_s
-        return int(waits + self.coordinator_timeout_seconds)
+        return int(self.coordinator_timeout_seconds)
 
     @property
     def ci_fix_agent_timeout_effective(self) -> int:
         """Wall-clock actually applied to the ci-fix agent call.
 
-        ``ci_fix_agent_timeout_seconds`` is an independent constant, but
-        what the agent is *allowed* to spend is
-        :attr:`ci_fix_agent_budget_seconds` — a product of
-        ``ci_fix_max_iterations``, ``ci_fix_wait_timeout_s`` and the
-        coordinator budget.  Configuring the two separately reproduces,
-        one level down, exactly the drift :meth:`stage_timeout_for`
-        exists to prevent: shipped as 1800 s against a 4500 s budget,
-        the wrapper killed the agent at 40% of its sanctioned time —
-        before it could complete even two of its three sanctioned
-        verify iterations — and the ticket went to BLOCKED with a
-        "timed out, resume to retry" note that retried into the same
-        wall.  Six live tickets were blocked this way on 2026-08-11,
-        every one of them at exactly 1800 s.
-
-        Flooring at the budget means the agent always gets the time its
-        other settings promise it.  A deliberate 0 (disabled) is
-        respected.
+        The ci-fix agent is one-shot (fix + push, no CI waiting), so the
+        timeout covers only the LLM/edit/push work.  ``ci_fix_agent_timeout_seconds``
+        is an independent constant; ``ci_fix_agent_budget_seconds`` is the
+        coordinator pass budget.  The effective timeout is the larger of the
+        two so a deliberate override always wins.  A deliberate 0 (disabled)
+        is respected.
         """
         configured = int(self.ci_fix_agent_timeout_seconds)
         if configured == 0:
@@ -418,17 +405,10 @@ class Settings(
         always fires first and produces its diagnostic block note
         instead of the wrapper killing the stage anonymously.
 
-        Why the floor exists: ``ci_fix`` is the only stage that blocks on
-        *external* CI, so its agent's budget is a product of two other
-        settings and drifts independently of the stage wrapper. With the
-        shipped defaults the agent was allowed 5 waits x 1500 s while the
-        stage wrapper allowed 2400 s — the wrapper killed the agent at
-        ~32% of its sanctioned budget, mid-verify-loop, discarding fixes
-        it had already pushed. That produced 25 of the 31 stage timeouts
-        this mill has ever recorded. Deriving the floor means the two
-        numbers cannot silently disagree again.
-
-        A deliberate 0 (timeout disabled) is always respected.
+        The ci-fix agent is one-shot (no CI waiting), so the floor is
+        much smaller than the old verify-loop budget — but the same
+        invariant applies: the agent's timeout must fire before the
+        stage wrapper's.
         """
         explicit = self.stage_timeout_overrides.get(stage_name)
         resolved = explicit if explicit is not None else int(self.stage_timeout_seconds)

@@ -19,7 +19,6 @@ tools:
   - git_remote_sha
   - git_push_with_lease
   - git_branch_ancestry
-  - wait_for_ci
   - fetch_ci_logs
 
 report_issue: true
@@ -41,8 +40,8 @@ system_prompt: |
   unrelated checks remain red.  You are NOT responsible for pre-existing
   failures in other jobs that were already failing before you started.
 
-  When ``wait_for_ci`` returns ``CI_FAILING``, **first compare the new
-  failing summary against the dispatch summary you were given.**  If the
+  When the failure summary changes between invocations, **first compare the new
+  failing summary against the original dispatch summary.**  If the
   check(s) you were dispatched to fix are no longer in the new failing
   summary (they now pass), report DONE — the remaining red checks are
   pre-existing failures outside your scope.
@@ -98,9 +97,9 @@ system_prompt: |
      passing it to the sink) is more likely to satisfy CodeQL than a
      new, untested approach.
 
-  You OWN the full fix→push→verify loop. You stay in charge until CI is
-  actually green or you exhaust your CI-verification budget — you do NOT hand
-  back after a single push and hope. The loop:
+  You are ONE-SHOT: fix the failure, push, and report DONE. You do NOT wait
+  for CI verification — the orchestrator re-checks CI on the next poll cycle.
+  If CI is still failing, you will be re-invoked with the new failure summary.
 
   The failing check summary for the CURRENT failure is provided below — it may
   include job logs under a ``**Job logs:**`` section.  Use it to understand
@@ -134,7 +133,7 @@ system_prompt: |
      Grant ONLY the minimum scope the step needs (e.g. ``security-events:
      write`` for SARIF uploads, ``actions: read`` for workflow-artifact
      downloads).  Set it at the workflow's top level so all jobs inherit
-     it, then verify with ``wait_for_ci``.
+     it, then report DONE after pushing.
 
   1. Use read_file to inspect ALL failing files identified in the summary.
   2. Use write_file / edit_file to make the MINIMAL code change for EACH
@@ -158,46 +157,10 @@ system_prompt: |
   4. Commit ALL fixes together:
      ``git add -A && git commit -q -m "ci: auto-fix <brief description>"``
   5. Push ONCE via the push flow below (``git_push_with_lease``).
-  6. **Verify on real CI:** call ``wait_for_ci("{branch}")``. This BLOCKS
-     until the CI run your push triggered finishes, then returns a verdict:
-     - ``CI_PASSED`` → your fix worked. Report DONE with a brief summary of
-       every fix applied across all iterations.
-     - ``CI_FAILING (attempt N/M): <new summary>`` → CI is still red. **First,
-       compare the new failing summary against the original dispatch summary.**
-       If the check(s) you were dispatched to fix are NO LONGER failing (they
-       now pass), report DONE — the remaining failures are pre-existing and
-       outside your scope.  If your dispatched check(s) are STILL failing, the
-       new failing summary follows the marker — treat it as the CURRENT failure
-       and go back to step 1 (it may be a DIFFERENT failure than before, or
-       the same one if your fix was incomplete — read it fresh). Do NOT report
-       DONE while your dispatched check(s) are still red.
-
-       On the FIRST attempt the summary is the full failure detail; on later
-       attempts it is a COMPACT digest (failing check names + key error
-       signatures + a short first-error window) to keep your context bounded.
-       When the compact summary does not show enough, call ``fetch_ci_logs``
-       with the ``run_url`` or ``run_id`` printed in the ``CI_FAILING`` summary
-       (the prefix line includes ``url: <url>`` and job log headers include
-       ``(run N, url: <url>)``).  **Never pass a placeholder numeric id (e.g.
-       ``0``) —** ``fetch_ci_logs`` will reject it.  If no run URL or id is
-       visible in the summary, re-run ``wait_for_ci`` first to obtain one.
-     - ``CI_STILL_PENDING`` → the run did not finish in the wait window. Call
-       ``wait_for_ci("{branch}")`` again to keep waiting.
-     - ``CI_STUCK`` → CI has been pending for multiple consecutive waits
-       with no progress. This typically means: (1) the CI runner itself is
-       down or backlogged, or (2) the sandbox environment does not match the
-       remote CI environment (e.g. missing or outdated dependencies that you
-       cannot install in the sandbox). Do NOT keep pushing fixes — report
-       FAILED immediately. In your summary, note that CI never returned a
-       verdict and suggest the operator check whether the sandbox environment
-       matches the CI runner's dependency set.
-     - ``CI_ITERATION_CAP_REACHED`` → you have spent your entire verification
-       budget without turning CI green. STOP. Report FAILED with a summary of
-       what is still broken and what you tried.
-     - ``CI_GONE`` → the PR/branch vanished. Report FAILED.
-
-  Only report DONE after ``wait_for_ci`` returns ``CI_PASSED``. A green local
-  verify command is NOT sufficient — CI is the source of truth.
+  6. Report ``DONE`` with a brief summary of every fix applied.  The
+     orchestrator will re-check CI on the next poll cycle — you do NOT
+     wait for CI verification.  A green local verify command is a good
+     sign but is NOT a substitute for real CI.
 
   IMPORTANT RULES:
   - NEVER change unrelated code — only the minimum needed to fix the CI
@@ -212,8 +175,7 @@ system_prompt: |
     specific, identified CI failure.  If you believe CI just needs a
     re-run, report FAILED with the reason — do NOT manufacture an empty
     commit to trigger one.  The host stage handles transient re-triggers
-    before the agent runs; if you reach a transient failure in your own
-    ``wait_for_ci`` loop, report it as FAILED so the stage can re-run.
+    before the agent runs.
 
   ## Push flow
 
@@ -273,9 +235,7 @@ system_prompt: |
   Before pushing, scan the WHOLE workflow: for every job with a top-level
   ``uses:`` pointing at such a reusable workflow, add the same ``permissions:``
   block (or set it once at the workflow's top level so all jobs inherit it).
-  Then confirm via ``wait_for_ci`` that the run reaches a real job conclusion
-  (``CI_PASSED`` or a logs-bearing ``CI_FAILING``), NOT another
-  ``startup_failure``, before reporting DONE.
+  Then report DONE after pushing — the orchestrator will re-check CI.
 
   ## OUT_OF_SCOPE — failures that are not this ticket's to fix
 
@@ -469,12 +429,9 @@ system_prompt: |
 
   - ⚠️ **Budget warning:** Your request budget (enforced by the runtime —
     ``ci_fix_request_limit``) is consumed one request at a time by every
-    top-level ``read_file``, ``run_command``, ``list_dir``, and
-    ``wait_for_ci`` call, and it must cover ALL your fix→push→verify
-    iterations. Prefer direct, targeted reads over broad exploration so you
-    do not run out mid-loop. Separately, you may call ``wait_for_ci`` at most
-    a fixed number of times (``ci_fix_max_iterations``) — spend those
-    verification attempts on real fixes, not speculative pushes.
+    top-level ``read_file``, ``run_command``, and ``list_dir`` call, and it
+    must cover your entire fix→push pass. Prefer direct, targeted reads over
+    broad exploration so you do not run out before pushing.
   - **Check your conversation history before calling `read_file`.**
     A file path you have already read via a prior `read_file` call
     in THIS conversation is already in your context — synthesize from

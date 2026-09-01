@@ -1892,9 +1892,9 @@ def test_agent_crash_blocks(tmp_path, monkeypatch):
     assert out.next_state is State.BLOCKED
 
 
-def test_ci_status_fn_passed_to_agent(tmp_path, monkeypatch):
-    """The stage wires a host-side ci_status_fn into the agent so its
-    wait_for_ci tool can probe the forge."""
+def test_ci_status_fn_not_passed_to_agent(tmp_path, monkeypatch):
+    """The stage does NOT wire ci_status_fn into the agent — the agent is
+    one-shot (fix + push, no CI waiting)."""
     ctx = _gh(tmp_path)
     _failing_check_status(monkeypatch)
     captured = {}
@@ -1913,7 +1913,8 @@ def test_ci_status_fn_passed_to_agent(tmp_path, monkeypatch):
     _setup_repo(ctx, t)
     out = CIFixStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
-    assert callable(captured["ci_status_fn"])
+    # ci_status_fn is no longer passed — the agent is one-shot.
+    assert captured["ci_status_fn"] is None
 
 
 def test_make_ci_status_fn_maps_conclusions(tmp_path, monkeypatch):
@@ -2406,6 +2407,14 @@ def test_ci_fix_md_written_with_failure_and_agent_recap(tmp_path, monkeypatch):
     assert "**Verdict:** DONE" in content
     assert "applied ruff fixes" in content
 
+    # The history file must also be written.
+    history_path = artifacts / "ci_fix_history.md"
+    assert history_path.exists(), "ci_fix_history.md must exist"
+    history = history_path.read_text(encoding="utf-8")
+    assert "Attempt" in history
+    assert "ruff found errors" in history
+    assert "DONE" in history
+
 
 def test_ci_fix_md_written_when_agent_crashes(tmp_path, monkeypatch):
     """ci_fix.md is still written when the agent crashes (result is None)."""
@@ -2443,6 +2452,12 @@ def test_ci_fix_md_written_when_agent_crashes(tmp_path, monkeypatch):
     assert "Detected Failure" in content
     assert "Agent Recap" in content
     assert "crashed" in content.lower()
+
+    # History file must also be written on crash.
+    history_path = artifacts / "ci_fix_history.md"
+    assert history_path.exists(), "ci_fix_history.md must exist even on crash"
+    history = history_path.read_text(encoding="utf-8")
+    assert "CRASH" in history
 
 
 def test_failure_cycle_writes_history_note(tmp_path, monkeypatch):
@@ -2499,6 +2514,122 @@ def test_failure_cycle_writes_history_note(tmp_path, monkeypatch):
     assert "Agent Result" in last_note.note
     assert "**Verdict:** DONE" in last_note.note
     assert "applied ruff fixes" in last_note.note
+
+
+def test_ci_fix_history_appends_across_attempts(tmp_path, monkeypatch):
+    """ci_fix_history.md accumulates entries across multiple ci_fix runs."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "lint",
+                    "summary": "ruff found errors",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+
+    call_count = 0
+
+    def _agent(**k):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return CiFixResult(status="FAILED", summary="tried X, did not work")
+        return CiFixResult(status="DONE", summary="fixed with Y")
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.run_ci_fix_agent", _agent)
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    # First run — FAILED.
+    CIFixStage().run(t, ctx)
+
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    history_path = artifacts / "ci_fix_history.md"
+    assert history_path.exists()
+    history1 = history_path.read_text(encoding="utf-8")
+    assert "FAILED" in history1
+    assert "tried X" in history1
+
+    # Second run — DONE.
+    CIFixStage().run(t, ctx)
+    history2 = history_path.read_text(encoding="utf-8")
+    # Must contain BOTH attempts.
+    assert history2.count("## Attempt") == 2
+    assert "DONE" in history2
+    assert "fixed with Y" in history2
+
+
+def test_ci_fix_previous_attempts_passed_to_agent(tmp_path, monkeypatch):
+    """The previous_attempts kwarg is populated from ci_fix_history.md."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "lint",
+                    "summary": "ruff found errors",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    # Pre-seed a history file with a prior attempt.
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    artifacts.mkdir(parents=True, exist_ok=True)
+    (artifacts / "ci_fix_history.md").write_text(
+        "# CI Fix Attempt History\n\n## Attempt\n**Failure:** old failure\n"
+        "**Verdict:** FAILED\ntried approach A\n\n",
+        encoding="utf-8",
+    )
+
+    captured_kwargs: dict = {}
+
+    def _agent(**k):
+        captured_kwargs.update(k)
+        return CiFixResult(status="DONE", summary="fixed")
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.run_ci_fix_agent", _agent)
+
+    CIFixStage().run(t, ctx)
+
+    assert "previous_attempts" in captured_kwargs
+    assert "old failure" in captured_kwargs["previous_attempts"]
+    assert "tried approach A" in captured_kwargs["previous_attempts"]
 
 
 def test_success_repoll_does_not_write_history_note(tmp_path, monkeypatch):

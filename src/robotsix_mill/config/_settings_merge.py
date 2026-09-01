@@ -46,17 +46,14 @@ class _MergeSettings(BaseModel):
 
     # --- merge stage: auto-fix of failing remote CI ---
     # When a PR in human_mr_approval has failing CI checks, the merge stage
-    # transitions to fixing_ci and invokes the ci-fix agent.  The agent OWNS
-    # the fix→push→verify loop: it fixes, pushes, and calls wait_for_ci to
-    # block on the freshly-triggered CI run, iterating until CI is green or it
-    # exhausts ci_fix_max_iterations verification attempts.  There is no
-    # external FIXING_CI ⇄ IMPLEMENT_COMPLETE retry loop or per-ticket cycle
-    # counter — the iteration budget lives inside the wait_for_ci tool.
+    # transitions to fixing_ci and invokes the ci-fix agent.  The agent is
+    # ONE-SHOT: it fixes the failure and pushes, then reports DONE or FAILED.
+    # It does NOT wait for CI verification — the external FIXING_CI ⇄
+    # IMPLEMENT_COMPLETE polling loop handles iteration.
 
-    # Maximum number of times the agent may call wait_for_ci (i.e. push-and-
-    # re-check iterations) for one ticket before it must report FAILED and the
-    # stage escalates to BLOCKED.  Set to 0 only to effectively disable the
-    # agent's verify loop (it would never be allowed to wait).
+    # Multi-repo merge path only (MultiRepoCiFixMixin): maximum number of
+    # wait_for_ci iterations per ticket before escalating to BLOCKED.  The
+    # single-repo CIFixStage no longer uses this — its agent is one-shot.
     # Sized against observed runs, not guesswork: sampled successful ci_fix
     # stages completed in 300-900 s, all of them on a SINGLE verify iteration.
     # 3 leaves two retries for the "fix reveals the next failure" case while
@@ -75,7 +72,7 @@ class _MergeSettings(BaseModel):
     # 90 minutes. Raise the PIN, per-repo, if a specific board needs the extra
     # cascade room -- do not raise the fleet default.
     ci_fix_max_iterations: int = Field(
-        description="Maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
+        description="Multi-repo merge path only: maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
         default=3,
         ge=0,
         json_schema_extra={"advanced": True},
@@ -148,43 +145,28 @@ class _MergeSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
-    # How often (seconds) wait_for_ci polls the forge for the branch's CI
-    # conclusion while a run is in progress.
+    # Multi-repo merge path only: how often (seconds) wait_for_ci polls
+    # the forge for the branch's CI conclusion while a run is in progress.
     ci_fix_wait_poll_interval_s: float = Field(
-        description="Seconds between CI conclusion polls during wait_for_ci.",
+        description="Multi-repo merge path only: seconds between CI conclusion polls during wait_for_ci.",
         default=30.0,
         gt=0,
         json_schema_extra={"advanced": True},
     )
 
-    # Maximum seconds a single wait_for_ci call blocks before returning a
-    # still-pending signal (the agent may then call it again).  Generous by
-    # default because a full CI run (build + tests) can take many minutes.
-    #
-    # 900 s, not 1500: a timeout here is NOT a failure — the tool returns
-    # still-pending and the agent may call it again, so a shorter per-call
-    # wait costs one extra tool round-trip and nothing else. Observed CI runs
-    # on the busiest board finish in ~6 min, so 15 min is ample. The value
-    # matters because it multiplies into the stage ceiling
-    # (Settings.stage_timeout_for): at 1500 s x 5 iterations the ci_fix stage
-    # would have to be allowed 155 min to avoid killing its own agent.
+    # Multi-repo merge path only: maximum seconds a single wait_for_ci call
+    # blocks before returning a still-pending signal.
     ci_fix_wait_timeout_s: float = Field(
-        description="Maximum seconds a single wait_for_ci call blocks before returning still-pending.",
+        description="Multi-repo merge path only: maximum seconds a single wait_for_ci call blocks before returning still-pending.",
         default=900.0,
         gt=0,
         json_schema_extra={"advanced": True},
     )
 
-    # Early bail-out when CI is stuck.  When wait_for_ci returns
-    # CI_STILL_PENDING this many times in a row (each burning a full
-    # ci_fix_wait_timeout_s window), the next call returns CI_STUCK
-    # immediately without polling — the agent can then report FAILED
-    # rather than draining the remaining iteration budget on a CI run
-    # that is never going to report.  Set to 0 to disable (never
-    # short-circuit on consecutive pending).
+    # Multi-repo merge path only: early bail-out when CI is stuck.
     ci_fix_max_consecutive_pending: int = Field(
         description=(
-            "Early bail-out threshold: return CI_STUCK after this many "
+            "Multi-repo merge path only: early bail-out threshold — return CI_STUCK after this many "
             "consecutive CI_STILL_PENDING results. 0 disables."
         ),
         default=2,
@@ -203,9 +185,9 @@ class _MergeSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
-    # Per-run request budget for the ci-fix agent.  Must cover ALL the agent's
-    # fix→push→verify iterations (reads, edits, run_command, push, wait_for_ci),
-    # so it is larger than the legacy per-cycle budget.  When exhausted,
+    # Per-run request budget for the ci-fix agent.  Must cover the agent's
+    # entire fix→push pass (reads, edits, run_command, push), so it is
+    # larger than a simple single-tool budget.  When exhausted,
     # pydantic-ai raises UsageLimitExceeded, which the retry layer catches and
     # triggers the fallback model (if configured).  Set to 0 to disable.
     ci_fix_request_limit: int = Field(
@@ -216,12 +198,9 @@ class _MergeSettings(BaseModel):
     )
 
     # Maximum characters of inline job-log context in the failing summary
-    # built for the ci-fix agent — applied to BOTH the initial prompt and
-    # each ``wait_for_ci`` iteration's fresh failure detail.  The forge
-    # already windows each job log on the first failure marker at
-    # ``ci_log_max_bytes``; this caps the TOTAL concatenated log (each run's
-    # first-error window is kept, then a head+tail window of the whole
-    # concatenation) so a hard ticket's late fix→verify iterations stop
+    # built for the ci-fix agent.  The forge already windows each job log
+    # on the first failure marker at ``ci_log_max_bytes``; this caps the
+    # TOTAL concatenated log so a hard ticket's repeated fix attempts stop
     # re-sending unbounded log history.  The agent can still expand on
     # demand via ``fetch_ci_logs(full_log=True)``.  0 disables the cap.
     ci_fix_log_context_max_chars: int = Field(
@@ -231,8 +210,9 @@ class _MergeSettings(BaseModel):
         json_schema_extra={"advanced": True},
     )
 
-    # Maximum characters of a COMPACT failure summary returned by
-    # ``wait_for_ci`` on the 2nd and later iterations of one ci-fix run.
+    # Multi-repo merge path only: maximum characters of a COMPACT failure
+    # summary returned by ``wait_for_ci`` on the 2nd and later iterations
+    # of one ci-fix run.  The single-repo CIFixStage no longer uses this.
     # The first iteration (and the initial dispatch prompt) always receive
     # the full, already-capped failure detail; later iterations receive a
     # bounded digest (failing check names + first-error signatures + a
