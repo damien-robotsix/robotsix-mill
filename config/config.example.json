@@ -144,6 +144,14 @@
         "docstring_coverage_request_limit": 80,
         "enable_repo_creation": false,
         "epic_dedup_lookback_days": 7,
+        "ingest_blocked_source_tags": [
+            "caretaker",
+            "pin_bump",
+            "agent_limitation",
+            "recurring-diagnostic",
+            "recurring_error",
+            "robotsix-chat-feedback"
+        ],
         "explore_max_tokens": 4096,
         "explore_model_level": 1,
         "explore_request_limit": 100,

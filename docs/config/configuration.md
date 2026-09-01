@@ -1035,6 +1035,12 @@ single tasks.
 | `MILL_AUTO_EPIC_ENABLED` | `true` | When true, ingest promotes clearly multi-concern reports to an auto-decomposed epic. Set to `false` to disable the scope gate (all reports proceed as single tasks) |
 | `MILL_AUTO_EPIC_MIN_CONFIDENCE` | `0.7` | Minimum scope-classifier confidence (`0.0`–`1.0`) required to auto-promote an ingested report to an epic. Below this, the report stays a single task |
 
+**Machine-ingest source-tag block list.** robotsix-mill is a deployment-only board: `POST /tickets/ingest` callers whose `source_tag` matches an entry in `ingest_blocked_source_tags` are rejected with 400 and file no ticket. Investigation/diagnosis sources (caretaker, pin_bump, agent_limitation, recurring-diagnostic, recurring_error, robotsix-chat-feedback) can no longer auto-file tickets here — investigations are run as chat subsession agents instead. A source tag matches an entry when it equals it, is a `/`- or `-`-prefixed descendant (e.g. `caretaker` matches `caretaker/web`), or contains the entry as a delimited token (e.g. `caretaker` matches `pin_bump caretaker`). Override with a JSON array of source tags (`MILL_INGEST_BLOCKED_SOURCE_TAGS`), e.g. `["caretaker", "pin_bump"]`.
+
+| YAML path | Env var | Default | Description |
+|-----------|---------|---------|-------------|
+| `ingest_blocked_source_tags` | `MILL_INGEST_BLOCKED_SOURCE_TAGS` | `["caretaker", "pin_bump", "agent_limitation", "recurring-diagnostic", "recurring_error", "robotsix-chat-feedback"]` | Source tags whose machine ingests are rejected on this board (deployment-only). Override as a JSON array, e.g. `["caretaker", "my-investigation"]`. |
+
 ### 13. Skills & language instructions
 
 | YAML path | Env var | Default | Description |

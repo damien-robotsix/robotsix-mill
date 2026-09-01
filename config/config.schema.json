@@ -1695,6 +1695,23 @@
           "title": "Implement Zero Diff Abort Threshold",
           "type": "integer"
         },
+        "ingest_blocked_source_tags": {
+          "advanced": true,
+          "default": [
+            "caretaker",
+            "pin_bump",
+            "agent_limitation",
+            "recurring-diagnostic",
+            "recurring_error",
+            "robotsix-chat-feedback"
+          ],
+          "description": "Source tags whose machine ingests are rejected on this board (investigation/diagnosis sources cannot auto-file here).",
+          "items": {
+            "type": "string"
+          },
+          "title": "Ingest Blocked Source Tags",
+          "type": "array"
+        },
         "langfuse": {
           "anyOf": [
             {

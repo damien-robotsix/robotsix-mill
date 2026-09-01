@@ -224,6 +224,33 @@ class IngestResult(BaseModel):
     classified: str | None = None
 
 
+def _source_tag_blocked(blocked: tuple[str, ...], source_tag: str | None) -> str | None:
+    """Return the blocking entry for *source_tag*, or ``None`` if admitted.
+
+    robotsix-mill is a deployment-only board.  An entry matches when it
+    equals *source_tag*, is a ``/``- or ``-``-prefixed prefix of it
+    (e.g. ``caretaker`` matches ``caretaker/web``), or appears as a
+    delimited token within it (e.g. ``caretaker`` matches
+    ``pin_bump caretaker``).  Delimited-token matching lets us block
+    composite source tags ("pin_bump caretaker") without inventing every
+    hyphen/space variant.
+    """
+    st = (source_tag or "").casefold()
+    if not st:
+        return None
+    for entry in blocked:
+        e = entry.strip().casefold()
+        if not e:
+            continue
+        if (
+            st == e
+            or st.startswith((f"{e}/", f"{e}-"))
+            or re.search(rf"(?<![a-z0-9]){re.escape(e)}(?![a-z0-9])", st)
+        ):
+            return entry
+    return None
+
+
 @router.post("/tickets/ingest")
 def ingest_ticket(
     body: TicketIngest,
@@ -257,6 +284,24 @@ def ingest_ticket(
 
     # 2. Reject auto-registered repos when the flag is off.
     _check_repo_workable(repo_config, body.repo_id, settings)
+
+    # 2b. Reject investigation/diagnosis source tags — robotsix-mill is a
+    #     deployment-only board.  These sources must not auto-file tickets;
+    #     investigations are run as chat subsession agents instead.
+    blocked = _source_tag_blocked(settings.ingest_blocked_source_tags, body.source_tag)
+    if blocked is not None:
+        logger.info(
+            "ingest rejected source_tag %r (blocked entry %r) on repo %r",
+            body.source_tag,
+            blocked,
+            body.repo_id,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=f"source_tag {body.source_tag!r} is not admitted on this board: "
+            "mill admits deployment tickets only. Run this investigation as a chat "
+            "subsession agent instead of filing a ticket.",
+        )
 
     board_id = repo_config.board_id
 
