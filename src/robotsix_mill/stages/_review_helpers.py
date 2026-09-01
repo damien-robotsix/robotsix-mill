@@ -17,7 +17,7 @@ from pathlib import Path
 
 from ..agents.reviewing import ReviewAsk, ReviewVerdict
 from ..core.models import Ticket
-from ..core.states import State
+from ..core.states import ASK_USER_MARKER, State
 from ..core.workspace import Workspace
 from ..vcs import git_ops
 from .base import Outcome, StageContext
@@ -485,6 +485,56 @@ def _gaps_already_addressed(
         else:
             pending.append(ask)
     return already, pending
+
+
+def _round_cap_directives(
+    verdict: ReviewVerdict,
+    ticket: Ticket,
+    ctx: StageContext,
+) -> tuple[list[ReviewAsk], list[str]]:
+    """Collect the concrete review/ask_user directives still outstanding
+    when the REQUEST_CHANGES round cap is exhausted.
+
+    Returns ``(review_asks, ask_user_directives)``:
+
+    * *review_asks* — the current verdict's ``request_changes`` entries
+      that carry a concrete title or description (a real, actionable ask,
+      not an empty placeholder). A REQUEST_CHANGES verdict that still
+      carries such asks means the reviewer's explicit asks were never
+      satisfied.
+    * *ask_user_directives* — one entry per ``[ASK_USER]`` thread that has
+      at least one operator reply: the operator's answer (their
+      directive), prefixed with the question it answers.
+
+    The review stage uses these on round-cap exhaustion: instead of
+    auto-escalating to delivery with explicit directives possibly
+    unimplemented (which historically merged work whose reviewer/operator
+    asks were missing — e.g. PR #3087), it pauses on a human
+    "directives satisfied?" gate listing them.
+    """
+    review_asks = [
+        a
+        for a in verdict.request_changes
+        if (a.title or "").strip() or (a.description or "").strip()
+    ]
+
+    directive_lines: list[str] = []
+    comments = ctx.service.list_comments(ticket.id)
+    ask_thread_ids = {
+        c.id
+        for c in comments
+        if c.parent_id is None and (c.body or "").startswith(ASK_USER_MARKER)
+    }
+    for thread in (c for c in comments if c.id in ask_thread_ids):
+        replies = [
+            c for c in comments if c.parent_id == thread.id and (c.body or "").strip()
+        ]
+        if not replies:
+            continue  # unanswered question — nothing the operator directed
+        question = _collapse_comments(thread.body)
+        answers = "; ".join(_collapse_comments(c.body) for c in replies)
+        directive_lines.append(f"{question}  →  {answers}")
+    return review_asks, directive_lines
 
 
 def _build_prior_context(ticket, ctx, ws) -> str | None:
