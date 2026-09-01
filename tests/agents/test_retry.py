@@ -655,8 +655,16 @@ class TestClosingScratchLoop:
         loop.run_until_complete(_work())
 
     @staticmethod
-    def _leaked_loop_threads() -> int:
-        return sum(1 for t in threading.enumerate() if t.name.startswith("asyncio_"))
+    def _loop_threads() -> set[threading.Thread]:
+        """The live pydantic-ai scratch-loop executor threads.
+
+        Return the thread *objects* (not a count) so callers can diff
+        against a baseline.  Comparing identities is robust to unrelated
+        ``asyncio_*`` threads from other tests appearing or winding down
+        between snapshots — a bare count is not, which made these tests
+        flaky under xdist test-ordering / thread-timing races.
+        """
+        return {t for t in threading.enumerate() if t.name.startswith("asyncio_")}
 
     def test_leaks_without_the_guard(self) -> None:
         """Sanity-check the reproduction: unguarded, the executor thread survives."""
@@ -668,15 +676,16 @@ class TestClosingScratchLoop:
 
         # A long-lived thread, like the pooled ``asyncio.to_thread`` workers
         # that mill runs stages on.
-        before = self._leaked_loop_threads()
+        before = self._loop_threads()
         t = threading.Thread(target=_run, daemon=True)
         t.start()
         done.wait(timeout=10)
-        assert self._leaked_loop_threads() > before
+        # A new executor thread appeared and outlived the unguarded run.
+        assert self._loop_threads() - before
 
     def test_guard_closes_the_loop(self) -> None:
         """With the guard the loop is closed and its executor thread exits."""
-        before = self._leaked_loop_threads()
+        before = self._loop_threads()
         finished = threading.Event()
 
         def _run() -> None:
@@ -690,10 +699,12 @@ class TestClosingScratchLoop:
         t.join(timeout=10)
 
         # The executor thread is signalled on close; give it a moment to exit.
+        # Only threads created *inside* the guard matter — diff against the
+        # baseline so unrelated ``asyncio_*`` threads never affect the verdict.
         deadline = time.monotonic() + 10
-        while time.monotonic() < deadline and self._leaked_loop_threads() > before:
+        while time.monotonic() < deadline and self._loop_threads() - before:
             time.sleep(0.05)
-        assert self._leaked_loop_threads() == before
+        assert not (self._loop_threads() - before)
 
     def test_leaves_a_preexisting_loop_alone(self) -> None:
         """A loop the caller already owns must survive the block untouched."""
