@@ -67,9 +67,7 @@ def _run_post_refine_check(
     # Use the concise spec if available and non-degenerate.
     concise = result.concise_spec
     if concise and concise.strip() and not _spec_is_degenerate(concise):
-        (ws.artifacts_dir / "refine-verbose.md").write_text(
-            spec, encoding="utf-8"
-        )
+        (ws.artifacts_dir / "refine-verbose.md").write_text(spec, encoding="utf-8")
         log.info(
             "%s: post-refine check: %s",
             ticket.id,
@@ -87,10 +85,12 @@ def _run_post_refine_check(
     import json
 
     (ws.artifacts_dir / "post_refine_auto_approve.json").write_text(
-        json.dumps({
-            "decision": result.auto_approve,
-            "reason": result.auto_approve_reason,
-        }),
+        json.dumps(
+            {
+                "decision": result.auto_approve,
+                "reason": result.auto_approve_reason,
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -535,7 +535,9 @@ def single_scope_path(
 
     ack_threads(ctx, ticket, reviewer_comments, open_thread_ids)
 
-    return resolved_outcome(ctx, spec, ticket.id, "refined", source=ticket.source, ws=ws)
+    return resolved_outcome(
+        ctx, spec, ticket.id, "refined", source=ticket.source, ws=ws
+    )
 
 
 # -- phase: multi-scope split -------------------------------------------
@@ -614,7 +616,7 @@ def multi_scope_path(
         return Outcome(State.BLOCKED, "refiner produced no valid split children")
 
     if s.spec_review_enabled:
-        for i, child in enumerate(valid_children):
+        for child in valid_children:
             child["spec_markdown"] = _run_post_refine_check(
                 ctx, ticket, child["spec_markdown"], ws, s, reviewer_comments
             )

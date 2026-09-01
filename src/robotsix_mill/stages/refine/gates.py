@@ -545,6 +545,7 @@ class RefineGatesMixin:
         """
         from ...agents.pre_refine_classifier import run_pre_refine_classifier
         from ...agents.standards import fetch_standards_context
+        from . import _reconcile
 
         # Gather standards context (best-effort).
         standards_ctx = ""
@@ -563,10 +564,11 @@ class RefineGatesMixin:
         candidates_json = ""
         if len(draft) >= 100:
             try:
-                from ._gates_dedup import _build_candidates_block
+                from datetime import UTC, datetime
+
                 from ...agents import dedup
                 from ...core.datetime_utils import _as_utc
-                from datetime import UTC, datetime
+                from ._gates_dedup import _build_candidates_block
 
                 all_tickets = ctx.service.list()
                 now = datetime.now(UTC)
@@ -580,7 +582,10 @@ class RefineGatesMixin:
                     if t.id != ticket.id
                     and (
                         t.state not in non_terminal
-                        or (t.state == State.CLOSED and _as_utc(t.updated_at) >= lookback_cutoff)
+                        or (
+                            t.state == State.CLOSED
+                            and _as_utc(t.updated_at) >= lookback_cutoff
+                        )
                     )
                 ]
                 if ticket.parent_id is not None:
@@ -595,7 +600,9 @@ class RefineGatesMixin:
                 from ...core.models import TicketKind
 
                 candidates = [
-                    t for t in candidates if t.kind != TicketKind.EPIC or t.id == ticket.parent_id
+                    t
+                    for t in candidates
+                    if t.kind != TicketKind.EPIC or t.id == ticket.parent_id
                 ]
                 candidates = dedup.rank_candidates_by_similarity(
                     draft_title=ticket.title,
@@ -626,7 +633,9 @@ class RefineGatesMixin:
         if reviewer_comments and result.reviewer_agreement is not None:
             agreement = result.reviewer_agreement
             agreement_reason = result.reviewer_agreement_reason or ""
-            short = agreement_reason[:400] + ("…" if len(agreement_reason) > 400 else "")
+            short = agreement_reason[:400] + (
+                "…" if len(agreement_reason) > 400 else ""
+            )
 
             if agreement == "AGREE":
                 # Reviewer confirms the draft's conclusion.
@@ -701,9 +710,9 @@ class RefineGatesMixin:
             )
         done_id = result.already_done
         if done_id:
+            from ...core.dedup import _extract_paths
             from ._gates_dedup import _is_valid_dedup_target
             from .helpers import verify_claim
-            from ...core.dedup import _extract_paths
 
             reason_text = result.dedup_reason
             draft_paths = _extract_paths(draft)
@@ -724,8 +733,6 @@ class RefineGatesMixin:
                 )
 
         # --- Persist triage complexity for the refine agent ---
-        from . import _reconcile
-
         complexity = result.complexity or "needs-exploration"
         _reconcile.write_triage_complexity(
             ws,

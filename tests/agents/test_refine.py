@@ -4070,7 +4070,6 @@ def test_reviewer_agreement_routes_to_ready_for_task_without_branch(
 
     from robotsix_mill.agents.pre_refine_classifier import (
         PreRefineClassifierResult,
-        run_pre_refine_classifier,
     )
 
     def fake_pre_refine(**kwargs):
