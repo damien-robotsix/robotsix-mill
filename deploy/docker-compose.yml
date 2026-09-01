@@ -48,7 +48,7 @@
 #      of the mill-data volume.  In deploy mode the mill now discovers this
 #      at startup by inspecting its own container's mounts
 #      (sandbox.resolve_data_volume), so no host-specific config is required.
-#   4. claude-mount targets /root/.claude, but the mill runs as uid 1000
+#   4. claude-mount path is explicit (/home/mill/.claude) for uid 1000
 #      with HOME=/home/mill.  The default LLM path (OpenRouter via
 #      openrouter_api_key) is unaffected; the subscription-auth Claude SDK
 #      transport would need HOME/symlink wiring.
@@ -58,7 +58,12 @@ services:
     image: ghcr.io/damien-robotsix/robotsix-mill:main
     labels:
       robotsix.deploy.primary: "true"
-      robotsix.deploy.claude-mount: "true"
+      # Explicit path: the mill image homes uid 1000 at /home/mill, not the
+      # injector default /home/app — a bare "true" mounts where nothing reads
+      # it and the CLI reports "Not logged in" (2026-09-01 incident: the
+      # legacy raw mount was dropped by a contract refresh and the default
+      # path did not match).
+      robotsix.deploy.claude-mount: "/home/mill/.claude"
       robotsix.deploy.config-target: "/app/config/config.json"
       robotsix.deploy.chat-access: "true"
     environment:
