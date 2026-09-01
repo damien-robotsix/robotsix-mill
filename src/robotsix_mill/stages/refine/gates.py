@@ -568,7 +568,7 @@ class RefineGatesMixin:
 
                 from ...agents import dedup
                 from ...core.datetime_utils import _as_utc
-                from ._gates_dedup import _build_candidates_block
+                from .helpers import _build_candidates_block
 
                 all_tickets = ctx.service.list()
                 now = datetime.now(UTC)
@@ -771,7 +771,7 @@ class RefineGatesMixin:
                 "…" if len(result.triage_reason) > 400 else ""
             )
             from ...core.models import TicketKind
-            from ._triage import _verify_branch_merged
+            from .helpers import _verify_branch_merged
 
             if ticket.kind == TicketKind.TASK and (
                 not ticket.branch or not _verify_branch_merged(repo_dir, ticket)
@@ -830,7 +830,7 @@ class RefineGatesMixin:
                     repos = get_repos_config()
                     for rc in repos.repos.values():
                         if rc.board_id == target_board:
-                            ctx.service.migrate_board(
+                            ctx.service.migrate(
                                 ticket.id,
                                 target_board,
                                 note=f"{_MIGRATE_NOTE_PREFIX}{target_board} (was {ticket.board_id}): {result.triage_reason}",
