@@ -750,6 +750,30 @@ class _CoreSettings(BaseModel):
         description="Days back closed tickets are considered as duplicate candidates.",
         json_schema_extra={"advanced": True},
     )
+    # Machine-ingest source-tag block list (``POST /tickets/ingest``).
+    # robotsix-mill is a DEPLOYMENT board only: investigation/diagnosis
+    # sources (caretaker, pin_bump caretaker, agent_limitation,
+    # recurring-error analysis, chat-feedback loops) must NOT auto-file
+    # tickets here — investigations are run as chat subsession agents
+    # instead.  Ingests whose ``source_tag`` matches an entry here are
+    # rejected with 400, so these sources can no longer create mill
+    # tickets.  Override with MILL_INGEST_BLOCKED_SOURCE_TAGS
+    # (comma-separated).
+    ingest_blocked_source_tags: tuple[str, ...] = Field(
+        default=(
+            "caretaker",
+            "pin_bump",
+            "agent_limitation",
+            "recurring-diagnostic",
+            "recurring_error",
+            "robotsix-chat-feedback",
+        ),
+        description=(
+            "Source tags whose machine ingests are rejected on this board "
+            "(investigation/diagnosis sources cannot auto-file here)."
+        ),
+        json_schema_extra={"advanced": True},
+    )
     # Maximum number of candidates to pass to the dedup LLM after
     # similarity-based pre-filtering.  Caps the token budget regardless
     # of repo size.  ≥ 1 enforced by validator.

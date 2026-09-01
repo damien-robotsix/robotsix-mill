@@ -625,3 +625,76 @@ def test_ingest_reingest_epic_is_idempotent(client, service):
     assert r2.status_code == 200
     assert r2.json()["deduped"] is True
     assert r2.json()["ticket_id"] == ticket_id
+
+
+# ---------------------------------------------------------------------------
+# Investigation-source block list — robotsix-mill is deployment-only
+# ---------------------------------------------------------------------------
+def test_ingest_rejects_blocked_source_tag(client, service):
+    """An ingest from a blocked investigation source (caretaker) is
+    rejected with 400 and no ticket is created on the board."""
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(source_tag="caretaker"),
+    )
+    assert r.status_code == 400
+    assert "deployment tickets only" in r.json()["detail"]
+
+    # No ticket was created — the board is empty.
+    assert service.list() == []
+
+
+def test_ingest_rejects_composite_blocked_source_tag(client, service):
+    """A composite source tag containing a blocked token (pin_bump
+    caretaker) is rejected — this is the redundant caretaker source
+    that must no longer create mill tickets."""
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(source_tag="pin_bump caretaker"),
+    )
+    assert r.status_code == 400
+    assert service.list() == []
+
+
+def test_ingest_rejects_prefix_blocked_source_tag(client, service):
+    """A ``/``-prefixed caretaker source (caretaker/web) is rejected."""
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(source_tag="caretaker/web"),
+    )
+    assert r.status_code == 400
+    assert service.list() == []
+
+
+def test_ingest_accepts_deployment_source_tag(client, service):
+    """A deployment-scoped source tag still files normally — the block
+    list must not break the deployment capability (AC3)."""
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(source_tag="robotsix-chat"),
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert body["deduped"] is False
+    ticket = service.get(body["ticket_id"])
+    assert ticket is not None
+    assert ticket.state == "classifying"
+
+
+def test_ingest_blocked_source_tags_configurable(client, service, settings):
+    """The block list is configurable via settings — an operator can
+    admit or block additional source tags without code changes."""
+    settings.ingest_blocked_source_tags = ("my-investigation",)
+    r = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(source_tag="my-investigation"),
+    )
+    assert r.status_code == 400
+    assert service.list() == []
+
+    # A non-blocked source still files.
+    r2 = client.post(
+        "/tickets/ingest",
+        json=_ingest_payload(source_tag="caretaker"),
+    )
+    assert r2.status_code == 201
