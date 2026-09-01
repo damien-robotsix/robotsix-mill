@@ -17,7 +17,7 @@ import asyncio
 import contextlib
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from ..config import Settings, get_secrets
 from .prompt_tool_consistency import unregistered_call_directives
@@ -90,7 +90,9 @@ def level_uses_claude(level: int) -> bool:
     return tlc.model.startswith(_CLAUDE_SDK_PROVIDER)
 
 
-def new_openrouter_model(model_name: str, level: int, *, slot: str | None = None):
+def new_openrouter_model(
+    model_name: str, level: int, *, slot: Literal["default", "fallback"] | None = None
+):
     """Build a direct ``(model, http_client)`` for *level* via llmio.
 
     llmio's ``get_provider_for_level`` resolves the provider for the given
@@ -517,7 +519,7 @@ def _build_openrouter_handle(
     *,
     effective_model: str,
     level: int,
-    slot: str | None = None,
+    slot: Literal["default", "fallback"] | None = None,
     composed_system: str,
     all_tools: list[Any],
     output_type: Any,
@@ -632,7 +634,7 @@ def build_agent(
     tier_binding: Any | None = None,
     images: Sequence[tuple[str, bytes]] | None = None,
     vision_api_key: str | None = None,
-    slot: str | None = None,
+    slot: Literal["default", "fallback"] | None = None,
 ) -> Any:
     """Construct a pydantic-ai Agent for a capability ``level`` (1/2/3).
 
