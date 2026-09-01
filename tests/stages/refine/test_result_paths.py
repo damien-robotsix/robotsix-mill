@@ -1096,7 +1096,7 @@ class TestSingleScopePath:
         monkeypatch.setattr(
             _result_paths,
             "_run_post_refine_check",
-            lambda ctx, ticket, spec, ws, s, reviewer_comments: (
+            lambda ctx, ticket, spec, ws, s, reviewer_comments, **kw: (
                 review_called.append(spec) or _CONCISE_SPEC
             ),
         )
@@ -1509,7 +1509,7 @@ class TestMultiScopePath:
         monkeypatch.setattr(
             _result_paths,
             "_run_post_refine_check",
-            lambda ctx, ticket, spec, ws, s, reviewer_comments: (
+            lambda ctx, ticket, spec, ws, s, reviewer_comments, **kw: (
                 review_calls.append(spec) or _CONCISE_SPEC
             ),
         )

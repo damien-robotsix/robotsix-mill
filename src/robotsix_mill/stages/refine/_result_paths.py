@@ -40,6 +40,8 @@ def _run_post_refine_check(
     ws: Workspace,
     s: Settings,
     reviewer_comments: str | None,
+    *,
+    child_index: int | None = None,
 ) -> str:
     """Run the post-refine check (single LLM call).
 
@@ -67,7 +69,12 @@ def _run_post_refine_check(
     # Use the concise spec if available and non-degenerate.
     concise = result.concise_spec
     if concise and concise.strip() and not _spec_is_degenerate(concise):
-        (ws.artifacts_dir / "refine-verbose.md").write_text(spec, encoding="utf-8")
+        verbose_name = (
+            f"refine-verbose-child-{child_index}.md"
+            if child_index is not None
+            else "refine-verbose.md"
+        )
+        (ws.artifacts_dir / verbose_name).write_text(spec, encoding="utf-8")
         log.info(
             "%s: post-refine check: %s",
             ticket.id,
@@ -618,9 +625,15 @@ def multi_scope_path(
         return Outcome(State.BLOCKED, "refiner produced no valid split children")
 
     if s.spec_review_enabled:
-        for child in valid_children:
+        for i, child in enumerate(valid_children, start=1):
             child["spec_markdown"] = _run_post_refine_check(
-                ctx, ticket, child["spec_markdown"], ws, s, reviewer_comments
+                ctx,
+                ticket,
+                child["spec_markdown"],
+                ws,
+                s,
+                reviewer_comments,
+                child_index=i,
             )
 
     if len(valid_children) == 1:

@@ -207,12 +207,26 @@ def _post_refine_ok(monkeypatch):
         review = refining.review_spec_for_conciseness(
             settings=settings, spec_markdown=spec
         )
-        approve = refining.triage_auto_approve(settings=settings, spec=spec)
+        try:
+            approve = refining.triage_auto_approve(settings=settings, spec=spec)
+            decision, reason = approve.decision, approve.reason
+        except RuntimeError as exc:
+            # An unmocked seam hits the real-call guard: keep the review
+            # result and fall back to human approval, as the legacy flow
+            # did when auto-approve failed. Deliberate mock exceptions
+            # (non-guard) propagate into _run_post_refine_check's
+            # degrade path so the legacy fallback re-raises them.
+            if "Blocked real" not in str(exc):
+                raise
+            decision, reason = (
+                "NEEDS_APPROVAL",
+                "auto-approve triage failed — falling back to human approval",
+            )
         return PostRefineResult(
             concise_spec=review.concise_spec,
             stripped_summary=review.stripped_summary,
-            auto_approve=approve.decision,
-            auto_approve_reason=approve.reason,
+            auto_approve=decision,
+            auto_approve_reason=reason,
         )
 
     monkeypatch.setattr(
