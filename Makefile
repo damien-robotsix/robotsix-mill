@@ -100,6 +100,9 @@ migrate-stamp: install  ## Stamp existing DB as head without running migrations
 	uv run alembic stamp head
 
 check-migrations: install  ## Check for model/migration drift (CI gate)
-	uv run alembic --sqlalchemy.url="sqlite:////tmp/drift-check.db" upgrade head
-	uv run alembic --sqlalchemy.url="sqlite:////tmp/drift-check.db" check
+	cp alembic.ini /tmp/alembic-drift.ini
+	sed -i "s|^sqlalchemy\.url = .*|sqlalchemy.url = sqlite:////tmp/drift-check.db|" /tmp/alembic-drift.ini
+	uv run alembic -c /tmp/alembic-drift.ini upgrade head
+	uv run alembic -c /tmp/alembic-drift.ini check
+	rm -f /tmp/alembic-drift.ini /tmp/drift-check.db
 
