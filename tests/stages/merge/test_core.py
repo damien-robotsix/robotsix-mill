@@ -3150,8 +3150,8 @@ def test_empty_rollup_resets_when_jobs_appear(tmp_path, monkeypatch):
         assert out.next_state is State.IMPLEMENT_COMPLETE
 
 
-def test_empty_rollup_close_fails_falls_through_to_unpromotable(tmp_path, monkeypatch):
-    """If close_pr fails, fall through to the normal unpromotable check."""
+def test_empty_rollup_close_fails_parks_with_explicit_note(tmp_path, monkeypatch):
+    """close_pr failing parks BLOCKED with a note naming the failed attempt."""
     ctx = _empty_rollup_ctx(tmp_path, monkeypatch)
     t = _implement_complete(ctx)
     stage = MergeStage()
@@ -3171,9 +3171,103 @@ def test_empty_rollup_close_fails_falls_through_to_unpromotable(tmp_path, monkey
         "reopen_pr",
         lambda self, *, source_branch: True,
     )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "post_pr_comment",
+        lambda self, *, source_branch, body: True,
+    )
 
-    # Should fall through to the normal green-unpromotable path.
-    # Since green_unpromotable_max_polls is 10 and we've only polled
-    # empty_rollup_max_polls times, it should keep re-polling.
+    # The marker is written before the forge calls, so the "at most one
+    # self-heal per PR" guard holds even when the attempt fails: park BLOCKED
+    # now with the attempt details instead of retrying on later polls.
+    out = stage.run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "closed=False" in out.note
+    assert "reopened=False" in out.note
+
+
+def test_empty_rollup_reopen_fails_parks_with_explicit_note(tmp_path, monkeypatch):
+    """close_pr succeeding but reopen_pr failing parks BLOCKED and warns the PR
+    may have been left closed."""
+    ctx = _empty_rollup_ctx(tmp_path, monkeypatch)
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+
+    # Poll up to threshold - 1.
+    for _ in range(ctx.settings.empty_rollup_max_polls - 1):
+        stage.run(t, ctx)
+
+    # close succeeds, reopen fails.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "close_pr",
+        lambda self, *, source_branch: True,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "reopen_pr",
+        lambda self, *, source_branch: False,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "post_pr_comment",
+        lambda self, *, source_branch, body: True,
+    )
+
+    out = stage.run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "closed=True" in out.note
+    assert "reopened=False" in out.note
+    assert "left closed" in out.note.lower()
+
+
+def test_empty_rollup_polls_do_not_consume_green_unpromotable_budget(
+    tmp_path, monkeypatch
+):
+    """Empty-rollup polls below the self-heal threshold must not consume the
+    green-unpromotable budget — otherwise a small
+    green_unpromotable_max_polls parks the ticket with the generic 'no check
+    outstanding' note before the self-heal can trigger."""
+    ctx = _empty_rollup_ctx(
+        tmp_path,
+        monkeypatch,
+        empty_rollup_max_polls=3,
+        green_unpromotable_max_polls=1,
+    )
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+
+    # Track forge calls: the self-heal must fire at the empty-rollup
+    # threshold, not be preempted by the green-unpromotable ceiling.
+    closed_branches: list[str] = []
+    reopened_branches: list[str] = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "close_pr",
+        lambda self, *, source_branch: closed_branches.append(source_branch) or True,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "reopen_pr",
+        lambda self, *, source_branch: reopened_branches.append(source_branch) or True,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "post_pr_comment",
+        lambda self, *, source_branch, body: True,
+    )
+
+    # Poll below the threshold: each must re-poll (IMPLEMENT_COMPLETE), never
+    # trip the green-unpromotable ceiling with the generic note.
+    for _ in range(ctx.settings.empty_rollup_max_polls - 1):
+        out = stage.run(t, ctx)
+        assert out.next_state is State.IMPLEMENT_COMPLETE
+
+    # At the threshold, the self-heal fires and re-polls.
     out = stage.run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert len(closed_branches) == 1
+    assert len(reopened_branches) == 1
+    assert (
+        "close/reopen" in out.note.lower() or "closed and reopened" in out.note.lower()
+    )
