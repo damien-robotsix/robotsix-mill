@@ -30,7 +30,7 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "httpx>=0.27",
     "cryptography",
-    "pypdf>=6.14.2",
+    "pypdf>=6.16.1",
     # Shared kanban-board frontend library: column-per-status board chrome
     # parameterized by a BoardAdapter Protocol and a render-mode switch.
     # Consumed via git dependency — see robotsix-board README for API docs.
@@ -64,12 +64,12 @@ docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27", "pymdown-extensions>
 # an explicit `--group dev` on every sync.
 default-groups = ["dev"]
 exclude-newer = "7d"
-# pypdf 6.15.0 fixes GHSA-fp3f-mc75-235c and GHSA-fwg2-594c-jp42 (both
-# resource-exhaustion), and was published 2026-08-06 — inside the rolling
-# 7-day window. A per-package override rather than a wider cutoff, so
-# exactly one package escapes.  The cutoff must post-date the release
-# itself.
-exclude-newer-package = { pypdf = "2026-08-07T00:00:00Z" }
+# pypdf 6.16.1+ fixes GHSA-763m-79hh-57f2 / GHSA-23w6-3w8w-8484 /
+# GHSA-jp53-mhqp-8xcg (resource-exhaustion / infinite-loop), and 6.16.2
+# was published 2026-08-23 — inside the rolling 7-day window. A
+# per-package override rather than a wider cutoff, so exactly one package
+# escapes.  The cutoff must post-date the release itself.
+exclude-newer-package = { pypdf = "2026-08-24T00:00:00Z" }
 # robotsix-github-auth pins robotsix-http to an older rev (4cf79993) while
 # robotsix-llmio pins ba90d55ea.  The two transitive exact-rev pins are
 # otherwise irreconcilable; both are ancestors of the rev below, so

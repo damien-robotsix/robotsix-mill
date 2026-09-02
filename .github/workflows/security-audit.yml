@@ -82,27 +82,13 @@ jobs:
           # decryption exposes a Bleichenbacher oracle; fixed in 50.0.0.
           # Pinned 50.0.0 via uv.lock; the advisory database may still
           # flag this version — safe to ignore.
-          #
-          # GHSA-fp3f-mc75-235c (pypdf): large memory usage for large
-          # /ToUnicode streams; fixed in 6.15.0 (2026-08-06). Pinned
-          # 6.15.0 via uv.lock with a per-package exclude-newer
-          # override; the advisory database may still flag this version
-          # — safe to ignore.
-          #
-          # GHSA-fwg2-594c-jp42 (pypdf): long runtimes for large CID
-          # font width ranges; fixed in 6.15.0 (2026-08-06). Pinned
-          # 6.15.0 via uv.lock with a per-package exclude-newer
-          # override; the advisory database may still flag this version
-          # — safe to ignore.
           uv audit --frozen \
             --ignore PYSEC-2025-183 \
             --ignore MAL-2026-4750 \
             --ignore GHSA-9xwg-3r6f-jcx2 \
             --ignore GHSA-jwv3-5hgf-82ww \
             --ignore GHSA-m2h6-j472-rp4c \
-            --ignore GHSA-g6cj-pr64-35w5 \
-            --ignore GHSA-fp3f-mc75-235c \
-            --ignore GHSA-fwg2-594c-jp42
+            --ignore GHSA-g6cj-pr64-35w5
 
       - name: Generate SBOM (CycloneDX)
         if: always()
