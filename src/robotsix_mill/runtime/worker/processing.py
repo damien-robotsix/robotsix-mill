@@ -620,11 +620,13 @@ async def _process_ticket_inner(
         # trace per sweep, accumulating quickly. The wait is resumed
         # naturally by the next sweep once the dep terminates.
         #
-        # DRAFT tickets are exempt: the refine stage's own dependency
-        # gate short-circuits them to DONE with a blocked note, saving
-        # LLM budget.  That transition is a real state change (not
-        # same-state), so no empty-trace issue.
-        if ctx.service.unmet_dependencies(ticket) and ticket.state != State.DRAFT:
+        # DRAFT tickets wait here too: they must NOT reach the refine
+        # stage while a dependency is open — refine cannot produce a
+        # terminal outcome for them (DONE would cancel the child; see
+        # the 2026-09-02 incident where 11 epic children were silently
+        # cancelled across 6 boards), so the only correct handling is
+        # this trace-free skip until the dependency terminates.
+        if ctx.service.unmet_dependencies(ticket):
             log.debug(
                 "%s: waiting on unmet dependencies — skipping (no trace)",
                 ticket_id,

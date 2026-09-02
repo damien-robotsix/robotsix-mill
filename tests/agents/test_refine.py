@@ -28,9 +28,10 @@ def test_empty_title_and_draft_blocks(ctx, service):
     assert "empty title and draft" in out.note
 
 
-def test_dep_gated_ticket_is_short_circuited_to_done(ctx, service, monkeypatch):
-    """A DRAFT ticket with an unmet dependency is short-circuited to DONE
-    with no LLM spend."""
+def test_dep_gated_ticket_is_deferred_not_cancelled(ctx, service, monkeypatch):
+    """A DRAFT ticket with an unmet dependency is deferred (same-state
+    no-op, no LLM spend) — NEVER short-circuited to DONE, which is
+    terminal and silently cancels the child (2026-09-02 incident)."""
     parent = service.create("Parent ticket", "parent draft")
     dependent = service.create("Dependent ticket", "dependent draft")
     service.set_depends_on(dependent.id, [parent.id])
@@ -62,8 +63,8 @@ def test_dep_gated_ticket_is_short_circuited_to_done(ctx, service, monkeypatch):
     out = RefineStage().run(dependent, ctx)
 
     assert not refine_called
-    assert out.next_state is State.DONE
-    assert "dependency gate" in out.note
+    assert out.next_state is State.DRAFT
+    assert service.get(dependent.id).state is State.DRAFT
 
 
 def test_dep_satisfied_ticket_is_refined(ctx, service, monkeypatch):

@@ -10,10 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...config import target_branch_for
-from ...core.constants import (
-    DEPENDENCY_BLOCKED_PREFIX,
-    NON_IMPLEMENTATION_CLOSE_PREFIXES,
-)
+from ...core.constants import NON_IMPLEMENTATION_CLOSE_PREFIXES
 from ...core.models import Ticket, TicketKind
 from ...core.states import State
 from ...core.workspace import Workspace
@@ -41,28 +38,20 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
             return Outcome(State.BLOCKED, "empty title and draft — nothing to refine")
 
         # --- dependency gate: refuse to refine until all deps are
-        # terminal (CLOSED/DONE).  Short-circuit to DONE with a clear
-        # "blocked on prerequisite" note so the ticket does not burn
-        # LLM budget on an unsatisfiable refine.
+        # terminal (CLOSED/DONE).  Same-state no-op — the worker's own
+        # dependency gate normally skips these tickets trace-free, so
+        # this only fires on a race.  It must NEVER return DONE: DONE
+        # is terminal and nothing reopens the child, so a DONE outcome
+        # silently cancels the ticket (2026-09-02 incident: 11 epic
+        # children cancelled across 6 boards since #3025 shipped).
         unmet: list[str] = ctx.service.unmet_dependencies(ticket)
         if unmet:
             log.info(
-                "%s: unmet dependencies — short-circuiting to DONE: %s",
+                "%s: unmet dependencies — deferring refine: %s",
                 ticket.id,
                 unmet,
             )
-            dep_states = []
-            for dep_id in unmet:
-                dep_ticket = ctx.service.get(dep_id)
-                dep_states.append(
-                    f"{dep_id} ({dep_ticket.state.value})" if dep_ticket else dep_id
-                )
-            state_detail = "; ".join(dep_states)
-            return Outcome(
-                State.DONE,
-                f"{DEPENDENCY_BLOCKED_PREFIX} blocked on prerequisite(s): "
-                f"{state_detail}",
-            )
+            return Outcome(State.DRAFT)
 
         s = ctx.settings
 
