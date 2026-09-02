@@ -47,7 +47,11 @@ class _ServiceBase:
             pass
 
         def transition(
-            self, ticket_id: str, dst: State, note: str | None = ...
+            self,
+            ticket_id: str,
+            dst: State,
+            note: str | None = ...,
+            block_reason: str | None = ...,
         ) -> Ticket:
             pass
 

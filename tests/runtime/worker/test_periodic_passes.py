@@ -10,7 +10,7 @@ from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 
 # The function under test.
-from robotsix_mill.runtime.worker.periodic_passes import _ci_debt_recheck_pass
+from robotsix_mill.runtime.worker.periodic_passes import _blocked_recheck_pass
 
 CI_DEBT_NOTE = (
     "CI blocked by pre-existing target-branch debt: workflow(s) "
@@ -106,7 +106,7 @@ def test_all_workflows_green_transitions_to_implement_complete(
         lambda *a, **kw: forge,
     )
 
-    _ci_debt_recheck_pass(settings, repo_config)
+    _blocked_recheck_pass(settings, repo_config)
 
     updated = svc.get(t.id)
     assert updated.state == State.IMPLEMENT_COMPLETE
@@ -125,7 +125,7 @@ def test_mixed_conclusions_some_green_stays_blocked(
         lambda *a, **kw: forge,
     )
 
-    _ci_debt_recheck_pass(settings, repo_config)
+    _blocked_recheck_pass(settings, repo_config)
 
     updated = svc.get(t.id)
     assert updated.state == State.BLOCKED
@@ -141,7 +141,7 @@ def test_all_workflows_failing_stays_blocked(settings, repo_config, svc, monkeyp
         lambda *a, **kw: forge,
     )
 
-    _ci_debt_recheck_pass(settings, repo_config)
+    _blocked_recheck_pass(settings, repo_config)
 
     updated = svc.get(t.id)
     assert updated.state == State.BLOCKED
@@ -159,7 +159,7 @@ def test_neutral_and_skipped_conclusions_are_green(
         lambda *a, **kw: forge,
     )
 
-    _ci_debt_recheck_pass(settings, repo_config)
+    _blocked_recheck_pass(settings, repo_config)
 
     updated = svc.get(t.id)
     assert updated.state == State.IMPLEMENT_COMPLETE
@@ -181,7 +181,7 @@ def test_no_matching_note_skipped(settings, repo_config, svc, monkeypatch):
         lambda *a, **kw: forge,
     )
 
-    _ci_debt_recheck_pass(settings, repo_config)
+    _blocked_recheck_pass(settings, repo_config)
 
     updated = svc.get(t.id)
     assert updated.state == State.BLOCKED
@@ -198,7 +198,7 @@ def test_missing_workflow_run_stays_blocked(settings, repo_config, svc, monkeypa
         lambda *a, **kw: forge,
     )
 
-    _ci_debt_recheck_pass(settings, repo_config)
+    _blocked_recheck_pass(settings, repo_config)
 
     updated = svc.get(t.id)
     assert updated.state == State.BLOCKED
@@ -217,7 +217,7 @@ def test_list_workflow_runs_error_survives(settings, repo_config, svc, monkeypat
     )
 
     # Must not raise.
-    _ci_debt_recheck_pass(settings, repo_config)
+    _blocked_recheck_pass(settings, repo_config)
 
     updated = svc.get(t.id)
     assert updated.state == State.BLOCKED
@@ -247,7 +247,7 @@ def test_debt_note_survives_a_later_annotation(settings, repo_config, svc, monke
     forge = _mock_forge({"lint": "success", "test": "success"})
     monkeypatch.setattr("robotsix_mill.forge.get_forge", lambda *a, **kw: forge)
 
-    _ci_debt_recheck_pass(settings, repo_config)
+    _blocked_recheck_pass(settings, repo_config)
 
     assert svc.get(t.id).state == State.IMPLEMENT_COMPLETE
 
@@ -265,6 +265,113 @@ def test_a_newer_unrelated_block_reason_wins(settings, repo_config, svc, monkeyp
     forge = _mock_forge({"lint": "success", "test": "success"})
     monkeypatch.setattr("robotsix_mill.forge.get_forge", lambda *a, **kw: forge)
 
-    _ci_debt_recheck_pass(settings, repo_config)
+    _blocked_recheck_pass(settings, repo_config)
 
     assert svc.get(t.id).state == State.BLOCKED
+
+
+# ---------------------------------------------------------------------------
+# Structured block reasons (machine-checkable, not prose)
+# ---------------------------------------------------------------------------
+#
+# New blocks carry a ``block_reason`` JSON on the Ticket
+# ({"kind": "target_branch_red", "workflows": [...]}) that the rechecker
+# reads directly instead of substring-matching the note. This is what
+# fixes the 2026-09-02 incident: the two tickets' prose note omitted the
+# canonical "too" suffix, so the legacy regex missed them and they stayed
+# parked after main went green.
+
+
+def _make_blocked_ticket_reason(svc, note, block_reason):
+    """Block a ticket through IMPLEMENT_COMPLETE with a structured reason."""
+    t = svc.create("Test ticket", "Test body")
+    svc.transition(t.id, State.READY, note="refined")
+    svc.transition(t.id, State.DOCUMENTING, note="docs")
+    svc.transition(t.id, State.DELIVERABLE, note="deliverable")
+    svc.transition(t.id, State.IMPLEMENT_COMPLETE, note="merge stage started")
+    svc.transition(t.id, State.BLOCKED, note=note, block_reason=block_reason)
+    return svc.get(t.id)
+
+
+def test_structured_reason_resumes_with_evidence(
+    settings, repo_config, svc, monkeypatch
+):
+    """A structured target_branch_red block resumes when green, and the
+    resume note names the run IDs as evidence."""
+    from robotsix_mill.core.block_reason import TARGET_BRANCH_RED, encode
+
+    # Prose note that does NOT match the legacy regex (no "too" suffix) —
+    # exactly the shape that stranded the 2026-09-02 tickets. The
+    # structured reason is what the rechecker trusts.
+    note = (
+        "CI blocked by pre-existing target-branch debt: workflow(s) "
+        "CI, Security Audit are failing on the merge target"
+    )
+    t = _make_blocked_ticket_reason(
+        svc, note, encode(TARGET_BRANCH_RED, workflows=["CI", "Security Audit"])
+    )
+
+    forge = _mock_forge({"CI": "success", "Security Audit": "success"})
+    monkeypatch.setattr("robotsix_mill.forge.get_forge", lambda *a, **kw: forge)
+
+    _blocked_recheck_pass(settings, repo_config)
+
+    updated = svc.get(t.id)
+    assert updated.state == State.IMPLEMENT_COMPLETE
+    # The resume note names the evidence (workflow run IDs).
+    events = svc.history(t.id, order="desc")
+    resume = next(
+        (ev.note or "" for ev in events if ev.state is State.IMPLEMENT_COMPLETE),
+        "",
+    )
+    assert "CI#1" in resume and "Security Audit#2" in resume
+
+
+def test_structured_unknown_kind_is_skipped(settings, repo_config, svc, monkeypatch):
+    """A structured reason of an unhandled kind is never resumed (the
+    rechecker only resumes what it can positively verify cleared)."""
+    from robotsix_mill.core.block_reason import encode
+
+    t = _make_blocked_ticket_reason(
+        svc, "blocked", encode("some_future_kind", provider="x")
+    )
+
+    forge = _mock_forge({"CI": "success"})
+    monkeypatch.setattr("robotsix_mill.forge.get_forge", lambda *a, **kw: forge)
+
+    _blocked_recheck_pass(settings, repo_config)
+
+    assert svc.get(t.id).state == State.BLOCKED
+
+
+def test_structured_still_red_stays_blocked(settings, repo_config, svc, monkeypatch):
+    """A structured target_branch_red block with a still-red workflow stays
+    BLOCKED."""
+    from robotsix_mill.core.block_reason import TARGET_BRANCH_RED, encode
+
+    t = _make_blocked_ticket_reason(
+        svc, "blocked", encode(TARGET_BRANCH_RED, workflows=["lint"])
+    )
+
+    forge = _mock_forge({"lint": "failure"})
+    monkeypatch.setattr("robotsix_mill.forge.get_forge", lambda *a, **kw: forge)
+
+    _blocked_recheck_pass(settings, repo_config)
+
+    assert svc.get(t.id).state == State.BLOCKED
+
+
+def test_resume_clears_block_reason(settings, repo_config, svc):
+    """Leaving BLOCKED via resume_blocked clears the structured reason."""
+    from robotsix_mill.core.block_reason import TARGET_BRANCH_RED, encode
+
+    t = _make_blocked_ticket_reason(
+        svc, "blocked", encode(TARGET_BRANCH_RED, workflows=["lint"])
+    )
+    assert svc.get(t.id).block_reason is not None
+
+    svc.resume_blocked(t.id, note="operator resume")
+
+    updated = svc.get(t.id)
+    assert updated.state != State.BLOCKED
+    assert updated.block_reason is None

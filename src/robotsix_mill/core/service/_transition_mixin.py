@@ -408,7 +408,13 @@ def _verify_citations(note: str, repo_dir: Path | None) -> str:
 class _TransitionMixin(_ServiceBase):
     """State transitions, resume, retry, request-changes, and mark-done."""
 
-    def transition(self, ticket_id: str, dst: State, note: str | None = None) -> Ticket:
+    def transition(
+        self,
+        ticket_id: str,
+        dst: State,
+        note: str | None = None,
+        block_reason: str | None = None,
+    ) -> Ticket:
         """Move a ticket to *dst* state.
 
         Returns the updated :class:`Ticket`. Raises :class:`KeyError` if
@@ -416,7 +422,11 @@ class _TransitionMixin(_ServiceBase):
         transition is not allowed by the state machine.
 
         When transitioning to :class:`State.BLOCKED`, the originating
-        state is recorded in ``blocked_from`` so it can be resumed later.
+        state is recorded in ``blocked_from`` so it can be resumed later,
+        and *block_reason* (if given) is recorded as the machine-checkable
+        structured reason (see :mod:`~robotsix_mill.core.block_reason`).
+        Leaving BLOCKED clears both.  *block_reason* is ignored when the
+        destination is not BLOCKED.
 
         Transitions to terminal states — :class:`State.DONE`,
         :class:`State.CLOSED`, or :class:`State.ERRORED` — are rejected
@@ -469,6 +479,7 @@ class _TransitionMixin(_ServiceBase):
             # BLOCKED (regardless of resume or override path).
             if dst is State.BLOCKED:
                 ticket.blocked_from = ticket.state.value
+                ticket.block_reason = block_reason
                 # Guard: every BLOCKED transition must carry a reason in
                 # the history event.  A blocked ticket with no note is an
                 # unrecoverable diagnostic gap — default to a generic note
@@ -483,6 +494,7 @@ class _TransitionMixin(_ServiceBase):
                     )
             elif ticket.state is State.BLOCKED:
                 ticket.blocked_from = None
+                ticket.block_reason = None
                 # When an operator forces a blocked ticket back into
                 # READY with an explicit justification note, clear the
                 # implement stage's stale-spec guard so the fingerprint-
@@ -612,6 +624,7 @@ class _TransitionMixin(_ServiceBase):
                     f"{ticket_id}: {ticket.state} -> {dst} not allowed"
                 )
             ticket.blocked_from = None
+            ticket.block_reason = None
             ticket.retry_attempt = 0
             ticket.last_transient_error = None
             ticket.next_retry_at = None
@@ -906,6 +919,7 @@ class _TransitionMixin(_ServiceBase):
                     f"state {ticket.state} is already terminal"
                 )
             ticket.blocked_from = None
+            ticket.block_reason = None
             ticket.paused_from = None
             old_state = ticket.state.value
             ticket.state = State.CLOSED

@@ -715,6 +715,7 @@ async def _process_ticket_inner(
                     ticket_id,
                     preflight_outcome.next_state,
                     preflight_outcome.note,
+                    block_reason=preflight_outcome.block_reason,
                 )
             except TransitionError:
                 log.warning(
@@ -1031,7 +1032,12 @@ async def _process_ticket_inner(
             )
         else:
             try:
-                ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
+                ctx.service.transition(
+                    ticket_id,
+                    outcome.next_state,
+                    outcome.note,
+                    block_reason=outcome.block_reason,
+                )
             except TransitionError as e:
                 # The pipeline auto-completing a ticket (e.g. merge → DONE
                 # once the PR merged) must not be blocked by a stale
@@ -1048,7 +1054,12 @@ async def _process_ticket_inner(
                         outcome.next_state,
                         n,
                     )
-                    ctx.service.transition(ticket_id, outcome.next_state, outcome.note)
+                    ctx.service.transition(
+                        ticket_id,
+                        outcome.next_state,
+                        outcome.note,
+                        block_reason=outcome.block_reason,
+                    )
                 else:
                     raise
             log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)

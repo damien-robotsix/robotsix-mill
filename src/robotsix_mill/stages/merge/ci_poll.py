@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from ...config import target_branch_for
+from ...core.block_reason import TARGET_BRANCH_RED, encode
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ...forge import Forge, get_forge
@@ -380,6 +381,7 @@ class CIPollMixin(_MergeStageBase):
                     f"{names} are failing on the merge target too and were not "
                     f"introduced by this PR. Operator must stabilise the target "
                     f"branch's CI before this can merge.",
+                    block_reason=encode(TARGET_BRANCH_RED, workflows=sorted(debt)),
                 )
 
         # --- Transient infra failure: don't count against the cycle ceiling ---
