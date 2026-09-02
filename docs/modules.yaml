@@ -38,6 +38,7 @@ modules:
       - tests/config/test_repos_source.py
       - tests/config/test_repos_registry_shape.py
       - tests/config/test_auto_merge_enabled_wiring.py
+      - tests/config/test_meta_exclude_wiring.py
       - tests/config/test_follows_standards.py
       - tests/config/test_secrets.py
       - tests/config/test_secrets_key_persistence.py

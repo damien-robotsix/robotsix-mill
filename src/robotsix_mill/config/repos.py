@@ -412,6 +412,15 @@ def load_repos_config(config_file: str | None = None) -> ReposRegistry:
             auto_merge_enabled=repo_data.get("auto_merge_enabled", True)
             if isinstance(repo_data, dict)
             else True,
+            # Same class of bug as auto_merge_enabled above: the field was
+            # declared on RepoConfig but never read here, so an operator
+            # setting ``meta_exclude: true`` in repos.yaml was silently
+            # dropped and every repo kept the field's ``False`` default.
+            # The periodic meta pass therefore kept cloning/grading repos
+            # the operator explicitly opted out of.
+            meta_exclude=repo_data.get("meta_exclude", False)
+            if isinstance(repo_data, dict)
+            else False,
             source="auto" if source_tag == "auto" else "config",
         )
 
