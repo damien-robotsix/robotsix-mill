@@ -49,13 +49,12 @@ jobs:
       #   GHSA-g6cj-pr64-35w5 (cryptography): PKCS#7 EnvelopedData decryption
       #     exposes a Bleichenbacher oracle; fixed in 50.0.0.
       #     Pinned 50.0.0 via uv.lock; advisory DB may still flag.
-      #   GHSA-fp3f-mc75-235c (pypdf): large memory usage for large
-      #     /ToUnicode streams; fixed in 6.15.0 (2026-08-06). Pinned
-      #     6.15.0 via uv.lock; advisory DB may still flag.
-      #   GHSA-fwg2-594c-jp42 (pypdf): long runtimes for large CID font
-      #     width ranges; fixed in 6.15.0 (2026-08-06). Pinned 6.15.0
-      #     via uv.lock; advisory DB may still flag.
-      audit-ignore: "PYSEC-2025-183, MAL-2026-4750, GHSA-9xwg-3r6f-jcx2, GHSA-jwv3-5hgf-82ww, GHSA-m2h6-j472-rp4c, GHSA-g6cj-pr64-35w5, GHSA-fp3f-mc75-235c, GHSA-fwg2-594c-jp42"
+      #
+      #   pypdf advisories GHSA-763m-79hh-57f2, GHSA-23w6-3w8w-8484,
+      #     GHSA-jp53-mhqp-8xcg (and the earlier GHSA-fp3f-mc75-235c /
+      #     GHSA-fwg2-594c-jp42) are fixed by pypdf 6.16.1; uv.lock
+      #     resolves 6.16.2, so no pypdf advisory is ignored here.
+      audit-ignore: "PYSEC-2025-183, MAL-2026-4750, GHSA-9xwg-3r6f-jcx2, GHSA-jwv3-5hgf-82ww, GHSA-m2h6-j472-rp4c, GHSA-g6cj-pr64-35w5"
 
   mill-specific:
     runs-on: ubuntu-latest
