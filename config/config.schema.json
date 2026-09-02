@@ -223,6 +223,13 @@
           "title": "Max Inflight Prs",
           "type": "integer"
         },
+        "meta_exclude": {
+          "advanced": true,
+          "default": false,
+          "description": "When true, this repo is skipped by the periodic meta (fleet-consistency) pass: it is not cloned/studied, no META alignment/TODO drafts are filed against its board, and its board is not scanned for prior meta proposals.",
+          "title": "Meta Exclude",
+          "type": "boolean"
+        },
         "openrouter_api_key": {
           "anyOf": [
             {

@@ -139,6 +139,17 @@ class RepoConfig(BaseModel):
         description="Cross-repo target configuration for fork-contribution workflows. Unset for same-repo delivery.",
         json_schema_extra={"advanced": True},
     )
+    # Operator-controlled opt-out from the periodic meta (fleet-consistency)
+    # pass. Like ``deployed_log_folder``/``sandbox_image`` above, this is an
+    # operator-only knob set in the central ``config/repos.yaml`` — NOT the
+    # managed repo's committed ``.robotsix-mill/config.yaml`` — so a WIP or
+    # private repo can be onboarded without being graded against fleet
+    # standards or accumulating meta drafts.
+    meta_exclude: bool = Field(
+        False,
+        description="When true, this repo is skipped by the periodic meta (fleet-consistency) pass: it is not cloned/studied, no META alignment/TODO drafts are filed against its board, and its board is not scanned for prior meta proposals.",
+        json_schema_extra={"advanced": True},
+    )
     ci_monitor_enabled: bool = Field(
         True,
         description="When true, the CI monitor polls this repo's main-branch CI status periodically.",
