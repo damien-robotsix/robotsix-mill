@@ -463,8 +463,18 @@ class Forge(ABC):
         Used to explain an unpromotable-but-green PR: a required context
         missing from what the PR actually reports can never arrive, so
         waiting is pointless. Returns ``[]`` when protection is unreadable,
-        absent, or the forge has no equivalent — callers must treat ``[]``
-        as "unknown", not "nothing required". Must NEVER raise.
+        absent, or the forge has no GitHub-style required-status-check
+        contexts — callers must treat ``[]`` as "unknown", not "nothing
+        required". Must NEVER raise.
+
+        The default ``[]`` is an intentional no-op for forges without named
+        required-status-check contexts: GitLab gates merges on boolean
+        project settings (``only_allow_merge_if_pipeline_succeeds``,
+        required approvals) rather than per-context branch-protection
+        requirements, so there is no list of context names to enumerate.
+        Adapters for such forges must inherit this default rather than
+        fabricate context names — a made-up name would make the
+        missing-context diagnostic cite a check that cannot exist.
         """
         return []
 
