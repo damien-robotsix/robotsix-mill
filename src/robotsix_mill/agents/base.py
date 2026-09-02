@@ -526,7 +526,6 @@ def _build_openrouter_handle(
     name: str | None,
     retries: int,
     max_tokens: int | None = None,
-    tier_binding: Any | None = None,
     images: Sequence[tuple[str, bytes]] | None = None,
     vision_api_key: str | None = None,
 ) -> AgentHandle:
@@ -552,18 +551,15 @@ def _build_openrouter_handle(
         # Route through llmio's provider.build_agent so the text-only
         # OpenRouter backend gets the ask_image tool answered by the
         # TierConfig.vision binding, plus the image note. The provider must
-        # carry the OpenRouter key (either from the binding or the key
-        # guard) for the vision binding to authenticate.
-        if tier_binding is not None:
-            provider = _provider_for_binding(tier_binding, level)
-        else:
-            from robotsix_llmio import get_provider_for_level
+        # carry the OpenRouter key (from the key guard) for the vision
+        # binding to authenticate.
+        from robotsix_llmio import get_provider_for_level
 
-            if not get_secrets().openrouter_api_key:
-                raise RuntimeError("OPENROUTER_API_KEY is not set")
-            provider = get_provider_for_level(
-                level, api_key=get_secrets().openrouter_api_key
-            )
+        if not get_secrets().openrouter_api_key:
+            raise RuntimeError("OPENROUTER_API_KEY is not set")
+        provider = get_provider_for_level(
+            level, slot=slot, api_key=get_secrets().openrouter_api_key
+        )
         handle = cast(
             "AgentHandle",
             provider.build_agent(
@@ -585,11 +581,7 @@ def _build_openrouter_handle(
             handle._agent.model_settings = ModelSettings(max_tokens=max_tokens)
         return handle
 
-    if tier_binding is not None:
-        provider = _provider_for_binding(tier_binding, level)
-        model, http_client = provider.new_model(model=effective_model, level=level)
-    else:
-        model, http_client = new_openrouter_model(effective_model, level, slot=slot)
+    model, http_client = new_openrouter_model(effective_model, level, slot=slot)
     agent_kwargs: dict[str, Any] = {
         "model": model,
         "system_prompt": composed_system,
@@ -631,7 +623,6 @@ def build_agent(
     board_id: str = "",
     repo_dir: Path | None = None,
     web_knowledge_block_reason: str | None = None,
-    tier_binding: Any | None = None,
     images: Sequence[tuple[str, bytes]] | None = None,
     vision_api_key: str | None = None,
     slot: Literal["default", "fallback"] | None = None,
