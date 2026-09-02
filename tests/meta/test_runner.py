@@ -23,6 +23,7 @@ def _repo_cfg(
     *,
     board_id: str | None = None,
     forge_remote_url: str | None = None,
+    meta_exclude: bool = False,
 ) -> RepoConfig:
     return RepoConfig(
         repo_id=repo_id,
@@ -31,6 +32,7 @@ def _repo_cfg(
         langfuse_public_key="pk-test",
         langfuse_secret_key="sk-test",
         forge_remote_url=forge_remote_url,
+        meta_exclude=meta_exclude,
     )
 
 
@@ -676,5 +678,109 @@ class TestRunMetaPass:
         assert result.updated_memory == "first memory"
         assert len(persist_calls) == 1
         assert persist_calls[0][1] == "first memory"
+
+        db.reset_engine()
+
+    def test_meta_exclude_repo_hidden_from_pass(self, tmp_path, monkeypatch, caplog):
+        """A repo marked meta_exclude=true is (a) dropped from the clones
+        handed to the meta agent and (b) never receives an alignment/TODO
+        draft even if the agent returns one targeting it.  A non-excluded
+        repo is unaffected."""
+        settings = _make_settings(tmp_path)
+        db.reset_engine()
+        db.init_db(settings, board_id="meta")
+        db.init_db(settings, board_id="repo-a")
+        db.init_db(settings, board_id="repo-excluded")
+
+        monkeypatch.setattr(
+            "robotsix_mill.meta.runner.Settings",
+            lambda: settings,
+        )
+
+        clone_path = tmp_path / "clones"
+        repo_a_path = clone_path / "repo-a"
+        repo_excl_path = clone_path / "repo-excluded"
+        repo_a_path.mkdir(parents=True)
+        repo_excl_path.mkdir(parents=True)
+
+        monkeypatch.setattr(
+            "robotsix_mill.meta.runner.clone_all_repos",
+            lambda _s: {
+                "repo-a": repo_a_path,
+                "repo-excluded": repo_excl_path,
+            },
+        )
+
+        agent_kwargs: list[dict] = []
+
+        agent_result = MetaAgentResult(
+            updated_memory="ledger",
+            alignment_drafts=[
+                DraftProposal(
+                    title="Align repo-a",
+                    body="repo-a should adopt X.",
+                    target_repo_id="repo-a",
+                ),
+                DraftProposal(
+                    title="Align excluded",
+                    body="excluded should adopt Y.",
+                    target_repo_id="repo-excluded",
+                ),
+            ],
+            todo_drafts=[
+                DraftProposal(
+                    title="TODO excluded",
+                    body="TODO in excluded repo.",
+                    target_repo_id="repo-excluded",
+                ),
+            ],
+        )
+
+        def _fake_agent(**kw):
+            agent_kwargs.append(kw)
+            return agent_result
+
+        monkeypatch.setattr("robotsix_mill.meta.runner.run_meta_agent", _fake_agent)
+
+        reg = ReposRegistry(
+            repos={
+                "repo-a": _repo_cfg("repo-a", board_id="repo-a"),
+                "repo-excluded": _repo_cfg(
+                    "repo-excluded", board_id="repo-excluded", meta_exclude=True
+                ),
+            }
+        )
+        monkeypatch.setattr("robotsix_mill.meta.runner.get_repos_config", lambda: reg)
+
+        monkeypatch.setattr(
+            "robotsix_mill.meta.runner.persist_memory", lambda p, t: None
+        )
+        monkeypatch.setattr("robotsix_mill.meta.runner.load_memory", lambda _p: "")
+        monkeypatch.setattr(
+            "robotsix_mill.meta.runner._gather_meta_proposals",
+            lambda _s: "",
+        )
+
+        with caplog.at_level(logging.WARNING):
+            result = run_meta_pass("test-session")
+
+        # (a) Excluded repo dropped from the clones handed to the agent
+        assert len(agent_kwargs) == 1
+        assert agent_kwargs[0]["repo_clones"] == {"repo-a": repo_a_path}
+
+        # (b) No drafts filed against the excluded repo's board
+        excl_svc = TicketService(settings, board_id="repo-excluded")
+        assert excl_svc.list() == []
+        assert all(
+            d["title"] not in {"Align excluded", "TODO excluded"}
+            for d in result.alignment_drafts_created + result.todo_drafts_created
+        )
+        assert any("meta_exclude" in m and "skipping" in m for m in caplog.messages)
+
+        # Non-excluded repo is unaffected
+        repo_a_svc = TicketService(settings, board_id="repo-a")
+        repo_a_tickets = repo_a_svc.list()
+        assert len(repo_a_tickets) == 1
+        assert repo_a_tickets[0].title == "Align repo-a"
 
         db.reset_engine()

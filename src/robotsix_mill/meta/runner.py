@@ -152,6 +152,18 @@ def _file_repo_drafts(
             )
             continue
 
+        # Belt-and-suspenders: never file meta drafts against a repo the
+        # operator has excluded from the fleet-consistency pass, even if the
+        # agent returns one targeting it.
+        if target_rc.meta_exclude:
+            log.warning(
+                "meta_pass: %s draft %r targets meta_exclude repo %r — skipping",
+                label,
+                draft.title,
+                draft.target_repo_id,
+            )
+            continue
+
         # ------------------------------------------------------------------
         # Deterministic workflow-portability gate: skip drafts that propose
         # enabling an internal (non-portable) workflow on a managed repo.
@@ -206,8 +218,11 @@ def _gather_meta_proposals(settings: Settings) -> str:
     for t in meta_service.recent_proposals_for(SourceKind.META, limit=100):
         all_tickets[t.id] = t
 
-    # 2. Every registered repo board
+    # 2. Every registered repo board (excluding meta_exclude repos, whose
+    #    boards must not be scanned for prior meta proposals)
     for repo_config in repos_config.repos.values():
+        if repo_config.meta_exclude:
+            continue
         service = TicketService(settings, board_id=repo_config.board_id)
         for t in service.recent_proposals_for(SourceKind.META, limit=100):
             all_tickets[t.id] = t
@@ -238,6 +253,24 @@ def run_meta_pass(session_id: str) -> MetaPassResult:
 
     # 2. Cross-repo clone (best-effort; empty is not an error)
     repo_clones = clone_all_repos(settings)
+
+    # Drop meta-excluded repos before they reach the meta-agent. Filtering
+    # here (rather than inside ``clone_all_repos``) keeps other periodics
+    # that reuse ``clone_all_repos`` — e.g. the module-curator — unaffected.
+    excluded = {
+        rc.repo_id for rc in get_repos_config().repos.values() if rc.meta_exclude
+    }
+    for repo_id in excluded & repo_clones.keys():
+        log.info(
+            "meta_pass: repo %r is meta_exclude=true — not handing its clone "
+            "to the meta agent",
+            repo_id,
+        )
+    repo_clones = {
+        repo_id: path
+        for repo_id, path in repo_clones.items()
+        if repo_id not in excluded
+    }
 
     # 3. Resolve mill repo config for tracing
     mill_repo_id = settings.trace_review_target_repo_id
