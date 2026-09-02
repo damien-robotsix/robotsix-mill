@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from robotsix_mill._resources import agent_definitions_dir
 
-from ..config import RepoConfig, Settings
+from ..config import RepoConfig, Settings, get_secrets
 
 # Backward-compat re-exports — symbols moved to refine_triage module.
 # New code should import these from ``refine_triage`` directly.
@@ -472,6 +472,41 @@ def _coerce_refine_output(output: object) -> RefineResult:
     return RefineResult(spec_markdown=str(output).strip() or None)
 
 
+_SCREENSHOT_MEDIA_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+
+def _read_screenshot_images(
+    screenshot_paths: list[Path] | None,
+) -> list[tuple[str, bytes]]:
+    """Read user-supplied screenshots into ``[(media_type, bytes), ...]``
+    for native delivery via ``build_agent(images=...)``.
+
+    Unsupported suffixes and unreadable files are skipped silently — refine
+    never crashes on a bad screenshot and degrades to text-only when nothing
+    can be read. Input order is preserved.
+    """
+    images: list[tuple[str, bytes]] = []
+    for sp in screenshot_paths or []:
+        media_type = _SCREENSHOT_MEDIA_TYPES.get(sp.suffix.lower())
+        if media_type is None:
+            continue
+        try:
+            data = sp.read_bytes()
+        except OSError as e:
+            log.warning("refine: could not read screenshot %s: %s", sp, e)
+            continue
+        if not data:
+            continue
+        images.append((media_type, data))
+    return images
+
+
 def _build_refine_overrides(
     definition,
     settings: Settings,
@@ -527,11 +562,14 @@ def run_refine_agent(
     conversation (the resume path after ``ask_user``).
 
     ``screenshot_paths`` — user-supplied image files attached to the
-    ticket. When present AND the claude_sdk backend is active for
-    refine, each image is read and passed to the model as a
-    ``pydantic_ai.BinaryContent`` block so the agent can *see* it. On
-    the non-vision default (OpenRouter) path the images are not attached;
-    a short text note tells the agent they exist instead.
+    ticket. Each readable image is passed to ``build_agent`` as native
+    ``images=[(media_type, bytes), ...]`` with the OpenRouter key as
+    ``vision_api_key`` so the model can *see* it on any transport (llmio
+    delivers images natively to the Claude SDK and answers image
+    questions via the injected ``ask_image`` tool on the OpenRouter
+    vision binding). The prompt stays text-only. When screenshots are
+    supplied but none can be read, a short text note tells the agent
+    they exist instead.
 
     ``standards_context`` — pre-fetched robotsix-standards content
     injected as read-only context so the agent can cross-check its
@@ -560,8 +598,6 @@ def run_refine_agent(
     from .base import (
         _safe_close,
         build_agent_from_definition,
-        claude_sdk_supports_inline_image,
-        level_uses_claude,
     )
     from .retry import _is_claude_sdk_degenerate_result, run_agent
     from .yaml_loader import load_agent_definition, resolve_agent_level
@@ -741,6 +777,19 @@ def run_refine_agent(
             "the failing logs and the repo — do not web-search."
         )
 
+    # Attach user-supplied screenshots natively via build_agent(images=...)
+    # so the model sees them alongside the text draft — on any transport.
+    # llmio delivers the images natively to the Claude SDK and answers image
+    # questions via the injected ``ask_image`` tool on the OpenRouter
+    # (``TierConfig.vision``) transport; the prompt stays text-only, no image
+    # bytes are embedded in it. Unreadable files are skipped and refine
+    # degrades silently to the text-only path — it never crashes on a bad
+    # screenshot.
+    _screenshot_images = _read_screenshot_images(screenshot_paths)
+    if _screenshot_images:
+        overrides["images"] = _screenshot_images
+        overrides["vision_api_key"] = get_secrets().openrouter_api_key
+
     agent = build_agent_from_definition(
         settings,
         definition,
@@ -815,52 +864,18 @@ def run_refine_agent(
             f"{reviewer_comments}",
         )
 
-    # Decide the prompt payload: attach screenshots as vision input only
-    # on the claude_sdk path AND only when that backend can actually view
-    # inline images (the capability gate — default OFF, because the
-    # installed llmio bridge silently mishandles BinaryContent and stalls
-    # the CLI for 1200s). The OpenRouter default has no vision either. When
-    # images exist but the backend can't see them, leave a text note so
-    # the agent knows they're there.
-    _vision = (
-        bool(screenshot_paths)
-        and level_uses_claude(2)  # refine is level 2 → Claude SDK
-        and claude_sdk_supports_inline_image(settings)
-    )
-    binary_contents: list[Any] = []
-    if _vision:
-        from pydantic_ai import BinaryContent
-
-        _media_types = {
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".gif": "image/gif",
-            ".webp": "image/webp",
-        }
-        for sp in screenshot_paths or []:
-            media_type = _media_types.get(sp.suffix.lower())
-            if media_type is None:
-                continue
-            try:
-                data = sp.read_bytes()
-            except OSError as e:
-                log.warning("refine: could not read screenshot %s: %s", sp, e)
-                continue
-            binary_contents.append(BinaryContent(data=data, media_type=media_type))
-        if not binary_contents:
-            _vision = False
-    elif screenshot_paths:
+    # Screenshots are attached natively via build_agent(images=...) above,
+    # so the prompt stays text-only on every transport. When screenshots
+    # were supplied but none could be read (unsupported suffix / unreadable
+    # file), leave a text note so the agent knows they exist.
+    if screenshot_paths and "images" not in overrides:
         user_prompt += "\n\n" + section(
             "attached-screenshots",
             f"{len(screenshot_paths)} screenshot(s) are attached to this "
-            "ticket but cannot be viewed by the current model backend "
-            "(no vision). Refine from the text draft.",
+            "ticket but could not be read. Refine from the text draft.",
         )
 
-    prompt_payload: object = (
-        [user_prompt, *binary_contents] if binary_contents else user_prompt
-    )
+    prompt_payload: object = user_prompt
 
     limits = UsageLimits(
         request_limit=request_limit_override
