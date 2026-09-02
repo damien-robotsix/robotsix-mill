@@ -21,7 +21,7 @@ from pydantic_ai.exceptions import UnexpectedModelBehavior
 
 from robotsix_mill._resources import agent_definitions_dir
 
-from ..config import Settings
+from ..config import Settings, get_secrets
 from .diff_utils import _split_diff_by_file, changed_line_ranges_from_diff
 
 __all__ = ["changed_line_ranges_from_diff"]
@@ -234,18 +234,14 @@ def _review_attempt(
     reference_files: list[str] | None,
     changed_line_ranges: dict[str, list[tuple[int, int]]] | None = None,
     repo_dir: Path | None,
-    screenshot_path: Path | None,
     agent: Any,
-    level: int,
     settings: Settings,
     limits: Any,
-    claude_sdk_supports_inline_image: Any,
 ) -> object:
     """Build the prompt and run one review pass, returning the
     agent's (possibly re-prompted) output. Raises on token-limit
     overflow so the caller can decide whether to degrade.
     """
-    from .base import level_uses_claude
     from .prompt_blocks import section
     from .retry import run_agent
     from .structured_output_guard import reprompt_if_unstructured
@@ -263,7 +259,7 @@ def _review_attempt(
         from pydantic_ai.settings import ModelSettings
 
         run_kwargs["model_settings"] = ModelSettings(max_tokens=max_tokens_override)
-    run_user_prompt: str | list[Any] | None = user_prompt
+    run_user_prompt: str | None = user_prompt
     # Build the synthetic message_history AFTER the user_prompt is
     # finalized so the prompt can be prepended cleanly BEFORE the
     # preload tool calls; see fs_tools.build_preseed_history.
@@ -299,19 +295,6 @@ def _review_attempt(
             if preseed:
                 run_kwargs["message_history"] = preseed
                 run_user_prompt = None
-    # Attach a board screenshot as a vision image ONLY when the
-    # review agent is routed to the Claude SDK backend AND that
-    # backend can actually view inline images (the capability gate
-    # — default OFF, because the installed llmio bridge silently
-    # mishandles BinaryContent and stalls the CLI for 1200s).
-    # The default model has no vision either. A missing/unreadable file
-    # degrades silently to the text-only path — never crash review.
-    if (
-        screenshot_path is not None
-        and level_uses_claude(level)
-        and claude_sdk_supports_inline_image(settings)
-    ):
-        run_user_prompt = _maybe_attach_screenshot(run_user_prompt, screenshot_path)
     result = run_agent(
         agent,
         lambda h: h.run_sync(run_user_prompt, **run_kwargs),
@@ -402,14 +385,14 @@ def run_review_agent(
     reusable-workflow interfaces referenced in the diff). Paths outside
     *repo_dir* and outside every *extra_roots* entry are still rejected.
 
-    When *screenshot_path* is provided AND the file exists AND the review
-    agent is routed to the Claude SDK backend (vision-capable), the PNG
-    is read and attached as a ``pydantic_ai.BinaryContent`` image on the
-    FINAL user turn so the model sees the rendered board alongside the
-    diff. On the default OpenRouter path (no Claude SDK routing) the image
-    is never attached — the default model has no vision and would reject an image
-    block. A missing/unreadable screenshot degrades silently to the
-    text-only path; it never alters routing or crashes review.
+    When *screenshot_path* is provided AND the file exists, its PNG bytes
+    are passed to ``build_agent(images=[("image/png", bytes)], ...)`` with
+    ``vision_api_key`` set to the OpenRouter key, so the model sees the
+    rendered board alongside the diff. llmio delivers the image natively to
+    the Claude SDK and answers via the ``TierConfig.vision`` binding for
+    OpenRouter — the prompt itself stays text-only. A missing/unreadable
+    screenshot degrades silently to the text-only path; it never alters
+    routing or crashes review.
     """
     import functools
 
@@ -418,9 +401,8 @@ def run_review_agent(
     from .base import (
         _safe_close,
         build_agent_from_definition,
-        claude_sdk_supports_inline_image,
     )
-    from .yaml_loader import load_agent_definition, resolve_agent_level
+    from .yaml_loader import load_agent_definition
 
     definition = load_agent_definition(agent_definitions_dir() / "review.yaml")
 
@@ -443,6 +425,19 @@ def run_review_agent(
     if level is not None:
         overrides["level"] = level
 
+    # Attach a board screenshot natively via build_agent(images=...) so the
+    # reviewer sees the rendered board alongside the diff. llmio delivers
+    # images natively to the Claude SDK and answers via the
+    # TierConfig.vision binding for OpenRouter — the prompt stays text-only,
+    # no image bytes are embedded in it. A missing/unreadable file degrades
+    # silently to the text-only path — review never crashes on a bad
+    # screenshot.
+    if screenshot_path is not None:
+        png_bytes = _read_screenshot_bytes(screenshot_path)
+        if png_bytes is not None:
+            overrides["images"] = [("image/png", png_bytes)]
+            overrides["vision_api_key"] = get_secrets().openrouter_api_key
+
     agent = build_agent_from_definition(
         settings,
         definition,
@@ -462,14 +457,9 @@ def run_review_agent(
             reference_files=reference_files,
             changed_line_ranges=changed_line_ranges,
             repo_dir=repo_dir,
-            screenshot_path=screenshot_path,
             agent=agent,
-            level=level
-            if level is not None
-            else resolve_agent_level(settings, definition),
             settings=settings,
             limits=limits,
-            claude_sdk_supports_inline_image=claude_sdk_supports_inline_image,
         )
 
         output = _run_with_degraded_retry(_attempt, diff=diff, settings=settings)
@@ -756,41 +746,20 @@ def _run_with_degraded_retry(
         )
 
 
-def _maybe_attach_screenshot(
-    run_user_prompt: str | list[Any] | None,
-    screenshot_path: Path,
-) -> str | list[Any] | None:
-    """Return *run_user_prompt* with the board PNG attached as a vision
-    image, or unchanged when the file is missing/unreadable.
+def _read_screenshot_bytes(screenshot_path: Path) -> bytes | None:
+    """Read a board screenshot's PNG bytes, or ``None`` when the file is
+    missing/unreadable/empty.
 
-    Caller has already confirmed the agent is routed to a vision-capable
-    backend. A missing/unreadable file degrades silently to the text-only
-    path — review must never crash on a bad screenshot.
+    Review must never crash on a bad screenshot — a missing or unreadable
+    file degrades silently to the text-only path (no ``images=`` passed).
     """
     if not screenshot_path.exists():
-        return run_user_prompt
+        return None
     try:
         png_bytes = screenshot_path.read_bytes()
     except OSError:
-        return run_user_prompt
-    if not png_bytes:
-        return run_user_prompt
-
-    from pydantic_ai import BinaryContent
-
-    image = BinaryContent(data=png_bytes, media_type="image/png")
-    if run_user_prompt is None:
-        # Pre-seed active: the text prompt is in message_history; give the
-        # run a short instruction plus the image as the final user turn.
-        return [
-            (
-                "A full-page screenshot of the rendered kanban board is "
-                "attached. Assess its visual appearance (columns, seeded "
-                "tickets, layout) alongside the diff."
-            ),
-            image,
-        ]
-    return [run_user_prompt, image]
+        return None
+    return png_bytes or None
 
 
 def _coerce_verdict(output: object) -> ReviewVerdict:
