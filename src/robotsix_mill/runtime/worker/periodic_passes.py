@@ -3,7 +3,7 @@
 Defines ``PeriodicPassesMixin``, a mixin for the ``Worker`` class that
 provides scheduled background passes: meta-survey, health checks,
 diagnostics, stale-branch cleanup, orphaned-PR detection, sandbox
-reaping, trace health, and CI-debt recheck.  Each pass is gated by a
+reaping, trace health, and blocked-reason recheck.  Each pass is gated by a
 ``RunRegistry`` and driven by a shared per-repo supervisor loop.
 """
 
@@ -113,101 +113,144 @@ def _last_block_reason(
     return reason
 
 
-def _ci_debt_recheck_pass(
-    settings: Settings,
-    repo_config: RepoConfig,
-) -> None:
-    """Check one repo for CI-debt-blocked tickets whose target-branch
-    workflows have since turned green, and auto-resume them.
+def _prose_ci_debt_workflows(
+    settings: Settings, repo_config: RepoConfig, ticket_id: str
+) -> list[str] | None:
+    """Legacy fallback: extract target-branch-debt workflow names from prose.
 
-    Query all BLOCKED tickets whose block note cites pre-existing
-    target-branch CI debt.  For each, parse the workflow names from the
-    note, check their latest run conclusion on the target branch, and
-    transition back to IMPLEMENT_COMPLETE when all are now green.
+    Pre-structured blocks carry no ``block_reason``; their only signal is
+    the entering-blocked note.  Parse it with ``_CI_DEBT_NOTE_RE`` for
+    backward compatibility.  Returns the workflow names, or ``None`` when
+    the note is not a CI-debt block (so callers skip the ticket entirely).
     """
     from sqlmodel import col, select
 
     from ...core import db as core_db
     from ...core.models import TicketEvent
+
+    with core_db.session(settings, repo_config.board_id) as s:
+        rows = s.exec(
+            select(TicketEvent.state, TicketEvent.note)
+            .where(TicketEvent.ticket_id == ticket_id)
+            .order_by(col(TicketEvent.id))
+        ).all()
+    note = (_last_block_reason(rows) or "").strip()
+    if not note:
+        return None
+    m = _CI_DEBT_NOTE_RE.search(note)
+    if not m:
+        return None
+    names_raw = m.group(1).strip()
+    if not names_raw:
+        return None
+    names = [n.strip() for n in names_raw.split(",") if n.strip()]
+    return names or None
+
+
+def _maybe_resume_target_ci(
+    svc, forge, target: str, ticket_id: str, names: list[str]
+) -> None:
+    """Resume a target_branch_red-blocked ticket once its workflows are green.
+
+    Checks the latest run of each named workflow on *target*; when all are
+    green the ticket transitions back to IMPLEMENT_COMPLETE with a note
+    naming the evidence (workflow run IDs) so the resume is auditable.
+    """
+    from ...core.states import State
+
+    try:
+        latest: dict[str, dict[str, object]] = {}
+        for r in forge.list_workflow_runs(branch=target):
+            name = str(r.get("name", ""))
+            if name and name not in latest:
+                latest[name] = r
+    except Exception:
+        log.warning(
+            "blocked-recheck: list_workflow_runs failed for repo %s, "
+            "ticket %s — skipping",
+            getattr(svc, "board_id", ""),
+            ticket_id,
+            exc_info=True,
+        )
+        return
+
+    evidence: list[str] = []
+    for name in names:
+        run = latest.get(name)
+        if run is None:
+            return  # no recent run for a named workflow — still blocked
+        conclusion = str(run.get("conclusion", "")).lower()
+        if conclusion not in {"success", "neutral", "skipped"}:
+            return  # still red — blocked
+        run_id = run.get("id")
+        evidence.append(f"{name}#{run_id}" if run_id else name)
+
+    log.info(
+        "blocked-recheck: auto-resuming %s — all CI-debt workflows green on %s: %s",
+        ticket_id,
+        target,
+        ", ".join(evidence),
+    )
+    try:
+        svc.transition(
+            ticket_id,
+            State.IMPLEMENT_COMPLETE,
+            note="[auto-resumed] target-branch CI debt cleared — "
+            f"green runs: {', '.join(evidence)}",
+        )
+    except Exception:
+        log.exception(
+            "blocked-recheck: transition failed for %s",
+            ticket_id,
+        )
+
+
+def _blocked_recheck_pass(
+    settings: Settings,
+    repo_config: RepoConfig,
+) -> None:
+    """Check one repo for BLOCKED tickets whose block reason no longer holds.
+
+    Every BLOCKED ticket's machine-checkable reason (``block_reason``) is
+    evaluated against live state: ``target_branch_red{workflows}`` checks
+    the named workflows' latest run on the target branch, and resumes the
+    ticket (back to IMPLEMENT_COMPLETE) when they are all green.  Tickets
+    without a structured reason fall back to the legacy prose CI-debt
+    parse.  Kinds with no evaluator are skipped — a ticket is never
+    resumed unless the reason can be positively verified cleared.
+    """
+    from ...core.block_reason import TARGET_BRANCH_RED, decode
     from ...core.service import TicketService
     from ...core.states import State
     from ...forge import get_forge
 
     svc = TicketService(settings, board_id=repo_config.board_id)
     target = target_branch_for(settings, repo_config)
+    # Forge is created lazily: a repo with no matching BLOCKED tickets
+    # must not require a configured forge (e.g. a synthetic board with no
+    # backing repo).
+    forge = None
 
     blocked = svc.list(state=State.BLOCKED)
     for ticket in blocked:
-        with core_db.session(settings, repo_config.board_id) as s:
-            rows = s.exec(
-                select(TicketEvent.state, TicketEvent.note)
-                .where(TicketEvent.ticket_id == ticket.id)
-                .order_by(col(TicketEvent.id))
-            ).all()
-        note = (_last_block_reason(rows) or "").strip()
-        if not note:
+        reason = decode(ticket.block_reason)
+        if reason and reason.get("kind") == TARGET_BRANCH_RED:
+            names = [
+                str(n).strip() for n in reason.get("workflows", []) if str(n).strip()
+            ]
+            if names:
+                if forge is None:
+                    forge = get_forge(settings, repo_config=repo_config)
+                _maybe_resume_target_ci(svc, forge, target, ticket.id, names)
             continue
-        m = _CI_DEBT_NOTE_RE.search(note)
-        if not m:
-            continue
-        names_raw = m.group(1).strip()
-        if not names_raw:
-            continue
-        names = [n.strip() for n in names_raw.split(",") if n.strip()]
-        if not names:
-            continue
-
-        forge = get_forge(settings, repo_config=repo_config)
-        try:
-            runs = forge.list_workflow_runs(branch=target)
-        except Exception:
-            log.warning(
-                "ci-debt-recheck: list_workflow_runs failed for repo %s, "
-                "ticket %s — skipping",
-                repo_config.repo_id,
-                ticket.id,
-                exc_info=True,
-            )
-            continue
-
-        # Index latest run per workflow name.
-        latest: dict[str, dict[str, object]] = {}
-        for r in runs:
-            name = str(r.get("name", ""))
-            if name and name not in latest:
-                latest[name] = r
-
-        all_green = True
-        for name in names:
-            run = latest.get(name)
-            if run is None:
-                # No recent run for this workflow — still blocked.
-                all_green = False
-                break
-            conclusion = str(run.get("conclusion", "")).lower()
-            if conclusion not in {"success", "neutral", "skipped"}:
-                all_green = False
-                break
-
-        if all_green:
-            log.info(
-                "ci-debt-recheck: auto-resuming %s — "
-                "all CI-debt workflows green on %s: %s",
-                ticket.id,
-                target,
-                ", ".join(names),
-            )
-            try:
-                svc.transition(
-                    ticket.id,
-                    State.IMPLEMENT_COMPLETE,
-                    note="[auto-resumed] target-branch CI debt cleared",
-                )
-            except Exception:
-                log.exception(
-                    "ci-debt-recheck: transition failed for %s",
-                    ticket.id,
-                )
+        # Legacy prose fallback — pre-structured blocks carry no
+        # block_reason.  New blocks always record a structured reason, so
+        # the rechecker never has to trust prose for them.
+        names = _prose_ci_debt_workflows(settings, repo_config, ticket.id)
+        if names:
+            if forge is None:
+                forge = get_forge(settings, repo_config=repo_config)
+            _maybe_resume_target_ci(svc, forge, target, ticket.id, names)
 
 
 class PeriodicPassesMixin(_WorkerBase):
@@ -859,12 +902,12 @@ class PeriodicPassesMixin(_WorkerBase):
     # --- CI-debt auto-resume pass -------------------------------------------
 
     async def _ci_debt_recheck_loop(self) -> None:
-        """Periodic CI-debt recheck loop — per-repo.
+        """Periodic blocked-reason recheck loop — per-repo.
 
-        Scans BLOCKED tickets whose block note cites pre-existing
-        target-branch CI debt.  When all the named workflows have
-        turned green on the target branch, the ticket is auto-resumed
-        back to IMPLEMENT_COMPLETE.
+        Scans BLOCKED tickets whose recorded block reason is
+        ``target_branch_red`` (or a legacy prose CI-debt note).  When all
+        the named workflows have turned green on the target branch, the
+        ticket is auto-resumed back to IMPLEMENT_COMPLETE.
         """
         settings = self.ctx.settings
         interval = max(60, settings.ci_debt_recheck_interval_seconds)
@@ -874,18 +917,18 @@ class PeriodicPassesMixin(_WorkerBase):
             repos = get_repos_config()
             for repo_config in list(repos.repos.values()):
                 try:
-                    # _ci_debt_recheck_pass does synchronous forge (GitHub
+                    # _blocked_recheck_pass does synchronous forge (GitHub
                     # API) and DB I/O — offload to a thread so a slow forge
                     # call can never freeze the event loop (and with it,
                     # every HTTP route mill serves) for its duration.
                     await self._tracked_to_thread(
-                        _ci_debt_recheck_pass, settings, repo_config
+                        _blocked_recheck_pass, settings, repo_config
                     )
                 except asyncio.CancelledError:
                     raise
                 except Exception:
                     log.exception(
-                        "ci-debt-recheck: error on repo %s",
+                        "blocked-recheck: error on repo %s",
                         repo_config.repo_id,
                     )
             await asyncio.sleep(interval)

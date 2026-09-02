@@ -50,6 +50,7 @@ modules:
       abstraction for file-based ticket workspaces.
     paths:
       - src/robotsix_mill/core/__init__.py
+      - src/robotsix_mill/core/block_reason.py
       - src/robotsix_mill/core/models.py
       - src/robotsix_mill/core/states.py
       - src/robotsix_mill/core/db.py

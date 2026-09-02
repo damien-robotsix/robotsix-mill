@@ -60,6 +60,10 @@ class Outcome:
 
     next_state: State
     note: str | None = None
+    # structured machine-checkable block reason for a BLOCKED outcome
+    # (see core.block_reason).  Threaded to transition() so the rechecker
+    # can evaluate it against live state without parsing prose.
+    block_reason: str | None = None
 
 
 class Stage(ABC):

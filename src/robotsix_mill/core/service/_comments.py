@@ -347,6 +347,7 @@ class _CommentMixin(_ServiceBase):
             # All [ASK_USER] threads closed → resume.
             dst = State(ticket.paused_from)
             ticket.blocked_from = None
+            ticket.block_reason = None
             ticket.paused_from = None
             old_state = ticket.state.value
             ticket.state = dst

@@ -165,6 +165,16 @@ class Ticket(SQLModel, table=True):
     # enables the BLOCKED → <originating state> resume path so only the
     # failed stage is re-run.
     blocked_from: str | None = Field(default=None)
+    # machine-checkable reason for the CURRENT BLOCKED state — a JSON
+    # object {"kind": <kind>, ...params}, e.g.
+    # {"kind": "target_branch_red", "workflows": ["CI", "Security Audit"]}
+    # or {"kind": "unmet_dependency", "ticket_id": "..."}.  Set when
+    # transitioning INTO BLOCKED from a structured block site, cleared
+    # when leaving BLOCKED.  The periodic block-rechecker reads ONLY this
+    # field (never prose) so a reason can be evaluated against live state
+    # without substring-matching block notes — a known false-positive and
+    # false-negative source.
+    block_reason: str | None = Field(default=None)
     # when paused mid-stage (awaiting user reply), which state the ticket
     # was in before the pause; enables the AWAITING_USER_REPLY →
     # <paused_from> resume path so the stage can resume from the question.
