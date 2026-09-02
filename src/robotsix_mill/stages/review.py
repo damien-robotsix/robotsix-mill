@@ -39,6 +39,7 @@ from ._review_helpers import (
     _load_file_map,
     _maybe_cache,
     _reusable_workflow_sha_refs_from_diff,
+    _round_cap_directives,
     _sanitize_comments,
     _spawn_dependency_tickets,
     _split_asks,
@@ -615,11 +616,36 @@ class ReviewStage(Stage):
                     ticket.id,
                     exc_info=True,
                 )
+
+            # Re-scan the review/ask_user directives before escalating.
+            # Round-cap exhaustion must NOT auto-deliver on deadline alone:
+            # when a REQUEST_CHANGES verdict still carries concrete asks —
+            # or the operator left explicit directives in past [ASK_USER]
+            # replies — those directives may have gone unimplemented (PR
+            # #3087 merged with the operator's own directives #2/#3/#5
+            # missing, and a refine gate-collapse shipped dead code).
+            # Route to a human "directives satisfied?" gate instead.
+            review_asks, ask_user_directives = _round_cap_directives(
+                verdict, ticket, ctx
+            )
+            if review_asks or ask_user_directives:
+                return self._pause_for_directive_confirmation(
+                    review_asks,
+                    ask_user_directives,
+                    rounds,
+                    s,
+                    ticket,
+                    ctx,
+                )
+
+            # Nothing concrete outstanding — bare REQUEST_CHANGES with no
+            # asks and no narrative. Escalate for human merge approval.
             ctx.service.add_comment(
                 ticket.id,
                 f"Review round cap exhausted ({rounds}/{s.review_max_rounds} "
-                f"REQUEST_CHANGES rounds). Escalating to DELIVERABLE for "
-                f"human merge approval.\n\nLast review verdict:\n{verdict.comments}",
+                f"REQUEST_CHANGES rounds) with no concrete outstanding "
+                f"directives. Escalating to DELIVERABLE for human merge "
+                f"approval.\n\nLast review verdict:\n{verdict.comments}",
                 author="review",
             )
             ctx.service.set_review_rounds(ticket.id, 0)
@@ -732,3 +758,68 @@ class ReviewStage(Stage):
         outcome = Outcome(State.READY, verdict.comments)
         _maybe_cache(ws, input_hash, outcome)
         return outcome
+
+    def _pause_for_directive_confirmation(
+        self,
+        review_asks: list[ReviewAsk],
+        ask_user_directives: list[str],
+        rounds: int,
+        s: Settings,
+        ticket: Ticket,
+        ctx: StageContext,
+    ) -> Outcome:
+        """Pause on a human "directives satisfied?" gate at round cap.
+
+        The REQUEST_CHANGES round cap was exhausted while concrete
+        review/ask_user directives are still outstanding. Post an
+        ``[ASK_USER]`` thread listing them and pause — the ticket is NOT
+        delivered on deadline alone. The operator's reply closes the
+        thread and auto-resumes the review (``paused_from`` is
+        ``CODE_REVIEW``): confirming the directives lets the next review
+        round approve, while listing remaining gaps bounces the ticket
+        back to implement via the normal REQUEST_CHANGES path.
+        """
+        lines = [
+            (
+                f"Review round cap exhausted ({rounds}/{s.review_max_rounds} "
+                "REQUEST_CHANGES rounds) while the following concrete "
+                "directive(s) are still outstanding. This ticket will NOT be "
+                "delivered automatically — confirm every directive below is "
+                "implemented in the current branch before it can ship."
+            ),
+            "",
+        ]
+        if review_asks:
+            lines.append("**Reviewer's requested changes:**")
+            for i, a in enumerate(review_asks, 1):
+                title = (a.title or "").strip()
+                desc = (a.description or "").strip()
+                first_line = desc.splitlines()[0] if desc else ""
+                if title and first_line and first_line != title:
+                    lines.append(f"{i}. **{title}** — {first_line}")
+                else:
+                    lines.append(f"{i}. **{title or first_line}**")
+            lines.append("")
+        if ask_user_directives:
+            lines.append("**Operator directives from previous ask_user replies:**")
+            for i, d in enumerate(ask_user_directives, 1):
+                lines.append(f"{i}. {d}")
+            lines.append("")
+        lines.append(
+            "Reply listing any directive still missing to kick the ticket "
+            "back to implement, or confirm all are satisfied to let it "
+            "proceed toward delivery."
+        )
+        ctx.service.add_comment(
+            ticket.id, f"[ASK_USER]\n\n{chr(10).join(lines)}", author="review"
+        )
+        ctx.service.set_review_rounds(ticket.id, 0)
+        note = (
+            f"review round cap exhausted ({rounds}/{s.review_max_rounds}) — "
+            "concrete directives outstanding; awaiting operator "
+            "'directives satisfied?' confirmation"
+        )
+        # Deliberately NOT cached (like the NEEDS_DISCUSSION pause):
+        # AWAITING_USER_REPLY outcomes must not replay, because the
+        # operator's answer is part of the resumed review's input.
+        return Outcome(State.AWAITING_USER_REPLY, note)

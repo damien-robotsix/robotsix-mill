@@ -562,8 +562,14 @@ def test_request_changes_under_cap(ctx_factory, monkeypatch):
     assert comments[0].body == "fix X"
 
 
-def test_request_changes_at_cap_escalates(ctx_factory, monkeypatch):
-    """When review_rounds hits the cap, REQUEST_CHANGES → DELIVERABLE."""
+def test_request_changes_at_cap_pauses_on_directives_gate(ctx_factory, monkeypatch):
+    """Round-cap exhaustion with concrete asks → 'directives satisfied?' gate.
+
+    A REQUEST_CHANGES verdict that still carries concrete asks at the cap
+    must NOT be auto-escalated to DELIVERABLE on deadline alone — the
+    reviewer's explicit asks may be unimplemented. The stage pauses on an
+    [ASK_USER] thread listing them.
+    """
     ctx = ctx_factory(
         forge_remote_url="file:///dummy",
         review_enabled="true",
@@ -588,7 +594,142 @@ def test_request_changes_at_cap_escalates(ctx_factory, monkeypatch):
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
+        return ReviewVerdict(
+            verdict="REQUEST_CHANGES",
+            comments="still broken",
+            request_changes=[
+                ReviewAsk(
+                    title="trim ci_fix history to 20 entries",
+                    description="ci_fix history is append-only; trim to the "
+                    "last 20 entries.",
+                    files_touched=["src/robotsix_mill/stages/ci_fix.py"],
+                )
+            ],
+        )
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.AWAITING_USER_REPLY
+    assert "directives" in out.note
+
+    # Counter reset to 0
+    t2 = ctx.service.get(t.id)
+    assert t2.review_rounds == 0
+
+    # The [ASK_USER] gate thread is stored, lists the cap and the ask.
+    comments = ctx.service.list_comments(t.id)
+    assert len(comments) == 1
+    assert comments[0].body.startswith("[ASK_USER]")
+    assert "cap exhausted" in comments[0].body
+    assert "3/3" in comments[0].body
+    assert "trim ci_fix history to 20 entries" in comments[0].body
+
+    # Answering the gate resumes the review: the worker first applies
+    # AWAITING_USER_REPLY (paused_from=code_review), then the reply closes
+    # the thread and auto-resumes to CODE_REVIEW for a fresh review run.
+    ask_id = comments[0].id
+    ctx.service.transition(t.id, State.AWAITING_USER_REPLY, note="paused")
+    ctx.service.add_comment(
+        t.id,
+        "all directives satisfied — proceed",
+        author="user",
+        parent_id=ask_id,
+    )
+    t3 = ctx.service.get(t.id)
+    assert t3.state is State.CODE_REVIEW
+
+
+def test_request_changes_at_cap_includes_ask_user_directives(ctx_factory, monkeypatch):
+    """Round-cap exhaustion surfaces operator ask_user directives too.
+
+    Even when the final verdict carries no concrete ``request_changes``,
+    operator directives left in past [ASK_USER] replies must gate the
+    delivery — they may have gone unimplemented.
+    """
+    ctx = ctx_factory(
+        forge_remote_url="file:///dummy",
+        review_enabled="true",
+        review_max_rounds="3",
+    )
+    t = _ticket(ctx)
+    ctx.service.set_review_rounds(t.id, 2)  # round 3 is the cap
+    # Simulate a prior NEEDS_DISCUSSION pause where the operator pinned
+    # explicit directives in the ask_user reply (thread closed on resume).
+    ask_comment = ctx.service.add_comment(
+        t.id,
+        "[ASK_USER]\n\nHow should ci_fix history be bounded?",
+        author="review",
+    )
+    ctx.service.transition(t.id, State.AWAITING_USER_REPLY, note="paused")
+    ctx.service.add_comment(
+        t.id,
+        "Directive #2: make ci_fix history append-only; #3: trim to 20; "
+        "#5: include crash exception detail.",
+        author="user",
+        parent_id=ask_comment.id,
+    )
+    t = ctx.service.get(t.id)  # post-resume state
+    assert t.state is State.CODE_REVIEW
+
+    def _fake_review(
+        *,
+        settings,
+        diff,
+        spec,
+        model_name=None,
+        prior_context=None,
+        repo_dir=None,
+        reference_files=None,
+        changed_line_ranges=None,
+        screenshot_path=None,
+        extra_roots=None,
+        level=None,
+    ):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
         return ReviewVerdict(verdict="REQUEST_CHANGES", comments="still broken")
+
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
+
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.AWAITING_USER_REPLY
+
+    comments = ctx.service.list_comments(t.id)
+    gate = comments[-1]
+    assert gate.body.startswith("[ASK_USER]")
+    assert "Directive #2" in gate.body
+    assert "append-only" in gate.body
+
+
+def test_request_changes_at_cap_without_concrete_directives_escalates(
+    ctx_factory, monkeypatch
+):
+    """Round-cap exhaustion with NO concrete directives still escalates."""
+    ctx = ctx_factory(
+        forge_remote_url="file:///dummy",
+        review_enabled="true",
+        review_max_rounds="3",
+    )
+    t = _ticket(ctx)
+    ctx.service.set_review_rounds(t.id, 2)  # round 3 is the cap
+    t = ctx.service.get(t.id)  # refresh in-memory object
+
+    def _fake_review(
+        *,
+        settings,
+        diff,
+        spec,
+        model_name=None,
+        prior_context=None,
+        repo_dir=None,
+        reference_files=None,
+        changed_line_ranges=None,
+        screenshot_path=None,
+        extra_roots=None,
+        level=None,
+    ):
+        del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
+        return ReviewVerdict(verdict="REQUEST_CHANGES", comments="")
 
     monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", _fake_review)
 
