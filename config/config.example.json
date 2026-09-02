@@ -125,6 +125,7 @@
         "diagnostic_interval_seconds": 0,
         "diagnostic_monitored_repo_ids": [],
         "diagnostic_target_repo_id": "robotsix-mill",
+        "ci_auto_close_interval_seconds": 0,
         "disk_check_extra_paths": [
             "/"
         ],

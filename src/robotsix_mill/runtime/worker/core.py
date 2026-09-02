@@ -271,6 +271,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._db_maintenance_task: asyncio.Task[Any] | None = None
         self._sandbox_reaper_task: asyncio.Task[None] | None = None
         self._ci_debt_recheck_task: asyncio.Task[None] | None = None
+        self._ci_auto_close_task: asyncio.Task[None] | None = None
         self._credit_balance_task: asyncio.Task[None] | None = None
         self._dependabot_ingest_task: asyncio.Task[None] | None = None
         self._requeue_task: asyncio.Task[None] | None = None
@@ -1164,6 +1165,13 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             ),
         )
         self._start_poll_loop_pass(
+            "ci-auto-close",
+            self._ci_auto_close_poll_loop,
+            "_ci_auto_close_task",
+            log_msg="Periodic ci auto-close enabled: interval %ds",
+            log_args=(self.ctx.settings.ci_auto_close_interval_seconds,),
+        )
+        self._start_poll_loop_pass(
             "config-pin-drift",
             self._config_pin_drift_poll_loop,
             "_config_pin_drift_task",
@@ -1385,6 +1393,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             "_db_maintenance_task",
             "_sandbox_reaper_task",
             "_ci_debt_recheck_task",
+            "_ci_auto_close_task",
             "_credit_balance_task",
             "_requeue_task",
         ):

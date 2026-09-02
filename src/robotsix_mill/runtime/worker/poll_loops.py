@@ -601,6 +601,34 @@ class PollLoopsMixin(_WorkerBase):
                 log.exception("blocked-auto-resume poll failed")
             await asyncio.sleep(interval)
 
+    async def _ci_auto_close_poll_loop(self) -> None:
+        """Periodic ci auto-close: re-checks open source=ci tickets against
+        the CURRENT main head and closes the ones whose workflow has since
+        turned green (red-then-fixed). Deterministic — forge reads +
+        service.transition/mark_done, no AI agent, no tracing. Global pass
+        across every board.
+        """
+        settings = self.ctx.settings
+        interval = max(60, settings.ci_auto_close_interval_seconds)
+        initial = self._initial_delay("ci-auto-close", interval)
+        await asyncio.sleep(initial)
+        while True:
+            try:
+                from ...agents.runners.ci_auto_close_runner import (
+                    run_ci_auto_close,
+                )
+
+                result = await asyncio.to_thread(run_ci_auto_close, settings)
+                log.info(
+                    "ci-auto-close: pass complete — checked=%d closed=%d skipped=%d",
+                    result.get("checked", 0),
+                    result.get("closed", 0),
+                    result.get("skipped", 0),
+                )
+            except Exception:
+                log.exception("ci-auto-close poll failed")
+            await asyncio.sleep(interval)
+
     async def _config_pin_drift_poll_loop(self) -> None:
         """Periodic config pin-drift check: reports pinned settings that
         shadow a changed code default.

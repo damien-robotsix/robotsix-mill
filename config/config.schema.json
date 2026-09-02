@@ -776,6 +776,13 @@
           "title": "Branch Prefix",
           "type": "string"
         },
+        "ci_auto_close_interval_seconds": {
+          "advanced": true,
+          "default": 900,
+          "description": "Seconds between CI-failure auto-close passes. 0 = disabled.",
+          "title": "Ci Auto Close Interval Seconds",
+          "type": "integer"
+        },
         "ci_debt_recheck_interval_seconds": {
           "default": 3600,
           "description": "Seconds between CI-debt recheck passes. 0 = disabled.",
