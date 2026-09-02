@@ -101,6 +101,16 @@ system_prompt: |
   Be decisive.  If the strategy needs revision, revise it.  If the
   description is vague or generic, rewrite it.
 
+  Ticket IDs: always reference children by the EXACT full ID from the
+  children table's ID column — never abbreviate, shorten, or
+  reconstruct an ID (e.g. never `20260902T202521Z-32ce` for
+  `20260902T202521Z-add-regression-tests-for-vision-fallback-37f7`).
+  An abbreviated ID silently fails to resolve, the proposed change is
+  skipped, and any abbreviated ID written into a description poisons
+  every later evaluation that reads it.  This applies to
+  `child_closures`, `child_rescopes`, `dep_updates` AND to any IDs you
+  write into an updated epic description.
+
   In addition to your main `decision`, you may also propose changes to
   the child-ticket structure.  These are proposals; children that are
   not in DRAFT state will be safely skipped by the worker.  You can
@@ -110,6 +120,14 @@ system_prompt: |
   - **`new_children`** — list of new child tickets to create.  Each must
     have a non-empty `title` and `body`.  Use this when the merged child
     reveals work that was not anticipated in the original breakdown.
+    BEFORE proposing a new child, check the children table: if an
+    existing non-terminal child (DRAFT/READY/…) already covers that
+    scope, do NOT propose a new one — rescope the existing child
+    instead.  You are re-invoked after EVERY child merge, and other
+    evaluations may run seconds apart: blindly re-proposing the same
+    scrutiny follow-ups (docs, tests, rollback) on each invocation
+    floods the board with duplicate drafts.  The worker also refuses
+    proposals that near-duplicate a live sibling's title.
   - **`child_rescopes`** — map of child_id to `{"title": … (optional),
     "body": … (optional)}`.  At least one of `title` or `body` must be
     non-empty per entry.  Use this when an existing child's title or

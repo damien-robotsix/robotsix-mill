@@ -71,6 +71,12 @@ class _FakeEpicService:
     def set_depends_on(self, child_id, deps):
         self.calls.append(("set_depends_on", child_id, deps))
 
+    def create(self, *, title, description, kind, parent_id):
+        self.calls.append(("create", title, parent_id))
+        from types import SimpleNamespace
+
+        return SimpleNamespace(id=f"new-{len(self.calls)}", title=title)
+
 
 def test_build_child_summaries_truncates_and_shapes():
 
@@ -438,6 +444,102 @@ def test_reconcile_incident_4564_unstarted_children_survive():
 
     # None of the unstarted Tier-1 children are obsoleted.
     assert not any(c[0] == "transition" for c in svc.calls)
+
+
+def _aged_child(minutes_ago, title, state=State.DRAFT):
+    """Child whose id carries a creation timestamp *minutes_ago* in the past."""
+    from datetime import UTC, datetime, timedelta
+    from types import SimpleNamespace
+
+    ts = (datetime.now(UTC) - timedelta(minutes=minutes_ago)).strftime("%Y%m%dT%H%M%S")
+    slug = title.lower().replace(" ", "-")[:30]
+    return SimpleNamespace(id=f"{ts}Z-{slug}-abcd", title=title, state=state)
+
+
+def test_titles_similar_catches_epic_8d4a_duplicates():
+    """The 2026-09-02 storm titles must match; unrelated siblings must not."""
+    from robotsix_mill.runtime.worker.epic import _titles_similar
+
+    assert _titles_similar(
+        "Implement comprehensive regression tests for image handling and vision fallback",
+        "Implement comprehensive regression test suite for vision fallback and error handling",
+    )
+    assert _titles_similar(
+        "Document vision_model configuration and behavior",
+        "Document vision_model configuration and caption fallback behavior",
+    )
+    assert _titles_similar(
+        "Define and document rollback/disable strategy for vision route",
+        "Implement rollback and disable strategy for vision route feature",
+    )
+    assert not _titles_similar(
+        "Document vision_model configuration and behavior",
+        "Define and document rollback/disable strategy for vision route",
+    )
+    assert not _titles_similar("", "anything")
+
+
+def test_reconcile_new_children_skipped_while_recent_sibling_exists():
+    """A sibling created within the window means a concurrent re-eval already
+    filed follow-ups — re-proposing must be refused (epic 8d4a storm)."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _reconcile_child_changes
+
+    svc = _FakeEpicService(children=[_aged_child(2, "Fresh follow-up")])
+    result = EpicStatusResult(
+        decision="keep_open",
+        new_children=[{"title": "Another follow-up", "body": "do the thing"}],
+    )
+
+    _reconcile_child_changes(svc, "E1", result)
+
+    assert not any(c[0] == "create" for c in svc.calls)
+
+
+def test_reconcile_new_children_near_duplicate_title_skipped():
+    """A proposal near-duplicating a live sibling's title is refused; a
+    genuinely new one is created."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _reconcile_child_changes
+
+    svc = _FakeEpicService(
+        children=[_aged_child(60, "Document vision_model configuration and behavior")]
+    )
+    result = EpicStatusResult(
+        decision="keep_open",
+        new_children=[
+            {
+                "title": "Document vision_model configuration and caption fallback behavior",
+                "body": "docs",
+            },
+            {"title": "Add prometheus metrics for caption cache", "body": "metrics"},
+        ],
+    )
+
+    _reconcile_child_changes(svc, "E1", result)
+
+    created = [c[1] for c in svc.calls if c[0] == "create"]
+    assert created == ["Add prometheus metrics for caption cache"]
+
+
+def test_reconcile_new_children_within_batch_twin_skipped():
+    """Two near-identical proposals in ONE batch create only the first."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _reconcile_child_changes
+
+    svc = _FakeEpicService(children=[_aged_child(60, "Old unrelated child")])
+    result = EpicStatusResult(
+        decision="keep_open",
+        new_children=[
+            {"title": "Add regression tests for vision fallback", "body": "t"},
+            {"title": "Add regression test suite for vision fallback", "body": "t"},
+        ],
+    )
+
+    _reconcile_child_changes(svc, "E1", result)
+
+    created = [c[1] for c in svc.calls if c[0] == "create"]
+    assert created == ["Add regression tests for vision fallback"]
 
 
 def test_stage_rank_covers_every_pipeline_state():
