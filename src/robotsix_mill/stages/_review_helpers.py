@@ -16,7 +16,7 @@ import subprocess
 from pathlib import Path
 
 from ..agents.reviewing import ReviewAsk, ReviewVerdict
-from ..core.models import Ticket
+from ..core.models import Comment, Ticket
 from ..core.states import ASK_USER_MARKER, State
 from ..core.workspace import Workspace
 from ..vcs import git_ops
@@ -519,7 +519,9 @@ def _round_cap_directives(
     ]
 
     directive_lines: list[str] = []
-    comments = ctx.service.list_comments(ticket.id)
+    # ``list(...)`` re-boxes the SQLModel-plugin ``list?[Comment]`` return
+    # into a plain ``list[Comment]`` so mypy --strict treats it as iterable.
+    comments: list[Comment] = list(ctx.service.list_comments(ticket.id))
     ask_thread_ids = {
         c.id
         for c in comments
