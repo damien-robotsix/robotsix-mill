@@ -48,6 +48,13 @@ close_thread_for_ticket
 # gap-id markers rather than title-fingerprint lookback).
 trace_review_dedup_lookback_days
 
+# Legacy Claude-only vision gate — its only code consumer
+# (claude_sdk_supports_inline_image) was removed once refine started
+# feeding screenshots natively via build_agent(images=...). The field
+# stays as an inert, documented legacy config flag (see
+# docs/config/configuration.md).
+claude_sdk_vision_enabled
+
 _absorb_summary_typos
 best_k
 failure_summary

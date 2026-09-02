@@ -165,36 +165,6 @@ def test_level_uses_claude_default_slot():
 
 
 # ---------------------------------------------------------------------------
-# claude_sdk_supports_inline_image
-# ---------------------------------------------------------------------------
-
-
-def test_claude_sdk_supports_inline_image_true():
-    """Returns True when claude_sdk_vision_enabled is True."""
-    from robotsix_mill.agents.base import claude_sdk_supports_inline_image
-
-    s = Settings(claude_sdk_vision_enabled=True)
-    assert claude_sdk_supports_inline_image(s) is True
-
-
-def test_claude_sdk_supports_inline_image_false():
-    """Returns False when claude_sdk_vision_enabled is False."""
-    from robotsix_mill.agents.base import claude_sdk_supports_inline_image
-
-    s = Settings(claude_sdk_vision_enabled=False)
-    assert claude_sdk_supports_inline_image(s) is False
-
-
-def test_claude_sdk_supports_inline_image_default_false():
-    """Default Settings (vision_enabled not set) returns False."""
-    from robotsix_mill.agents.base import claude_sdk_supports_inline_image
-
-    s = Settings()
-    # claude_sdk_vision_enabled defaults to False
-    assert claude_sdk_supports_inline_image(s) is False
-
-
-# ---------------------------------------------------------------------------
 # AgentHandle
 # ---------------------------------------------------------------------------
 
