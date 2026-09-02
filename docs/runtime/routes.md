@@ -18,6 +18,7 @@ in `runtime/api.py`.
 | `_passes.py` | Passes | Manual pass triggering and pass status |
 | `_repo_helpers.py` | — (internal) | Shared helpers for board-id resolution |
 | `_repos.py` | Repos | Per-repo configuration and status endpoints |
+| `_system.py` | System | Drain (update-pending) mode controls |
 | `_tickets.py` | Tickets | Ticket CRUD: create, list, read, update, transition |
 | `_tickets_ingest.py` | Tickets | Ingest a batch of tickets from an external source |
 | `_tickets_merge.py` | Tickets | Merge-related ticket operations |
@@ -28,7 +29,28 @@ in `runtime/api.py`.
 
 `GET /health` returns the service status, uptime, and worker pool
 health. The worker exposes a `/health/worker` variant with per-repo
-concurrency details.
+concurrency details. When drain (update-pending) mode is armed, the
+response also includes a `drain` object with the same shape as
+`GET /system/drain`.
+
+## Drain (update-pending) mode
+
+`POST /system/drain` arms (or clears) drain mode: the worker stops
+starting new heavy stages (implement / ci_fix / refine) while letting
+in-flight ones finish, so the mill drains to a deployable quiet point.
+The caretaker sets the flag when it sees a pending image update, polls
+until `drained` is true, then deploys.
+
+- `POST /system/drain` — arm drain mode. Body `{"ttl_seconds": 3600}`
+  overrides the fail-open TTL (default 3600s); `{"enabled": false}`
+  clears immediately.
+- `GET /system/drain` — current status:
+  `{"active", "drained", "drain_until", "active_stages"}`. `drained`
+  is true when drain is armed and no heavy stage is in flight.
+
+Fail-open: the flag is in-memory only (a restart clears it) and expires
+after the TTL, so a stale flag whose caretaker has vanished can never
+wedge intake.
 
 ## Board WebSocket
 

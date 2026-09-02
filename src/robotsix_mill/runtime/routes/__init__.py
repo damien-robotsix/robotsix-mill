@@ -22,6 +22,7 @@ from . import (
     _passes,
     _repos,
     _step_usage,
+    _system,
     _tickets,
     _tickets_ingest,
     _tickets_merge,
@@ -48,3 +49,4 @@ router.include_router(_repos.router)
 router.include_router(_step_usage.router)
 router.include_router(_tickets_ingest.router)
 router.include_router(_config.router)
+router.include_router(_system.router)

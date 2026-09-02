@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from ...config import RepoConfig, get_repos_config
@@ -59,6 +59,21 @@ _IN_FLIGHT_PR_STATES: frozenset[State] = frozenset(
 # member of _IN_FLIGHT_PR_STATES) are ALWAYS processed regardless
 # of the cap count.
 _CAP_GATED_STATES: frozenset[State] = frozenset({State.READY, State.DRAFT})
+
+# Stage names considered "heavy" for drain mode. When the caretaker
+# sets the drain flag (pending image update), the worker stops STARTING
+# new heavy stages (implement / ci_fix / refine) so the mill drains to
+# a quiet state the caretaker can deploy into, while letting in-flight
+# heavy stages and all lighter stages (merge / document / review /
+# deliver / classify) finish. Gate on the *stage* a state maps to via
+# STAGE_FOR_STATE so unknown/side states (BLOCKED etc.) never match.
+_DRAIN_HEAVY_STAGES: frozenset[str] = frozenset({"implement", "ci_fix", "refine"})
+
+# Fail-open TTL (seconds) for the drain flag when the POST body omits
+# ttl_seconds. The flag is also cleared by restart (in-memory only), so
+# a stale flag whose caretaker has disappeared can never wedge intake
+# for longer than this.
+DEFAULT_DRAIN_TTL_SECONDS = 3600
 
 
 # An in-flight-state ticket whose state has not advanced in this long is
@@ -280,6 +295,12 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         # ticket is actually processed (cap check passed) or when an
         # explicit priority flip calls requeue_with_current_priority.
         self._cap_deferred: set[str] = set()
+        # Drain flag for update mode: UTC datetime until which the worker
+        # refuses to START new heavy stages, or None (not draining). In-memory
+        # only — a process restart clears it (fail-open). Expiry is checked
+        # lazily on each dequeue, so a stale flag whose caretaker has vanished
+        # resumes normal intake after the TTL.
+        self._drain_until: datetime | None = None
         # (ticket_id, stage) -> {"stage": str, "started_at": str} while
         # stage.run() is executing.  Keyed per RUN, not per ticket, so a
         # duplicate dispatch that slips past the guard below is visible
@@ -326,6 +347,59 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             q = asyncio.PriorityQueue()
             self.queues[board_id] = q
         return q
+
+    # ------------------------------------------------------------------
+    # Drain mode (update-pending)
+    # ------------------------------------------------------------------
+
+    def set_drain(self, ttl_seconds: int = DEFAULT_DRAIN_TTL_SECONDS) -> None:
+        """Arm drain mode: stop starting NEW heavy stages until *ttl_seconds*
+        from now, while letting in-flight ones finish.
+
+        The caretaker calls this when it sees a pending image update,
+        then deploys at the first drained tick and clears the flag via
+        restart (in-memory state — a restart naturally clears it).
+        """
+        self._drain_until = datetime.now(UTC).replace(microsecond=0) + timedelta(
+            seconds=ttl_seconds
+        )
+
+    def clear_drain(self) -> None:
+        """Clear drain mode immediately (fail-open fast-path)."""
+        self._drain_until = None
+
+    def drain_active(self) -> bool:
+        """Return True while drain mode is armed and not yet expired.
+
+        Expiry is checked and enforced lazily here (and in the dequeue
+        loop) so a stale flag whose caretaker has vanished resumes normal
+        intake after the TTL.
+        """
+        if self._drain_until is None:
+            return False
+        if datetime.now(UTC) >= self._drain_until:
+            self._drain_until = None  # fail-open: TTL expired
+            return False
+        return True
+
+    def drain_status(self) -> dict[str, Any]:
+        """Read-only drain snapshot for /system/drain and /health.
+
+        ``active`` — drain is armed and unexpired. ``drained`` — no heavy
+        stage is currently in flight (the mill is at a deployable quiet
+        point). ``active_stages`` — current stage names in flight, useful
+        for the caretaker to see what remains.
+        """
+        active = self.drain_active()
+        active_stages = sorted(info["stage"] for info in self._active.values())
+        return {
+            "active": active,
+            "drain_until": (
+                self._drain_until.isoformat() if self._drain_until else None
+            ),
+            "drained": active and not (_DRAIN_HEAVY_STAGES & set(active_stages)),
+            "active_stages": active_stages,
+        }
 
     def enqueue(self, ticket_id: str) -> None:
         """Enqueue *ticket_id* on its repo's queue with CURRENT priority
@@ -559,6 +633,42 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         service=board_service,
                         repo_config=ticket_repo_config,
                     )
+
+                # --- Drain gate (update mode) ---
+                # The caretaker armed drain mode for a pending image
+                # update. Do NOT START new heavy stages (implement /
+                # ci_fix / refine): re-enqueue the popped heavy ticket and
+                # wait, while in-flight heavy stages and all lighter stages
+                # (merge / document / review / deliver / classify) finish
+                # normally. The gate keys off the ticket's CURRENT state
+                # via STAGE_FOR_STATE (not the popped stage rank), so a
+                # state flip while queued is respected. Fail-open: the flag
+                # carries a TTL and lives only in memory, so a restart or
+                # expiry resumes normal intake automatically.
+                if self.drain_active():
+                    _drain_stage = (
+                        STAGE_FOR_STATE.get(before_state)
+                        if before_state is not None
+                        else None
+                    )
+                    if _drain_stage in _DRAIN_HEAVY_STAGES:
+                        log.info(
+                            "%s: drain mode active — deferring heavy stage "
+                            "%s until the pending update deploys",
+                            ticket_id,
+                            _drain_stage,
+                        )
+                        self._pending.discard(ticket_id)
+                        self._enqueue_seq += 1
+                        self._pending.add(ticket_id)
+                        queue.put_nowait(
+                            (popped_prio, popped_stage, self._enqueue_seq, ticket_id)
+                        )
+                        # Do NOT call queue.task_done() here — `continue`
+                        # still runs the `finally` block which calls it once
+                        # per get() (same invariant as the cap-deferral path).
+                        await asyncio.sleep(5)
+                        continue
 
                 # --- In-flight PR cap ---
                 if (

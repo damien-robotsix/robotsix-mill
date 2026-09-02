@@ -1,5 +1,5 @@
 import asyncio
-from datetime import UTC
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -725,6 +725,129 @@ def test_queue_for_empty_board_returns_default_and_creates_lazily():
     assert "fresh" not in w.queues
     q = w._queue_for("fresh")
     assert w.queues["fresh"] is q
+
+
+# -- drain mode (update-pending) -----------------------------------------
+
+
+def test_drain_defaults_inactive():
+    """A fresh Worker has drain mode off; drain_status reports it."""
+    w = _fake_worker({})
+    assert w.drain_active() is False
+    assert w.drain_status()["active"] is False
+    assert w.drain_status()["drained"] is False
+
+
+def test_drain_set_active_and_clear():
+    """set_drain arms drain mode until the TTL; clear_drain clears it."""
+    w = _fake_worker({})
+    w.set_drain(ttl_seconds=60)
+    assert w.drain_active() is True
+    status = w.drain_status()
+    assert status["active"] is True
+    assert status["drain_until"] is not None
+
+    w.clear_drain()
+    assert w.drain_active() is False
+    assert w.drain_status()["active"] is False
+
+
+def test_drain_ttl_expires_fail_open():
+    """A stale flag (caretaker gone) expires after the TTL and intake
+    resumes — fail-open, no lingering state."""
+    from datetime import timedelta
+
+    w = _fake_worker({})
+    w.set_drain(ttl_seconds=3600)
+    assert w.drain_active() is True
+
+    # Move drain_until into the past to simulate the TTL elapsing while
+    # the caretaker is away.
+    w._drain_until = datetime.now(UTC) - timedelta(seconds=1)
+    assert w.drain_active() is False  # expired → fail-open
+    assert w._drain_until is None  # state cleared
+
+
+def test_drain_status_reports_drained_when_no_heavy_in_flight():
+    """drained means drain armed AND no heavy stage currently running."""
+    w = _fake_worker({})
+    # Simulate an in-flight heavy stage (implement) and a light one.
+    w._active[("t1", "implement")] = {"stage": "implement", "started_at": "x"}
+    w._active[("t2", "merge")] = {"stage": "merge", "started_at": "x"}
+    w.set_drain(ttl_seconds=60)
+    status = w.drain_status()
+    assert status["active"] is True
+    assert status["drained"] is False  # implement still in flight
+    assert "implement" in status["active_stages"]
+
+    # Once the heavy stage finishes, drained flips true.
+    w._active.pop(("t1", "implement"))
+    status = w.drain_status()
+    assert status["drained"] is True
+    assert status["active_stages"] == ["merge"]
+
+
+async def test_drain_gate_defers_heavy_stage_until_cleared(ctx, service, monkeypatch):
+    """While drain mode is armed, a heavy stage (implement) is NOT started;
+    once cleared, the queued ticket is processed normally."""
+    import threading
+
+    calls = []
+    lock = threading.Lock()
+
+    class FakeImplement(Stage):
+        name = "implement"
+        input_state = State.READY
+
+        def run(self, _t, _c):
+            with lock:
+                calls.append("run")
+            # BLOCKED halts the chain (not in STAGE_FOR_STATE) and is a
+            # valid READY transition, so the ticket ends processing.
+            return Outcome(State.BLOCKED, "implemented")
+
+    monkeypatch.setitem(registry.STAGES, "implement", FakeImplement())
+
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+
+    fake_repos = ReposRegistry(
+        repos={
+            "test-repo": RepoConfig(
+                repo_id="test-repo",
+                board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+                max_concurrency=1,
+            ),
+        }
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.get_repos_config",
+        lambda: fake_repos,
+    )
+
+    t = service.create("drain test")
+    service.transition(t.id, State.READY, note="ready")
+
+    w = Worker(ctx)
+    w.set_drain(ttl_seconds=60)  # arm BEFORE start so the gate holds
+    w.start()
+    try:
+        w.enqueue(t.id)
+        # Drain gate holds the heavy ticket for a few cycles; it must
+        # not be dispatched while drain is armed.
+        await asyncio.sleep(0.3)
+        assert calls == [], f"heavy stage ran during drain: {calls}"
+        assert service.get(t.id).state is State.READY
+
+        # Clear drain → the queued ticket processes normally.
+        w.clear_drain()
+        await asyncio.wait_for(w.queue_join(), timeout=10)
+        assert calls == ["run"]
+        assert service.get(t.id).state is State.BLOCKED
+    finally:
+        await w.stop()
 
 
 async def test_start_creates_per_repo_consumer_pools(ctx, monkeypatch):

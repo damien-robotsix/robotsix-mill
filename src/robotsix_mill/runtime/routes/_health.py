@@ -61,6 +61,11 @@ async def health(request: Request) -> dict[str, Any]:
 
     settings: Settings = request.app.state.settings
     payload["disk_usage"] = _get_disk_usage(settings.data_dir)
+    # Drain (update-pending) status so the caretaker can deploy at the
+    # first drained tick without hitting the /system/drain endpoint.
+    worker = getattr(request.app.state, "worker", None)
+    if worker is not None:
+        payload["drain"] = worker.drain_status()
     return payload
 
 
