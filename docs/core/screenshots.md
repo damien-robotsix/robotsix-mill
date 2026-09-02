@@ -61,6 +61,12 @@ refine restarts — even if refinement starts over from scratch, your
 image is kept.
 
 During refinement, the agent uses the screenshot as visual context
-where the backend supports it. On a vision-capable backend the agent can
-see the image; on a text-only backend the screenshot is still preserved,
-just not visually interpreted.
+through llmio's `images=` parameter on `build_agent`, which is
+**provider-agnostic**: on the Claude SDK transport the image is
+delivered natively, and on a text-only OpenRouter/DeepSeek transport it
+is interpreted by an `ask_image` tool answered by the `TierConfig.vision`
+binding. Either way the screenshot is stored alongside the ticket and
+preserved across refine restarts — even if refinement starts over from
+scratch, your image is kept. See the
+[Image handling guide](../guides/image-handling.md) for the full
+mechanism.

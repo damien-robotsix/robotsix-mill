@@ -76,6 +76,7 @@ nav:
       - Usage: cli/usage.md
   - Guides:
       - Adding a New Agent: guides/adding-a-new-agent.md
+      - Image handling: guides/image-handling.md
   - API Reference:
       - Agents: agents/reference.md
       - Core: reference/core.md

@@ -12,7 +12,8 @@ A self-contained LLM-driven ticket solver with a SQLite-backed management plane,
 - **[Pipeline](agents/index.md)** — Understand the agent catalog, approval gate, dedup guard (and the advisory **[epic-decomposition pre-filing dedup](epic-dedup.md)**), and merge stage.
 - **[Observability](langfuse/observability.md)** — per-repo Langfuse + deployed-log config the refine agent consults.
 - **[Operations](cost-and-resilience.md)** — Monitor costs, manage notifications, track ticket provenance, and clean up workspaces.
-- **[Attaching screenshots](screenshots.md)** — Attach an image to a ticket from the board so the refine agent has visual context.
+- **[Attaching screenshots](core/screenshots.md)** — Attach an image to a ticket from the board so the refine agent has visual context.
+- **[Image handling](guides/image-handling.md)** — How agents receive attached images through llmio's `images=` parameter (provider-agnostic, `TierConfig.vision` binding, `vision_api_key` sourcing, migration from the Claude-only gate).
 - **[Agent communication research](agents/communication-research.md)** — Phase 1 survey of existing agent-to-agent communication approaches feeding the planned architecture decision.
 
 ## Links

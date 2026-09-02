@@ -380,7 +380,7 @@ Node + the `claude` CLI in the container). These knobs govern that path:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `core.claude_max_concurrency` | `MILL_CLAUDE_MAX_CONCURRENCY` | `4` | Deprecated, inert since the Claude run semaphore was removed: no longer bounds anything. Kept so existing pinned configs load |
-| `core.claude_sdk_vision_enabled` | `MILL_CLAUDE_SDK_VISION_ENABLED` | `false` | Allow inline image (screenshot/vision) input on the Claude SDK path. **Default off**: the installed llmio bridge cannot consume `BinaryContent` image parts — it stringifies them into a useless repr that hangs the `claude` CLI until the 1200s per-call cap fires. While off, the refine/review screenshot paths degrade to a text note. Flip to `true` (a one-line change) once the bridge gains real image-input support |
+| `core.claude_sdk_vision_enabled` | `MILL_CLAUDE_SDK_VISION_ENABLED` | `false` | **Legacy Claude-only vision gate — being removed.** Image feeding is now provider-agnostic through llmio's `images=` parameter on `build_agent`: the Claude SDK reads images natively, and OpenRouter (DeepSeek) gets an `ask_image` tool answered by the `TierConfig.vision` binding (see [Image handling guide](../guides/image-handling.md)). The prompt always stays text-only; never embed `BinaryContent`. New configs should omit this flag — screenshots reach the model via `images=` regardless of its value. |
 ### 2. Request limits
 
 | YAML path | Env var | Default | Description |
