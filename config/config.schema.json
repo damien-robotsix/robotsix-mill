@@ -970,6 +970,14 @@
           "title": "Ci Transient Max Retries",
           "type": "integer"
         },
+        "classify_reserved_slots": {
+          "advanced": true,
+          "default": 1,
+          "description": "Slots within max_global_concurrency reserved for the cheap classify stage so new tickets classify promptly under heavy-stage saturation. Comes out of the cap, not on top of it.",
+          "minimum": 0,
+          "title": "Classify Reserved Slots",
+          "type": "integer"
+        },
         "claude_max_concurrency": {
           "advanced": true,
           "default": 4,

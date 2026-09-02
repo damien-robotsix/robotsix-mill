@@ -76,6 +76,7 @@
         "ci_prevention_max_rules": 10,
         "ci_prevention_rules_max_events": 100,
         "ci_transient_max_retries": 3,
+        "classify_reserved_slots": 1,
         "claude_max_concurrency": 4,
         "claude_sdk_vision_enabled": false,
         "codeql_fp_triage_enabled": true,
