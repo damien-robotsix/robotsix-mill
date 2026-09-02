@@ -17,7 +17,7 @@ import asyncio
 import contextlib
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ..config import Settings, get_secrets
 from .prompt_tool_consistency import unregistered_call_directives
@@ -577,16 +577,19 @@ def _build_openrouter_handle(
             provider = get_provider_for_level(
                 level, api_key=get_secrets().openrouter_api_key
             )
-        handle = provider.build_agent(
-            level=level,
-            model=effective_model,
-            system_prompt=composed_system,
-            tools=all_tools,
-            output_type=output_type,
-            name=name,
-            retries=retries,
-            images=images,
-            vision_api_key=vision_api_key,
+        handle = cast(
+            "AgentHandle",
+            provider.build_agent(
+                level=level,
+                model=effective_model,
+                system_prompt=composed_system,
+                tools=all_tools,
+                output_type=output_type,
+                name=name,
+                retries=retries,
+                images=images,
+                vision_api_key=vision_api_key,
+            ),
         )
         if max_tokens is not None:
             # llmio's generic build_agent has no max_tokens param; apply it
