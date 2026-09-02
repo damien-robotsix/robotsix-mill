@@ -188,7 +188,9 @@ def _capture(monkeypatch, output_obj):
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
-        bmod, "new_openrouter_model", lambda model_name, level, **kw: (object(), object())
+        bmod,
+        "new_openrouter_model",
+        lambda model_name, level, **kw: (object(), object()),
     )
     # Force the DeepSeek (pydantic-ai) provider for ALL levels so the
     # FakeAgent above intercepts the build. refine is level 3 (Claude SDK)
