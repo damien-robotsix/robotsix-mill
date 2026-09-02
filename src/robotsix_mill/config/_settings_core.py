@@ -61,6 +61,26 @@ class _CoreSettings(BaseModel):
         ),
         json_schema_extra={"advanced": True},
     )
+    # Slots within ``max_global_concurrency`` held back for the cheap
+    # classify stage so freshly-ingested tickets always classify promptly,
+    # even when every other slot is held by hour-scale implement/ci_fix
+    # runs (observed: with the whole fleet on the slow keyed model, 5
+    # tickets queued 30+ min in CLASSIFYING and operators re-filed
+    # duplicates thinking it was stuck). The reserved slots come OUT of the
+    # cap, not on top of it — the total ceiling is unchanged. Clamped to at
+    # most ``max_global_concurrency - 1`` at gate construction so heavy
+    # stages always keep at least one slot. Default 1 reserves a single
+    # slot; the classify stage runs no sandbox, so one is plenty.
+    classify_reserved_slots: int = Field(
+        default=1,
+        ge=0,
+        description=(
+            "Slots within max_global_concurrency reserved for the cheap "
+            "classify stage so new tickets classify promptly under heavy-"
+            "stage saturation. Comes out of the cap, not on top of it."
+        ),
+        json_schema_extra={"advanced": True},
+    )
     # Maximum stagger window (seconds) for cross-repo fan-out ticket
     # creation. When a single programmatic source (periodic pass,
     # audit, survey) enqueues tickets across N repos, the N
