@@ -413,7 +413,6 @@ class _TransitionMixin(_ServiceBase):
         ticket_id: str,
         dst: State,
         note: str | None = None,
-        *,
         block_reason: str | None = None,
     ) -> Ticket:
         """Move a ticket to *dst* state.

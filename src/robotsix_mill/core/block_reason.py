@@ -28,7 +28,7 @@ def encode(kind: str, **params: object) -> str:
     return json.dumps({"kind": kind, **params}, sort_keys=True)
 
 
-def decode(raw: str | None) -> dict | None:
+def decode(raw: str | None) -> dict[str, object] | None:
     """Decode a ``block_reason`` string back to its dict.
 
     Returns ``None`` for ``None``, malformed JSON, or a value that is not

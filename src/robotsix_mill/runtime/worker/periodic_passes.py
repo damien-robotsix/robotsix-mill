@@ -17,12 +17,16 @@ import re
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
 
 from ...config import RepoConfig, Settings, get_repos_config, target_branch_for
 from .. import tracing
 from ._base import _WorkerBase
 from .epic import _branch_is_stale
+
+if TYPE_CHECKING:
+    from ...core.service import TicketService
+    from ...forge import Forge
 
 log = logging.getLogger("robotsix_mill.worker")
 
@@ -148,7 +152,7 @@ def _prose_ci_debt_workflows(
 
 
 def _maybe_resume_target_ci(
-    svc, forge, target: str, ticket_id: str, names: list[str]
+    svc: TicketService, forge: Forge, target: str, ticket_id: str, names: list[str]
 ) -> None:
     """Resume a target_branch_red-blocked ticket once its workflows are green.
 
@@ -235,8 +239,11 @@ def _blocked_recheck_pass(
     for ticket in blocked:
         reason = decode(ticket.block_reason)
         if reason and reason.get("kind") == TARGET_BRANCH_RED:
-            names = [
-                str(n).strip() for n in reason.get("workflows", []) if str(n).strip()
+            raw_workflows = reason.get("workflows")
+            if not isinstance(raw_workflows, list):
+                continue  # malformed structured reason — skip, never trust it
+            names: list[str] | None = [
+                str(n).strip() for n in raw_workflows if str(n).strip()
             ]
             if names:
                 if forge is None:
