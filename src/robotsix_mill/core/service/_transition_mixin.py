@@ -1034,4 +1034,12 @@ class _TransitionMixin(_ServiceBase):
             s.refresh(ticket)
             if self._on_transition is not None:
                 self._on_transition(ticket, old_state)
-            return comment, ticket
+            # Capture unblock targets to fire AFTER this session closes,
+            # mirroring transition(): mark-done is a completion (DONE) so
+            # dependents parked on this ticket must not stay BLOCKED —
+            # e.g. a ci_fix dependency closed as moot must still resume
+            # the ticket it parked.
+            unblock_targets = _parse_depends_on_str(ticket.unblocks)
+        if unblock_targets:
+            self._fire_unblocks(ticket_id, unblock_targets)
+        return comment, ticket
