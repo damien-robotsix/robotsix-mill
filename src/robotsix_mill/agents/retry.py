@@ -385,6 +385,7 @@ def run_agent[T](
     fallback_fn: Callable[[], T] | None = None,
     what: str = "model call",
     sleep: Callable[[float], None] = time.sleep,
+    tier_fallback: bool = True,
 ) -> T:
     """Run *agent* with bounded local retry.
 
@@ -398,6 +399,15 @@ def run_agent[T](
     exhausted does the fallback run, itself through a fresh retry session.
     This guards against persistent provider-side outages (e.g. provider 503
     on OpenRouter) by falling back to a different model.
+
+    When *tier_fallback* is ``True`` (the default), a tier-unavailable
+    failure (Claude subscription exhausted / dead OAuth credential) rebuilds
+    the agent on the fallback provider slot via the ``_failover_rebuild``
+    hook and reruns there. Pass ``tier_fallback=False`` when a higher layer
+    (llmio's ``call_with_failover`` loop) already owns provider failover —
+    e.g. ``load_and_run_agent``'s slot factory — so the exhaustion
+    propagates up and the loop (not the nested fallback) records the slot
+    and the armed window.
 
     After a successful run, per-step usage data (token counts, model name,
     request count, tool calls, and retry info) is recorded as a span
@@ -463,7 +473,7 @@ def run_agent[T](
     try:
         result = _run_isolated(_call_closing)
     except Exception as exc:
-        if not is_tier_unavailable(exc):
+        if not tier_fallback or not is_tier_unavailable(exc):
             raise
         result = _run_at_fallback_slot(
             agent, make_run, exc, what=what, sleep=sleep, run_isolated=_run_isolated

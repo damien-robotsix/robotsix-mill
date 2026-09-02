@@ -51,7 +51,7 @@ def fake_ai(monkeypatch):
     monkeypatch.setattr(orp, "OpenRouterProvider", lambda **kw: object())
     monkeypatch.setattr(
         "robotsix_mill.agents.base.new_openrouter_model",
-        lambda model_name, level: (FakeModel(model_name), object()),
+        lambda model_name, level, **kw: (FakeModel(model_name), object()),
     )
     return box
 
@@ -132,7 +132,7 @@ def test_out_of_scope_skips_pattern_persistence(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.agents.base.new_openrouter_model",
-        lambda model_name, level: (FakeModel(model_name), object()),
+        lambda model_name, level, **kw: (FakeModel(model_name), object()),
     )
 
     from robotsix_mill.agents import ci_patterns, fs_tools
@@ -190,7 +190,7 @@ def test_uses_build_fs_tools(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.agents.base.new_openrouter_model",
-        lambda model_name, level: (FakeModel(model_name), object()),
+        lambda model_name, level, **kw: (FakeModel(model_name), object()),
     )
 
     # build_fs_tools is imported from .fs_tools in the function body,
@@ -234,7 +234,7 @@ def test_agent_prompt_forbids_push_and_branch_switching(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.agents.base.new_openrouter_model",
-        lambda model_name, level: (FakeModel(model_name), object()),
+        lambda model_name, level, **kw: (FakeModel(model_name), object()),
     )
 
     from robotsix_mill.agents import fs_tools
@@ -279,7 +279,7 @@ def test_patterns_injected_into_prompt(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.agents.base.new_openrouter_model",
-        lambda model_name, level: (FakeModel(model_name), object()),
+        lambda model_name, level, **kw: (FakeModel(model_name), object()),
     )
 
     from robotsix_mill.agents import ci_patterns, fs_tools
@@ -339,7 +339,7 @@ def test_no_patterns_shows_placeholder(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.agents.base.new_openrouter_model",
-        lambda model_name, level: (FakeModel(model_name), object()),
+        lambda model_name, level, **kw: (FakeModel(model_name), object()),
     )
 
     from robotsix_mill.agents import ci_patterns, fs_tools
@@ -393,7 +393,7 @@ def test_pattern_saved_after_fix(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.agents.base.new_openrouter_model",
-        lambda model_name, level: (FakeModel(model_name), object()),
+        lambda model_name, level, **kw: (FakeModel(model_name), object()),
     )
 
     from robotsix_mill.agents import ci_patterns, fs_tools
@@ -455,7 +455,7 @@ def test_no_pattern_saved_when_signature_empty(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "robotsix_mill.agents.base.new_openrouter_model",
-        lambda model_name, level: (FakeModel(model_name), object()),
+        lambda model_name, level, **kw: (FakeModel(model_name), object()),
     )
 
     from robotsix_mill.agents import ci_patterns, fs_tools

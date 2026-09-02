@@ -638,7 +638,11 @@ def test_build_agent_openrouter_images_route_through_provider(monkeypatch, setti
     fake_provider = MagicMock()
     fake_provider.build_agent.return_value = fake_handle
 
-    monkeypatch.setattr(bmod, "_provider_for_binding", lambda tlc, level: fake_provider)
+    import robotsix_llmio
+
+    monkeypatch.setattr(
+        robotsix_llmio, "get_provider_for_level", lambda level, **kw: fake_provider
+    )
 
     handle = bmod._build_openrouter_handle(
         settings,
@@ -649,7 +653,6 @@ def test_build_agent_openrouter_images_route_through_provider(monkeypatch, setti
         output_type=str,
         name="test-agent",
         retries=2,
-        tier_binding=MagicMock(),
         images=[("image/png", b"png")],
         vision_api_key="sk-vision",
     )
@@ -690,7 +693,7 @@ def test_build_openrouter_handle_constructs_agent(monkeypatch, settings):
     fake_client = MagicMock()
     captured_call: dict = {}
 
-    def fake_new_openrouter(model_name, level):
+    def fake_new_openrouter(model_name, level, **kw):
         captured_call["model_name"] = model_name
         captured_call["level"] = level
         return fake_model, fake_client
@@ -743,7 +746,7 @@ def test_build_openrouter_handle_with_max_tokens(monkeypatch, settings):
     monkeypatch.setattr(
         bmod,
         "new_openrouter_model",
-        lambda model_name, level: (MagicMock(), MagicMock()),
+        lambda model_name, level, **kw: (MagicMock(), MagicMock()),
     )
 
     bmod._build_openrouter_handle(

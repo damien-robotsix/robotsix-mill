@@ -133,7 +133,9 @@ def test_all_tools_registered(tmp_path, monkeypatch):
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
-        bmod, "new_openrouter_model", lambda model_name, level: (object(), object())
+        bmod,
+        "new_openrouter_model",
+        lambda model_name, level, **kw: (object(), object()),
     )
 
     from robotsix_mill.agents.base import build_agent

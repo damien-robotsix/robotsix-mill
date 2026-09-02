@@ -38,17 +38,16 @@ class _FakeAgent:
 def _spy_build(builds: list):
     """Record each (level, provider) build_agent_from_definition sees.
 
-    ``tier_binding`` is ``None`` on the normal attempt (plain level
-    resolution) and carries the forced slot binding on the cross-slot
-    attempt; resolve the effective provider either way.
+    With the call_with_failover loop owning slot bookkeeping, mill threads
+    the loop's explicit *slot* into ``build_agent`` (no forced binding);
+    resolve the effective provider from that slot so the builds list
+    reflects the slot the loop actually attempted.
     """
 
-    def _build(
-        settings, definition, *, tools, level, tier_binding, repo_dir, **overrides
-    ):
+    def _build(settings, definition, *, tools, level, slot=None, repo_dir, **overrides):
         from robotsix_llmio.core.factory import default_tier_config
 
-        binding = tier_binding or default_tier_config().for_level(level)
+        binding = default_tier_config().for_level(level, slot=slot)
         builds.append((level, binding.provider))
         return _FakeAgent(binding)
 
@@ -58,7 +57,7 @@ def _spy_build(builds: list):
 def _run_script(outcomes: dict[str, list]):
     """run_agent stand-in scripted per provider prefix of the built binding."""
 
-    def _run(agent, make_run, *, what):
+    def _run(agent, make_run, *, what, tier_fallback=True):
         outcome = outcomes[agent.binding.provider].pop(0)
         if isinstance(outcome, Exception):
             raise outcome
@@ -108,6 +107,44 @@ def test_provider_failure_reruns_same_level_on_fallback_slot(monkeypatch):
     levels = [lvl for lvl, _ in builds]
     assert levels[0] == levels[1]  # the level NEVER changes
     assert [prov for _, prov in builds] == ["claudeSDK", "openrouter"]
+
+
+def test_fallback_success_preserves_armed_window(monkeypatch):
+    """A fallback-slot success must NOT reset the failover window.
+
+    llmio's loop records the success on the *fallback* slot, so
+    /provider-status keeps reporting failover_active=true until the window
+    expires. The prod regression was a nested mill fallback swallowing the
+    exhaustion and returning a *default*-slot success, which cleared the
+    freshly-armed window (record_success('default')) — net: every call
+    re-paid a doomed default-slot probe.
+    """
+    from robotsix_llmio.core.failover import get_failover_tracker
+
+    builds: list = []
+    _wire(
+        monkeypatch,
+        builds,
+        {
+            "claudeSDK": [ClaudeSDKUsageExhaustedError("weekly limit")],
+            "openrouter": ["rescued"],
+        },
+    )
+
+    tracker = get_failover_tracker()
+    tracker.reset()
+
+    result = load_and_run_agent(
+        settings=_Settings(failover=True),
+        definition_name="retrospect",
+        prompt="go",
+        what="test-run",
+    )
+
+    assert result == "rescued"
+    # The window armed when the default slot exhausted and is STILL live
+    # after the fallback-slot call returned (no default-slot success record).
+    assert tracker.active_slot() == "fallback"
 
 
 def test_no_failover_when_disabled(monkeypatch):
