@@ -160,6 +160,34 @@ def _matches_claude_usage_exhausted(exc: BaseException) -> bool:
     return bool(_CLAUDE_USAGE_EXHAUSTED_RE.search(str(exc)))
 
 
+# Claude Agent SDK transport/process failure. llmio raises
+# ``ClaudeSDKAPIError`` (whose message always begins "Claude Agent SDK
+# transport/process failure (<label>): …") when a raw claude_agent_sdk
+# subprocess/transport failure survives the bounded retry loop. It is
+# infrastructure, not a property of the ticket: the same stage succeeds once
+# the transport / credential recovers, so it must be treated as transient —
+# the implement AgentRunError handler then fails the attempt BEFORE any
+# spec-determined outcome and records no spec fingerprint. Classifying it
+# fatal let the handler fall through to the spec-determined path, and the
+# next resume hit a false "spec unchanged" re-block, pinning the ticket
+# until an operator override. Seen live 2026-09-01 on two concurrent tickets
+# (…071238Z, …073557Z) with identical "Claude Agent SDK transport/process
+# failure (implement): Claude Code returned an error result: success"
+# messages. Note this does NOT match the bare degenerate-success message
+# "Claude Code returned an error result: success" (deterministic, handled by
+# the refine runner) — the classifier keys on the transport/process failure
+# signature that wraps it.
+_CLAUDE_SDK_TRANSPORT_FAILURE_RE = re.compile(
+    r"Claude Agent SDK transport/process failure", re.IGNORECASE
+)
+
+
+def _matches_claude_sdk_transport_failure(exc: BaseException) -> bool:
+    if type(exc).__name__ == "ClaudeSDKAPIError":
+        return True
+    return bool(_CLAUDE_SDK_TRANSPORT_FAILURE_RE.search(str(exc)))
+
+
 def _walk_chain(exc: BaseException) -> list[BaseException]:
     seen: set[int] = set()
     out: list[BaseException] = []
@@ -741,6 +769,14 @@ def _check_one_transient(exc: BaseException) -> bool:
     # quota resets, nothing about the ticket changed. "transient" here is
     # what routes it into the worker's model-outage PARK.
     if _matches_claude_usage_exhausted(exc):
+        return True
+    # Claude Agent SDK transport/process failure is infrastructure too: the
+    # SDK subprocess died mid-run and the same stage succeeds once the
+    # transport/credential recovers. "transient" here is what makes the
+    # implement AgentRunError handler fail the attempt before any
+    # spec-determined outcome — no spec fingerprint, so resume-blocked
+    # re-runs instead of hitting a false "spec unchanged" re-block.
+    if _matches_claude_sdk_transport_failure(exc):
         return True
     return bool(_is_transient_message(exc))
 

@@ -372,6 +372,44 @@ def test_classify_claude_sdk_degenerate_success_in_cause_chain():
     assert classify_stage_error(outer) == "fatal"
 
 
+def test_classify_claude_sdk_transport_failure_is_transient():
+    """'Claude Agent SDK transport/process failure' (the ClaudeSDKAPIError
+    llmio raises when a raw claude_agent_sdk subprocess/transport failure
+    survives its bounded retry loop) is infrastructure: transient at the
+    stage level so the implement handler fails the attempt BEFORE recording
+    a spec fingerprint (2026-09-01: ...-071238Z / ...-073557Z poisoned
+    fingerprints → false 'spec unchanged' re-blocks)."""
+    assert (
+        classify_stage_error(
+            Exception(
+                "Claude Agent SDK transport/process failure (implement): "
+                "Claude Code returned an error result: success"
+            )
+        )
+        == "transient"
+    )
+
+
+def test_classify_claude_sdk_transport_failure_in_cause_chain():
+    inner = Exception("Claude Agent SDK transport/process failure (implement): boom")
+    outer = RuntimeError("agent run failed")
+    outer.__cause__ = inner
+    assert classify_stage_error(outer) == "transient"
+
+
+class _FakeSDKAPIError(Exception):
+    pass
+
+
+_FakeSDKAPIError.__name__ = "ClaudeSDKAPIError"
+
+
+def test_classify_claude_sdk_api_error_type_name_is_transient():
+    """Even with an opaque message, the ClaudeSDKAPIError type name alone is
+    enough — it is, by construction, a transport/process failure."""
+    assert classify_stage_error(_FakeSDKAPIError("opaque text")) == "transient"
+
+
 # ---------------------------------------------------------------------------
 # _is_transient_message — message-string fallback for transient patterns
 # not caught by exception-type checks (e.g. pydantic-ai's
