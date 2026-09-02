@@ -453,6 +453,13 @@ def test_e2e_mixed_operations(settings, service, monkeypatch):
     Assert all safe operations are applied."""
     from robotsix_mill.agents.epic_status import EpicStatusResult
 
+    # The freshly created non-terminal siblings below would trip the
+    # recent-child new_children brake (epic 8d4a storm guard); disable
+    # it here — the brake has its own tests in test_core_epic_reeval.
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.epic._RECENT_CHILD_WINDOW_SECONDS", 0
+    )
+
     epic = service.create("My Epic", "Build the thing", kind=TicketKind.EPIC)
     draft_child = service.create("Rescope me", "old body", parent_id=epic.id)
     close_child = service.create("Close me", "obsolete", parent_id=epic.id)

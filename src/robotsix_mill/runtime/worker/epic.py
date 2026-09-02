@@ -12,6 +12,7 @@ re-evaluation entry point for periodic passes and the
 from __future__ import annotations
 
 import logging
+import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -27,6 +28,73 @@ log = logging.getLogger("robotsix_mill.worker")
 _EPIC_CHILD_TERMINAL = frozenset(
     {State.DONE, State.CLOSED, State.ANSWERED, State.EPIC_CLOSED}
 )
+
+# Guards against the duplicate-children storm (epic 8d4a, 2026-09-02):
+# a merge burst fires one re-eval per merged child, and each re-eval's
+# scrutiny pass re-proposed the same doc/test/rollback follow-ups —
+# 10 near-duplicate drafts in 15 minutes. Two deterministic brakes:
+# skip new_children entirely while a sibling created within the window
+# exists (a concurrent re-eval already filed its follow-ups), and skip
+# any proposal whose title is near-identical to a live sibling's.
+_RECENT_CHILD_WINDOW_SECONDS = 600
+_NEW_CHILD_TITLE_SIMILARITY = 0.5
+
+_TITLE_STOPWORDS = frozenset(
+    [
+        "a",
+        "an",
+        "the",
+        "and",
+        "or",
+        "for",
+        "of",
+        "to",
+        "in",
+        "on",
+        "with",
+        "from",
+        "by",
+        "when",
+        "into",
+    ]
+)
+
+
+def _title_tokens(title: str) -> frozenset[str]:
+    """Normalize a title into a comparable token set.
+
+    Lowercases, splits on non-alphanumerics (keeping ``_``), drops
+    articles/prepositions, and strips a naive plural ``s`` so that
+    "tests" and "test" compare equal.
+    """
+    words = re.split(r"[^a-z0-9_]+", title.lower())
+    tokens = set()
+    for w in words:
+        if not w or w in _TITLE_STOPWORDS:
+            continue
+        if len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
+            w = w[:-1]
+        tokens.add(w)
+    return frozenset(tokens)
+
+
+def _titles_similar(a: str, b: str) -> bool:
+    """True when two titles share most of their content words (Jaccard)."""
+    ta, tb = _title_tokens(a), _title_tokens(b)
+    if not ta or not tb:
+        return False
+    return len(ta & tb) / len(ta | tb) >= _NEW_CHILD_TITLE_SIMILARITY
+
+
+def _id_created_at(ticket_id: str) -> datetime | None:
+    """Parse the creation timestamp a ticket id starts with, or ``None``."""
+    m = re.match(r"^(\d{8}T\d{6})Z-", ticket_id)
+    if m is None:
+        return None
+    try:
+        return datetime.strptime(m.group(1), "%Y%m%dT%H%M%S").replace(tzinfo=UTC)
+    except ValueError:
+        return None
 
 
 def _run_epic_reeval(epic_id: str, settings) -> None:
@@ -307,6 +375,33 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
 
     # --- new_children --------------------------------------------------
     if result.new_children:
+        existing_children = list(svc.list_children_across_boards(epic_id))
+        now = datetime.now(UTC)
+        recent = [
+            c.id
+            for c in existing_children
+            if getattr(c, "state", None) not in _EPIC_CHILD_TERMINAL
+            and (created := _id_created_at(c.id)) is not None
+            and (now - created).total_seconds() < _RECENT_CHILD_WINDOW_SECONDS
+        ]
+        if recent:
+            log.warning(
+                "epic %s: skipping %d new_children — sibling(s) created within "
+                "the last %ds (%s); a concurrent re-eval already filed "
+                "follow-ups, re-proposing now would duplicate them",
+                epic_id,
+                len(result.new_children),
+                _RECENT_CHILD_WINDOW_SECONDS,
+                ", ".join(recent),
+            )
+            result.new_children = []
+        # Titles of live (non-terminal) siblings — a near-identical
+        # proposal duplicates open work instead of adding scope.
+        live_titles = [
+            c.title
+            for c in existing_children
+            if getattr(c, "state", None) not in _EPIC_CHILD_TERMINAL
+        ]
         for i, child_spec in enumerate(result.new_children):
             if not isinstance(child_spec, dict):
                 log.warning(
@@ -331,6 +426,19 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
                     i,
                 )
                 continue
+            duplicate_of = next(
+                (t for t in live_titles if _titles_similar(title, t)), None
+            )
+            if duplicate_of is not None:
+                log.warning(
+                    "epic %s: new_children[%d] '%s' skipped — near-duplicate "
+                    "of live sibling '%s'",
+                    epic_id,
+                    i,
+                    title.strip(),
+                    duplicate_of,
+                )
+                continue
             try:
                 child = svc.create(
                     title=title.strip(),
@@ -338,6 +446,7 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
                     kind=TicketKind.TASK,
                     parent_id=epic_id,
                 )
+                live_titles.append(title.strip())
                 log.info(
                     "epic %s: created new child %s ('%s')",
                     epic_id,
