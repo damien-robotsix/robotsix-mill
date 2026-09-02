@@ -509,6 +509,9 @@ list_passes
 # run_pass — FastAPI route handler invoked via @router.post decorator;
 # vulture (60% confidence) cannot trace FastAPI-decorated handlers.
 run_pass
+# get_drain — FastAPI route handler invoked via @router.get decorator;
+# vulture (60% confidence) cannot trace FastAPI-decorated handlers.
+get_drain
 
 # -- stages ------------------------------------------------------------------
 input_state
