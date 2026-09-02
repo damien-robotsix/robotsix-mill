@@ -1967,6 +1967,24 @@ def test_unblocks_fires_on_done(service):
     assert any(solver.id in (n or "") for n in draft_notes)
 
 
+def test_unblocks_fires_on_mark_done(service):
+    """mark_done must fire unblocks like transition() does — a ci_fix
+    dependency closed as moot (2026-09-02: ticket …-b3e9 marked done,
+    dependent …-908c stayed BLOCKED) must still resume its dependents."""
+    solver = service.create("solver")
+    target = service.create("target")
+    service.transition(target.id, State.BLOCKED)
+    service.set_unblocks(solver.id, [target.id])
+
+    service.transition(solver.id, State.READY)
+    service.transition(solver.id, State.BLOCKED, note="stuck")
+    service.mark_done(solver.id, note="moot — failure cleared upstream")
+
+    assert service.get(target.id).state is State.DRAFT  # auto-unblocked
+    draft_notes = [e.note for e in service.history(target.id) if e.state is State.DRAFT]
+    assert any(solver.id in (n or "") for n in draft_notes)
+
+
 def test_unblocks_skips_target_that_is_not_blocked(service):
     solver = service.create("solver")
     target = service.create("target")
