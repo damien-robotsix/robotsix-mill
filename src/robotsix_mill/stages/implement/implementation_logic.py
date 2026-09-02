@@ -620,7 +620,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         # No point smoking a red build; a smoke failure folds into the
         # SAME passed/diag → ValidationResult.decide machinery as a test
         # failure (retry while iterations remain, escalate on the last,
-        # BLOCKED on sandbox-unavailable). Strictly opt-in: skipped
+        # transient-retry on sandbox-unavailable). Strictly opt-in: skipped
         # entirely unless a smoke command is set (repo file wins over the
         # global fallback), and skipped when the ticket's introduced
         # files don't match the repo's smoke_paths globs.
@@ -628,20 +628,19 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             ctx, ticket, repo_dir, target, settings, passed, diag
         )
         if not passed and diag.startswith("sandbox unavailable"):
-            cls._finalize(
-                ctx,
-                ticket,
-                repo_dir,
-                branch,
-                summary,
-                ok=False,
-                reference_files=ref_files,
-                extra_roots=extra_roots,
-            )
-            return _SinglePassResult(
-                next_action="return",
-                outcome=Outcome(State.BLOCKED, diag),
-            )
+            # "sandbox unavailable" means the sandbox container could not be
+            # launched (docker run failed — e.g. the docker-py auto-remove
+            # race that surfaces as "No such container"): infrastructure, not
+            # a defect in the ticket's work. Raise it as a transient
+            # SandboxError so the worker's classify_stage_error schedules a
+            # retry-with-backoff instead of parking the ticket in BLOCKED for
+            # a human. Do NOT _finalize first — that would persist a spec
+            # fingerprint and poison the next pass with a false "spec
+            # unchanged" block (same reasoning as the AgentRunError transient
+            # path above).
+            from ...sandbox import SandboxError
+
+            raise SandboxError(diag)
 
         decision = ValidationResult.decide(
             passed=passed,

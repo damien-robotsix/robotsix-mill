@@ -367,9 +367,37 @@ def _is_transient_openai(exc: BaseException) -> bool:
     )
 
 
+def _is_empty_stderr_git_fatal(exc: subprocess.CalledProcessError) -> bool:
+    """A git command that exited 128 (git's "fatal") with NO stderr text.
+
+    A genuine git fatal always writes a diagnostic to stderr; a 128 exit
+    with an EMPTY stderr is the signature of an environmental hiccup — the
+    process was killed (OOM / container teardown), the workspace raced
+    away, or a filesystem stall — not a defect in the ticket's work.
+    Classifying it fatal turns such a hiccup into a "Fatal:
+    CalledProcessError" BLOCKED ticket that names git, not the
+    environment, and needs a manual resume even though the same stage
+    succeeds on a retry. Observed 2026-09-02 on ticket …-cb49: ``git add
+    -A`` exited 128 with empty stderr and blocked the ticket.
+    """
+    if exc.returncode != 128:
+        return False
+    cmd = exc.cmd
+    argv = cmd if isinstance(cmd, (list, tuple)) else str(cmd).split()
+    first = str(argv[0]) if argv else ""
+    if os.path.basename(first) != "git":
+        return False
+    stderr = exc.stderr
+    if isinstance(stderr, bytes):
+        stderr = stderr.decode("utf-8", errors="replace")
+    return not (stderr or "").strip()
+
+
 def _is_transient_called_process_error(exc: BaseException) -> bool:
     if not isinstance(exc, subprocess.CalledProcessError):
         return False
+    if _is_empty_stderr_git_fatal(exc):
+        return True
     stderr = exc.stderr
     if stderr is None:
         return False

@@ -205,6 +205,56 @@ def test_cpe_fatal_non_git():
     assert _is_transient_called_process_error(exc) is False
 
 
+def test_cpe_transient_git_128_empty_stderr():
+    # git add -A exited 128 with EMPTY stderr — environmental hiccup, not a
+    # spec defect: classify transient so the worker retries with backoff.
+    exc = subprocess.CalledProcessError(
+        128, ["git", "-C", "/ws/repo", "add", "-A"], stderr=""
+    )
+    assert _is_transient_called_process_error(exc) is True
+
+
+def test_cpe_transient_git_128_stderr_none():
+    exc = subprocess.CalledProcessError(128, ["git", "add", "-A"], stderr=None)
+    assert _is_transient_called_process_error(exc) is True
+
+
+def test_cpe_transient_git_128_empty_bytes_stderr():
+    exc = subprocess.CalledProcessError(128, ["git", "add", "-A"], stderr=b"")
+    assert _is_transient_called_process_error(exc) is True
+
+
+def test_cpe_transient_git_absolute_path_128_empty_stderr():
+    exc = subprocess.CalledProcessError(128, ["/usr/bin/git", "commit"], stderr="")
+    assert _is_transient_called_process_error(exc) is True
+
+
+def test_cpe_fatal_git_128_with_stderr_stays_fatal():
+    # A 128 that DID write a diagnostic is a real git error, not the
+    # empty-stderr environmental signature — stays fatal.
+    exc = subprocess.CalledProcessError(
+        128, ["git", "add", "-A"], stderr="fatal: Permission denied"
+    )
+    assert _is_transient_called_process_error(exc) is False
+
+
+def test_cpe_fatal_non_git_128_empty_stderr():
+    exc = subprocess.CalledProcessError(128, ["ls", "-l"], stderr="")
+    assert _is_transient_called_process_error(exc) is False
+
+
+def test_cpe_fatal_git_non_128_empty_stderr():
+    # Only git's 128 "fatal" exit with empty stderr is treated as
+    # environmental; other exit codes with empty stderr stay fatal.
+    exc = subprocess.CalledProcessError(1, ["git", "add", "-A"], stderr="")
+    assert _is_transient_called_process_error(exc) is False
+
+
+def test_classify_stage_error_git_128_empty_stderr_transient():
+    exc = subprocess.CalledProcessError(128, ["git", "add", "-A"], stderr="")
+    assert classify_stage_error(exc) == "transient"
+
+
 def test_cpe_fatal_not_called_process_error():
     assert _is_transient_called_process_error(ValueError("nope")) is False
 

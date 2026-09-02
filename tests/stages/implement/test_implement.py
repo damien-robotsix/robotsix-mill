@@ -2346,7 +2346,16 @@ def test_baseline_check_sha_invalidation(ctx_factory, tmp_path, monkeypatch):
 
 
 def test_baseline_check_sandbox_unavailable(ctx_factory, tmp_path, monkeypatch):
-    """AC6: sandbox unavailable → BLOCKED with diagnostic."""
+    """AC6: sandbox unavailable during baseline check → transient SandboxError.
+
+    A sandbox that fails to launch is infrastructure, not a pre-existing
+    failure on the base: it must raise a transient error (worker retries
+    with backoff) rather than caching a bogus baseline failure, blocking the
+    ticket, and spawning a phantom baseline-fix.
+    """
+    from robotsix_mill.runtime.transient_errors import classify_stage_error
+    from robotsix_mill.sandbox import SandboxError
+
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         forge_remote_url=remote,
@@ -2361,16 +2370,14 @@ def test_baseline_check_sandbox_unavailable(ctx_factory, tmp_path, monkeypatch):
 
     t = _ticket(ctx)
 
-    out = ImplementStage().run(t, ctx)
-    assert out.next_state is State.BLOCKED
-    assert "sandbox unavailable" in out.note
+    with pytest.raises(SandboxError) as excinfo:
+        ImplementStage().run(t, ctx)
+    assert "sandbox unavailable" in str(excinfo.value)
+    assert classify_stage_error(excinfo.value) == "transient"
 
-    # Result must be cached so retries don't re-attempt.
+    # No bogus "passed: False" baseline cache — a retry re-attempts cleanly.
     cache_path = ctx.service.workspace(t).artifacts_dir / "baseline_check.json"
-    assert cache_path.exists()
-    cache = json.loads(cache_path.read_text(encoding="utf-8"))
-    assert cache["passed"] is False
-    assert "sandbox unavailable" in cache["diagnosis"]
+    assert not cache_path.exists()
 
 
 def test_baseline_gate_proceeds_when_dependency_fix_done(
