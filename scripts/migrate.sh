@@ -31,4 +31,12 @@ echo "==> Board:  ${BOARD}"
 echo "==> DB:     ${DB_PATH}"
 echo "==> Action: alembic ${ACTION} head"
 
-exec uv run alembic --sqlalchemy.url="$DB_URL" "${ACTION}" head
+# alembic has no ``--sqlalchemy.url`` flag (it errors with
+# "unrecognized arguments"); point a temp copy of alembic.ini at the
+# per-board DB instead, mirroring the ``make check-migrations`` recipe.
+TMP_INI="$(mktemp "${TMPDIR:-/tmp}/alembic-migrate.XXXXXX.ini")"
+trap 'rm -f "$TMP_INI"' EXIT
+cp "$REPO_ROOT/alembic.ini" "$TMP_INI"
+sed -i "s|^sqlalchemy\.url = .*|sqlalchemy.url = ${DB_URL}|" "$TMP_INI"
+
+uv run alembic -c "$TMP_INI" "${ACTION}" head
