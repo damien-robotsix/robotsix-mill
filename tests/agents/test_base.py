@@ -580,6 +580,89 @@ def test_build_agent_claude_sdk_path(monkeypatch):
     assert fake_provider.build_agent.call_args.kwargs["system_prompt"] == "test prompt"
 
 
+def test_build_agent_claude_sdk_forwards_images_and_vision_key(monkeypatch):
+    """When images are attached on the Claude SDK path, build_agent forwards
+    them NATIVELY (images=) along with the vision_api_key to the provider's
+    build_agent — the prompt stays text-only."""
+    from robotsix_llmio.claude_sdk.provider import (
+        ClaudeSDKProvider as RealClaudeSDKProvider,
+    )
+
+    from robotsix_mill.agents import base as bmod
+
+    s = Settings()
+
+    monkeypatch.setattr(bmod, "compose_prompt", lambda *a, **kw: "test prompt")
+
+    fake_claude_handle = MagicMock()
+    fake_provider = MagicMock(spec=RealClaudeSDKProvider)
+    fake_provider.build_agent.return_value = fake_claude_handle
+    monkeypatch.setattr(
+        "robotsix_llmio.core.factory.get_provider_for_identifier",
+        lambda identifier, **kwargs: fake_provider,
+    )
+
+    result = bmod.build_agent(
+        s,
+        system_prompt="Test prompt.",
+        level=2,  # default slot → Claude SDK transport
+        name="claude-agent",
+        tools=[],
+        images=[("image/png", b"png")],
+        vision_api_key="sk-vision",
+    )
+
+    assert result is fake_claude_handle
+    fake_provider.build_agent.assert_called_once()
+    kw = fake_provider.build_agent.call_args.kwargs
+    assert kw["images"] == [("image/png", b"png")]
+    assert kw["vision_api_key"] == "sk-vision"
+
+
+def test_build_agent_openrouter_images_route_through_provider(monkeypatch, settings):
+    """When images are attached on the OpenRouter path, _build_openrouter_handle
+    routes through llmio's provider.build_agent (which injects the ask_image
+    tool answered by the TierConfig.vision binding) instead of the manual
+    pydantic-ai Agent assembly. The vision_api_key is supplied for the vision
+    binding."""
+    from robotsix_mill.agents import base as bmod
+    from robotsix_mill.config import Secrets, _reset_secrets
+
+    _reset_secrets()
+    import robotsix_mill.config as _cfg
+
+    _cfg._secrets = Secrets(openrouter_api_key="sk-test")
+
+    fake_handle = MagicMock()
+    fake_handle._agent = MagicMock()
+    fake_provider = MagicMock()
+    fake_provider.build_agent.return_value = fake_handle
+
+    monkeypatch.setattr(bmod, "_provider_for_binding", lambda tlc, level: fake_provider)
+
+    handle = bmod._build_openrouter_handle(
+        settings,
+        effective_model="deepseek/deepseek-v4-flash",
+        level=1,
+        composed_system="System prompt.",
+        all_tools=[],
+        output_type=str,
+        name="test-agent",
+        retries=2,
+        tier_binding=MagicMock(),
+        images=[("image/png", b"png")],
+        vision_api_key="sk-vision",
+    )
+
+    assert handle is fake_handle
+    fake_provider.build_agent.assert_called_once()
+    kw = fake_provider.build_agent.call_args.kwargs
+    assert kw["images"] == [("image/png", b"png")]
+    assert kw["vision_api_key"] == "sk-vision"
+    assert kw["model"] == "deepseek/deepseek-v4-flash"
+    assert kw["system_prompt"] == "System prompt."
+
+
 # ---------------------------------------------------------------------------
 # _build_openrouter_handle
 # ---------------------------------------------------------------------------

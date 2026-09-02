@@ -218,18 +218,26 @@ def _write_png(tmp_path) -> object:
     return p
 
 
-def test_screenshot_not_attached_when_vision_gate_off(tmp_path, monkeypatch):
-    """Regression for the 1200s stall (ticket 565a / 348e): routed to the
-    Claude SDK backend with the vision capability gate at its default
-    (False), an existing board PNG must NOT be attached — the run input
-    stays a bare ``str`` with no BinaryContent, so the input shape that
-    hangs the llmio bridge can no longer be emitted. The transport-level
-    fix (teaching the robotsix-llmio claude_sdk bridge to consume image
-    parts) lives there and needs a dependency bump — out of scope here."""
+def test_screenshot_passed_as_images_kwarg(tmp_path, monkeypatch):
+    """A present, readable board PNG is handed to ``build_agent`` as native
+    ``images=[("image/png", bytes)]`` with the OpenRouter key as
+    ``vision_api_key``, for the reviewer regardless of transport (Claude or
+    OpenRouter). The run input stays a text-only string — llmio delivers the
+    image natively to the Claude SDK and answers via the
+    ``TierConfig.vision`` binding for OpenRouter; no ``BinaryContent`` is
+    embedded in the prompt."""
     from pydantic_ai import BinaryContent
 
     agent = _FakeAgent()
-    _patch_agent_definition(monkeypatch, agent)
+    captured: dict = {}
+
+    def fake_builder(*a, **k):
+        captured.update(k)
+        return agent
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.build_agent_from_definition", fake_builder
+    )
 
     s = _settings(tmp_path, OPENROUTER_API_KEY="k")
     png = _write_png(tmp_path)
@@ -238,69 +246,38 @@ def test_screenshot_not_attached_when_vision_gate_off(tmp_path, monkeypatch):
         settings=s,
         diff="diff --git a/x b/x",
         spec="Fix x",
-        # level=2 routes to Claude (vision-capable transport), proving it is
-        # the vision *gate* (default False) — not the level — that blocks the
-        # attach.
-        level=2,
+        level=2,  # Claude transport — images delivered natively by the SDK
         screenshot_path=png,
     )
     assert isinstance(result, ReviewVerdict)
 
-    assert len(agent.calls) == 1
+    assert captured["images"] == [("image/png", _PNG_1X1)]
+    assert captured["vision_api_key"] == "k"
+
     run_input = agent.calls[0][0]
     assert isinstance(run_input, str)
-    assert not isinstance(run_input, list)
     assert "Fix x" in run_input
-    # No BinaryContent leaked into the string path.
+    # No BinaryContent leaked into the text-only prompt.
     assert BinaryContent.__name__ not in run_input
 
 
-def test_screenshot_attached_when_vision_gate_on(tmp_path, monkeypatch):
-    """Claude SDK backend + ``claude_sdk_vision_enabled=True`` + an
-    existing PNG → the run input is a list whose final element is a
-    BinaryContent image, alongside the diff/spec text. This exercises the
-    (future) vision-enabled path that the capability gate guards."""
-    from pydantic_ai import BinaryContent
-
+def test_screenshot_images_passed_on_openrouter_path(tmp_path, monkeypatch):
+    """Same images=/vision_api_key handoff on the default OpenRouter
+    (DeepSeek) transport. The gate that used to restrict screenshots to the
+    Claude SDK is gone — llmio's ``TierConfig.vision`` binding answers the
+    ``ask_image`` tool there."""
     agent = _FakeAgent()
-    _patch_agent_definition(monkeypatch, agent)
+    captured: dict = {}
 
-    s = _settings(
-        tmp_path,
-        OPENROUTER_API_KEY="k",
-        claude_sdk_vision_enabled=True,
+    def fake_builder(*a, **k):
+        captured.update(k)
+        return agent
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.build_agent_from_definition", fake_builder
     )
-    png = _write_png(tmp_path)
 
-    result = run_review_agent(
-        settings=s,
-        diff="diff --git a/x b/x",
-        spec="Fix x",
-        level=2,  # Claude (vision-capable) transport
-        screenshot_path=png,
-    )
-    assert isinstance(result, ReviewVerdict)
-
-    assert len(agent.calls) == 1
-    run_input = agent.calls[0][0]
-    assert isinstance(run_input, list)
-    images = [c for c in run_input if isinstance(c, BinaryContent)]
-    assert len(images) == 1
-    assert images[0].media_type == "image/png"
-    assert images[0].data == _PNG_1X1
-    # The diff/spec text is still present alongside the image.
-    assert any(isinstance(c, str) and "Fix x" in c for c in run_input)
-
-
-def test_screenshot_not_attached_on_deepseek_path(tmp_path, monkeypatch):
-    """Default DeepSeek backend → NO image is attached; the run input is the
-    bare string prompt, byte-for-byte equivalent to today."""
-    from pydantic_ai import BinaryContent
-
-    agent = _FakeAgent()
-    _patch_agent(monkeypatch, agent)
-
-    s = _settings(tmp_path, OPENROUTER_API_KEY="k")  # default llm_backend
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")  # default OpenRouter backend
     png = _write_png(tmp_path)
 
     result = run_review_agent(
@@ -311,38 +288,38 @@ def test_screenshot_not_attached_on_deepseek_path(tmp_path, monkeypatch):
     )
     assert isinstance(result, ReviewVerdict)
 
-    assert len(agent.calls) == 1
-    run_input = agent.calls[0][0]
-    assert isinstance(run_input, str)
-    assert not isinstance(run_input, list)
-    assert "Fix x" in run_input
-    # Sanity: no BinaryContent leaked into the string path.
-    assert BinaryContent.__name__ not in run_input
+    assert captured["images"] == [("image/png", _PNG_1X1)]
+    assert captured["vision_api_key"] == "k"
 
 
 def test_missing_screenshot_falls_back_to_text(tmp_path, monkeypatch):
-    """Claude SDK routing + vision gate ON but the screenshot file does
-    not exist → no crash, falls back to the bare-string text path. The
-    missing/unreadable-file silent degradation must stay intact."""
+    """Screenshot file does not exist → no images=/vision_api_key are passed
+    and the prompt stays a bare string. The missing/unreadable-file silent
+    degradation must stay intact."""
     from pathlib import Path
 
     agent = _FakeAgent()
-    _patch_agent_definition(monkeypatch, agent)
+    captured: dict = {}
 
-    s = _settings(
-        tmp_path,
-        OPENROUTER_API_KEY="k",
-        claude_sdk_vision_enabled=True,
+    def fake_builder(*a, **k):
+        captured.update(k)
+        return agent
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.base.build_agent_from_definition", fake_builder
     )
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
 
     result = run_review_agent(
         settings=s,
         diff="diff --git a/x b/x",
         spec="Fix x",
-        level=2,  # Claude (vision-capable) transport
         screenshot_path=Path(tmp_path) / "does-not-exist.png",
     )
     assert isinstance(result, ReviewVerdict)
+    assert "images" not in captured
+    assert "vision_api_key" not in captured
     run_input = agent.calls[0][0]
     assert isinstance(run_input, str)
 

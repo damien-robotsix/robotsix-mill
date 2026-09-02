@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -540,6 +541,8 @@ def _build_openrouter_handle(
     retries: int,
     max_tokens: int | None = None,
     tier_binding: Any | None = None,
+    images: Sequence[tuple[str, bytes]] | None = None,
+    vision_api_key: str | None = None,
 ) -> AgentHandle:
     """Build the OpenRouter ``AgentHandle`` for an agent.
 
@@ -547,9 +550,50 @@ def _build_openrouter_handle(
     comes from llmio via the binding (or :func:`new_openrouter_model`);
     this function only assembles the pydantic-ai ``Agent`` so per-agent
     ``max_tokens``/tools/name are preserved.
+
+    When *images* are attached, the agent is routed through llmio's
+    ``provider.build_agent(images=...)`` instead of the manual pydantic-ai
+    assembly: the OpenRouter (DeepSeek) backend is text-only, so llmio hands
+    the agent an ``ask_image`` tool answered by the ``TierConfig.vision``
+    binding and appends the image note to the system prompt. The caller's
+    prompt stays text-only — never embed ``BinaryContent``.
     """
     from pydantic_ai import Agent
     from pydantic_ai.settings import ModelSettings
+
+    if images:
+        # Route through llmio's provider.build_agent so the text-only
+        # OpenRouter backend gets the ask_image tool answered by the
+        # TierConfig.vision binding, plus the image note. The provider must
+        # carry the OpenRouter key (either from the binding or the key
+        # guard) for the vision binding to authenticate.
+        if tier_binding is not None:
+            provider = _provider_for_binding(tier_binding, level)
+        else:
+            from robotsix_llmio import get_provider_for_level
+
+            if not get_secrets().openrouter_api_key:
+                raise RuntimeError("OPENROUTER_API_KEY is not set")
+            provider = get_provider_for_level(
+                level, api_key=get_secrets().openrouter_api_key
+            )
+        handle = provider.build_agent(
+            level=level,
+            model=effective_model,
+            system_prompt=composed_system,
+            tools=all_tools,
+            output_type=output_type,
+            name=name,
+            retries=retries,
+            images=images,
+            vision_api_key=vision_api_key,
+        )
+        if max_tokens is not None:
+            # llmio's generic build_agent has no max_tokens param; apply it
+            # to the wrapped pydantic-ai agent directly (same effect as the
+            # ModelSettings passed at construction on the no-image path).
+            handle._agent.model_settings = ModelSettings(max_tokens=max_tokens)
+        return handle
 
     if tier_binding is not None:
         provider = _provider_for_binding(tier_binding, level)
@@ -598,6 +642,8 @@ def build_agent(
     repo_dir: Path | None = None,
     web_knowledge_block_reason: str | None = None,
     tier_binding: Any | None = None,
+    images: Sequence[tuple[str, bytes]] | None = None,
+    vision_api_key: str | None = None,
 ) -> Any:
     """Construct a pydantic-ai Agent for a capability ``level`` (1/2/3).
 
@@ -609,6 +655,12 @@ def build_agent(
 
     Set ``report_issue=False`` for agents that already emit draft
     tickets through their structured output (audit, retrospect).
+
+    *images* (``(media_type, bytes)`` pairs) and *vision_api_key* are
+    forwarded to the provider's ``build_agent``: Claude SDK reads images
+    natively; OpenRouter (DeepSeek) gets llmio's ``ask_image`` tool answered
+    by the ``TierConfig.vision`` binding. The caller's prompt stays text-only
+    — never embed ``BinaryContent`` when passing ``images=``.
 
     Note: for a structured ``output_type`` on a model whose provider
     rejects forced ``tool_choice``, wrap it in ``PromptedOutput`` at
@@ -731,6 +783,8 @@ def build_agent(
                 name=name,
                 retries=retries,
                 max_tokens=max_tokens,
+                images=images,
+                vision_api_key=vision_api_key,
                 # Confine the SDK's built-in Write/Edit tools to the ticket's
                 # workspace clone. repo_dir is None for board-less agents → no
                 # confinement, unchanged behavior.
@@ -749,6 +803,8 @@ def build_agent(
                 output_type=output_type,
                 name=name,
                 retries=retries,
+                images=images,
+                vision_api_key=vision_api_key,
                 workspace_root=repo_dir,
             )
         return handle
@@ -765,4 +821,6 @@ def build_agent(
         name=name,
         retries=retries,
         max_tokens=max_tokens,
+        images=images,
+        vision_api_key=vision_api_key,
     )
