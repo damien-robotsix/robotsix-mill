@@ -83,26 +83,17 @@ jobs:
           # Pinned 50.0.0 via uv.lock; the advisory database may still
           # flag this version — safe to ignore.
           #
-          # GHSA-fp3f-mc75-235c (pypdf): large memory usage for large
-          # /ToUnicode streams; fixed in 6.15.0 (2026-08-06). Pinned
-          # 6.15.0 via uv.lock with a per-package exclude-newer
-          # override; the advisory database may still flag this version
-          # — safe to ignore.
-          #
-          # GHSA-fwg2-594c-jp42 (pypdf): long runtimes for large CID
-          # font width ranges; fixed in 6.15.0 (2026-08-06). Pinned
-          # 6.15.0 via uv.lock with a per-package exclude-newer
-          # override; the advisory database may still flag this version
-          # — safe to ignore.
+          # pypdf advisories GHSA-763m-79hh-57f2, GHSA-23w6-3w8w-8484,
+          # GHSA-jp53-mhqp-8xcg (and the earlier GHSA-fp3f-mc75-235c /
+          # GHSA-fwg2-594c-jp42) are fixed by pypdf 6.16.1; uv.lock
+          # resolves 6.16.2, so no pypdf advisory is ignored here.
           uv audit --frozen \
             --ignore PYSEC-2025-183 \
             --ignore MAL-2026-4750 \
             --ignore GHSA-9xwg-3r6f-jcx2 \
             --ignore GHSA-jwv3-5hgf-82ww \
             --ignore GHSA-m2h6-j472-rp4c \
-            --ignore GHSA-g6cj-pr64-35w5 \
-            --ignore GHSA-fp3f-mc75-235c \
-            --ignore GHSA-fwg2-594c-jp42
+            --ignore GHSA-g6cj-pr64-35w5
 
       - name: Generate SBOM (CycloneDX)
         if: always()
