@@ -3,8 +3,7 @@
 A BLOCKED ticket's ``block_reason`` field carries a JSON object of the
 form ``{"kind": <kind>, ...params}`` describing *why* it is blocked, so a
 periodic rechecker can evaluate the condition against live state (GitHub
-CI for ``target_branch_red``, ticket state for ``unmet_dependency``, llmio
-status for ``quota_exhausted``) without substring-matching the prose note.
+CI for ``target_branch_red``) without substring-matching the prose note.
 
 Kinds are stable strings so new ones can be added without a schema change;
 the rechecker dispatches on ``kind`` and silently skips any kind it has no
@@ -17,10 +16,6 @@ import json
 
 #: target branch's CI is red on workflows not introduced by this PR
 TARGET_BRANCH_RED = "target_branch_red"
-#: this ticket is blocked waiting on another ticket (``ticket_id``) to finish
-UNMET_DEPENDENCY = "unmet_dependency"
-#: a model provider's quota/credit is exhausted (``provider``)
-QUOTA_EXHAUSTED = "quota_exhausted"
 
 
 def encode(kind: str, **params: object) -> str:
@@ -49,9 +44,3 @@ def decode(raw: str | None) -> dict | None:
     if not isinstance(data, dict) or not data.get("kind"):
         return None
     return data
-
-
-def kind_of(raw: str | None) -> str | None:
-    """Return just the block-reason kind, or ``None`` when absent/invalid."""
-    data = decode(raw)
-    return data["kind"] if data else None
