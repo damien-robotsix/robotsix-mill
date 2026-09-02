@@ -22,10 +22,11 @@
 #
 # NOTE — params the v1 contract does NOT model (present in the dev compose,
 # NOT reproducible here): `init: true`, `stop_grace_period: 30m`,
-# `ulimits.nofile`, `mem_limit: 4g`, `cpus: 2`.  entrypoint.sh already
-# raises the soft nofile limit at start; the rest must be baked into the
-# image or added to a future contract version.  They are not required for a
-# healthy deploy.
+# `ulimits.nofile`, `cpus: 2`.  entrypoint.sh already raises the soft
+# nofile limit at start; the rest must be baked into the image or added to
+# a future contract version.  They are not required for a healthy deploy.
+# Memory limits ARE modelled since central-deploy 0.12.0 via the
+# `robotsix.deploy.mem-limit` / `memswap-limit` labels below.
 #
 # FOLLOW-UPS:
 #   1. socket-proxy host socket — ADDRESSED.  The docker-socket-proxy needs
@@ -66,6 +67,13 @@ services:
       robotsix.deploy.claude-mount: "/home/mill/.claude"
       robotsix.deploy.config-target: "/app/config/config.json"
       robotsix.deploy.chat-access: "true"
+      # Memory OOM guard (implement-stage leak grew the process past 3 GB and
+      # got SIGKILLed twice on 2026-08-28). Applied out-of-band to HostConfig
+      # on every create/recreate by central-deploy ≥0.12.0, replacing the live
+      # `docker update` that any redeploy silently dropped. memswap = mem
+      # disables extra swap so the limit is a hard ceiling.
+      robotsix.deploy.mem-limit: "4.5g"
+      robotsix.deploy.memswap-limit: "4.5g"
     environment:
       # Reach the Docker daemon through the hardened socket-proxy sibling
       # rather than a mounted socket.  The Docker CLI (which the sandbox
