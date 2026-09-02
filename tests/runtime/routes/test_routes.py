@@ -2023,3 +2023,50 @@ def test_diagnostic_events_dedup(client, settings):
     assert r.status_code == 200
     body = r.json()
     assert body["category_counts"].get("CI_FAILURE", 0) == 1
+
+
+# -- /system/drain (drain mode) -------------------------------------------
+
+
+def test_system_drain_get_defaults_inactive(client):
+    """GET /system/drain reports drain off on a fresh worker."""
+    r = client.get("/system/drain")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["active"] is False
+    assert body["drained"] is False
+
+
+def test_system_drain_post_arms_and_get_reflects(client):
+    """POST /system/drain arms drain mode; GET reflects it."""
+    r = client.post("/system/drain", json={"ttl_seconds": 60})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["active"] is True
+    assert body["drain_until"] is not None
+
+    r = client.get("/system/drain")
+    assert r.json()["active"] is True
+
+    # /health exposes the same drain payload.
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json()["drain"]["active"] is True
+
+
+def test_system_drain_post_default_ttl(client):
+    """POST without ttl_seconds uses the worker default (non-zero)."""
+    r = client.post("/system/drain", json={})
+    assert r.status_code == 200
+    assert r.json()["active"] is True
+
+
+def test_system_drain_post_enabled_false_clears(client):
+    """POST with enabled=false clears an armed drain immediately."""
+    client.post("/system/drain", json={"ttl_seconds": 60})
+    assert client.get("/system/drain").json()["active"] is True
+
+    r = client.post("/system/drain", json={"enabled": False})
+    assert r.status_code == 200
+    assert r.json()["active"] is False
+    assert client.get("/system/drain").json()["active"] is False
