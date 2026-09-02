@@ -554,6 +554,53 @@ class TestInvokeImplementAgent:
         with pytest.raises(AgentRunError):
             self._run_agent_error(monkeypatch, err)
 
+    def test_claude_sdk_transport_failure_without_cause_re_raises_no_fingerprint(
+        self, monkeypatch
+    ):
+        """Claude Agent SDK transport/process failure (ClaudeSDKAPIError) is
+        infrastructure, not a verdict on the spec: the attempt must re-raise
+        for the worker's retry-with-backoff and record NO spec fingerprint.
+        Otherwise the next resume hits a false 'spec unchanged' re-block and
+        pins the ticket until an operator override (2026-09-01:
+        ...-071238Z / ...-073557Z)."""
+        err = AgentRunError(
+            "Claude Agent SDK transport/process failure (implement): "
+            "Claude Code returned an error result: success",
+            [],
+        )
+        with pytest.raises(AgentRunError):
+            self._run_agent_error(monkeypatch, err)
+
+    def test_claude_sdk_transport_failure_via_typed_cause_re_raises(self, monkeypatch):
+        """Same failure carried as a typed ClaudeSDKAPIError-like cause: the
+        handler re-raises the original cause (no fingerprint)."""
+        original_cause = RuntimeError(
+            "Claude Agent SDK transport/process failure (implement): "
+            "Claude Code returned an error result: success"
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.coding.run_implement_agent",
+            lambda **kw: (_ for _ in ()).throw(
+                AgentRunError("boom", [], cause=original_cause)
+            ),
+        )
+        monkeypatch.setattr(_Stage, "_finalize", lambda *a, **kw: None)
+
+        with pytest.raises(RuntimeError, match="transport/process failure"):
+            _Stage._invoke_implement_agent(
+                ctx=_stage_ctx(),
+                ticket=FakeTicket(),
+                repo_dir=_DUMMY_PATH,
+                branch="main",
+                settings=_simple_namespace(),
+                ic=_ic(),
+                language_instructions="",
+                agent_level=None,
+                resume_history=None,
+                extra_roots=None,
+                memory_board_id="mb",
+            )
+
     def test_agent_error_transient_cause_re_raises(self, monkeypatch):
         """AgentRunError with transient cause re-raises the original cause."""
         original_cause = ConnectionError("timeout")
