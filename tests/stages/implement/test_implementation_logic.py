@@ -821,8 +821,16 @@ class TestEvaluateTestResults:
         assert result.feedback == "test diag"
         assert result.ic is not None
 
-    def test_sandbox_unavailable_early_return(self, monkeypatch):
-        """sandbox unavailable → return BLOCKED immediately."""
+    def test_sandbox_unavailable_raises_transient(self, monkeypatch):
+        """sandbox unavailable → raise transient SandboxError (worker retries).
+
+        The sandbox failing to launch is infrastructure, not a spec defect;
+        it must raise a transient error so the worker schedules a
+        retry-with-backoff, and must NOT _finalize (no spec fingerprint).
+        """
+        from robotsix_mill.runtime.transient_errors import classify_stage_error
+        from robotsix_mill.sandbox import SandboxError
+
         self._install_default_patches(monkeypatch)
         finalize_ok = []
 
@@ -838,11 +846,12 @@ class TestEvaluateTestResults:
             lambda **kw: (False, "sandbox unavailable: no capacity"),
         )
 
-        result = self._call(monkeypatch)
-        assert result.next_action == "return"
-        assert result.outcome.next_state is State.BLOCKED
-        assert "sandbox unavailable" in result.outcome.note
-        assert finalize_ok == [False]
+        with pytest.raises(SandboxError) as excinfo:
+            self._call(monkeypatch)
+        assert "sandbox unavailable" in str(excinfo.value)
+        assert classify_stage_error(excinfo.value) == "transient"
+        # No finalize — a spec fingerprint would poison the next resume.
+        assert finalize_ok == []
 
     def test_no_change_needed_to_done(self, monkeypatch):
         """no_change_needed + no_changes + no edit tools → DONE."""

@@ -1099,6 +1099,18 @@ class ValidationMixin(_ImplementStageBase):
         finally:
             git_ops.checkout(repo_dir, branch)
 
+        # A "sandbox unavailable" baseline result means the sandbox container
+        # could not be launched (docker run failed — e.g. the docker-py
+        # auto-remove race that surfaces as "No such container"):
+        # infrastructure, not a pre-existing failure on the base. Raise it as
+        # a transient SandboxError so the worker retries with backoff instead
+        # of caching a bogus "passed: False", blocking the ticket, and
+        # spawning a phantom baseline-fix ticket.
+        if not passed and diag.startswith("sandbox unavailable"):
+            from ...sandbox import SandboxError
+
+            raise SandboxError(diag)
+
         cache_data: dict[str, object] = {
             "passed": passed,
             "diagnosis": diag,
