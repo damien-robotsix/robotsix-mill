@@ -73,6 +73,38 @@ log = logging.getLogger("robotsix_mill.stages.ci_fix")
 # context bounded while still surfacing the most recent attempts.
 _CI_FIX_HISTORY_MAX_CHARS = 4000
 
+# Maximum number of ``## Attempt`` entries retained in ci_fix_history.md.
+# The write path trims to this many so the file does not grow unboundedly
+# per ticket.
+_CI_FIX_HISTORY_MAX_ENTRIES = 20
+
+
+def _trim_ci_fix_history(path: Path, max_entries: int) -> None:
+    """Rewrite *path* keeping only its most recent *max_entries* attempts.
+
+    ``ci_fix_history.md`` accumulates one ``## Attempt`` block per cycle;
+    this keeps the file bounded.  Best-effort: read/parse failures are
+    logged and leave the file untouched.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except Exception:
+        log.warning("failed to read ci_fix_history.md for trimming (%s)", path)
+        return
+    # The first chunk is the header preamble; each subsequent chunk is the
+    # body of one ``## Attempt`` block preceding the next marker.  Rejoining
+    # the tail keeps the marker that preceded the first retained block.
+    chunks = text.split("## Attempt")
+    header = chunks[0]
+    attempts = chunks[1:]
+    if len(attempts) <= max_entries:
+        return
+    trimmed = header + "## Attempt" + "## Attempt".join(attempts[-max_entries:])
+    try:
+        path.write_text(trimmed, encoding="utf-8")
+    except Exception:
+        log.warning("failed to trim ci_fix_history.md %s", path)
+
 
 def _load_ci_fix_history(ctx: StageContext, ticket: Ticket) -> str:
     """Load the compacted ci-fix attempt history for *ticket*.
@@ -254,6 +286,7 @@ class CIFixStage(Stage):
         super().__init__()
         self._last_agent_timed_out = False
         self._last_agent_timeout_elapsed: float = 0.0
+        self._last_agent_crash_detail: str | None = None
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Process a FIXING_CI ticket: poll forge CI status on the ticket branch and, on failure, run the automated CI-fix agent to push corrective commits."""
@@ -865,7 +898,10 @@ class CIFixStage(Stage):
         Writes the latest cycle detail to ``ci_fix.md`` (overwrite) and
         appends a compacted entry to ``ci_fix_history.md`` so that
         subsequent ci_fix runs can see what was already tried.  The
-        history file is never truncated — each attempt adds one entry.
+        history file is appended to with a single write call (never a
+        read-modify-write, which would race concurrent writers) and is
+        trimmed to the most recent ``_CI_FIX_HISTORY_MAX_ENTRIES``
+        attempts so it does not grow unboundedly per ticket.
         Best-effort only.
         """
         try:
@@ -904,13 +940,28 @@ class CIFixStage(Stage):
                     entry_lines.append(summary)
             else:
                 entry_lines.append("**Verdict:** CRASH")
+                # Surface the underlying crash (type + message) into the
+                # history entry so the next ci_fix run sees why the prior
+                # attempt died instead of a bare "CRASH".
+                crash_detail = self._last_agent_crash_detail
+                if crash_detail:
+                    entry_lines.append(f"**Crash:** {crash_detail}")
             entry_lines.append("")  # blank separator
-            # Append (create if absent).
-            if history_path.exists():
-                existing = history_path.read_text(encoding="utf-8")
-            else:
-                existing = "# CI Fix Attempt History\n\n"
-            _write_text(history_path, existing + "\n".join(entry_lines))
+            # Append-only write: open in append mode and write the entry in a
+            # single write call.  A read-modify-write (read whole file, then
+            # rewrite ``existing + entry``) races with any concurrent writer
+            # and silently drops entries — the operator directive (open mode
+            # ``a``, single write call) removes that race.  The header is
+            # emitted only on first creation.
+            history_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = "\n".join(entry_lines)
+            if not history_path.exists():
+                payload = "# CI Fix Attempt History\n\n" + payload
+            with open(history_path, "a", encoding="utf-8") as f:
+                f.write(payload)
+            # Keep the history bounded: drop all but the most recent
+            # entries so the file cannot grow unboundedly per ticket.
+            _trim_ci_fix_history(history_path, _CI_FIX_HISTORY_MAX_ENTRIES)
         except Exception:
             log.exception("%s: failed to write ci_fix.md artifact", ticket.id)
 
@@ -965,6 +1016,7 @@ class CIFixStage(Stage):
         s = ctx.settings
         self._last_agent_timed_out = False
         self._last_agent_timeout_elapsed = 0.0
+        self._last_agent_crash_detail = None
         # The agent is one-shot (no CI waiting), so the timeout covers
         # only the LLM/edit/push work.
         timeout_s = s.ci_fix_agent_timeout_effective
@@ -1044,6 +1096,10 @@ class CIFixStage(Stage):
                 if result.updated_memory:
                     persist_memory(ci_fix_memory_path, result.updated_memory)
         except Exception as e:
+            # Record the crash type + message so the history entry written by
+            # ``_write_ci_fix_artifact`` can surface *why* the prior attempt
+            # died — the next ci_fix run needs that signal.
+            self._last_agent_crash_detail = f"{type(e).__name__}: {e}"
             log.exception("%s: ci-fix agent crashed: %s", ticket.id, e)
             return None
         return result

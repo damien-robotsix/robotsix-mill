@@ -2511,6 +2511,10 @@ def test_ci_fix_md_written_when_agent_crashes(tmp_path, monkeypatch):
     assert history_path.exists(), "ci_fix_history.md must exist even on crash"
     history = history_path.read_text(encoding="utf-8")
     assert "CRASH" in history
+    # Directive: the crash type + message must be surfaced so the next
+    # attempt sees why the prior one died.
+    assert "RuntimeError" in history
+    assert "boom" in history
 
 
 def test_failure_cycle_writes_history_note(tmp_path, monkeypatch):
@@ -2628,6 +2632,62 @@ def test_ci_fix_history_appends_across_attempts(tmp_path, monkeypatch):
     assert history2.count("## Attempt") == 2
     assert "DONE" in history2
     assert "fixed with Y" in history2
+
+
+def test_ci_fix_history_trims_to_max_entries(tmp_path, monkeypatch):
+    """ci_fix_history.md is trimmed to the most recent 20 attempts."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "lint",
+                    "summary": "ruff found errors",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="fixed with Z"),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    # Pre-seed a history file with more than 20 attempts.
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    artifacts.mkdir(parents=True, exist_ok=True)
+    seeded = ["# CI Fix Attempt History\n\n"]
+    for i in range(25):
+        seeded.append(f"## Attempt\n**Failure:** seed {i}\n**Verdict:** FAILED\n\n")
+    (artifacts / "ci_fix_history.md").write_text("".join(seeded), encoding="utf-8")
+
+    CIFixStage().run(t, ctx)
+
+    history_path = artifacts / "ci_fix_history.md"
+    history = history_path.read_text(encoding="utf-8")
+    # 25 seeded + 1 new attempt trimmed back to 20.
+    assert history.count("## Attempt") == 20
+    # The newest entry survives; the oldest seeded ones are dropped.
+    assert "fixed with Z" in history
+    assert "seed 0" not in history
+    assert "seed 5" not in history
+    assert "seed 6" in history
 
 
 def test_ci_fix_previous_attempts_passed_to_agent(tmp_path, monkeypatch):
