@@ -1173,6 +1173,7 @@ in `config/config.example.json`.
 |----------|----------|---------|-------------|
 | `repos.<id>.board_id` | yes | — | Board identifier for per-repo board isolation |
 | `repos.<id>.forge_remote_url` | no | `forge_remote_url` | Per-repo forge remote URL for push/PR/merge operations |
+| `repos.<id>.meta_exclude` | no | `false` | When `true`, this repo is excluded from the periodic meta (fleet-consistency) pass — it is not cloned/studied, no META alignment/TODO drafts are filed against its board, and its board is not scanned for prior meta proposals. Operator-controlled (set in `config/repos.yaml`, not the managed repo's committed config). Use this for WIP or private repos that should not be graded against fleet standards. |
 | `repos.<id>.working_branch` | no | — | Per-repo target branch for clone/baseline/deliver operations. When set, overrides the global `forge_target_branch`. Use this for repos whose default branch is not `main` (e.g. `rolling`, `lyrical`, `develop`). Automatically populated by member-sync from the manifest `version` field. |
 
 
