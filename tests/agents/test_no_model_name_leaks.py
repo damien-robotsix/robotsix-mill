@@ -77,30 +77,30 @@ def test_no_model_id_leaks_in_src(pattern: re.Pattern[str]):
     )
 
 
-def test_vision_model_slug_not_hardcoded_in_src():
-    """The vision binding's concrete model slug — read from llmio's
-    ``TierConfig.vision``, never hard-coded here — must not appear in
-    ``src/``. Resolving it from llmio keeps this guard in sync with the
-    baked binding instead of pinning a slug that would itself leak."""
+def test_tierconfig_vision_slug_not_leaked_in_src():
+    """The llmio ``TierConfig.vision`` model binding must not be hardcoded
+    in mill's src/.
+
+    The static ``_FORBIDDEN_PATTERNS`` list covers model families known at
+    authoring time. This guard additionally resolves the *current* vision
+    slug from llmio (``default_tier_config().vision.model_name``), so an
+    llmio vision re-pin to a new model family is still caught instead of
+    leaking through the ``vision_api_key``/``images=`` image seams. Exemptions
+    mirror ``_ALLOWED_RE`` (provider-prefix constants, historical references).
+    """
     from robotsix_llmio.core.factory import default_tier_config
 
-    slug = default_tier_config().vision.model_name
+    vision_name = default_tier_config().vision.model_name
     violations: list[str] = []
     for path in _iter_python_files():
         text = path.read_text(encoding="utf-8")
         for lineno, line in enumerate(text.splitlines(), start=1):
-            # Skip comments that are documenting removed code (same policy
-            # as the parametrized leak scan above).
-            stripped = line.strip()
-            if stripped.startswith("#"):
-                if _ALLOWED_RE.search(line):
-                    continue
-            if slug in line:
+            if vision_name in line:
                 if _ALLOWED_RE.search(line):
                     continue
                 violations.append(f"{path}:{lineno}: {line.rstrip()}")
 
     assert not violations, (
-        f"Vision model slug {slug!r} (from TierConfig.vision) found in src/:\n"
+        f"llmio TierConfig.vision slug {vision_name!r} found in src/:\n"
         + "\n".join(violations)
     )
