@@ -531,6 +531,11 @@ class TestCheckUpstreamCiBreakage:
             "robotsix_mill.vcs.git_ops.remote_branch_sha",
             lambda repo, branch: None,
         )
+        # Forge lists no runs → falls back to the (None) local ref.
+        monkeypatch.setattr(
+            "robotsix_mill.forge.get_forge",
+            lambda s, repo_config: _FakeForge(workflow_runs=[]),
+        )
 
         result = _check_upstream_ci_breakage(
             "test-ticket",
@@ -573,6 +578,95 @@ class TestCheckUpstreamCiBreakage:
             [{"name": "ruff"}],
         )
         assert result is None
+
+    def test_resolves_current_forge_head_not_stale_local_ref(self, monkeypatch):
+        """The guard evaluates the target branch's CURRENT head from the
+        forge, not the (possibly stale) local remote-tracking ref captured
+        when the ticket was parked.
+
+        Regression for robotsix-board main advancing 7fc8e9d4 -> 53000db1
+        (2026-09-03): the old sha's CI was red for CodeQL, the new tip is
+        green, yet the guard kept re-blocking on the stale sha.  Once the
+        current tip is green for the cited checks it must NOT re-block.
+        """
+        from robotsix_mill.config import Settings
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
+
+        monkeypatch.setattr(
+            "robotsix_mill.config.repos.target_branch_for",
+            lambda s, rc: "main",
+        )
+        # Local clone is pinned to the STALE sha whose CI was red.
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            lambda repo, branch: "7fc8e9d4stale",
+        )
+        seen: list[str] = []
+
+        def _ccc(*, sha):
+            seen.append(sha)
+            if sha == "7fc8e9d4stale":
+                return {"conclusion": "failure", "failing": [{"name": "CodeQL"}]}
+            # Current tip is green.
+            return {"conclusion": "success", "failing": []}
+
+        mock_forge = _FakeForge(
+            commit_ci_conclusion=_ccc,
+            workflow_runs=[{"head_sha": "53000db1fresh"}],
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.forge.get_forge",
+            lambda s, repo_config: mock_forge,
+        )
+
+        result = _check_upstream_ci_breakage(
+            "test-ticket",
+            Settings(),
+            None,
+            "/fake/repo",
+            [{"name": "CodeQL"}],
+        )
+        # Evaluated against the fresh forge head, which is green — no re-block.
+        assert result is None
+        assert seen == ["53000db1fresh"], (
+            "guard must query the current forge head, not the stale local ref"
+        )
+
+    def test_falls_back_to_local_ref_when_forge_has_no_runs(self, monkeypatch):
+        """When the forge lists no runs for the target, the guard falls back
+        to the local remote-tracking ref so behaviour degrades gracefully."""
+        from robotsix_mill.config import Settings
+        from robotsix_mill.stages.ci_fix_helpers import _check_upstream_ci_breakage
+
+        monkeypatch.setattr(
+            "robotsix_mill.config.repos.target_branch_for",
+            lambda s, rc: "main",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            lambda repo, branch: "abc123def4567890",
+        )
+        seen: list[str] = []
+
+        def _ccc(*, sha):
+            seen.append(sha)
+            return {"conclusion": "failure", "failing": [{"name": "ruff"}]}
+
+        mock_forge = _FakeForge(commit_ci_conclusion=_ccc, workflow_runs=[])
+        monkeypatch.setattr(
+            "robotsix_mill.forge.get_forge",
+            lambda s, repo_config: mock_forge,
+        )
+
+        result = _check_upstream_ci_breakage(
+            "test-ticket",
+            Settings(),
+            None,
+            "/fake/repo",
+            [{"name": "ruff"}],
+        )
+        assert result is not None
+        assert seen == ["abc123def4567890"]
 
     def test_target_ci_pending_returns_none(self, monkeypatch):
         """When the target branch CI is pending, return None."""
@@ -659,15 +753,26 @@ class TestCheckUpstreamCiBreakage:
 
 class _FakeForge:
     """Minimal forge stub that returns a canned dict (or raises) from
-    ``commit_ci_conclusion``."""
+    ``commit_ci_conclusion`` and a canned list of runs from
+    ``list_workflow_runs``.
 
-    def __init__(self, commit_ci_conclusion=None):
+    ``workflow_runs`` defaults to an empty list so the guard falls back to
+    the (monkeypatched) ``remote_branch_sha`` local ref — preserving the
+    pre-existing tests that only care about ``commit_ci_conclusion``."""
+
+    def __init__(self, commit_ci_conclusion=None, workflow_runs=None):
         self._ccc = commit_ci_conclusion
+        self._runs = workflow_runs if workflow_runs is not None else []
 
     def commit_ci_conclusion(self, *, sha):
         if callable(self._ccc):
             return self._ccc(sha=sha)
         return self._ccc
+
+    def list_workflow_runs(self, *, branch):
+        if callable(self._runs):
+            return self._runs(branch=branch)
+        return self._runs
 
 
 # ---------------------------------------------------------------------------
