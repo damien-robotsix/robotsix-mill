@@ -28,7 +28,6 @@ class _MergeSettings(BaseModel):
         description="Maximum rebase attempts per ticket before escalating to BLOCKED.",
         default=3,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # When a PR parked in human_mr_approval becomes conflicting or behind
@@ -41,7 +40,6 @@ class _MergeSettings(BaseModel):
         description="Hours to wait before re-rebasing a PR parked in human_mr_approval. Set to 0 to disable.",
         default=4,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # --- merge stage: auto-fix of failing remote CI ---
@@ -75,7 +73,6 @@ class _MergeSettings(BaseModel):
         description="Multi-repo merge path only: maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
         default=3,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Wall-clock timeout (seconds) for a single ci-fix agent pass.  This
@@ -99,7 +96,6 @@ class _MergeSettings(BaseModel):
         ),
         default=1800,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Multi-repo merge path only (MultiRepoCiFixMixin): that path still runs
@@ -110,13 +106,11 @@ class _MergeSettings(BaseModel):
         description="Multi-repo merge path only: max ci-fix attempts per cycle.",
         default=2,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
     ci_fix_max_cycles: int = Field(
         description="Multi-repo merge path only: max ci-fix cycles per ticket.",
         default=3,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Number of consecutive identical-failure cycles before escalating to
@@ -128,7 +122,6 @@ class _MergeSettings(BaseModel):
         description="Consecutive identical CI failure cycles before escalating. 0 disables.",
         default=2,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Number of consecutive identical merge-guard blocks before escalating
@@ -142,7 +135,6 @@ class _MergeSettings(BaseModel):
         description="Consecutive identical merge-guard blocks before stronger escalation. 0 disables.",
         default=2,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Multi-repo merge path only: how often (seconds) wait_for_ci polls
@@ -151,7 +143,6 @@ class _MergeSettings(BaseModel):
         description="Multi-repo merge path only: seconds between CI conclusion polls during wait_for_ci.",
         default=30.0,
         gt=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Multi-repo merge path only: maximum seconds a single wait_for_ci call
@@ -160,7 +151,6 @@ class _MergeSettings(BaseModel):
         description="Multi-repo merge path only: maximum seconds a single wait_for_ci call blocks before returning still-pending.",
         default=900.0,
         gt=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Multi-repo merge path only: early bail-out when CI is stuck.
@@ -171,7 +161,6 @@ class _MergeSettings(BaseModel):
         ),
         default=2,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Maximum number of automatic CI re-runs for transient/infrastructure
@@ -182,7 +171,6 @@ class _MergeSettings(BaseModel):
         description="Maximum automatic CI re-runs for transient failures before escalating. 0 disables.",
         default=3,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Per-run request budget for the ci-fix agent.  Must cover the agent's
@@ -194,7 +182,6 @@ class _MergeSettings(BaseModel):
         description="Per-run request budget for the ci-fix agent. 0 disables.",
         default=120,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Maximum characters of inline job-log context in the failing summary
@@ -207,7 +194,6 @@ class _MergeSettings(BaseModel):
         description="Maximum characters of inline CI job-log context in the ci-fix failing summary. 0 disables.",
         default=16000,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Multi-repo merge path only: maximum characters of a COMPACT failure
@@ -225,7 +211,6 @@ class _MergeSettings(BaseModel):
         description="Maximum characters of the compact wait_for_ci failure summary for iterations >= 2. 0 disables compacting.",
         default=2000,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # The non-log portions of a failing summary (check annotations and the
@@ -238,13 +223,11 @@ class _MergeSettings(BaseModel):
         description="Maximum check annotations rendered per ci-fix failing summary. 0 disables.",
         default=40,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
     ci_fix_max_alerts: int = Field(
         description="Maximum code-scanning alert lines rendered per ci-fix failing summary. 0 disables.",
         default=40,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Per-ticket ceiling on how many times the worker may re-dispatch the
@@ -267,7 +250,6 @@ class _MergeSettings(BaseModel):
         ),
         default=3,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # When True (default), ci_fix may invoke a conservative codeql_fp_triage
@@ -278,7 +260,6 @@ class _MergeSettings(BaseModel):
     codeql_fp_triage_enabled: bool = Field(
         description="When true, ci_fix may invoke codeql_fp_triage to dismiss high-confidence CodeQL false positives.",
         default=True,
-        json_schema_extra={"advanced": True},
     )
 
     # Cross-stage ceiling on combined REBASING + FIXING_CI dispatches without
@@ -292,7 +273,6 @@ class _MergeSettings(BaseModel):
         description="Cross-stage ceiling on combined REBASING + FIXING_CI dispatches without green CI. 0 disables.",
         default=6,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Ceiling on REBASING ↔ FIXING_CI alternations (ping-pong) before
@@ -305,7 +285,6 @@ class _MergeSettings(BaseModel):
         description="Ceiling on REBASING to FIXING_CI alternations before escalating. 0 disables.",
         default=3,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Ceiling on consecutive merge polls where CI is fully green (nothing
@@ -320,7 +299,6 @@ class _MergeSettings(BaseModel):
         description="Ceiling on consecutive polls with green CI but an unpromotable PR before escalating. 0 disables.",
         default=10,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Ceiling on consecutive merge polls where CI reports success with zero
@@ -332,7 +310,6 @@ class _MergeSettings(BaseModel):
         description="Consecutive empty-rollup polls before close/reopen self-heal. 0 disables.",
         default=3,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Maximum review-revision attempts per ticket before escalating to BLOCKED.
@@ -340,5 +317,4 @@ class _MergeSettings(BaseModel):
         description="Maximum review-revision attempts per ticket before escalating to BLOCKED.",
         default=2,
         ge=1,
-        json_schema_extra={"advanced": True},
     )
