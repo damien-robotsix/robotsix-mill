@@ -697,6 +697,32 @@ class _FailingContext(NamedTuple):
 UPSTREAM_CI_BLOCK_MARKER = "Upstream CI breakage detected"
 
 
+def _current_target_head_sha(forge: Any, target: str) -> str | None:
+    """Head SHA of *target* as the forge currently sees it.
+
+    Resolves against the forge's latest workflow runs — a network-backed,
+    forge-authed read of the branch tip — rather than a workspace clone's
+    ``refs/remotes/origin/<target>`` ref.  A resumed ticket's clone can be
+    pinned to the commit captured when it was parked; re-reading that stale
+    ref would re-evaluate an already-superseded failure and re-block the
+    ticket even after the target branch has advanced to a green tip.  The
+    forge API lists runs newest-first, so the first run's ``head_sha`` is
+    the latest commit on the branch that has CI at all — exactly what the
+    ``upstream_ci_recovery`` pass resolves, keeping guard and recovery in
+    agreement.  ``None`` when the branch has no runs or the lookup fails
+    (the caller then falls back to the local remote-tracking ref).
+    """
+    try:
+        runs = forge.list_workflow_runs(branch=target)
+    except Exception:
+        return None
+    for run in runs:
+        sha = run.get("head_sha")
+        if sha:
+            return str(sha)
+    return None
+
+
 def _check_upstream_ci_breakage(
     ticket_id: str,
     settings: Any,
@@ -747,28 +773,48 @@ def _check_upstream_ci_breakage(
     # 1. Get the target branch name.
     target = target_branch_for(settings, repo_config)
 
-    # 2. Resolve the target branch's HEAD from the local clone.
+    # 2. Build the forge and resolve the target branch's CURRENT head.
+    #    Resolve from the forge (network, forge-authed) rather than the
+    #    workspace clone's remote-tracking ref: a resumed ticket's clone
+    #    can be pinned to the commit captured when it was parked, so the
+    #    stale ref would re-evaluate an already-superseded failure and
+    #    re-block the ticket forever even after the target went green
+    #    (robotsix-board main advanced 7fc8e9d4 -> 53000db1, 2026-09-03,
+    #    yet the block kept citing the stale 7fc8e9d4).  Fall back to the
+    #    local ref only when the forge yields no head.
     try:
-        target_sha = git_ops.remote_branch_sha(Path(repo_dir), target)
+        forge = get_forge(settings, repo_config=repo_config)
     except Exception:
         _log.warning(
-            "%s: could not resolve target branch SHA for '%s' — "
+            "%s: could not build forge for target branch '%s' — "
             "skipping upstream CI breakage check",
             ticket_id,
             target,
         )
         return None
+
+    target_sha = _current_target_head_sha(forge, target)
+    if target_sha is None:
+        try:
+            target_sha = git_ops.remote_branch_sha(Path(repo_dir), target)
+        except Exception:
+            _log.warning(
+                "%s: could not resolve target branch SHA for '%s' — "
+                "skipping upstream CI breakage check",
+                ticket_id,
+                target,
+            )
+            return None
     if target_sha is None:
         _log.info(
-            "%s: target branch '%s' has no remote ref — skipping upstream check",
+            "%s: target branch '%s' head unresolved — skipping upstream check",
             ticket_id,
             target,
         )
         return None
 
-    # 3. Check CI status on the target branch's HEAD.
+    # 3. Check CI status on the target branch's CURRENT head.
     try:
-        forge = get_forge(settings, repo_config=repo_config)
         target_ci = forge.commit_ci_conclusion(sha=target_sha)
     except Exception:
         _log.warning(
