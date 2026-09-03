@@ -503,6 +503,7 @@ _db_maintenance_task
 _sandbox_reaper_task
 _dependabot_ingest_task
 _ci_debt_recheck_task
+_ci_auto_close_task
 _requeue_task
 queue_size
 queue_join
