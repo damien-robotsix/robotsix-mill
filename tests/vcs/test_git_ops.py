@@ -1,5 +1,6 @@
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -3106,3 +3107,40 @@ def test_uv_lock_is_exempt_from_the_drop_guard(tmp_path):
     assert dropped == []
     assert sibling == []
     assert "uv.lock" in git_ops.DEFAULT_REBASE_DROP_EXEMPT_PATHS
+
+
+# ===========================================================================
+# clear_stale_index_lock
+# ===========================================================================
+
+
+def _make_lock(tmp_path: Path, *, age_seconds: float) -> Path:
+    """Create ``<repo>/.git/index.lock`` and back-date its mtime."""
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    lock = repo / ".git" / "index.lock"
+    lock.write_text("")
+    past = os.stat(lock).st_atime, time.time() - age_seconds
+    os.utime(lock, past)
+    return lock
+
+
+def test_clear_stale_index_lock_removes_old_lock(tmp_path):
+    """A lock older than the staleness threshold is deleted and reported."""
+    lock = _make_lock(tmp_path, age_seconds=git_ops.STALE_INDEX_LOCK_SECONDS + 60)
+    assert git_ops.clear_stale_index_lock(lock.parent.parent) is True
+    assert not lock.exists()
+
+
+def test_clear_stale_index_lock_keeps_fresh_lock(tmp_path):
+    """A recently-created lock (a live git process) is left untouched."""
+    lock = _make_lock(tmp_path, age_seconds=10)
+    assert git_ops.clear_stale_index_lock(lock.parent.parent) is False
+    assert lock.exists()
+
+
+def test_clear_stale_index_lock_no_lock(tmp_path):
+    """A missing lock is a silent no-op."""
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    assert git_ops.clear_stale_index_lock(repo) is False

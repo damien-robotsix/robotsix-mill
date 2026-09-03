@@ -11,8 +11,10 @@ and ``tmp_path`` workspaces, per repo convention.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -24,6 +26,7 @@ from robotsix_mill.core.states import State
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.implement.file_operations import FileOperationsMixin
+from robotsix_mill.vcs import git_ops
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -475,6 +478,64 @@ class TestCloneAndBranch:
         assert "create_branch" not in calls
         # Rebase still runs.
         assert "try_rebase_onto" in calls
+
+    def test_resume_clears_stale_index_lock(self, monkeypatch, tmp_path):
+        """A stale ``.git/index.lock`` is removed before the resume checkout."""
+        ctx = _ctx(tmp_path)
+        ticket = _ticket(ctx)
+        ws = ctx.service.workspace(ticket)
+        repo_dir = ws.dir / "repo"
+        (repo_dir / ".git").mkdir(parents=True)
+        lock = repo_dir / ".git" / "index.lock"
+        lock.write_text("")
+        # Back-date the lock well past the staleness threshold.
+        stale = git_ops.STALE_INDEX_LOCK_SECONDS + 120
+        os.utime(lock, (os.stat(lock).st_atime, time.time() - stale))
+        calls = []
+        self._mock_git_ops_clone_chain(monkeypatch, calls)
+        self._mock_forge_auth(monkeypatch)
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.branch_exists",
+            lambda rd, branch: True,
+        )
+
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
+        assert isinstance(result, tuple)
+        assert not lock.exists()
+        assert "checkout" in calls
+
+    def test_resume_checkout_failure_surfaces_stderr(self, monkeypatch, tmp_path):
+        """A failing resume checkout blocks with the git stderr visible."""
+        ctx = _ctx(tmp_path)
+        ticket = _ticket(ctx)
+        ws = ctx.service.workspace(ticket)
+        repo_dir = ws.dir / "repo"
+        (repo_dir / ".git").mkdir(parents=True)
+        calls = []
+        self._mock_git_ops_clone_chain(monkeypatch, calls)
+        self._mock_forge_auth(monkeypatch)
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.branch_exists",
+            lambda rd, branch: True,
+        )
+
+        def fake_checkout(rd, branch):
+            raise subprocess.CalledProcessError(
+                128,
+                ["git", "checkout", "-q", branch],
+                stderr=b"fatal: Unable to create '.git/index.lock': File exists",
+            )
+
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.file_operations.git_ops.checkout",
+            fake_checkout,
+        )
+
+        result = FileOperationsMixin._clone_and_branch(ctx, ticket, ctx.settings)
+        assert isinstance(result, Outcome)
+        assert result.next_state == State.BLOCKED
+        assert "git checkout failed on resume" in (result.note or "")
+        assert "index.lock" in (result.note or "")
 
     def test_clone_failure_returns_blocked(self, monkeypatch, tmp_path):
         ctx = _ctx(tmp_path)

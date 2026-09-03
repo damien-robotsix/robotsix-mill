@@ -332,7 +332,22 @@ class FileOperationsMixin(_ImplementStageBase):
             repo_dir, branch
         )
         if resuming:
-            git_ops.checkout(repo_dir, branch)
+            # A git process that crashed mid-implement can leave
+            # ``.git/index.lock`` behind; every subsequent git command in
+            # this workspace then fails until the lock is removed. Clear a
+            # stale lock BEFORE the first git command so the resume repairs
+            # itself instead of re-blocking on a terminal condition.
+            git_ops.clear_stale_index_lock(repo_dir)
+            try:
+                git_ops.checkout(repo_dir, branch)
+            except subprocess.CalledProcessError as e:
+                stderr_str = _decode_stderr(e.stderr)
+                cmd = e.cmd if isinstance(e.cmd, str) else " ".join(map(str, e.cmd))
+                return Outcome(
+                    State.BLOCKED,
+                    "git checkout failed on resume: "
+                    + git_ops.redact_credentials((stderr_str or cmd).strip())[:600],
+                )
             # A prior cycle may have terminated on a non-finalizing exit path
             # (transient AgentRunError re-raise, pause/interrupt, worker-
             # scheduled retry) that left real edits UNCOMMITTED in the
