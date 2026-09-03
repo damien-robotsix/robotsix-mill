@@ -124,13 +124,21 @@ class MultiRepoMixin(_MergeStageBase):
                 # instead of spinning on a lookup that can never succeed.
                 statuses.append({**base, "status": "pr_missing"})
                 continue
-            # A PR was found — any consecutive no-PR streak is over.
-            found_any = True
-            _reset_consecutive(ctx.service.workspace(ticket).artifacts_dir, _PR_MISSING_COUNT)
             base["url"] = pr.get("url", url)
             if pr.get("merged"):
+                # A merged PR is terminal — it cannot help an unresolvable
+                # sibling PR resolve, so it must NOT count as progress that
+                # resets the no-PR streak.  Otherwise a merged+missing ticket
+                # resets its counter every poll and never escalates — the same
+                # silent-spin this guard targets, in a partial variant.
                 statuses.append({**base, "status": "merged"})
                 continue
+            # A non-merged PR was found — an active PR is making progress, so
+            # any consecutive no-PR streak is over.
+            found_any = True
+            _reset_consecutive(
+                ctx.service.workspace(ticket).artifacts_dir, _PR_MISSING_COUNT
+            )
             if pr.get("state") == "closed":
                 statuses.append({**base, "status": "closed_unmerged"})
                 continue
@@ -199,22 +207,29 @@ class MultiRepoMixin(_MergeStageBase):
             )
 
         # No failures/conflicts/closed remain. If every non-merged repo is
-        # green (nothing pending), auto-merge the green PRs (review-gated).
+        # green (nothing pending AND nothing unresolvable), auto-merge the
+        # green PRs (review-gated).  An unresolvable (``pr_missing``) repo
+        # must hold the gate exactly as the old ``pending`` classification
+        # did: auto-merging the green repos while a sibling PR is undelivered
+        # would ship a partial cross-repo change — strictly worse than a safe
+        # re-poll.
         green = [r for r in statuses if r["status"] == "green"]
         pending = [r for r in statuses if r["status"] == "pending"]
-        if green and not pending:
+        missing = [r for r in statuses if r["status"] == "pr_missing"]
+        if green and not pending and not missing:
             return self._multi_repo_auto_merge(ticket, ctx, green)
 
         # Every repo's PR is either merged or unresolvable — a ticket the
         # merge stage cannot act on for the same reason.  Escalate to
         # BLOCKED past the consecutive/no-PR ceiling instead of re-polling
         # the same dead lookups forever (the PRs may live in a repo other
-        # than the one recorded, or were never pushed).  If any repo is
-        # still green/pending the polls below keep making progress and the
-        # counter was already reset when those PRs were found.
-        missing = [r for r in statuses if r["status"] == "pr_missing"]
-        if missing and not found_any and all(
-            r["status"] in ("merged", "pr_missing") for r in statuses
+        # than the one recorded, or were never pushed).  ``found_any`` is now
+        # only set by a NON-merged active PR, so a merged+missing ticket (no
+        # active PR) reaches this escalation instead of resetting forever.
+        if (
+            missing
+            and not found_any
+            and all(r["status"] in ("merged", "pr_missing") for r in statuses)
         ):
             max_polls = s.merge_pr_missing_max_polls
             if max_polls:

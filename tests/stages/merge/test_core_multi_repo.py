@@ -1576,14 +1576,23 @@ def test_multi_repo_pr_missing_resets_when_pr_appears(tmp_path, monkeypatch):
     for _ in range(ceiling - 1):
         assert stage.run(t, ctx).next_state is State.IMPLEMENT_COMPLETE
 
-    # repo-a's PR appears (merged) → streak resets.
+    # repo-a's PR appears again as an ACTIVE (open) PR → genuine progress, so
+    # the consecutive no-PR streak resets.  (A *merged* PR would NOT reset it —
+    # see test_multi_repo_merged_plus_missing_blocks_after_ceiling — because a
+    # terminal PR cannot help the still-missing sibling resolve.)
     _route_by_remote(
         monkeypatch,
-        pr_responses={remote_b: None},
-        pr_by_url_responses={
-            remote_a: {"merged": True, "state": "closed", "url": "u-a"},
+        pr_responses={
+            remote_a: {
+                "merged": False,
+                "state": "open",
+                "url": "u-a",
+                "mergeable": True,
+            },
             remote_b: None,
         },
+        ci_responses={remote_a: {"conclusion": "pending", "failing": []}},
+        pr_by_url_responses={remote_b: None},
     )
     assert stage.run(t, ctx).next_state is State.IMPLEMENT_COMPLETE
 
@@ -1596,3 +1605,117 @@ def test_multi_repo_pr_missing_resets_when_pr_appears(tmp_path, monkeypatch):
     for _ in range(ceiling - 1):
         assert stage.run(t, ctx).next_state is State.IMPLEMENT_COMPLETE
     assert stage.run(t, ctx).next_state is State.BLOCKED
+
+
+def test_multi_repo_green_plus_missing_does_not_auto_merge(tmp_path, monkeypatch):
+    """One repo green + one repo unresolvable must NOT auto-merge the green
+    repo — that would ship a partial cross-repo change, strictly worse than a
+    safe re-poll.  ``pr_missing`` holds the auto-merge gate exactly as the old
+    ``pending`` classification did; the ticket stays in IMPLEMENT_COMPLETE."""
+    ctx = _gh(
+        tmp_path,
+        auto_merge_enabled="true",
+        review_enabled="true",
+        review_feedback_enabled="true",
+    )
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {
+                "merged": False,
+                "state": "open",
+                "url": "u-a",
+                "mergeable": True,
+            },
+            remote_b: None,
+        },
+        ci_responses={remote_a: {"conclusion": "success", "failing": []}},
+        pr_by_url_responses={remote_b: None},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_review_status",
+        lambda self, *, source_branch: None,
+    )
+    merged_calls = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: (
+            merged_calls.append(self._remote_url) or {"merged": True}
+        ),
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    ctx.service.workspace(t).artifacts_dir.joinpath("review.md").write_text(
+        "verdict: APPROVE\nauto_merge_eligible: true\n", encoding="utf-8"
+    )
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {"repo_id": "repo-a", "branch": branch, "url": "u-a"},
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert merged_calls == []
+
+
+def test_multi_repo_merged_plus_missing_blocks_after_ceiling(tmp_path, monkeypatch):
+    """One repo already merged + one repo unresolvable must still escalate.
+
+    A merged PR is terminal and cannot help the still-missing sibling resolve,
+    so it must NOT reset the consecutive no-PR streak.  Past the ceiling the
+    ticket BLOCKs instead of spinning forever (a partial variant of the
+    silent-spin the guard targets)."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {"merged": True, "state": "closed", "url": "u-a"},
+            remote_b: None,
+        },
+        pr_by_url_responses={remote_a: None, remote_b: None},
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {"repo_id": "repo-a", "branch": branch, "url": "u-a"},
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    stage = MergeStage()
+    ceiling = ctx.settings.merge_pr_missing_max_polls
+    outs = [stage.run(t, ctx) for _ in range(ceiling)]
+    assert [o.next_state for o in outs[:-1]] == [State.IMPLEMENT_COMPLETE] * (
+        ceiling - 1
+    )
+    final = outs[-1]
+    assert final.next_state is State.BLOCKED
+    assert "no PR found" in final.note
+    assert "repo-b" in final.note

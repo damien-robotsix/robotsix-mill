@@ -89,7 +89,7 @@ def _statuses_to_check_runs(statuses_data: dict[str, Any]) -> list[dict[str, Any
     for ctx, entries in by_context.items():
         # The conclusion for a context comes from THAT context's own
         # ``state`` — NOT the combined ``state`` field, which is the
-        # aggregate across every context (""failure"" when ANY one of them
+        # aggregate across every context ("failure" when ANY one of them
         # failed).  Using the combined state smeared one failing context
         # onto every other: a green context such as "All CI checks passed"
         # was reported as a failing check whenever an unrelated context
