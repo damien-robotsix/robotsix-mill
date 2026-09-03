@@ -257,9 +257,9 @@ def run_ci_auto_close(settings: Settings) -> dict[str, Any]:
     # Map board_id -> repo_config so each ticket's forge has the right identity.
     repo_by_board: dict[str, Any] = {}
     try:
-        for rc in get_repos_config().repos.values():
-            if rc.board_id and rc.board_id not in repo_by_board:
-                repo_by_board[rc.board_id] = rc
+        for repo_cfg in get_repos_config().repos.values():
+            if repo_cfg.board_id and repo_cfg.board_id not in repo_by_board:
+                repo_by_board[repo_cfg.board_id] = repo_cfg
     except Exception:
         log.exception("ci_auto_close: could not load repos config")
 
