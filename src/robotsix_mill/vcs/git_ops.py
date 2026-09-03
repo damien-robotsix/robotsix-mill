@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from enum import StrEnum
 from pathlib import Path
 
@@ -342,6 +343,50 @@ def branch_exists(repo: Path, name: str) -> bool:
         ).returncode
         == 0
     )
+
+
+# Age (seconds) past which a leftover ``.git/index.lock`` is treated as
+# stale and safe to remove. No live git process in mill's per-ticket
+# flow holds the index lock anywhere near this long; a lock older than
+# this is the residue of a git process that crashed mid-operation.
+# Observed 2026-09-02: a git crash mid-implement left ``index.lock``
+# behind, and every subsequent ``git checkout`` failed with
+# CalledProcessError, re-blocking the ticket in a retry loop on a
+# terminal condition until a human removed the lock by hand.
+STALE_INDEX_LOCK_SECONDS = 15 * 60
+
+
+def clear_stale_index_lock(
+    repo: Path, max_age_seconds: float = STALE_INDEX_LOCK_SECONDS
+) -> bool:
+    """Remove a stale ``.git/index.lock`` left by a crashed git process.
+
+    Returns ``True`` when a stale lock was found and deleted (logging the
+    repair), ``False`` otherwise. Best-effort: a missing lock, a lock
+    younger than *max_age_seconds* (a genuinely live git process), or an
+    ``OSError`` while inspecting/removing the file all return ``False``
+    without raising, so callers can invoke this unconditionally before a
+    workspace git command.
+    """
+    lock = repo / ".git" / "index.lock"
+    try:
+        age = time.time() - lock.stat().st_mtime
+    except OSError:
+        return False
+    if age < max_age_seconds:
+        return False
+    try:
+        lock.unlink()
+    except OSError:
+        return False
+    log.warning(
+        "cleared stale git index.lock in %s (age %.0fs > %.0fs) — "
+        "repairing after a crashed git process",
+        repo,
+        age,
+        max_age_seconds,
+    )
+    return True
 
 
 def checkout(repo: Path, name: str) -> None:
