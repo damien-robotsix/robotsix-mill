@@ -193,6 +193,14 @@ class CIPollMixin(_MergeStageBase):
                                 f"Tracked PR closed ({tracked_url}) — "
                                 "reconcile pass will close",
                             )
+                        # Tracked PR resolved and is still OPEN — a
+                        # legitimately-waiting foreign-PR tracker awaiting an
+                        # external merge, NOT a dead lookup.  Re-poll
+                        # indefinitely (the design before the no-PR spin
+                        # guard) without touching the consecutive no-PR
+                        # counter, which would otherwise BLOCK a live tracker
+                        # with a misleading "branch never pushed" note.
+                        return None, Outcome(same_state)
             if pr is None:
                 # No PR found for the branch in the board-derived repo (and
                 # no tracked-URL fallback applied).  Count consecutive

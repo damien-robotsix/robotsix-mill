@@ -991,6 +991,49 @@ def test_tracker_ticket_merged_pr_blocks(tmp_path, monkeypatch):
     assert "merged" in outcome.note.lower()
 
 
+def test_tracker_ticket_open_pr_repolls_past_ceiling(tmp_path, monkeypatch):
+    """A tracker ticket whose tracked PR is resolvable but still OPEN must
+    re-poll indefinitely (awaiting an external merge) — never BLOCK on the
+    no-PR spin guard, even past ``merge_pr_missing_max_polls``."""
+    from robotsix_mill.core.models import SourceKind
+
+    ctx = _gh(tmp_path)
+
+    t = ctx.service.create(
+        title="Track external PR: test-repo#42",
+        description="Tracked PR for testing.\n\n- URL: https://github.com/owner/repo/pull/42",
+        source=SourceKind.ORPHANED_PR_CHECK,
+    )
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE):
+        ctx.service.transition(t.id, st)
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+    t = ctx.service.get(t.id)
+
+    ws = ctx.service.workspace(t)
+    ws.description_path.write_text(
+        "Tracked PR for testing.\n\n- URL: https://github.com/owner/repo/pull/42",
+        encoding="utf-8",
+    )
+
+    # No PR on the mill branch, but the tracked PR is found and still OPEN.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: None,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status_by_url",
+        lambda self, *, url: {"merged": False, "state": "open", "url": url},
+    )
+
+    # Poll well past the no-PR ceiling — a live tracker never BLOCKs.
+    ceiling = ctx.settings.merge_pr_missing_max_polls
+    for _ in range(ceiling + 2):
+        outcome = MergeStage()._poll_implement_complete(t, ctx)
+        assert outcome.next_state is State.IMPLEMENT_COMPLETE
+
+
 # === Pre-existing target-branch CI debt: ci_fix exemption ==================
 
 
