@@ -734,6 +734,11 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                     if before is not None
                     else (popped_prio, popped_stage)
                 )
+                # The classify stage is a cheap two-call, sandbox-less stage
+                # that must never queue behind hour-scale implement/ci_fix
+                # runs. Let it draw on the gate's reserved slots so a fresh
+                # ticket classifies promptly even when the cap is saturated.
+                reserved_ok = before_state == State.CLASSIFYING
                 claimed = self._try_claim(ticket_id, before_state)
                 if claimed is None:
                     continue  # a live run already covers this ticket+stage
@@ -748,7 +753,9 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                             ticket_id,
                             admission_rank,
                         )
-                    async with self._global_semaphore.slot(admission_rank):
+                    async with self._global_semaphore.slot(
+                        admission_rank, reserved_ok=reserved_ok
+                    ):
                         with _ticket_sandbox_rank(admission_rank):
                             await process_ticket(
                                 ticket_id, per_ticket_ctx, active_map=self._active
@@ -1068,8 +1075,11 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         if not self._tasks:
             repos = get_repos_config()
             cap = max(1, self.ctx.settings.max_global_concurrency)
-            self._global_semaphore = PriorityGate(cap)
-            log.info("global concurrency cap: %d", cap)
+            reserved = max(0, self.ctx.settings.classify_reserved_slots)
+            self._global_semaphore = PriorityGate(cap, reserved=reserved)
+            log.info(
+                "global concurrency cap: %d (classify-reserved: %d)", cap, reserved
+            )
             pool_sizes = [
                 (rc.board_id, max(1, rc.max_concurrency)) for rc in repos.repos.values()
             ]
