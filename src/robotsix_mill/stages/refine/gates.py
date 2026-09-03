@@ -100,6 +100,16 @@ _SCOPE_TRIAGE_STAGE_PHRASE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Repo-local mill-onboarding tickets legitimately cite mill concepts:
+# their deliverable is a ``.robotsix-mill/`` config or presence file that
+# lives inside the *target repo's own tree* (e.g. onboarding a service
+# repo with ``.robotsix-mill/config.yaml`` + ``.robotsix-mill/periodic/
+# *.yaml`` presence files).  When a draft references such a path, the
+# mill-domain tokens it mentions describe files it is *adding to this
+# repo*, not a mill construct filed against the wrong board — so the
+# repo-awareness gate must not reject it as a mis-route.
+_ROBOTSIX_MILL_LOCAL_PATH_RE = re.compile(r"\.robotsix-mill/", re.IGNORECASE)
+
 
 class RefineGatesMixin:
     """Pre-refine gate staticmethods mixed into :class:`RefineStage`."""
@@ -344,6 +354,15 @@ class RefineGatesMixin:
             return None
 
         text = f"{title}\n{draft}"
+
+        # Repo-local mill-onboarding tickets (their deliverable is a
+        # ``.robotsix-mill/`` config or presence file inside this repo's
+        # own tree) legitimately reference mill concepts.  Skip the gate
+        # so they are not auto-closed as mis-routed — the non-portable
+        # periodic case is already caught earlier by the
+        # workflow-portability gate.
+        if _ROBOTSIX_MILL_LOCAL_PATH_RE.search(text):
+            return None
 
         needles: list[str] = []
         for token in _SCOPE_TRIAGE_DOMAIN_TOKENS:

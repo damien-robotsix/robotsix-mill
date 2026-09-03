@@ -1485,6 +1485,29 @@ def test_scope_triage_repo_awareness_allows_term_present_in_repo(ctx_factory, tm
     assert out is None
 
 
+def test_scope_triage_repo_awareness_allows_repo_local_mill_onboarding(
+    ctx_factory, tmp_path
+):
+    """A repo-local ``.robotsix-mill/`` onboarding ticket is not a mis-route.
+
+    Its deliverable lives inside the target repo's own tree, so the mill
+    concepts it cites (``scope-triage``, periodic agents) are legitimate
+    and must not trigger the repo-awareness gate.
+    """
+    ctx = ctx_factory()
+    title = "Add .robotsix-mill/ config for browser repo"
+    body = (
+        "Create `.robotsix-mill/config.yaml` and "
+        "`.robotsix-mill/periodic/audit.yaml` so the mill scope-triage "
+        "and periodic agents run against this repo."
+    )
+    t = _ticket(ctx, title=title, body=body)
+    repo = _make_repo(tmp_path, {"src/game.py": "def play():\n    return 1\n"})
+
+    out = RefineStage._run_scope_triage_repo_awareness_gate(ctx, t, body, title, repo)
+    assert out is None
+
+
 def test_scope_triage_repo_awareness_skips_without_repo(ctx_factory):
     """With no repo to grep, the gate falls through to the LLM triage."""
     ctx = ctx_factory()
