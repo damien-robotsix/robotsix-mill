@@ -1802,6 +1802,13 @@
           "title": "Merge Poll Seconds",
           "type": "integer"
         },
+        "merge_pr_missing_max_polls": {
+          "default": 20,
+          "description": "Ceiling on consecutive merge polls with no PR found before escalating to BLOCKED. 0 disables.",
+          "minimum": 0,
+          "title": "Merge Pr Missing Max Polls",
+          "type": "integer"
+        },
         "meta_interval_seconds": {
           "default": 604800,
           "description": "Seconds between automatic meta-agent passes. 0 = disabled.",

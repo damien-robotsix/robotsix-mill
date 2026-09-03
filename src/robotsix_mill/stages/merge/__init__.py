@@ -71,16 +71,19 @@ from ...runtime import tracing
 from ...vcs import git_ops
 from ._shared import (
     _MERGE_REASON,
+    _PR_MISSING_COUNT,
     _REBASE_COUNTER,
     _REV_REV_COUNTER,
     _build_failing_summary,
     _is_pr_check_run,
     _latest_failing_workflows,
     _load_pr_urls,
+    _next_consecutive,
     _read_counter,
     _read_reason,
     _refresh_branch_for_ci,
     _repo_config_for_entry,
+    _reset_consecutive,
     _verify_merge_ancestor,
     _workspace_repo_dir,
     _write_counter,
@@ -92,6 +95,7 @@ from .core import MergeStage
 __all__ = [
     "_MERGE_REASON",
     # constants
+    "_PR_MISSING_COUNT",
     "_REBASE_COUNTER",
     "_REV_REV_COUNTER",
     "MergeStage",
@@ -100,10 +104,12 @@ __all__ = [
     "_latest_failing_workflows",
     # helpers
     "_load_pr_urls",
+    "_next_consecutive",
     "_read_counter",
     "_read_reason",
     "_refresh_branch_for_ci",
     "_repo_config_for_entry",
+    "_reset_consecutive",
     # patchable seams
     "_resolve_remote_url",
     "_verify_merge_ancestor",

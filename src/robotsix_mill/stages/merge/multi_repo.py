@@ -20,10 +20,13 @@ from ...forge import get_forge
 from ..base import Outcome, StageContext
 from ._base import _MergeStageBase
 from ._shared import (
+    _PR_MISSING_COUNT,
     _ci_truly_green,
+    _next_consecutive,
     _read_counter,
     _reconcile_with_remote_pr,
     _repo_config_for_entry,
+    _reset_consecutive,
     _write_counter,
     log,
 )
@@ -68,6 +71,7 @@ class MultiRepoMixin(_MergeStageBase):
         s = ctx.settings
 
         statuses: list[dict[str, Any]] = []
+        found_any = False
         for entry in pr_entries:
             repo_id = entry.get("repo_id", "")
             branch = entry.get("branch", "")
@@ -114,8 +118,15 @@ class MultiRepoMixin(_MergeStageBase):
                     continue
 
             if pr is None:
-                statuses.append({**base, "status": "pending"})
+                # Unresolvable PR — neither the branch-keyed nor the
+                # recorded-URL lookup found it.  Marked distinctly so the
+                # per-ticket consecutive/no-PR guard (below) can escalate
+                # instead of spinning on a lookup that can never succeed.
+                statuses.append({**base, "status": "pr_missing"})
                 continue
+            # A PR was found — any consecutive no-PR streak is over.
+            found_any = True
+            _reset_consecutive(ctx.service.workspace(ticket).artifacts_dir, _PR_MISSING_COUNT)
             base["url"] = pr.get("url", url)
             if pr.get("merged"):
                 statuses.append({**base, "status": "merged"})
@@ -193,6 +204,30 @@ class MultiRepoMixin(_MergeStageBase):
         pending = [r for r in statuses if r["status"] == "pending"]
         if green and not pending:
             return self._multi_repo_auto_merge(ticket, ctx, green)
+
+        # Every repo's PR is either merged or unresolvable — a ticket the
+        # merge stage cannot act on for the same reason.  Escalate to
+        # BLOCKED past the consecutive/no-PR ceiling instead of re-polling
+        # the same dead lookups forever (the PRs may live in a repo other
+        # than the one recorded, or were never pushed).  If any repo is
+        # still green/pending the polls below keep making progress and the
+        # counter was already reset when those PRs were found.
+        missing = [r for r in statuses if r["status"] == "pr_missing"]
+        if missing and not found_any and all(
+            r["status"] in ("merged", "pr_missing") for r in statuses
+        ):
+            max_polls = s.merge_pr_missing_max_polls
+            if max_polls:
+                artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+                if _next_consecutive(artifacts_dir, _PR_MISSING_COUNT) >= max_polls:
+                    ids = ", ".join(r["repo_id"] for r in missing)
+                    return Outcome(
+                        State.BLOCKED,
+                        f"no PR found for {ids} for {max_polls} consecutive merge "
+                        "polls — the PRs may live in a repo other than the one "
+                        "recorded for this ticket, or the branches were never "
+                        "pushed; manual intervention required",
+                    )
 
         # Mix of green / pending / merged — same-state no-op; re-poll.
         return Outcome(ticket.state)

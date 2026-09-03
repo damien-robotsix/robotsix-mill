@@ -78,15 +78,26 @@ def _statuses_to_check_runs(statuses_data: dict[str, Any]) -> list[dict[str, Any
     statuses = statuses_data.get("statuses", [])
     if not statuses:
         return []
-    # Collapse per-context into a single item.
-    by_context: dict[str, Any][str, list[dict[str, Any]]] = {}
+    # Collapse per-context into a single item (the combined-status endpoint
+    # returns statuses newest-first, so the first entry per context is the
+    # latest update).
+    by_context: dict[str, Any] = {}
     for st in statuses:
         ctx = st.get("context", "")
         by_context.setdefault(ctx, []).append(st)
     runs = []
-    for ctx in by_context:
-        # overall state: "success", "failure", "pending"
-        state = statuses_data.get("state", "success")
+    for ctx, entries in by_context.items():
+        # The conclusion for a context comes from THAT context's own
+        # ``state`` — NOT the combined ``state`` field, which is the
+        # aggregate across every context (""failure"" when ANY one of them
+        # failed).  Using the combined state smeared one failing context
+        # onto every other: a green context such as "All CI checks passed"
+        # was reported as a failing check whenever an unrelated context
+        # failed, which misassembled the cross-repo ci-fix failing list and
+        # gated merges on checks that had actually passed (observed
+        # 2026-09-03 on robotsix-chat#1807's merge polling).
+        latest = entries[0]
+        state = latest.get("state") or statuses_data.get("state", "success")
         conclusion = state if state != "pending" else None
         runs.append(
             {

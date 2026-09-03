@@ -2961,6 +2961,103 @@ def test_green_unpromotable_guard_disabled_by_zero(tmp_path, monkeypatch):
 
 
 # ============================================================
+# Consecutive no-PR spin guard (merge_pr_missing_max_polls)
+# ============================================================
+
+
+def _pr_missing_ctx(tmp_path, monkeypatch, **extra):
+    """Forge stubs for 'no PR found for the ticket's branch'."""
+    ctx = _gh(tmp_path, **extra)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: None,
+    )
+    return ctx
+
+
+def test_pr_missing_re_polls_below_the_ceiling(tmp_path, monkeypatch):
+    """A missing PR is normally transient (CI still provisioning) — the
+    first polls must keep re-polling, not block."""
+    ctx = _pr_missing_ctx(tmp_path, monkeypatch)
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+    for _ in range(ctx.settings.merge_pr_missing_max_polls - 1):
+        out = stage.run(t, ctx)
+        assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+def test_pr_missing_blocks_at_the_ceiling_with_specific_note(tmp_path, monkeypatch):
+    """A permanently-missing PR (e.g. cross-repo deliver polled against the
+    board's own repo) escalates to BLOCKED with an actionable note instead
+    of silently spinning on the same dead lookup."""
+    ctx = _pr_missing_ctx(tmp_path, monkeypatch)
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+    outs = [
+        stage.run(t, ctx) for _ in range(ctx.settings.merge_pr_missing_max_polls)
+    ]
+    assert [o.next_state for o in outs[:-1]] == [State.IMPLEMENT_COMPLETE] * (
+        len(outs) - 1
+    )
+    final = outs[-1]
+    assert final.next_state is State.BLOCKED
+    assert "no PR found" in final.note
+    assert "manual intervention" in final.note
+
+
+def test_pr_missing_counter_resets_when_pr_appears(tmp_path, monkeypatch):
+    """A PR that appears resets the streak — the next missing run starts the
+    budget over from scratch."""
+    ctx = _pr_missing_ctx(tmp_path, monkeypatch)
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+    for _ in range(ctx.settings.merge_pr_missing_max_polls - 1):
+        stage.run(t, ctx)
+
+    # PR appears (green + mergeable) → promotes and resets the counter.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    assert stage.run(t, ctx).next_state is State.HUMAN_MR_APPROVAL
+    # run() only returns the outcome; the worker applies the transition.
+    # Simulate it so the next poll dispatches from HUMAN_MR_APPROVAL.
+    ctx.service.transition(t.id, State.HUMAN_MR_APPROVAL, note="gates passed")
+    t = ctx.service.get(t.id)
+
+    # PR disappears again — budget restarted, so still not blocked yet.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: None,
+    )
+    for _ in range(ctx.settings.merge_pr_missing_max_polls - 1):
+        assert stage.run(t, ctx).next_state is State.HUMAN_MR_APPROVAL
+    assert stage.run(t, ctx).next_state is State.BLOCKED
+
+
+def test_pr_missing_guard_disabled_by_zero(tmp_path, monkeypatch):
+    """merge_pr_missing_max_polls=0 restores the old unbounded re-poll."""
+    ctx = _pr_missing_ctx(tmp_path, monkeypatch, merge_pr_missing_max_polls=0)
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+    for _ in range(12):
+        assert stage.run(t, ctx).next_state is State.IMPLEMENT_COMPLETE
+
+
+# ============================================================
 # Empty-rollup self-heal (close/reopen PR)
 # ============================================================
 

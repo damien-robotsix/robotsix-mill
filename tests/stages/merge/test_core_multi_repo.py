@@ -1497,3 +1497,102 @@ def test_multi_repo_no_changes_requested_auto_merges(tmp_path, monkeypatch):
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
     assert sorted(merged_calls) == [remote_a, remote_b]
+
+
+def test_multi_repo_all_prs_missing_blocks_after_ceiling(tmp_path, monkeypatch):
+    """Every repo's PR unresolvable (branch-keyed AND recorded-URL lookups
+    both empty) re-polls below the ceiling; past it the ticket BLOCKs with
+    a specific note instead of silently spinning on dead lookups."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={remote_a: None, remote_b: None},
+        pr_by_url_responses={remote_a: None, remote_b: None},
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {
+                "repo_id": "repo-a",
+                "branch": branch,
+                "url": "https://github.com/o/a/pull/1",
+            },
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    stage = MergeStage()
+    ceiling = ctx.settings.merge_pr_missing_max_polls
+    outs = [stage.run(t, ctx) for _ in range(ceiling)]
+    assert [o.next_state for o in outs[:-1]] == [State.IMPLEMENT_COMPLETE] * (
+        ceiling - 1
+    )
+    final = outs[-1]
+    assert final.next_state is State.BLOCKED
+    assert "no PR found" in final.note
+    assert "repo-a" in final.note
+    assert "repo-b" in final.note
+
+
+def test_multi_repo_pr_missing_resets_when_pr_appears(tmp_path, monkeypatch):
+    """A repo whose PR appears again resets the consecutive no-PR streak —
+    the next all-missing run starts the budget over."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={remote_a: None, remote_b: None},
+        pr_by_url_responses={remote_a: None, remote_b: None},
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {"repo_id": "repo-a", "branch": branch, "url": "u-a"},
+            {"repo_id": "repo-b", "branch": branch, "url": "u-b"},
+        ],
+    )
+
+    stage = MergeStage()
+    ceiling = ctx.settings.merge_pr_missing_max_polls
+    for _ in range(ceiling - 1):
+        assert stage.run(t, ctx).next_state is State.IMPLEMENT_COMPLETE
+
+    # repo-a's PR appears (merged) → streak resets.
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={remote_b: None},
+        pr_by_url_responses={
+            remote_a: {"merged": True, "state": "closed", "url": "u-a"},
+            remote_b: None,
+        },
+    )
+    assert stage.run(t, ctx).next_state is State.IMPLEMENT_COMPLETE
+
+    # All missing again — budget restarted, so still not blocked yet.
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={remote_a: None, remote_b: None},
+        pr_by_url_responses={remote_a: None, remote_b: None},
+    )
+    for _ in range(ceiling - 1):
+        assert stage.run(t, ctx).next_state is State.IMPLEMENT_COMPLETE
+    assert stage.run(t, ctx).next_state is State.BLOCKED

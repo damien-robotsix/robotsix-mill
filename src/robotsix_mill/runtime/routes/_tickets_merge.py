@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ...config import Settings
+from ...config import ConfigError, Settings
 from ...config.repos import target_branch_for
 from ...core.models import TicketRead
 from ...core.service import TicketService
@@ -308,6 +308,105 @@ def get_merge_reason(
     return {"reason": reason_path.read_text(encoding="utf-8").strip()}
 
 
+def _multi_repo_merge_status(
+    ticket: Ticket,
+    svc: TicketService,
+    settings: Settings,
+    pr_entries: list[dict[str, Any]],
+) -> dict[str, object]:
+    """Aggregate merge-readiness for a multi-repo (meta/cross-repo) ticket.
+
+    The ``pr_urls.json`` manifest the deliver stage wrote is the recorded
+    source of truth — the PRs live in the repos it names, which may be a
+    DIFFERENT repo than this board's own repo.  Each entry's per-repo
+    forge resolves the PR by its recorded URL (the branch-keyed lookup is
+    only a fallback), so the drawer never reports "No PR found for this
+    branch" against the wrong repo, as happened on 2026-09-03 for
+    robotsix-chat#1807 whose branch-keyed lookup was run against the
+    mill's own repo.
+    """
+    mergeable: bool | None = None
+    ci_conclusion: str | None = None
+    unresolved: list[str] = []
+    for entry in pr_entries:
+        repo_id = entry.get("repo_id", "")
+        branch = entry.get("branch", "")
+        url = entry.get("url", "")
+        try:
+            rc = _repo_config_for_entry(entry)
+        except ConfigError:
+            unresolved.append(f"{repo_id}: unknown repo in pr_urls.json")
+            continue
+        forge = get_forge(settings, repo_config=rc)
+        pr = None
+        if url:
+            try:
+                pr = forge.pr_status_by_url(url=url)
+            except Exception:
+                pr = None
+        if pr is None and branch:
+            try:
+                pr = forge.pr_status(source_branch=branch)
+            except Exception:
+                pr = None
+        if pr is None:
+            unresolved.append(f"{repo_id}: no PR found for the recorded URL")
+            continue
+        if pr.get("merged"):
+            continue
+        if pr.get("mergeable") is False:
+            mergeable = False
+        elif mergeable is not False:
+            mergeable = pr.get("mergeable")
+        try:
+            cs = forge.check_status(source_branch=branch)
+        except Exception:
+            cs = None
+        concl = (cs or {}).get("conclusion")
+        if concl == "failure":
+            ci_conclusion = "failure"
+        elif ci_conclusion != "failure" and concl == "pending":
+            ci_conclusion = "pending"
+        elif ci_conclusion is None and concl == "success":
+            ci_conclusion = "success"
+
+    if unresolved:
+        return {
+            "mergeable": mergeable,
+            "ci_conclusion": ci_conclusion,
+            "can_merge": False,
+            "reason": "no PR found for the recorded URL(s): "
+            + "; ".join(unresolved),
+        }
+    if mergeable is False:
+        return {
+            "mergeable": False,
+            "ci_conclusion": ci_conclusion,
+            "can_merge": False,
+            "reason": "PR has conflicts — rebase needed",
+        }
+    if ci_conclusion == "failure":
+        return {
+            "mergeable": mergeable,
+            "ci_conclusion": ci_conclusion,
+            "can_merge": False,
+            "reason": "CI checks are failing",
+        }
+    if ci_conclusion == "pending":
+        return {
+            "mergeable": mergeable,
+            "ci_conclusion": ci_conclusion,
+            "can_merge": False,
+            "reason": "CI checks are still running",
+        }
+    return {
+        "mergeable": mergeable,
+        "ci_conclusion": ci_conclusion,
+        "can_merge": True,
+        "reason": "",
+    }
+
+
 @router.get("/tickets/{ticket_id}/merge-status")
 def get_merge_status(
     ticket_id: str,
@@ -342,6 +441,26 @@ def get_merge_status(
             "can_merge": False,
             "reason": f"ticket is not in a merge-relevant state (currently {ticket.state.value})",
         }
+
+    # Multi-repo mode: when the deliver stage wrote ``pr_urls.json`` the
+    # PRs live in the recorded repos — resolve them by their recorded URLs
+    # instead of re-deriving the repo from the board (a meta/cross-repo
+    # ticket's board has no matching repo config, so the branch-keyed
+    # lookup would run against the wrong repo and report "No PR found").
+    from ...stages.merge import _load_pr_urls, _repo_config_for_entry
+
+    try:
+        pr_entries = _load_pr_urls(svc.workspace(ticket).artifacts_dir)
+    except ValueError as e:
+        return {
+            "mergeable": None,
+            "ci_conclusion": None,
+            "can_merge": False,
+            "reason": f"pr_urls.json corrupted: {e}",
+        }
+
+    if pr_entries:
+        return _multi_repo_merge_status(ticket, svc, settings, pr_entries)
 
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
     forge = get_forge(settings, repo_config=repo_config)

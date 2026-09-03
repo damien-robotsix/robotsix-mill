@@ -3656,6 +3656,39 @@ def test_statuses_to_check_runs_same_context_collapsed():
     assert names == {"ci/test", "ci/lint"}
 
 
+def test_statuses_to_check_runs_uses_per_context_state_not_combined():
+    """Each status context keeps ITS OWN state — the combined-status
+    ``state`` must NOT smear onto every context.
+
+    Regression for 2026-09-03 (robotsix-chat#1807): the combined
+    ``state`` is the aggregate across all contexts (``"failure"`` when
+    ANY one failed), so using it for every context misassembled the
+    cross-repo ci-fix failing list — a green context such as "All CI
+    checks passed" was reported as a failing check, and a PR whose only
+    real failure was elsewhere was gated on checks that had passed.
+    """
+    data = {
+        "state": "failure",
+        "statuses": [
+            {"context": "All CI checks passed", "state": "success"},
+            {"context": "Pre-commit hooks", "state": "failure"},
+        ],
+    }
+    runs = _statuses_to_check_runs(data)
+    by_name = {r["name"]: r for r in runs}
+    assert by_name["All CI checks passed"]["conclusion"] == "success"
+    assert by_name["All CI checks passed"]["status"] == "completed"
+    assert by_name["Pre-commit hooks"]["conclusion"] == "failure"
+    assert by_name["Pre-commit hooks"]["status"] == "completed"
+    # Fallback: a status entry without its own state still uses the
+    # combined state, so the legacy single-status shape keeps working.
+    legacy = _statuses_to_check_runs(
+        {"state": "pending", "statuses": [{"context": "ci/test"}]}
+    )
+    assert legacy[0]["conclusion"] is None
+    assert legacy[0]["status"] == "in_progress"
+
+
 # ---------------------------------------------------------------------------
 # _latest_definitive_runs
 # ---------------------------------------------------------------------------
