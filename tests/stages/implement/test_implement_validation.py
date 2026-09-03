@@ -246,6 +246,10 @@ def _call_guardrail(ctx, settings, file_map, ticket_id="T-1"):
 
 def test_scope_guardrail_skips_when_no_file_map(monkeypatch):
     monkeypatch.setattr(validation_mod, "target_branch_for", lambda *a: "main")
+    # ``changed`` is now computed at the top of the method (for the
+    # repo-settings write-path guard) before the no-file_map short-circuit,
+    # so stub introduced_files like the sibling tests do.
+    monkeypatch.setattr(validation_mod.git_ops, "introduced_files", lambda *a: [])
     res = _call_guardrail(_scope_ctx(), _scope_settings(), file_map=None)
     assert res.action == "skip_iteration"
     assert res.outcome is None

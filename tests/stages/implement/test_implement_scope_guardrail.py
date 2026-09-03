@@ -270,6 +270,203 @@ def test_run_scope_guardrail_reject_cleans_resumed_wip_history(
     assert "a.txt" in net
 
 
+# --- .robotsix-mill/config.yaml write-path guard --------------------------
+
+
+def _seed_repo_settings(ctx, remote, t, base_config: str):
+    """Clone, commit *base_config* as .robotsix-mill/config.yaml on
+    origin/main, then check out a fresh mill branch. Returns (repo, branch).
+    """
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    (repo / ".robotsix-mill").mkdir(parents=True, exist_ok=True)
+    (repo / ".robotsix-mill" / "config.yaml").write_text(base_config)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "seed repo settings")
+    _git(repo, "push", "origin", "main")
+    branch = f"mill/{t.id}"
+    _git(repo, "checkout", "-q", "-b", branch)
+    return repo, branch
+
+
+def _no_triage(monkeypatch):
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+
+    monkeypatch.setattr(
+        scope_triage_mod,
+        "run_scope_triage_agent",
+        lambda **_k: (_ for _ in ()).throw(
+            AssertionError("scope-triage must not be called for this case")
+        ),
+    )
+
+
+def test_repo_settings_guard_valid_in_scope_edit_proceeds(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """(a) An in-scope, well-formed edit that ADDS extra_sandbox_packages
+    while preserving the existing keys → guard returns None, ticket
+    proceeds (no block)."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, ".robotsix-mill/config.yaml")
+
+    repo, branch = _seed_repo_settings(
+        ctx, remote, t, "test_command: pytest -q\nlanguages: [python]\n"
+    )
+    # Add a key while preserving the existing ones.
+    (repo / ".robotsix-mill" / "config.yaml").write_text(
+        "test_command: pytest -q\n"
+        "languages: [python]\n"
+        "extra_sandbox_packages:\n  - pip:pytest\n"
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "wip: add extra_sandbox_packages")
+
+    _no_triage(monkeypatch)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        branch,
+        summary="agent summary",
+        ref_files=None,
+        file_map={".robotsix-mill/config.yaml"},
+        settings=ctx.settings,
+        spec="add extra_sandbox_packages",
+        current_feedback=None,
+    )
+
+    # Guard did not interfere; the only changed file is in scope.
+    assert result.action == "skip_iteration"
+    assert result.outcome is None
+
+
+def test_repo_settings_guard_blocks_dropped_keys(ctx_factory, tmp_path, monkeypatch):
+    """(b) An edit that replaces the file with only extra_sandbox_packages,
+    dropping test_command/smoke_command → guard blocks with feedback
+    naming the dropped keys."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, ".robotsix-mill/config.yaml")
+
+    repo, branch = _seed_repo_settings(
+        ctx,
+        remote,
+        t,
+        "test_command: pytest -q\nsmoke_command: scripts/smoke.sh\n",
+    )
+    # Clobber the file — only the ticket-specific key remains.
+    (repo / ".robotsix-mill" / "config.yaml").write_text(
+        "extra_sandbox_packages:\n  - pip:pytest\n"
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "wip: clobber config")
+
+    _no_triage(monkeypatch)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        branch,
+        summary="agent summary",
+        ref_files=None,
+        file_map={".robotsix-mill/config.yaml"},
+        settings=ctx.settings,
+        spec="add extra_sandbox_packages",
+        current_feedback=None,
+    )
+
+    assert result.action == "return"
+    assert result.outcome is not None
+    assert result.outcome.next_state is State.BLOCKED
+    note = result.outcome.note
+    assert ".robotsix-mill/config.yaml" in note
+    assert "test_command" in note
+    assert "smoke_command" in note
+    assert "do not rewrite the whole file" in note
+
+    # A step event mirrors the block on the ticket timeline.
+    events = [ev.note for ev in ctx.service.history(t.id) if ev.note]
+    assert any("test_command" in n and "config.yaml" in n for n in events)
+
+
+def test_repo_settings_guard_blocks_invalid_content(ctx_factory, tmp_path, monkeypatch):
+    """(c) An edit introducing a wrong-typed key → guard blocks with the
+    validator's problem in the feedback."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, ".robotsix-mill/config.yaml")
+
+    repo, branch = _seed_repo_settings(ctx, remote, t, "test_command: pytest -q\n")
+    # Introduce a wrong-typed key (test_command must be a string).
+    (repo / ".robotsix-mill" / "config.yaml").write_text("test_command: 5\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "wip: wrong-typed key")
+
+    _no_triage(monkeypatch)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        branch,
+        summary="agent summary",
+        ref_files=None,
+        file_map={".robotsix-mill/config.yaml"},
+        settings=ctx.settings,
+        spec="edit config",
+        current_feedback=None,
+    )
+
+    assert result.action == "return"
+    assert result.outcome is not None
+    assert result.outcome.next_state is State.BLOCKED
+    assert "test_command" in result.outcome.note
+    assert "config.yaml" in result.outcome.note
+
+
+def test_repo_settings_guard_ignores_untouched_config(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A ticket that does not touch .robotsix-mill/config.yaml is not
+    affected by the guard (it returns None immediately)."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    (repo / "a.txt").write_text("in scope")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "wip: in scope only")
+
+    _no_triage(monkeypatch)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=ctx.settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    # No config.yaml in the diff → guard is a no-op; in-scope change passes.
+    assert result.action == "skip_iteration"
+    assert result.outcome is None
+
+
 # --- binary artifact auto-cleanup in scope guardrail ----------------------
 
 

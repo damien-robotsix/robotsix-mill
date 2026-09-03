@@ -34,6 +34,118 @@ import yaml
 
 log = logging.getLogger("robotsix_mill.config.repo_settings")
 
+# Every top-level key the loaders in this module read (plus the
+# deprecated-but-tolerated ``deployed_log_folder``, see
+# :func:`warn_if_deprecated_log_folder`). Kept in sync with the loaders so
+# the write-path validator can flag typos (e.g. ``test_commands:``) that
+# would otherwise silently disable the gate.
+KNOWN_REPO_SETTINGS_KEYS = frozenset(
+    {
+        "test_command",
+        "smoke_command",
+        "smoke_paths",
+        "skip_ci",
+        "languages",
+        "language",
+        "extra_sandbox_packages",
+        "members",
+        "deployed_log_folder",
+    }
+)
+
+
+# (key, allowed types, human-readable expectation) for each typed
+# top-level key, mirroring the loaders' own type contracts. Note ``bool``
+# is checked before ``int``-accepting keys would matter: ``skip_ci`` must
+# be a real bool, so ``skip_ci: 1`` is rejected.
+_REPO_SETTINGS_TYPE_CHECKS: tuple[tuple[str, type | tuple[type, ...], str], ...] = (
+    ("test_command", str, "a string"),
+    ("smoke_command", str, "a string"),
+    ("smoke_paths", list, "a list"),
+    ("extra_sandbox_packages", list, "a list"),
+    ("skip_ci", bool, "a bool"),
+    ("languages", (list, str), "a list or string"),
+    ("language", str, "a string"),
+    ("members", dict, "a mapping"),
+)
+
+
+def validate_repo_settings_text(text: str) -> list[str]:
+    """Validate the *text* of a ``.robotsix-mill/config.yaml`` file.
+
+    Returns a list of human-readable problem strings; an empty list means
+    the content is valid. Pure — never touches the filesystem and never
+    raises — so it can be unit-tested in isolation and used on the write
+    path to reject a broken file before it is committed.
+
+    The checks mirror the loaders' own type contracts:
+
+    * YAML must parse (a :class:`yaml.YAMLError` yields one problem).
+    * The top level must be a mapping (dict). An empty file / top-level
+      ``null`` is valid (equivalent to "no settings"), matching the
+      loaders treating absence as default.
+    * ``test_command`` / ``smoke_command`` must be ``str`` when present.
+    * ``smoke_paths`` / ``extra_sandbox_packages`` must be ``list`` when
+      present.
+    * ``skip_ci`` must be ``bool`` when present.
+    * ``languages`` must be ``list`` or ``str`` and ``language`` ``str``
+      when present.
+    * ``members`` must be a mapping when present.
+    * Any top-level key not in :data:`KNOWN_REPO_SETTINGS_KEYS` is a
+      problem (guards typos that would silently disable a gate).
+    """
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        return [f"invalid YAML: {exc}"]
+
+    # An empty file / top-level ``null`` means "no settings" — valid.
+    if data is None:
+        return []
+
+    if not isinstance(data, dict):
+        return ["top level must be a mapping (dict)"]
+
+    problems: list[str] = [
+        f"unknown top-level key: {key!r}"
+        for key in data
+        if key not in KNOWN_REPO_SETTINGS_KEYS
+    ]
+    problems.extend(
+        f"{key!r} must be {label}"
+        for key, types, label in _REPO_SETTINGS_TYPE_CHECKS
+        if key in data and not isinstance(data[key], types)
+    )
+    return problems
+
+
+def dropped_top_level_keys(base_text: str, new_text: str) -> list[str]:
+    """Return the sorted top-level keys present in *base_text* but absent
+    from *new_text* — i.e. keys a rewrite clobbered.
+
+    Both sides are parsed with :func:`yaml.safe_load`. If either side
+    fails to parse or is not a mapping, returns ``[]`` (the validator
+    handles malformed cases; this helper only detects clobbering of an
+    otherwise-valid base). A key whose *value* changed is NOT a drop —
+    only removal counts. Pure — never touches the filesystem and never
+    raises.
+    """
+
+    def _keys(text: str) -> set[str] | None:
+        try:
+            data = yaml.safe_load(text)
+        except yaml.YAMLError:
+            return None
+        if not isinstance(data, dict):
+            return None
+        return set(data.keys())
+
+    base_keys = _keys(base_text)
+    new_keys = _keys(new_text)
+    if base_keys is None or new_keys is None:
+        return []
+    return sorted(base_keys - new_keys)
+
 
 def load_repo_test_command(repo_dir: Path | None) -> str | None:
     """Return the per-repo ``test_command`` from
