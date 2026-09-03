@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ...config import ConfigError, Settings
 from ...config.repos import target_branch_for
-from ...core.models import TicketRead
+from ...core.models import Ticket, TicketRead
 from ...core.service import TicketService
 from ...core.states import State
 from ...forge import get_forge
@@ -325,6 +325,8 @@ def _multi_repo_merge_status(
     robotsix-chat#1807 whose branch-keyed lookup was run against the
     mill's own repo.
     """
+    from ...stages.merge import _repo_config_for_entry
+
     mergeable: bool | None = None
     ci_conclusion: str | None = None
     unresolved: list[str] = []
@@ -447,7 +449,7 @@ def get_merge_status(
     # instead of re-deriving the repo from the board (a meta/cross-repo
     # ticket's board has no matching repo config, so the branch-keyed
     # lookup would run against the wrong repo and report "No PR found").
-    from ...stages.merge import _load_pr_urls, _repo_config_for_entry
+    from ...stages.merge import _load_pr_urls
 
     try:
         pr_entries = _load_pr_urls(svc.workspace(ticket).artifacts_dir)
