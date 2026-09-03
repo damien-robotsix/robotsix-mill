@@ -39,7 +39,6 @@ class _ReviewGateSettings(BaseModel):
     auto_merge_main_debt_detection_enabled: bool = Field(
         description="When true, detect pre-existing main-branch CI debt to avoid rebase/ci-fix retry loops.",
         default=True,
-        json_schema_extra={"advanced": True},
     )
     # When True (default False), all auto-merge is suppressed globally
     # regardless of per-repo toggles.  Emergency kill-switch — the
@@ -137,7 +136,6 @@ class _ReviewGateSettings(BaseModel):
     refine_prescriptive_spec_code_lines_threshold: int = Field(
         description="Drafts with more than this many fenced code lines skip refine entirely.",
         default=50,
-        json_schema_extra={"advanced": True},
     )
     # When True (default), the refine stage detects specs whose
     # implementation section already contains complete file-path +
@@ -150,7 +148,6 @@ class _ReviewGateSettings(BaseModel):
     refine_skip_llm_on_impl_ready_spec: bool = Field(
         description="When true, implementation-ready specs skip the expensive LLM refine agent.",
         default=True,
-        json_schema_extra={"advanced": True},
     )
     # When True (default), a pre-Opus guard checks whether the reviewer's
     # feedback on a sendback ticket already agrees with the draft's
@@ -160,7 +157,6 @@ class _ReviewGateSettings(BaseModel):
     reviewer_agreement_gate_enabled: bool = Field(
         description="When true, reviewer agreement with a no-change-needed conclusion short-circuits to DONE.",
         default=True,
-        json_schema_extra={"advanced": True},
     )
     # When True (default), the cheap advisory-dedup-verification gate runs
     # after the inflight-advisory phase and before the expensive refine
@@ -173,7 +169,6 @@ class _ReviewGateSettings(BaseModel):
     refine_advisory_dedup_enabled: bool = Field(
         description="When true, a cheap advisory-dedup-verification gate runs after inflight-advisory phase.",
         default=True,
-        json_schema_extra={"advanced": True},
     )
     # When True, a deterministic pre-refine gate verifies that file paths
     # and line ranges cited in the ticket draft still exist on the
@@ -280,14 +275,12 @@ class _ReviewGateSettings(BaseModel):
     stale_branch_cleanup_interval_seconds: int = Field(
         description="Seconds between automatic stale-branch cleanup passes. 0 = disabled.",
         default=86400,
-        json_schema_extra={"advanced": True},
     )
     # A branch is eligible for cleanup only if its last commit is older than
     # this many days. Default 30 days.
     stale_branch_max_age_days: int = Field(
         description="Branch is eligible for cleanup only if its last commit is older than this many days.",
         default=30,
-        json_schema_extra={"advanced": True},
     )
     # When True, only delete branches whose name starts with ``branch_prefix``
     # (the "old mill" branches). When False, also reap any other stale branch
@@ -295,7 +288,6 @@ class _ReviewGateSettings(BaseModel):
     stale_branch_cleanup_prefix_only: bool = Field(
         description="When true, only delete branches matching branch_prefix.",
         default=True,
-        json_schema_extra={"advanced": True},
     )
     # Maximum number of CODE_REVIEW → READY → DOCUMENTING → CODE_REVIEW
     # round-trips before escalating to DELIVERABLE for human merge approval.
@@ -305,7 +297,6 @@ class _ReviewGateSettings(BaseModel):
         description="Maximum CODE_REVIEW to READY to DOCUMENTING to CODE_REVIEW round-trips before escalation.",
         default=3,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
 
     # Backstop ceiling on total implement passes per ticket (across all
@@ -319,7 +310,6 @@ class _ReviewGateSettings(BaseModel):
         description="Ceiling on total implement passes per ticket across all review rounds. 0 disables.",
         default=10,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
     # Maximum number of times the implement stage may be entered (spawned)
     # for a single ticket — counted across all review rounds and resumptions.
@@ -334,7 +324,6 @@ class _ReviewGateSettings(BaseModel):
         description="Maximum times the implement stage may be entered per ticket. 0 disables.",
         default=3,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
     # Number of consecutive no-progress BLOCKED implement cycles after
     # which the stall guard fires with an actionable diagnostic instead
@@ -347,7 +336,6 @@ class _ReviewGateSettings(BaseModel):
         description="Consecutive no-progress BLOCKED cycles before stall guard fires. 0 disables.",
         default=2,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
     # Consecutive zero-diff implement passes before the early-abort guard
     # pauses the ticket via ask_user instead of consuming further spawn
@@ -360,7 +348,6 @@ class _ReviewGateSettings(BaseModel):
         description="Consecutive zero-diff implement passes before pausing with ask_user. 0 disables.",
         default=2,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
     # How many model requests the review agent may make in one run
     # (counts each tool call + each reasoning step + the final verdict).
@@ -378,7 +365,6 @@ class _ReviewGateSettings(BaseModel):
     review_request_limit: int = Field(
         description="Per-call request cap for the review agent.",
         default=80,
-        json_schema_extra={"advanced": True},
     )
     # Maximum characters of the re-review prior-context block (prior
     # review comments + the implement rebuttal) fed to the review agent.
@@ -389,7 +375,6 @@ class _ReviewGateSettings(BaseModel):
         description="Maximum characters of prior review context fed to the review agent. 0 disables.",
         default=8000,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
     # Maximum characters of the combined git diff injected into the review
     # prompt. The raw ``git diff origin/<target>...HEAD`` can balloon to
@@ -403,7 +388,6 @@ class _ReviewGateSettings(BaseModel):
         description="Maximum characters of the combined git diff injected into the review prompt. 0 disables.",
         default=200_000,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
     # When the combined diff exceeds ``review_diff_max_chars``, thin each
     # hunk's context runs down to this many lines per side BEFORE the
@@ -416,7 +400,6 @@ class _ReviewGateSettings(BaseModel):
         description="Max surrounding context lines kept per hunk when the review diff exceeds review_diff_max_chars. 0 disables hunk thinning.",
         default=1,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
     # Lines of file context around each changed region preloaded in the
     # review preseed. Replaces the old whole-file preload: for a modified
@@ -427,7 +410,6 @@ class _ReviewGateSettings(BaseModel):
         description="Lines of file context around each changed region preloaded in the review preseed. 0 preloads only changed lines.",
         default=40,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
     # Output token budget for the review agent retry when the primary
     # attempt exhausts its max_tokens before generating a response
@@ -439,7 +421,6 @@ class _ReviewGateSettings(BaseModel):
         description="Output token budget for the review agent retry on max_tokens exhaustion. 0 disables.",
         default=65536,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
     # Maximum number of out-of-scope TEXT files fed into the scope-triage
     # prompt. When an implement pass leaves MORE than this many out-of-scope
@@ -461,17 +442,14 @@ class _ReviewGateSettings(BaseModel):
             "Absolute cap on out-of-scope text files before the scope-triage "
             "LLM is skipped, regardless of whether they are newly added."
         ),
-        json_schema_extra={"advanced": True},
     )
     scope_triage_max_files: int = Field(
         description="Maximum out-of-scope text files fed to the scope-triage prompt. 0 disables.",
         default=50,
         ge=0,
-        json_schema_extra={"advanced": True},
     )
     # Per-call cap for pre-refine triage agent (main call + tool calls).
     triage_request_limit: int = Field(
         description="Per-call request cap for the pre-refine triage agent.",
         default=8,
-        json_schema_extra={"advanced": True},
     )
