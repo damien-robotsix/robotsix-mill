@@ -544,6 +544,16 @@ class _PeriodicSettings(BaseModel):
         description="Repos the daily diagnostic agent monitors each pass.",
     )
 
+    # --- ci auto-close (stale source=ci failure tickets) ---
+    # Seconds between passes that re-check open source=ci tickets against the
+    # CURRENT main head and close the ones whose workflow has since turned
+    # green (see runners/ci_auto_close_runner.py). 0 = disabled.
+    ci_auto_close_interval_seconds: int = Field(
+        default=900,
+        description="Seconds between CI-failure auto-close passes. 0 = disabled.",
+        json_schema_extra={"advanced": True},
+    )
+
     # --- diagnostic event store ---
     # Explicit file path for the JSONL diagnostic event store.  When
     # unset (default) the path is derived per-repo:

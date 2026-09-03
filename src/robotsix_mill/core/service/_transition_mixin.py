@@ -14,6 +14,7 @@ from ...vcs import git_ops
 from ..db import retry_on_db_full
 from ..models import (
     Comment,
+    SourceKind,
     Ticket,
 )
 from ..states import State, can_transition
@@ -989,7 +990,13 @@ class _TransitionMixin(_ServiceBase):
             # ticket that loops in BLOCKED, or a ticket wedged in the
             # rebase agent — so both get the marker.
             force_close_states = {State.BLOCKED, State.REBASING}
-            is_force_close = ticket.state in force_close_states
+            # ci-source tickets are main-branch workflow-failure reports —
+            # they never open a feature branch, so there is nothing to
+            # merge-verify. The ci-auto-close pass closes them via mark_done
+            # once the workflow turns green, from any non-terminal state.
+            is_force_close = (
+                ticket.state in force_close_states or ticket.source == SourceKind.CI
+            )
             if is_force_close:
                 reason = note if note.strip() else "operator mark-done"
                 note = f"[force-closed from {ticket.state}] {reason}"
