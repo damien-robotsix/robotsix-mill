@@ -12,6 +12,7 @@ import logging
 from types import SimpleNamespace
 
 from robotsix_mill.config.repo_settings import (
+    dropped_top_level_keys,
     load_extra_sandbox_packages,
     load_repo_languages,
     load_repo_skip_ci,
@@ -19,6 +20,7 @@ from robotsix_mill.config.repo_settings import (
     load_repo_smoke_paths,
     load_repo_test_command,
     resolve_language_instructions,
+    validate_repo_settings_text,
     warn_if_deprecated_log_folder,
 )
 
@@ -427,3 +429,127 @@ def test_skip_ci_non_mapping_top_level_returns_false(tmp_path, caplog):
     with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.repo_settings"):
         assert load_repo_skip_ci(tmp_path) is False
     assert any("mapping" in r.message for r in caplog.records)
+
+
+# --- validate_repo_settings_text -------------------------------------------
+
+
+def test_validate_this_repos_own_config_is_valid():
+    """This repo's own committed .robotsix-mill/config.yaml must validate
+    cleanly — a guard on the guard itself."""
+    import pathlib
+
+    path = (
+        pathlib.Path(__file__).resolve().parents[2] / ".robotsix-mill" / "config.yaml"
+    )
+    text = path.read_text(encoding="utf-8")
+    assert validate_repo_settings_text(text) == []
+
+
+def test_validate_full_config_is_valid():
+    text = (
+        "test_command: pytest -q\n"
+        "smoke_command: scripts/smoke.sh\n"
+        "smoke_paths:\n  - src/**\n"
+        "skip_ci: false\n"
+        "languages: [python]\n"
+        "extra_sandbox_packages:\n  - pip:pytest\n"
+        "members:\n  member/a: {}\n"
+    )
+    assert validate_repo_settings_text(text) == []
+
+
+def test_validate_empty_file_is_valid():
+    assert validate_repo_settings_text("") == []
+
+
+def test_validate_null_top_level_is_valid():
+    assert validate_repo_settings_text("null\n") == []
+
+
+def test_validate_non_mapping_top_level_is_problem():
+    problems = validate_repo_settings_text("- a\n- b\n")
+    assert problems
+    assert any("mapping" in p for p in problems)
+
+
+def test_validate_test_command_wrong_type():
+    problems = validate_repo_settings_text("test_command: 5\n")
+    assert any("test_command" in p for p in problems)
+
+
+def test_validate_smoke_paths_wrong_type():
+    problems = validate_repo_settings_text('smoke_paths: "x"\n')
+    assert any("smoke_paths" in p for p in problems)
+
+
+def test_validate_skip_ci_wrong_type():
+    problems = validate_repo_settings_text('skip_ci: "yes"\n')
+    assert any("skip_ci" in p for p in problems)
+
+
+def test_validate_extra_sandbox_packages_wrong_type():
+    problems = validate_repo_settings_text("extra_sandbox_packages: {}\n")
+    assert any("extra_sandbox_packages" in p for p in problems)
+
+
+def test_validate_members_wrong_type():
+    problems = validate_repo_settings_text("members:\n  - a\n  - b\n")
+    assert any("members" in p for p in problems)
+
+
+def test_validate_language_wrong_type():
+    problems = validate_repo_settings_text("language: [python]\n")
+    assert any("language" in p for p in problems)
+
+
+def test_validate_unknown_key_is_problem_and_names_it():
+    problems = validate_repo_settings_text("test_commnad: pytest\n")
+    assert any("test_commnad" in p for p in problems)
+
+
+def test_validate_invalid_yaml_is_problem():
+    problems = validate_repo_settings_text("test_command: [unterminated\n")
+    assert len(problems) == 1
+    assert "YAML" in problems[0]
+
+
+def test_validate_never_raises_on_various_inputs():
+    for text in ("", "\n", "42\n", "true\n", "a: b: c\n", "{"):
+        # Must not raise for any input.
+        assert isinstance(validate_repo_settings_text(text), list)
+
+
+# --- dropped_top_level_keys ------------------------------------------------
+
+
+def test_dropped_keys_detects_removed_key():
+    base = "test_command: pytest\nlanguages: [python]\n"
+    new = "languages: [python]\n"
+    assert dropped_top_level_keys(base, new) == ["test_command"]
+
+
+def test_dropped_keys_multiple_sorted():
+    base = "test_command: pytest\nsmoke_command: x\nskip_ci: true\n"
+    new = "skip_ci: true\n"
+    assert dropped_top_level_keys(base, new) == ["smoke_command", "test_command"]
+
+
+def test_dropped_keys_changed_value_is_not_a_drop():
+    base = "test_command: pytest\n"
+    new = "test_command: pytest -q --tb=short\n"
+    assert dropped_top_level_keys(base, new) == []
+
+
+def test_dropped_keys_new_file_empty_base():
+    new = "test_command: pytest\n"
+    assert dropped_top_level_keys("", new) == []
+
+
+def test_dropped_keys_non_mapping_side_returns_empty():
+    assert dropped_top_level_keys("- a\n", "test_command: pytest\n") == []
+    assert dropped_top_level_keys("test_command: pytest\n", "- a\n") == []
+
+
+def test_dropped_keys_unparseable_side_returns_empty():
+    assert dropped_top_level_keys("test_command: [x\n", "test_command: pytest\n") == []

@@ -6,6 +6,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import yaml
+
 from ...agents import prerequisite
 from ...agents.testing import is_network_dependent_failure
 from ...config import Settings, target_branch_for
@@ -41,6 +43,14 @@ _STANDARD_CONFIG_FILES: frozenset[str] = frozenset(
         "mkdocs.yml",
     }
 )
+
+# The managed repo's per-repo settings file.  Unlike the standard config
+# files above, this one is frequently IN scope for a ticket (the mill
+# actively steers agents to edit it — e.g. to declare
+# ``extra_sandbox_packages``), so it never reaches the out-of-scope
+# auto-revert path.  The write-path guard below validates it and detects
+# clobbered keys against the whole changed set instead.
+_REPO_SETTINGS_FILE = ".robotsix-mill/config.yaml"
 
 
 def _spec_names_path(spec: str, path: str) -> bool:
@@ -158,6 +168,21 @@ class ValidationMixin(_ImplementStageBase):
         out-of-scope file immediately blocks the ticket.
         """
         target = target_branch_for(settings, ctx.repo_config)
+        changed = git_ops.introduced_files(repo_dir, target)
+
+        # --- repo-settings write-path guard ---
+        # Runs early and unconditionally on the FULL changed set: the
+        # per-repo settings file is usually in scope (in file_map), so it
+        # never appears in out_of_scope — keying off scope would miss it.
+        # Blocks a malformed/wrong-typed file or a rewrite that clobbers
+        # pre-existing keys, before either the empty-file_map or
+        # scope-violation branches below.
+        repo_settings_block = cls._guard_repo_settings_file(
+            ctx, ticket, repo_dir, branch, summary, ref_files, changed, target
+        )
+        if repo_settings_block is not None:
+            return repo_settings_block
+
         if not file_map:
             return _ScopeGuardrailResult(
                 action="skip_iteration",
@@ -165,7 +190,6 @@ class ValidationMixin(_ImplementStageBase):
                 feedback=current_feedback,
             )
 
-        changed = git_ops.introduced_files(repo_dir, target)
         # Directory entries in the file_map (trailing "/") cover every
         # file under them. Without this, a map entry like ".deps/" never
         # matches the individual ".deps/<pkg>/..." paths and a directory
@@ -382,6 +406,122 @@ class ValidationMixin(_ImplementStageBase):
             out_of_scope,
             file_map,
             changed,
+        )
+
+    @classmethod
+    def _guard_repo_settings_file(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        summary: str,
+        ref_files: list[str] | None,
+        changed: list[str],
+        target: str,
+    ) -> _ScopeGuardrailResult | None:
+        """Validate a written ``.robotsix-mill/config.yaml`` before deliver.
+
+        Fires only when this pass's *changed* set touched the per-repo
+        settings file.  Blocks (ESCALATE/park path — NOT a silent
+        auto-revert) when the new content is invalid, or when the edit
+        dropped a top-level key the base file had (the classic
+        "rewrote the whole file with just my key" clobber).  Returns
+        ``None`` — no interference — when the file is valid and drops no
+        keys, or when the pass never touched it.
+        """
+        if _REPO_SETTINGS_FILE not in changed:
+            return None
+
+        from ...config.repo_settings import (
+            dropped_top_level_keys,
+            validate_repo_settings_text,
+        )
+
+        # 1. New content from the working tree (absent ⇒ deletion).
+        wt_path = repo_dir / ".robotsix-mill" / "config.yaml"
+        deleted = not wt_path.is_file()
+        new_text = ""
+        if not deleted:
+            try:
+                new_text = wt_path.read_text(encoding="utf-8")
+            except OSError:
+                new_text = ""
+
+        # 2. Base content via ``git show`` (non-zero exit / error ⇒ the
+        #    file is newly added, so base is empty and no keys can drop).
+        base_text = ""
+        try:
+            proc = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "show",
+                    f"origin/{target}:{_REPO_SETTINGS_FILE}",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if proc.returncode == 0:
+                base_text = proc.stdout
+        except OSError:
+            base_text = ""
+
+        # 3. Validate new content (skip on deletion — nothing to parse).
+        problems = [] if deleted else validate_repo_settings_text(new_text)
+
+        # 4. Detect clobbered keys.  A deletion drops EVERY base key, but
+        #    ``dropped_top_level_keys`` returns [] when the new side is not
+        #    a mapping (empty text) — enumerate the base keys directly for
+        #    that case so a deletion of a populated file is caught.
+        if deleted:
+            try:
+                base_data = yaml.safe_load(base_text)
+            except yaml.YAMLError:
+                base_data = None
+            dropped = sorted(base_data.keys()) if isinstance(base_data, dict) else []
+        else:
+            dropped = dropped_top_level_keys(base_text, new_text)
+
+        if not problems and not dropped:
+            return None
+
+        # --- block with actionable feedback ---
+        parts = [
+            (
+                f"`{_REPO_SETTINGS_FILE}` guard blocked this change — the "
+                "per-repo settings file must stay valid and must not lose keys."
+            )
+        ]
+        if problems:
+            parts.append("Invalid content:\n" + "\n".join(f"  - {p}" for p in problems))
+        if dropped:
+            parts.append(
+                "This edit dropped pre-existing top-level key(s): "
+                + ", ".join(f"`{k}`" for k in dropped)
+                + ". Merge your change into the existing file rather than "
+                "replacing it — add your key alongside the existing keys; "
+                "do not rewrite the whole file."
+            )
+        feedback = "\n\n".join(parts)
+
+        log.warning("%s: %s", ticket.id, feedback)
+        ctx.service.add_step_event(ticket.id, feedback)
+        cls._finalize(
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            feedback,
+            ok=False,
+            reference_files=ref_files,
+            extra_roots=None,
+        )
+        return _ScopeGuardrailResult(
+            action="return",
+            outcome=Outcome(State.BLOCKED, feedback),
+            feedback=feedback,
         )
 
     @classmethod
