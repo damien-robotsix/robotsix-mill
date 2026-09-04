@@ -247,14 +247,32 @@ def run(
             # 125 == docker daemon/usage error (not the command's own exit code)
             if r.returncode == 125:
                 eof_msg = stderr.strip()
-                if "unexpected EOF" in eof_msg and attempt < max_attempts:
-                    log.warning(
-                        "sandbox spawn attempt %d/%d: docker wait stream EOF "
-                        "(socket-proxy timeout likely); retrying...",
-                        attempt,
-                        max_attempts,
-                    )
-                    # Clean up any container that may have leaked
+                # Two transient daemon conditions are worth a retry with a
+                # fresh spawn: "unexpected EOF" is a socket-proxy wait-stream
+                # timeout, and "No such container: <64-hex>" is container GC
+                # racing the spawn (the referenced container no longer
+                # exists, likely GC'd across the block/resume cycle). Genuine
+                # command/daemon failures still raise below.
+                is_eof = "unexpected EOF" in eof_msg
+                is_gc = "No such container" in eof_msg
+                if attempt < max_attempts and (is_eof or is_gc):
+                    if is_eof:
+                        log.warning(
+                            "sandbox spawn attempt %d/%d: docker wait stream EOF "
+                            "(socket-proxy timeout likely); retrying...",
+                            attempt,
+                            max_attempts,
+                        )
+                    else:
+                        log.warning(
+                            "sandbox spawn attempt %d/%d: daemon reports "
+                            "'No such container' (GC raced the spawn); "
+                            "retrying...",
+                            attempt,
+                            max_attempts,
+                        )
+                    # Clean up any container that may have leaked (a no-op in
+                    # the GC case — the container is already gone)
                     subprocess.run(
                         ["docker", "rm", "-f", name],
                         capture_output=True,
@@ -264,6 +282,6 @@ def run(
                 raise SandboxError(f"docker run failed: {eof_msg[:300]}")
             return r.returncode, _truncate(stdout + stderr)
     # Should not be reachable — the last attempt either returns or raises
-    # above (non-125 → return; 125 non-EOF → raise; 125 EOF on last
-    # attempt → raise).  Included as a safety net.
-    raise SandboxError("docker run failed: unexpected EOF after all retries")
+    # above (non-125 → return; 125 non-retryable → raise; 125 retryable
+    # signature on last attempt → raise).  Included as a safety net.
+    raise SandboxError("docker run failed: transient daemon error after all retries")
