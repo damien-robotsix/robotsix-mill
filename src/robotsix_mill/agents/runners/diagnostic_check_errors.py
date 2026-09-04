@@ -52,12 +52,12 @@ def _fingerprint(run: dict[str, Any]) -> tuple[str, str]:
 
 
 class ErroredRunsCheck:
-    """Detect errored runs and file one draft ticket per unique error/day."""
+    """Detect errored runs and surface them as diagnostic events (no tickets)."""
 
     name = "errored_runs"
 
     def run(self, ctx: DiagnosticCheckContext) -> DiagnosticCheckResult:
-        """Execute the errored-runs check and file draft tickets."""
+        """Execute the errored-runs check and emit diagnostic events."""
         try:
             return self._run(ctx)
         except Exception:

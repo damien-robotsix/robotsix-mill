@@ -174,7 +174,7 @@ class PriorityStallCheck:
     name = "priority_stall"
 
     def run(self, ctx: DiagnosticCheckContext) -> DiagnosticCheckResult:
-        """Execute the priority-stall check and file diagnostic tickets."""
+        """Execute the priority-stall check and emit diagnostic events."""
         try:
             return self._run(ctx)
         except Exception:
