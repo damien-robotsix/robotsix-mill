@@ -4,8 +4,9 @@ A :class:`DiagnosticCheck` that detects priority tickets stuck at
 ``IMPLEMENT_COMPLETE`` and investigates the merge deferral reason
 (branch status, CI state, mergeability). When a priority ticket
 has been at ``IMPLEMENT_COMPLETE`` for more than one monitor cycle
-without advancing, this check files a diagnostic ticket with the
-root-cause analysis.
+without advancing, this check emits a diagnostic event carrying the
+root-cause analysis. It files **no tickets** — investigation findings
+belong in a chat subsession, not in a ticket.
 
 Registered via :func:`register_check` so the daily diagnostic agent
 picks it up automatically — no runner edits required.
@@ -18,19 +19,17 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ...config import get_repos_config
-from ...core.models import SourceKind, TicketKind
 from ...core.service import TicketService
-from ...core.states import DONE_OR_CLOSED, State
+from ...core.states import State
 from ...forge import get_forge
 from .diagnostic_checks import (
     DiagnosticCheckContext,
     DiagnosticCheckResult,
     register_check,
 )
+from .diagnostic_events import emit_diagnostic_event
 
 log = logging.getLogger(__name__)
-
-_DIAGNOSTIC_TITLE_PREFIX = "[diagnostic] priority stall:"
 
 
 def _check_pr_status(
@@ -175,7 +174,7 @@ class PriorityStallCheck:
     name = "priority_stall"
 
     def run(self, ctx: DiagnosticCheckContext) -> DiagnosticCheckResult:
-        """Execute the priority-stall check and file diagnostic tickets."""
+        """Execute the priority-stall check and emit diagnostic events."""
         try:
             return self._run(ctx)
         except Exception:
@@ -235,7 +234,7 @@ class PriorityStallCheck:
                 "priority_stall: could not resolve repo config for %s", board_id
             )
 
-        drafts_created: list[dict[str, Any]] = []
+        emitted = 0
         investigated: list[dict[str, Any]] = []
         ci_in_flight = 0
 
@@ -253,148 +252,48 @@ class PriorityStallCheck:
             )
 
             # CI still in flight is not a stall — the ticket is waiting on
-            # exactly the thing it should be waiting on.  Filing here would
-            # produce a ticket per priority PR whose checks outlast the
+            # exactly the thing it should be waiting on.  Emitting here would
+            # produce an event per priority PR whose checks outlast the
             # 20-minute threshold, which is most of them.
             if investigation["ci_state"] == "pending":
                 ci_in_flight += 1
                 log.info(
-                    "priority_stall: ticket %s has CI in flight — not filing",
+                    "priority_stall: ticket %s has CI in flight — not emitting",
                     ticket.id,
                 )
                 continue
 
-            # File a diagnostic ticket with the investigation results
-            title = (
-                f"{_DIAGNOSTIC_TITLE_PREFIX} {ticket.id} — "
-                f"{investigation['summary'][:60]}"
-            )
-            if self._is_duplicate(ticket.id, service):
-                log.info(
-                    "priority_stall: an open diagnostic for %s already exists "
-                    "— not filing %r",
-                    ticket.id,
-                    title,
-                )
-                continue
-
-            body = self._build_body(ticket, investigation, board_id)
+            # Surface the finding as a diagnostic event only — never a
+            # ticket. Investigation belongs in a chat subsession, not in a
+            # ticket (operator policy). The event store dedups on
+            # (category, ticket_id, normalized_key), so a repeated stall on
+            # the same ticket does not flood the store.
             try:
-                diag_ticket = service.create(
-                    title,
-                    body,
-                    source=SourceKind.AGENT,
-                    kind=TicketKind.TASK,
-                )
-                log.info(
-                    "priority_stall: created ticket %s — %r",
-                    diag_ticket.id,
-                    title,
-                )
-                drafts_created.append({"id": diag_ticket.id, "title": title})
+                if emit_diagnostic_event(
+                    settings,
+                    board_id,
+                    category="PRIORITY_STALL",
+                    ticket_id=ticket.id,
+                    reason=investigation["summary"],
+                    normalized_key=ticket.id,
+                ):
+                    emitted += 1
             except Exception:
                 log.exception(
-                    "priority_stall: failed to file ticket for %s",
+                    "priority_stall: failed to emit event for %s",
                     ticket.id,
                 )
 
         summary = (
             f"{len(priority_tickets)} priority ticket(s) at IMPLEMENT_COMPLETE, "
             f"{len(stuck_tickets)} stuck ({ci_in_flight} waiting on in-flight CI); "
-            f"{len(drafts_created)} diagnostic draft(s) filed"
+            f"{emitted} diagnostic event(s) emitted (no tickets filed)"
         )
         return DiagnosticCheckResult(
             name=self.name,
             ok=True,
             summary=summary,
-            drafts_created=drafts_created,
         )
-
-    @staticmethod
-    def _is_duplicate(stalled_ticket_id: str, service: TicketService) -> bool:
-        """Return True if an open diagnostic already covers *stalled_ticket_id*.
-
-        Scoped to the stalled ticket rather than to the full title on
-        purpose: the title carries a slice of the investigation summary,
-        which changes as the PR moves (``CI pending`` → ``branch is
-        behind`` → ``mergeable_state='blocked'``).  Matching on the whole
-        title would therefore file a fresh ticket on every state change
-        instead of recognising the stall it already reported.
-        """
-        prefix = f"{_DIAGNOSTIC_TITLE_PREFIX} {stalled_ticket_id}".strip().casefold()
-        for t in service.list():
-            if (
-                t.title.strip().casefold().startswith(prefix)
-                and t.state not in DONE_OR_CLOSED
-            ):
-                return True
-        return False
-
-    @staticmethod
-    def _build_body(
-        ticket: Any,
-        investigation: dict[str, Any],
-        board_id: str,
-    ) -> str:
-        """Build the diagnostic ticket body."""
-        lines = [
-            "Auto-filed by the daily diagnostic agent (priority_stall check).",
-            "",
-            f"- **Repository / board:** `{board_id}`",
-            f"- **Stuck ticket:** `{ticket.id}` — {ticket.title}",
-            f"- **State:** {ticket.state.value}",
-            f"- **Priority:** {ticket.priority}",
-            f"- **Branch:** `{ticket.branch or '(default)'}`",
-            f"- **Last updated:** {ticket.updated_at.isoformat()}",
-            "",
-            "### Investigation results",
-            "",
-            f"- **Branch status:** {investigation['branch_status']}",
-            f"- **CI state:** {investigation['ci_state']}",
-            f"- **Mergeable:** {investigation['mergeable']}",
-            f"- **Mergeable state:** {investigation['mergeable_state']}",
-        ]
-
-        if investigation.get("pr_url"):
-            lines.append(f"- **PR URL:** {investigation['pr_url']}")
-
-        if investigation.get("failing_checks"):
-            lines.append(
-                f"- **Failing checks:** {', '.join(investigation['failing_checks'])}"
-            )
-
-        if investigation.get("pending_checks"):
-            lines.append(
-                f"- **Pending checks:** {', '.join(investigation['pending_checks'])}"
-            )
-
-        lines.extend(
-            [
-                "",
-                "### Summary",
-                "",
-                investigation["summary"],
-                "",
-                "### Action",
-                "",
-                (
-                    "This priority ticket is stuck at IMPLEMENT_COMPLETE. "
-                    "Investigate the merge deferral reason above and take "
-                    "appropriate action:"
-                ),
-                "",
-                "- If **branch is behind**: trigger a rebase",
-                "- If **CI is failing**: investigate the failure and fix or escalate",
-                "- If **merge conflicts**: resolve conflicts and rebase",
-                "- If **branch protection**: check required status contexts",
-                "",
-                (
-                    "Once resolved, the ticket should advance to "
-                    "HUMAN_MR_APPROVAL or WAITING_AUTO_MERGE."
-                ),
-            ]
-        )
-        return "\n".join(lines) + "\n"
 
 
 register_check(PriorityStallCheck())
