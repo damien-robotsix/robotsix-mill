@@ -87,6 +87,23 @@ TRANSIENT_PATTERNS: list[re.Pattern[str]] = [
         r"Service Unavailable))",
         re.IGNORECASE,
     ),
+    # External link-checker (mkdocs htmlproofer / lychee) reporting an
+    # upstream 5xx for a link OUTSIDE the ticket's diff — e.g. htmlproofer
+    # prints "response code 504 means something's wrong" when slsa.dev
+    # 504s.  A self-clearing upstream outage, not a diffable failure.
+    re.compile(r"response code 5\d\d", re.IGNORECASE),
+    # Generic upstream 5xx status phrase (e.g. a bare "504 Gateway Timeout")
+    # not already anchored by the HTTP-5xx / "502 Bad Gateway" / "503
+    # Service" patterns above.
+    re.compile(
+        r"\b5\d\d\s+(?:Bad Gateway|Service Unavailable|Gateway Time-?out)\b",
+        re.IGNORECASE,
+    ),
+    # `npm audit` / `npm install` hitting a registry.npmjs.org 5xx — the
+    # JS lint job surfaces this as "npm error code E503" or a bare 503 from
+    # the registry host.  Throttling/outage on npm's side, self-clearing.
+    re.compile(r"npm (?:error|warn)\b[^\n]*\bE?5\d\d\b", re.IGNORECASE),
+    re.compile(r"registry\.npmjs\.org[^\n]*\b5\d\d\b", re.IGNORECASE),
 ]
 
 
