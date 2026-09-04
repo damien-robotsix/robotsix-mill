@@ -258,7 +258,7 @@ class PriorityStallCheck:
             if investigation["ci_state"] == "pending":
                 ci_in_flight += 1
                 log.info(
-                    "priority_stall: ticket %s has CI in flight — not filing",
+                    "priority_stall: ticket %s has CI in flight — not emitting",
                     ticket.id,
                 )
                 continue

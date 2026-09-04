@@ -78,13 +78,20 @@ def _make_priority_ticket(
     return ticket.id
 
 
-def _assert_no_ticket_created(settings, result, expected_events: int):
-    """Assert the check filed no ticket and emitted *expected_events*."""
+def _assert_no_ticket_created(
+    settings, result, expected_events: int, expected_tickets: int
+):
+    """Assert the check filed no ticket and emitted *expected_events*.
+
+    *expected_tickets* is the number of tickets the test setup itself
+    created on the board — the check must not have created any more.
+    """
     assert result.drafts_created == []
     events = _events(settings)
     assert len(events) == expected_events
     # The board holds exactly the tickets the helper created — the check
     # itself created nothing.
+    assert len(TicketService(settings, board_id=_BOARD).list()) == expected_tickets
     assert result.ok is True
 
 
@@ -164,7 +171,7 @@ def test_stuck_ticket_ci_green_mergeable(tmp_path, monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger=dcp.log.name):
         result = dcp.PriorityStallCheck().run(_ctx(settings))
 
-    _assert_no_ticket_created(settings, result, expected_events=1)
+    _assert_no_ticket_created(settings, result, expected_events=1, expected_tickets=1)
     ev = _events(settings)[0]
     assert ev.ticket_id == tid
     assert "green" in ev.reason.lower() or "mergeable" in ev.reason.lower()
@@ -198,7 +205,7 @@ def test_stuck_ticket_ci_failing(tmp_path, monkeypatch):
     monkeypatch.setattr(dcp, "get_forge", lambda *a, **k: forge)
 
     result = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, result, expected_events=1)
+    _assert_no_ticket_created(settings, result, expected_events=1, expected_tickets=1)
     assert "lint" in _events(settings)[0].reason
     assert "test-py314" in _events(settings)[0].reason
 
@@ -223,7 +230,7 @@ def test_stuck_ticket_merge_conflicts(tmp_path, monkeypatch):
     monkeypatch.setattr(dcp, "get_forge", lambda *a, **k: forge)
 
     result = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, result, expected_events=1)
+    _assert_no_ticket_created(settings, result, expected_events=1, expected_tickets=1)
     assert "conflict" in _events(settings)[0].reason.lower()
 
 
@@ -248,7 +255,7 @@ def test_stuck_ticket_branch_behind(tmp_path, monkeypatch):
     monkeypatch.setattr(dcp, "get_forge", lambda *a, **k: forge)
 
     result = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, result, expected_events=1)
+    _assert_no_ticket_created(settings, result, expected_events=1, expected_tickets=1)
     assert "behind" in _events(settings)[0].reason.lower()
 
 
@@ -264,7 +271,7 @@ def test_stuck_ticket_no_pr(tmp_path, monkeypatch):
     monkeypatch.setattr(dcp, "get_forge", lambda *a, **k: forge)
 
     result = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, result, expected_events=1)
+    _assert_no_ticket_created(settings, result, expected_events=1, expected_tickets=1)
     assert "no PR" in _events(settings)[0].reason
 
 
@@ -287,7 +294,7 @@ def test_stuck_ticket_pr_merged(tmp_path, monkeypatch):
     monkeypatch.setattr(dcp, "get_forge", lambda *a, **k: forge)
 
     result = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, result, expected_events=1)
+    _assert_no_ticket_created(settings, result, expected_events=1, expected_tickets=1)
     assert "merged" in _events(settings)[0].reason.lower()
 
 
@@ -310,7 +317,7 @@ def test_stuck_ticket_pr_closed(tmp_path, monkeypatch):
     monkeypatch.setattr(dcp, "get_forge", lambda *a, **k: forge)
 
     result = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, result, expected_events=1)
+    _assert_no_ticket_created(settings, result, expected_events=1, expected_tickets=1)
     assert "closed" in _events(settings)[0].reason.lower()
 
 
@@ -326,7 +333,7 @@ def test_stuck_ticket_pr_status_error(tmp_path, monkeypatch):
     monkeypatch.setattr(dcp, "get_forge", lambda *a, **k: forge)
 
     result = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, result, expected_events=1)
+    _assert_no_ticket_created(settings, result, expected_events=1, expected_tickets=1)
     assert "failed" in _events(settings)[0].reason.lower()
 
 
@@ -351,7 +358,7 @@ def test_stuck_ticket_ci_status_error(tmp_path, monkeypatch):
     monkeypatch.setattr(dcp, "get_forge", lambda *a, **k: forge)
 
     result = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, result, expected_events=1)
+    _assert_no_ticket_created(settings, result, expected_events=1, expected_tickets=1)
     assert "failed" in _events(settings)[0].reason.lower()
 
 
@@ -380,11 +387,11 @@ def test_stuck_ticket_ci_pending(tmp_path, monkeypatch):
     monkeypatch.setattr(dcp, "get_forge", lambda *a, **k: forge)
 
     result = dcp.PriorityStallCheck().run(_ctx(settings))
-    assert result.ok is True
     # CI still running is not a stall — the ticket is waiting on exactly the
     # thing it should be waiting on, so no diagnostic event is emitted.
-    assert result.drafts_created == []
-    assert _events(settings) == []
+    _assert_no_ticket_created(
+        settings, result, expected_events=0, expected_tickets=1
+    )
     assert "waiting on in-flight CI" in result.summary
 
 
@@ -409,12 +416,12 @@ def test_dedup_no_duplicate_on_second_pass(tmp_path, monkeypatch):
     monkeypatch.setattr(dcp, "get_forge", lambda *a, **k: forge)
 
     first = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, first, expected_events=1)
+    _assert_no_ticket_created(settings, first, expected_events=1, expected_tickets=1)
 
     second = dcp.PriorityStallCheck().run(_ctx(settings))
     # Same (category, ticket_id, normalized_key) is deduplicated by the
     # event store, so the second pass emits nothing new and no ticket.
-    _assert_no_ticket_created(settings, second, expected_events=1)
+    _assert_no_ticket_created(settings, second, expected_events=1, expected_tickets=1)
 
 
 # --- dedup: survives a change in the investigation summary -----------------
@@ -446,12 +453,12 @@ def test_dedup_survives_summary_drift(tmp_path, monkeypatch):
         ),
     )
     first = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, first, expected_events=1)
+    _assert_no_ticket_created(settings, first, expected_events=1, expected_tickets=1)
 
     # Same stalled ticket, different verdict → same stall, no new event.
     pr["mergeable_state"] = "blocked"
     second = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, second, expected_events=1)
+    _assert_no_ticket_created(settings, second, expected_events=1, expected_tickets=1)
 
 
 # --- forge resolution failure ----------------------------------------------
@@ -469,7 +476,7 @@ def test_forge_resolution_failure(tmp_path, monkeypatch):
     )
 
     result = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, result, expected_events=1)
+    _assert_no_ticket_created(settings, result, expected_events=1, expected_tickets=1)
     assert "forge" in _events(settings)[0].reason.lower()
 
 
@@ -495,7 +502,7 @@ def test_multiple_stuck_tickets(tmp_path, monkeypatch):
     monkeypatch.setattr(dcp, "get_forge", lambda *a, **k: forge)
 
     result = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, result, expected_events=2)
+    _assert_no_ticket_created(settings, result, expected_events=2, expected_tickets=2)
 
 
 # --- check raises exception ------------------------------------------------
@@ -535,7 +542,7 @@ def test_stuck_ticket_ci_green_but_blocked(tmp_path, monkeypatch):
     monkeypatch.setattr(dcp, "get_forge", lambda *a, **k: forge)
 
     result = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, result, expected_events=1)
+    _assert_no_ticket_created(settings, result, expected_events=1, expected_tickets=1)
     reason = _events(settings)[0].reason.lower()
     assert "blocked" in reason or "protection" in reason
 
@@ -561,7 +568,7 @@ def test_stuck_ticket_no_ci_data(tmp_path, monkeypatch):
     monkeypatch.setattr(dcp, "get_forge", lambda *a, **k: forge)
 
     result = dcp.PriorityStallCheck().run(_ctx(settings))
-    _assert_no_ticket_created(settings, result, expected_events=1)
+    _assert_no_ticket_created(settings, result, expected_events=1, expected_tickets=1)
     assert "no CI" in _events(settings)[0].reason or "unknown" in _events(
         settings
     )[0].reason.lower()
