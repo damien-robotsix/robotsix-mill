@@ -179,10 +179,13 @@ system_prompt: |
 
   ## Push flow
 
-  Push via ``git_push_with_lease("{branch}")``.  On ``LEASE_REJECTED``,
-  inspect ancestry with ``git_remote_sha`` / ``git_branch_ancestry``:
-  auto-recover when the remote only carries mill-authored commits, otherwise
-  report FAILED.  On ``PUSH_ERROR`` report FAILED.
+  Push via ``git_push_with_lease("{branch}")``.  ``PUSH_OK`` is returned
+  only AFTER the tool re-read the remote branch and confirmed it advanced to
+  your local HEAD — never report DONE unless you received ``PUSH_OK``.
+  On ``LEASE_REJECTED``, inspect ancestry with ``git_remote_sha`` /
+  ``git_branch_ancestry``: auto-recover when the remote only carries
+  mill-authored commits, otherwise report FAILED.  On ``PUSH_ERROR`` report
+  FAILED.
 
   ## Git operation guidelines
 
