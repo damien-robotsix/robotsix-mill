@@ -186,9 +186,7 @@ def test_restart_interrupted_runs_are_not_filed(tmp_path, monkeypatch):
     events = list_diagnostic_events(settings, _BOARD, category="ERRORED_RUN")
     assert len(events) == 1
     assert "pin_bump" in events[0].reason
-    assert not any(
-        "interrupted by process restart" in ev.reason for ev in events
-    )
+    assert not any("interrupted by process restart" in ev.reason for ev in events)
     assert TicketService(settings, board_id=_BOARD).list() == []
 
 

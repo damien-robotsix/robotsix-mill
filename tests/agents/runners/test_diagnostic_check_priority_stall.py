@@ -389,9 +389,7 @@ def test_stuck_ticket_ci_pending(tmp_path, monkeypatch):
     result = dcp.PriorityStallCheck().run(_ctx(settings))
     # CI still running is not a stall — the ticket is waiting on exactly the
     # thing it should be waiting on, so no diagnostic event is emitted.
-    _assert_no_ticket_created(
-        settings, result, expected_events=0, expected_tickets=1
-    )
+    _assert_no_ticket_created(settings, result, expected_events=0, expected_tickets=1)
     assert "waiting on in-flight CI" in result.summary
 
 
@@ -569,6 +567,7 @@ def test_stuck_ticket_no_ci_data(tmp_path, monkeypatch):
 
     result = dcp.PriorityStallCheck().run(_ctx(settings))
     _assert_no_ticket_created(settings, result, expected_events=1, expected_tickets=1)
-    assert "no CI" in _events(settings)[0].reason or "unknown" in _events(
-        settings
-    )[0].reason.lower()
+    assert (
+        "no CI" in _events(settings)[0].reason
+        or "unknown" in _events(settings)[0].reason.lower()
+    )
