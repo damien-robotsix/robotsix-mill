@@ -1545,6 +1545,98 @@ def test_sandbox_op_timeout_zero_falls_back_to_command_timeout(monkeypatch, tmp_
     )
 
 
+@pytest.mark.parametrize(
+    "daemon_stderr",
+    [
+        # socket-proxy wait-stream timeout (pre-existing retry signature)
+        b"docker: Error response from daemon: unexpected EOF",
+        # container GC racing the spawn (this ticket's signature)
+        b"docker: Error response from daemon: No such container: 3e7f1a2b9c0d",
+    ],
+)
+def test_run_retries_transient_daemon_errors(tmp_path, monkeypatch, daemon_stderr):
+    """A 125 docker run failure with a transient daemon signature (wait-stream
+    EOF or 'No such container' container-GC) retries with a fresh spawn up to
+    max_attempts instead of raising SandboxError — and cleans up the stale
+    container before continuing, exactly like the pre-existing EOF branch."""
+    s = _settings(
+        tmp_path,
+        data_dir="/data",
+        data_volume="mill_data",
+        sandbox_image="python:3.14-slim",
+        sandbox_proxy_url="",
+    )
+    call_log = []
+
+    def fake_run(argv, **kw):
+        call_log.append(argv)
+        if argv[:2] == ["docker", "run"]:
+            n_run = sum(1 for a in call_log if a[:2] == ["docker", "run"])
+            if n_run == 1:
+                return subprocess.CompletedProcess(
+                    argv, 125, stdout=b"", stderr=daemon_stderr
+                )
+            return subprocess.CompletedProcess(argv, 0, stdout=b"ok", stderr=b"")
+        # docker rm -f cleanup attempts are best-effort no-ops here.
+        return subprocess.CompletedProcess(argv, 0, stdout=b"", stderr=b"")
+
+    monkeypatch.setattr(
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: [
+            "--mount",
+            "type=volume,src=mill_data,dst=/data/work/repo,volume-subpath=work/repo",
+        ],
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+
+    rc, out = sandbox.run("pytest -q", repo_dir="/data/work/repo", settings=s)
+
+    assert rc == 0
+    assert out == "ok"
+    # First spawn hit the transient daemon error; the retry succeeded.
+    assert sum(1 for a in call_log if a[:2] == ["docker", "run"]) == 2
+    # Cleanup-before-continue mirrors the unexpected EOF branch.
+    assert sum(1 for a in call_log if a[:3] == ["docker", "rm", "-f"]) == 1
+
+
+def test_run_raises_on_genuine_daemon_error_without_retry(tmp_path, monkeypatch):
+    """A genuine 125 daemon failure (no transient signature) still raises
+    SandboxError immediately — no retry churn for real errors."""
+    s = _settings(
+        tmp_path,
+        data_dir="/data",
+        data_volume="mill_data",
+        sandbox_image="python:3.14-slim",
+        sandbox_proxy_url="",
+    )
+    call_log = []
+
+    def fake_run(argv, **kw):
+        call_log.append(argv)
+        return subprocess.CompletedProcess(
+            argv,
+            125,
+            stdout=b"",
+            stderr=b"docker: Error response from daemon: OCI runtime create failed",
+        )
+
+    monkeypatch.setattr(
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: [
+            "--mount",
+            "type=volume,src=mill_data,dst=/data/work/repo,volume-subpath=work/repo",
+        ],
+    )
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+
+    with pytest.raises(sandbox.SandboxError):
+        sandbox.run("pytest -q", repo_dir="/data/work/repo", settings=s)
+    # Exactly one docker run — genuine daemon errors are not retried.
+    assert sum(1 for a in call_log if a[:2] == ["docker", "run"]) == 1
+
+
 # --- Hard ceiling on live sandbox containers -------------------------------
 #
 # max_global_concurrency used to be applied only around the board consumer's
