@@ -236,7 +236,7 @@ def _is_provenance_line(line: str) -> bool:
     provenance-footer field.
     """
     m = re.match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:", line)
-    return bool(m) and m.group(1) in _PROVENANCE_KEYS
+    return m is not None and m.group(1) in _PROVENANCE_KEYS
 
 
 def _strip_provenance_footer(spec: str) -> str:
