@@ -622,6 +622,169 @@ class TestTryMechanicalRebase:
 
 
 # ===========================================================================
+# 9c. try_rebase_onto_branch — integration (real git)
+# ===========================================================================
+
+
+class TestTryRebaseOntoBranch:
+    def test_rebase_onto_remote_branch_tip(self, tmp_path):
+        """Local carries an extra fix commit while the remote branch tip moved
+        forward concurrently (e.g. a mill rebase) — the fix is replayed on top
+        of the current remote tip."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "feat.txt").write_text("feature work")
+        git_ops.commit_all(dest, "feature commit")
+        git_ops.push(dest, "feature", remote, token=None)
+
+        # Local-only fix commit on top of the pushed feature branch.
+        (dest / "feat.txt").write_text("the agent's fix\n")
+        git_ops.commit_all(dest, "agent fix")
+
+        # Concurrent remote move: a second clone pushes to feature.
+        wd = tmp_path / "pusher"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(wd)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _git(wd, "config", "user.email", "op@t")
+        _git(wd, "config", "user.name", "operator")
+        _git(wd, "checkout", "-q", "feature")
+        (wd / "concurrent.txt").write_text("concurrent remote work\n")
+        _git(wd, "add", "-A")
+        _git(wd, "commit", "-q", "-m", "concurrent remote work")
+        _git(wd, "push", "origin", "feature")
+
+        result = git_ops.try_rebase_onto_branch(
+            dest, "feature", remote_url=remote, token=None
+        )
+        assert result is True
+
+        log = (
+            subprocess.run(
+                ["git", "-C", str(dest), "log", "--oneline", "--format=%s"],
+                capture_output=True,
+                text=True,
+            )
+            .stdout.strip()
+            .split("\n")
+        )
+        # The agent's fix lands on top of the concurrent remote work.
+        assert log[0] == "agent fix"
+        assert log[1] == "concurrent remote work"
+
+    def test_noop_when_remote_is_ancestor(self, tmp_path):
+        """Remote tip is already an ancestor of local (the fix exists only
+        locally, remote never moved) — rebase is a no-op, returns True, and
+        the local fix commit is preserved."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "feat.txt").write_text("feature work")
+        git_ops.commit_all(dest, "feature commit")
+        git_ops.push(dest, "feature", remote, token=None)
+
+        before = git_ops.head_sha(dest)
+        (dest / "feat.txt").write_text("the agent's fix\n")
+        git_ops.commit_all(dest, "agent fix")
+
+        result = git_ops.try_rebase_onto_branch(
+            dest, "feature", remote_url=remote, token=None
+        )
+        assert result is True
+        assert git_ops.head_sha(dest) != before  # fix commit still present
+        log = (
+            subprocess.run(
+                ["git", "-C", str(dest), "log", "--oneline", "--format=%s"],
+                capture_output=True,
+                text=True,
+            )
+            .stdout.strip()
+            .split("\n")
+        )
+        assert log[0] == "agent fix"
+
+    def test_fetch_failure_returns_false(self, tmp_path, monkeypatch):
+        """A failing fetch (network error) → returns False so the caller stops
+        retrying instead of pushing blind."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "feat.txt").write_text("feature work")
+        git_ops.commit_all(dest, "feature commit")
+        git_ops.push(dest, "feature", remote, token=None)
+        (dest / "feat.txt").write_text("the agent's fix\n")
+        git_ops.commit_all(dest, "agent fix")
+
+        orig_git = git_ops._git
+        call_count = [0]
+
+        def _failing_git(repo, *args, **kwargs):
+            call_count[0] += 1
+            # Fail the first fetch call.
+            if call_count[0] == 1 and args and args[0] == "fetch":
+                raise subprocess.CalledProcessError(128, ["git", "fetch"])
+            return orig_git(repo, *args)
+
+        monkeypatch.setattr(git_ops, "_git", _failing_git)
+
+        result = git_ops.try_rebase_onto_branch(
+            dest, "feature", remote_url=remote, token=None
+        )
+        assert result is False
+
+    def test_rebase_conflict_aborts_returns_false(self, tmp_path):
+        """Local fix conflicts with the current remote tip — rebase fails,
+        returns False, and the working tree is left clean with no ongoing
+        rebase."""
+        remote = make_bare_repo(tmp_path)
+        dest = tmp_path / "repo"
+        git_ops.clone(remote, dest, "main")
+        git_ops.create_branch(dest, "feature")
+        (dest / "README.md").write_text("conflicting edit from feature\n")
+        git_ops.commit_all(dest, "conflict on feature")
+        git_ops.push(dest, "feature", remote, token=None)
+
+        # Local second commit editing the same line.
+        (dest / "README.md").write_text("agent's conflicting fix\n")
+        git_ops.commit_all(dest, "agent fix")
+
+        # Concurrent remote move editing the same file line.
+        wd = tmp_path / "pusher"
+        subprocess.run(
+            ["git", "clone", "-q", remote, str(wd)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _git(wd, "config", "user.email", "op@t")
+        _git(wd, "config", "user.name", "operator")
+        _git(wd, "checkout", "-q", "feature")
+        (wd / "README.md").write_text("concurrent remote edit\n")
+        _git(wd, "add", "-A")
+        _git(wd, "commit", "-q", "-m", "concurrent remote edit")
+        _git(wd, "push", "origin", "feature")
+
+        result = git_ops.try_rebase_onto_branch(
+            dest, "feature", remote_url=remote, token=None
+        )
+        assert result is False
+        assert git_ops.has_changes(dest) is False
+        branch = subprocess.run(
+            ["git", "-C", str(dest), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        assert branch == "feature"
+
+
+# ===========================================================================
 # 10. head_sha — integration (real git)
 # ===========================================================================
 

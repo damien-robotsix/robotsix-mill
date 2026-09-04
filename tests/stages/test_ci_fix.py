@@ -1,6 +1,7 @@
 """Tests for the CIFixStage (FIXING_CI → IMPLEMENT_COMPLETE | BLOCKED)."""
 
 import json
+import subprocess
 
 import pytest
 
@@ -12,7 +13,11 @@ from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.forge import github
 from robotsix_mill.stages import StageContext
-from robotsix_mill.stages.ci_fix import CIFixStage, _extract_check_names
+from robotsix_mill.stages.ci_fix import (
+    _CI_PUSH_RETRY_BUDGET,
+    CIFixStage,
+    _extract_check_names,
+)
 from robotsix_mill.stages.ci_fix_helpers import (
     _build_failing_summary,
     _ci_failure_fingerprint,
@@ -43,6 +48,8 @@ def _mock_proactive_rebase_git_ops(monkeypatch):
     * ``empty_commit`` → no-op
     * ``reconcile_with_remote_pr`` → ``SYNCED`` (no foreign commits)
     * ``post_push_check`` → ``PASS`` (push landed cleanly)
+    * ``try_rebase_onto_branch`` → ``True`` (auto-retry rebase succeeds)
+    * ``push_with_lease`` → no-op (auto-retry re-push)
 
     Tests that need different behaviour override the relevant stub with
     their own ``monkeypatch.setattr`` — call-verification assertions (e.g.
@@ -76,6 +83,15 @@ def _mock_proactive_rebase_git_ops(monkeypatch):
     monkeypatch.setattr(
         "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
         lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
+    )
+    # Auto-retry path (NOT_LANDED recovery): rebase succeeds, re-push no-op.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.try_rebase_onto_branch",
+        lambda *a, **k: True,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
     )
 
 
@@ -309,6 +325,9 @@ def test_ci_fix_memory_read_passthrough_when_small(tmp_path, monkeypatch):
 
 
 def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
+    """Agent DONE but the push never lands even after the bounded auto-retry
+    budget (every re-push is lease-rejected) — BLOCKED with a transient
+    lease-rejection note, not a misleading 'could not fix' note."""
     ctx = _gh(tmp_path)
     monkeypatch.setattr(
         github.GitHubForge,
@@ -335,6 +354,21 @@ def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
             git_ops.PostPushResult.NOT_LANDED
         ),
     )
+    # The rebase always succeeds; every re-push is rejected by the lease —
+    # the transient case the auto-retry is designed to recover from.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.try_rebase_onto_branch",
+        lambda *a, **k: True,
+    )
+    push_attempts = {}
+
+    def fake_push(repo, branch, remote_url, token):
+        push_attempts["n"] = push_attempts.get("n", 0) + 1
+        raise subprocess.CalledProcessError(1, ["git", "push"])
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease", fake_push
+    )
 
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
@@ -342,6 +376,163 @@ def test_fix_success_push_failure_blocks(tmp_path, monkeypatch):
     out = CIFixStage().run(t, ctx)
     assert out.next_state is State.BLOCKED
     assert "push did not land" in out.note
+    # The block note distinguishes a transient push lease rejection from a
+    # substantive 'agent could not produce a fix'.
+    assert "push lease rejection" in out.note
+    assert "transient" in out.note
+    # The auto-retry is bounded, not an unbounded loop.
+    assert push_attempts["n"] == _CI_PUSH_RETRY_BUDGET
+
+
+def test_fix_success_push_not_landed_retry_relands(tmp_path, monkeypatch):
+    """Agent DONE, the first post-check is NOT_LANDED, but the auto-retry
+    (rebase onto the current remote tip + re-push with lease) lands the fix —
+    returns IMPLEMENT_COMPLETE instead of blocking."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": None, "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+    outcomes = iter(
+        [
+            git_ops.PostPushResult.NOT_LANDED,
+            git_ops.PostPushResult.PASS,
+        ]
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: next(outcomes),
+    )
+    rebased = {}
+
+    def fake_rebase(repo, branch, *, remote_url, token):
+        rebased["n"] = rebased.get("n", 0) + 1
+        return True
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.try_rebase_onto_branch", fake_rebase
+    )
+    pushed = {}
+
+    def fake_push(repo, branch, remote_url, token):
+        pushed["n"] = pushed.get("n", 0) + 1
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease", fake_push
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    # Rebased once and re-pushed once before the fix landed.
+    assert rebased["n"] == 1
+    assert pushed["n"] == 1
+
+
+def test_fix_success_push_rebase_conflict_blocks(tmp_path, monkeypatch):
+    """Agent DONE, the push did not land, and the fix cannot be re-applied
+    onto the current remote tip (rebase conflict) — blocks immediately as a
+    substantive fix failure rather than retrying pointlessly."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": None, "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: (
+            git_ops.PostPushResult.NOT_LANDED
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.try_rebase_onto_branch",
+        lambda *a, **k: False,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "push did not land" in out.note
+    assert "could not be re-applied" in out.note
+    assert "rebase conflict" in out.note
+
+
+def test_fix_success_push_retry_foreign_divergence_blocks(tmp_path, monkeypatch):
+    """Agent DONE, push did not land, auto-retry lands it, but the post-check
+    then finds foreign-authored commits on the branch — blocks for manual
+    reconciliation (a human pushed), never force-pushing over them."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {"name": "lint", "summary": None, "text": None, "annotations": []}
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: CiFixResult(status="DONE", summary="ok"),
+    )
+    outcomes = iter(
+        [
+            git_ops.PostPushResult.NOT_LANDED,
+            git_ops.PostPushResult.FOREIGN_DIVERGENCE,
+        ]
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
+        lambda repo, branch, target, remote_url, token: next(outcomes),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "foreign-authored commits" in out.note
+    assert "Manual reconciliation" in out.note
 
 
 def test_missing_workspace_clone_blocks(tmp_path, monkeypatch):

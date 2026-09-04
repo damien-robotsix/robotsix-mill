@@ -15,6 +15,7 @@ from __future__ import annotations
 import concurrent.futures
 import contextvars
 import logging
+import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -77,6 +78,13 @@ _CI_FIX_HISTORY_MAX_CHARS = 4000
 # The write path trims to this many so the file does not grow unboundedly
 # per ticket.
 _CI_FIX_HISTORY_MAX_ENTRIES = 20
+
+# Bounded push-retry budget for re-landing an agent's DONE push when the
+# post-check sees remote HEAD != local HEAD. Each attempt fetches + rebases
+# the branch onto its current remote tip and re-pushes with lease — the
+# agent's fix is still only local, so it is replayed on the freshest remote
+# state. Only after the budget is exhausted does the stage block for a human.
+_CI_PUSH_RETRY_BUDGET = 3
 
 
 def _trim_ci_fix_history(path: Path, max_entries: int) -> None:
@@ -1631,19 +1639,27 @@ class CIFixStage(Stage):
         the merge stage re-verifies CI and promotes to HUMAN_MR_APPROVAL.
 
         The agent is one-shot (no CI verification), so this is a cheap
-        safety net (foreign-push / lost-push detection), not a retry loop.
-        On a clean landing the refresh counter is reset so a later,
-        independent staleness can rebase once more.
+        safety net (foreign-push / lost-push detection). A lost push (remote
+        HEAD != local HEAD — usually a lease rejection after the mill rebased
+        the branch concurrently) is re-landed automatically: fetch + rebase
+        the branch onto its current remote tip, re-push with lease, bounded
+        by ``_CI_PUSH_RETRY_BUDGET`` attempts, before blocking with a
+        transient-lease-rejection note. Only a fix that cannot be re-applied
+        (rebase conflict / fetch failure) or a clobbered foreign commit
+        blocks immediately. On a clean landing the refresh counter is reset
+        so a later, independent staleness can rebase once more.
         """
         s = ctx.settings
         remote_url = _resolve_remote_url(s, ctx.repo_config)
         token = github_push_token(s, repo_config=ctx.repo_config)
         target = target_branch_for(s, ctx.repo_config)
+        repo = Path(repo_dir)
+        refresh_path = ctx.service.workspace(ticket).artifacts_dir / _CI_REFRESH_COUNTER
 
         # Deterministic post-check: verify the agent's push actually
         # landed and no foreign commits were clobbered.
         check = git_ops.post_push_check(
-            Path(repo_dir),
+            repo,
             branch=branch,
             target=target,
             remote_url=remote_url,
@@ -1652,24 +1668,100 @@ class CIFixStage(Stage):
 
         if check is git_ops.PostPushResult.PASS:
             # Genuine forward progress — allow a future staleness to refresh again.
-            _write_counter(
-                ctx.service.workspace(ticket).artifacts_dir / _CI_REFRESH_COUNTER, 0
-            )
+            _write_counter(refresh_path, 0)
             log.info("%s: ci fix reported DONE, push verified", ticket.id)
             return Outcome(State.IMPLEMENT_COMPLETE)
 
         if check is git_ops.PostPushResult.NOT_LANDED:
+            # The agent reported DONE but its push did not land — almost
+            # always a lease rejection because the mill rebased the branch
+            # concurrently and the remote tip moved out from under the
+            # agent's expected SHA. The fix commits are still safe locally;
+            # re-land them deterministically for a bounded number of
+            # attempts: fetch + rebase the branch onto its current remote
+            # tip, re-push with lease, re-verify. Only block for a human
+            # once the budget is exhausted, and only a fix that cannot be
+            # re-applied (rebase conflict) or a clobbered foreign commit is
+            # 'substantive' enough to block immediately.
+            for attempt in range(1, _CI_PUSH_RETRY_BUDGET + 1):
+                if not git_ops.try_rebase_onto_branch(
+                    repo, branch, remote_url=remote_url, token=token
+                ):
+                    log.warning(
+                        "%s: ci-fix push did not land and the fix could not "
+                        "be re-applied onto the current remote branch "
+                        "(attempt %d/%d) — blocking",
+                        ticket.id,
+                        attempt,
+                        _CI_PUSH_RETRY_BUDGET,
+                    )
+                    return Outcome(
+                        State.BLOCKED,
+                        "ci fix agent reported DONE but the push did not land "
+                        "(remote HEAD != local HEAD) and the fix could not be "
+                        "re-applied onto the current remote branch (rebase "
+                        "conflict or fetch failure) — the fix must be redone "
+                        "against the new base. Resume-blocked to retry from "
+                        "human_mr_approval.",
+                    )
+                try:
+                    git_ops.push_with_lease(repo, branch, remote_url, token)
+                except subprocess.SubprocessError:
+                    log.warning(
+                        "%s: ci-fix push retry %d/%d rejected (lease/"
+                        "transient) — retrying",
+                        ticket.id,
+                        attempt,
+                        _CI_PUSH_RETRY_BUDGET,
+                    )
+                    continue
+                check = git_ops.post_push_check(
+                    repo,
+                    branch=branch,
+                    target=target,
+                    remote_url=remote_url,
+                    token=token,
+                )
+                if check is git_ops.PostPushResult.PASS:
+                    _write_counter(refresh_path, 0)
+                    log.info(
+                        "%s: ci fix reported DONE, push re-landed after retry",
+                        ticket.id,
+                    )
+                    return Outcome(State.IMPLEMENT_COMPLETE)
+                if check is git_ops.PostPushResult.FOREIGN_DIVERGENCE:
+                    log.warning(
+                        "%s: ci-fix post-check failed — remote branch carries "
+                        "foreign-authored commits; a human may have pushed",
+                        ticket.id,
+                    )
+                    return Outcome(
+                        State.BLOCKED,
+                        "ci fix agent reported DONE but the remote branch carries "
+                        "foreign-authored commits — a human likely pushed to the PR "
+                        "branch. Manual reconciliation required. "
+                        "Resume-blocked to retry from human_mr_approval.",
+                    )
+                if check is git_ops.PostPushResult.UNAVAILABLE:
+                    log.warning(
+                        "%s: ci-fix post-check unavailable (fetch failed) — re-polling",
+                        ticket.id,
+                    )
+                    return Outcome(State.IMPLEMENT_COMPLETE)
+                # Still NOT_LANDED — the remote moved again; loop.
             log.warning(
-                "%s: ci-fix post-check failed — remote HEAD != local HEAD; "
-                "push did not land",
+                "%s: ci-fix push did not land after %d auto-retries "
+                "(remote HEAD != local HEAD) — blocking for human",
                 ticket.id,
+                _CI_PUSH_RETRY_BUDGET,
             )
             return Outcome(
                 State.BLOCKED,
                 "ci fix agent reported DONE but the push did not land "
-                "(remote HEAD != local HEAD). The agent may have hit a "
-                "lease rejection it could not recover from. "
-                "Resume-blocked to retry from human_mr_approval.",
+                "(remote HEAD != local HEAD) after "
+                f"{_CI_PUSH_RETRY_BUDGET} auto-retries — push lease rejection "
+                "(transient), not a fix failure. Resume-blocked to retry "
+                "from human_mr_approval.",
             )
 
         if check is git_ops.PostPushResult.FOREIGN_DIVERGENCE:

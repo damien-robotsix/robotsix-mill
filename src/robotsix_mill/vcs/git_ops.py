@@ -490,6 +490,50 @@ def try_mechanical_rebase(repo: Path, target_branch: str) -> bool:
         return False
 
 
+def try_rebase_onto_branch(
+    repo: Path,
+    branch: str,
+    *,
+    remote_url: str,
+    token: str | None,
+) -> bool:
+    """Fetch ``<branch>`` and rebase the current branch onto its current
+    remote tip (``origin/<branch>``).
+
+    Used by the ci-fix post-push recovery to re-land an agent's DONE push
+    after a lease rejection: the mill may have rebased the PR branch
+    concurrently, so the agent's committed fix (still only local) is
+    replayed on top of the fresh remote tip and the caller re-pushes with
+    lease.
+
+    Returns ``True`` on a clean rebase (a no-op when the remote is already
+    an ancestor of the local branch). On any fetch/rebase failure a
+    half-applied rebase is aborted and ``False`` is returned so the caller
+    can stop retrying and surface the problem to a human. Any uncommitted
+    working-tree leftovers are discarded first — they come only from an
+    interrupted agent mid-edit; the real fix is committed.
+    """
+    try:
+        fetch(repo, remote_url=remote_url, token=token, branch=branch)
+    except subprocess.SubprocessError:
+        return False
+    # Discard leftover uncommitted state from an interrupted agent; the
+    # real fix is committed. Best-effort — a failure falls through to the
+    # rebase, where the original error surfaces.
+    try:
+        _git(repo, "reset", "--hard", "HEAD")
+        _git(repo, "clean", "-fd")
+    except subprocess.CalledProcessError:
+        pass
+    try:
+        _git(repo, "rebase", f"origin/{branch}")
+        return True
+    except subprocess.SubprocessError:
+        with contextlib.suppress(subprocess.CalledProcessError):
+            _git(repo, "rebase", "--abort")
+        return False
+
+
 def head_sha(repo: Path) -> str:
     """Current HEAD commit SHA. Used to detect a no-op rebase so the
     merge stage can skip a pointless force-push (an unchanged push still
