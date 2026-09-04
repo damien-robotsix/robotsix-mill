@@ -551,7 +551,6 @@ class _PeriodicSettings(BaseModel):
     ci_auto_close_interval_seconds: int = Field(
         default=900,
         description="Seconds between CI-failure auto-close passes. 0 = disabled.",
-        json_schema_extra={"advanced": True},
     )
 
     # --- diagnostic event store ---
