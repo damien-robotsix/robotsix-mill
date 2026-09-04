@@ -47,6 +47,26 @@ _CI_LOG_FETCH_ATTEMPTS = 3
 _CI_LOG_FETCH_BACKOFF_SECONDS = 2.0
 _CI_LOG_FETCH_BACKOFF_CAP_SECONDS = 30.0
 _CI_LOG_FETCH_MAX_DEFERRALS = 3
+# Agents read ticket descriptions through tool calls whose results are
+# hard-capped well below 100K chars — an embedded log tail beyond that
+# makes the whole description unreadable to them (the full logs stay one
+# click away via the run link, and ci_fix re-fetches them itself).
+_CI_LOG_EMBED_MAX_CHARS = 20_000
+
+
+def _ci_log_body_parts(logs: str, ansi_re: re.Pattern[str]) -> list[str]:
+    """Markdown body parts embedding a bounded, ANSI-stripped log tail."""
+    stripped = ansi_re.sub("", logs)
+    parts: list[str] = []
+    if len(stripped) > _CI_LOG_EMBED_MAX_CHARS:
+        stripped = stripped[-_CI_LOG_EMBED_MAX_CHARS:]
+        parts.append(
+            "_Log tail below (truncated to the last "
+            f"{_CI_LOG_EMBED_MAX_CHARS:,} chars — full logs at the run "
+            "link above)._"
+        )
+    parts.extend(["```", stripped, "```"])
+    return parts
 
 
 class PollLoopsMixin(_WorkerBase):
@@ -1026,12 +1046,7 @@ class PollLoopsMixin(_WorkerBase):
                 "",
             ]
             if logs:
-                stripped = ansi_re.sub("", logs)
-                if len(stripped) > 200_000:
-                    stripped = stripped[-200_000:]
-                body_parts.append("```")
-                body_parts.append(stripped)
-                body_parts.append("```")
+                body_parts.extend(_ci_log_body_parts(logs, ansi_re))
             elif fetch_error:
                 body_parts.append(
                     "⚠️ **Could not fetch the run logs** after "
