@@ -277,6 +277,24 @@ class TestClassifyOrphanedPrs:
         assert len(result) == 1
         assert result[0].classification == OrphanClassification.NO_TICKET
 
+    def test_pin_bump_branch_excluded(self):
+        """Regression (2026-09-04 dry-run pass): ``mill/pin-bump/<dep>``
+        sweep branches are created ticket-less by the pin_bump periodic —
+        without the exemption they classified as NO_TICKET → FILE_TICKET
+        for every routine pin-bump PR fleet-wide."""
+        s = _settings()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(pr_status={"state": "open", "mergeable": True})
+        result = classify_orphaned_prs(
+            ["mill/pin-bump/robotsix-llmio"],
+            settings=s,
+            service=svc,
+            forge=forge,
+        )
+        assert result == []
+        svc.get.assert_not_called()
+
     def test_multiple_branches_mixed(self):
         """Active + orphan → only orphan returned."""
         s = _settings()

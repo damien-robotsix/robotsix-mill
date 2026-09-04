@@ -33,6 +33,11 @@ from robotsix_mill.vcs import git_ops
 
 log = logging.getLogger(__name__)
 
+# Branch-name segment (after ``settings.branch_prefix``) that marks a
+# pin-bump sweep PR.  These branches are created ticket-less by design;
+# consumers (e.g. the orphaned-PR check) use this to recognize them.
+PIN_BUMP_BRANCH_SEGMENT = "pin-bump/"
+
 
 def _fetch_one_pyproject(
     repo_id: str,
@@ -390,7 +395,7 @@ def _pr_guards_ok(
     if rc.max_inflight_prs > 0:
         open_branches = forge.list_open_pr_branches()
         mill_bump_count = sum(
-            1 for b in open_branches if b.startswith("mill/pin-bump/")
+            1 for b in open_branches if b.startswith(f"mill/{PIN_BUMP_BRANCH_SEGMENT}")
         )
         if mill_bump_count >= rc.max_inflight_prs:
             log.info(
@@ -418,7 +423,7 @@ def _apply_one_bump(
     prs_created: list[str],
 ) -> None:
     """Clone *rc*, update the pin rev, regenerate uv.lock, push, and open a PR."""
-    branch_name = f"mill/pin-bump/{dep_name}"
+    branch_name = f"mill/{PIN_BUMP_BRANCH_SEGMENT}{dep_name}"
 
     if not _pr_guards_ok(
         repo_id=repo_id,

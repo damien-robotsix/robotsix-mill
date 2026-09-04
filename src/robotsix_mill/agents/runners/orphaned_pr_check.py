@@ -27,6 +27,7 @@ from ...core.models import SourceKind, Ticket
 from ...core.service import TicketService
 from ...core.states import State
 from ...forge import get_forge
+from .pin_bump_runner import PIN_BUMP_BRANCH_SEGMENT
 
 if TYPE_CHECKING:
     from ...forge.base import Forge
@@ -246,6 +247,13 @@ def classify_orphaned_prs(
 
     for branch in mill_branches:
         ticket_id = branch.removeprefix(settings.branch_prefix)
+
+        # Pin-bump sweep branches are created ticket-less by the pin_bump
+        # periodic and owned end-to-end by the repo-hygiene drain — a
+        # missing ticket is their normal state, never an orphan signal.
+        if ticket_id.startswith(PIN_BUMP_BRANCH_SEGMENT):
+            continue
+
         ticket: Ticket | None = service.get(ticket_id)
 
         # --- Active ticket drives this PR → not orphaned ---
