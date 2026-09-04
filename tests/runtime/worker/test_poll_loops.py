@@ -1,6 +1,7 @@
 """Unit tests for PollLoopsMixin methods and helpers in poll_loops.py."""
 
 import json
+import re
 import time
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -9,7 +10,9 @@ from unittest.mock import patch
 import pytest
 
 from robotsix_mill.runtime.worker.poll_loops import (
+    _CI_LOG_EMBED_MAX_CHARS,
     PollLoopsMixin,
+    _ci_log_body_parts,
     _dependabot_body,
     _dependabot_title,
 )
@@ -675,3 +678,28 @@ class TestDependabotBody:
         body = _dependabot_body({})
         assert "**Package:** `` ()" in body
         assert "**Severity:** " in body
+
+
+# ---------------------------------------------------------------------------
+# _ci_log_body_parts
+# ---------------------------------------------------------------------------
+
+
+class TestCiLogBodyParts:
+    _ansi_re = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+    def test_short_logs_embedded_whole_without_notice(self):
+        parts = _ci_log_body_parts("\x1b[31merror: boom\x1b[0m\n", self._ansi_re)
+        assert parts == ["```", "error: boom\n", "```"]
+
+    def test_long_logs_truncated_to_tail_with_notice(self):
+        # Real job logs are line-oriented and much larger than the cap
+        # (the 2026-09-04 incident description was ~129K chars).
+        logs = "\n".join(f"2026-09-04T08:00:{i % 60:02d}Z step output line {i}" for i in range(5000))
+        assert len(logs) > _CI_LOG_EMBED_MAX_CHARS
+        parts = _ci_log_body_parts(logs, self._ansi_re)
+        assert parts[0].startswith("_Log tail below (truncated")
+        embedded = parts[2]
+        assert len(embedded) == _CI_LOG_EMBED_MAX_CHARS
+        assert embedded.endswith("step output line 4999")
+        assert len("\n".join(parts)) < 25_000
