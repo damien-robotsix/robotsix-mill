@@ -785,21 +785,30 @@ class TestRunCoordinator:
 
     # -- language_instructions -------------------------------------------
 
-    def test_language_instructions_injected_into_user_prompt(
+    def test_language_instructions_not_duplicated_into_user_prompt(
         self,
         settings,
         tmp_path,
+        monkeypatch,
     ):
-        """When ``language_instructions`` is non-empty it is prepended
-        in the user prompt under a ``## Language conventions`` heading."""
+        """implement.yaml sets ``inject_language_conventions: true`` so the
+        language-conventions block lives in the (cacheable) SYSTEM prompt.
+        run_coordinator must NOT also inject it into the per-pass user prompt
+        — re-emitting the same block verbatim on every pass is pure token
+        bloat (the block is already present, cached, in the system prompt)."""
         snippet = "Use pytest. Never run uv sync."
+        monkeypatch.setattr(
+            "robotsix_mill.config.repo_settings.resolve_language_instructions",
+            lambda *a, **k: snippet,
+        )
         self._run(settings, tmp_path, language_instructions=snippet)
-        prompt: str = self.captured["user_prompt"]
-        assert "## Language conventions\n\n" + snippet in prompt
-        # The language conventions appear before the ticket-spec.
-        conventions_pos = prompt.index("## Language conventions")
-        spec_pos = prompt.index("````ticket-spec")
-        assert conventions_pos < spec_pos
+        # Present once, in the system prompt (build_agent_from_definition).
+        assert "## Language conventions" in self.captured["system_prompt"]
+        assert snippet in self.captured["system_prompt"]
+        # NOT duplicated into the user prompt.
+        user_prompt: str = self.captured["user_prompt"]
+        assert "## Language conventions" not in user_prompt
+        assert snippet not in user_prompt
 
     def test_language_instructions_empty_unchanged(
         self,

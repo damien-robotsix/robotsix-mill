@@ -574,7 +574,16 @@ def run_coordinator(
             _retry_memory = ""  # board conventions unchanged since first pass
 
         user_prompt = ""
-        if language_instructions:
+        # Language conventions are already injected into the (cacheable)
+        # SYSTEM prompt by build_agent_from_definition when the definition
+        # sets ``inject_language_conventions`` — implement.yaml does, and the
+        # stage resolves ``language_instructions`` from the very same
+        # ``resolve_language_instructions`` source, so re-emitting the block
+        # here would duplicate it verbatim in the per-pass user prompt
+        # (uncached, re-sent on every coordinator pass). Only fall back to a
+        # user-prompt injection when the system prompt does NOT already carry
+        # it (a definition with the flag unset).
+        if language_instructions and not definition.inject_language_conventions:
             user_prompt += (
                 "## Language conventions\n\n" + language_instructions + "\n\n"
             )
