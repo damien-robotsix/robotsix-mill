@@ -688,6 +688,36 @@ class CIFixStage(Stage):
             count = _read_counter(counter_path) + 1
             _write_counter(counter_path, count)
             if count >= s.ci_fix_max_identical_failures:
+                # Transient external outages (registry / link-checker 5xx,
+                # runner flakes) produce an identical fingerprint every cycle
+                # because no diff can change them — yet they are self-clearing.
+                # Escalating them to a hard BLOCK routes a transient upstream
+                # outage to a human gate it will never satisfy.  Instead
+                # re-trigger the failing workflow(s) server-side and re-poll
+                # (auto-retry with backoff on the worker's CI cadence).  Gated
+                # on ci_transient_max_retries so an operator who disabled
+                # transient re-runs still gets the deterministic BLOCK.
+                from .ci_transient import is_transient_ci_failure
+
+                if s.ci_transient_max_retries > 0 and is_transient_ci_failure(
+                    failing_summary
+                ):
+                    reran = self._rerun_failing_workflows(ticket, ctx, head_sha)
+                    _write_counter(counter_path, 0)
+                    try:
+                        ctx.service.add_history_note(
+                            ticket.id,
+                            f"CI failure fingerprint ({current_fp}) repeated "
+                            f"{count}× but classified transient (external 5xx / "
+                            f"infra flake) — re-ran {reran} workflow(s) and "
+                            "re-polling instead of blocking.",
+                        )
+                    except Exception:
+                        log.warning(
+                            "%s: failed to record transient re-run note",
+                            ticket.id,
+                        )
+                    return Outcome(State.IMPLEMENT_COMPLETE)
                 check_names = _extract_check_names(failing_summary)
                 return Outcome(
                     State.BLOCKED,
@@ -705,6 +735,42 @@ class CIFixStage(Stage):
         fp_path.parent.mkdir(parents=True, exist_ok=True)
         fp_path.write_text(current_fp, encoding="utf-8")
         return None
+
+    def _rerun_failing_workflows(
+        self, ticket: Ticket, ctx: StageContext, head_sha: str
+    ) -> int:
+        """Server-side re-run of every failing workflow run at *head_sha*.
+
+        Returns the number of workflow runs successfully re-queued.  Used to
+        auto-retry a transient / external failure (registry or link-checker
+        5xx, runner flake) instead of hard-blocking on a repeated fingerprint;
+        the failing run itself never turns green on its own, so a re-run is the
+        only way to clear a self-clearing upstream outage.
+        """
+        if not head_sha:
+            return 0
+        reran = 0
+        try:
+            forge = get_forge(ctx.settings, repo_config=ctx.repo_config)
+            for run in forge.list_workflow_runs(head_sha=head_sha):
+                if run.get("conclusion") == "failure":
+                    try:
+                        if forge.rerun_workflow(run_id=run["id"]).get("rerun"):
+                            reran += 1
+                    except Exception:
+                        log.warning(
+                            "%s: rerun_workflow failed for run %s",
+                            ticket.id,
+                            run.get("id"),
+                            exc_info=True,
+                        )
+        except Exception:
+            log.warning(
+                "%s: failed to list/rerun workflows for transient retry",
+                ticket.id,
+                exc_info=True,
+            )
+        return reran
 
     def _run_agent_and_finalize(
         self,

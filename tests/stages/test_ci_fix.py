@@ -1734,6 +1734,116 @@ def test_identical_failure_resets_on_changed_fingerprint(tmp_path, monkeypatch):
     assert stored == current_fp
 
 
+def test_transient_fingerprint_reruns_instead_of_blocking(tmp_path, monkeypatch):
+    """A repeated fingerprint classified as a transient external 5xx must NOT
+    escalate to a hard BLOCK — the stage re-runs the workflow and re-polls
+    (auto-retry with backoff) instead."""
+    ctx = _gh(
+        tmp_path,
+        ci_fix_max_identical_failures="2",
+        ci_transient_max_retries="3",
+    )
+    failing = [
+        {
+            "name": "js-lint",
+            "summary": "npm error 503 Service Unavailable - GET "
+            "https://registry.npmjs.org/-/npm/v1/security/audits",
+            "text": None,
+            "annotations": [],
+        }
+    ]
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": failing,
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    # No failing runs surfaced during resolve (keeps the fingerprint free of
+    # appended job-log text); the gate's own re-run helper is exercised by the
+    # dedicated _rerun_failing_workflows tests below.
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, branch=None, head_sha=None: [],
+    )
+
+    def fake_agent(**k):
+        raise AssertionError("agent must not run for a transient repeat")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        fake_agent,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    repo_id = ctx.repo_config.board_id
+    summary = _build_failing_summary(failing)
+    fp = _ci_failure_fingerprint(summary, repo_id, head_sha="abc123")
+    artifacts = ctx.service.workspace(t).artifacts_dir
+    artifacts.mkdir(parents=True, exist_ok=True)
+    (artifacts / "ci_failure_fingerprint.txt").write_text(fp, encoding="utf-8")
+
+    counter_path = artifacts / "ci_identical_failure_count.txt"
+    _write_counter(counter_path, 1)
+    # Exhaust the quick transient re-run budget so _resolve_clone_and_status
+    # does not re-trigger first — force the flow through the fingerprint gate.
+    _write_counter(artifacts / "ci_transient_retry.txt", 3)
+
+    out = CIFixStage().run(t, ctx)
+    # Auto-retry (re-poll) rather than a hard human gate.
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    # Identical-failure counter reset so the ticket keeps auto-retrying.
+    assert counter_path.read_text(encoding="utf-8").strip() == "0"
+
+
+def test_rerun_failing_workflows_reruns_each_failed_run(tmp_path, monkeypatch):
+    """_rerun_failing_workflows re-queues every failing run at head_sha and
+    returns the count of runs re-triggered."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, branch=None, head_sha=None: [
+            {"id": 1, "conclusion": "failure"},
+            {"id": 2, "conclusion": "success"},
+            {"id": 3, "conclusion": "failure"},
+        ],
+    )
+    rerun_calls: list[int] = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "rerun_workflow",
+        lambda self, *, run_id: rerun_calls.append(run_id) or {"rerun": True},
+    )
+    t = _fixing_ci(ctx)
+    reran = CIFixStage()._rerun_failing_workflows(t, ctx, "abc123")
+    assert reran == 2
+    assert rerun_calls == [1, 3]
+
+
+def test_rerun_failing_workflows_no_head_sha_is_noop(tmp_path, monkeypatch):
+    """Without a head SHA there is nothing to re-run — the forge is untouched."""
+    ctx = _gh(tmp_path)
+    called: list[int] = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, branch=None, head_sha=None: called.append(1) or [],
+    )
+    t = _fixing_ci(ctx)
+    assert CIFixStage()._rerun_failing_workflows(t, ctx, "") == 0
+    assert called == []
+
+
 # ---------------------------------------------------------------------------
 # Staleness guard: rebase before cycle ceiling
 # ---------------------------------------------------------------------------

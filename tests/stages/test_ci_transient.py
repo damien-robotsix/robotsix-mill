@@ -376,3 +376,49 @@ class TestIsTransientCiFailure:
             "fetch failed for stub response\n"
         )
         assert is_transient_ci_failure(summary) is False
+
+    def test_detects_htmlproofer_external_link_5xx(self):
+        """mkdocs htmlproofer hitting a 504 on a link outside the diff."""
+        summary = (
+            "## ❌ FAILED: docs\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "- ./index.html\n"
+            "  *  External link https://slsa.dev/spec/v1.2/ failed\n"
+            "     response code 504 means something's wrong\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_detects_bare_504_gateway_timeout(self):
+        summary = (
+            "## ❌ FAILED: link-check\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "https://slsa.dev/spec/v1.2/ -> 504 Gateway Timeout\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_detects_npm_audit_registry_503(self):
+        """`npm audit` hitting a 503 from registry.npmjs.org (JS lint job)."""
+        summary = (
+            "## ❌ FAILED: js-lint\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "npm error code E503\n"
+            "npm error 503 Service Unavailable - "
+            "GET https://registry.npmjs.org/-/npm/v1/security/audits\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_detects_registry_npmjs_org_5xx(self):
+        summary = (
+            "## ❌ FAILED: install\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "request to https://registry.npmjs.org/left-pad failed, 500\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
