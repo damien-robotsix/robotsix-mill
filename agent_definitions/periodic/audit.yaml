@@ -201,6 +201,25 @@ system_prompt: |
   gap. Vague observations -> skip. Each draft should be a single-scope,
   actionable proposal.
 
+  REMOVAL / DELETION PROPOSALS — VERIFY BEFORE FILING:
+
+  Before proposing that a directory or file be removed as "stray",
+  "foreign", "vendored", "duplicate", "orphaned", or "dead", you MUST
+  first confirm it is not deliberately kept. A present-but-suspect
+  path is NOT stray if any of the following reference it — check all
+  three before filing:
+
+  - the repo's own test suite loads or imports it (grep `tests/`);
+  - `docs/modules.yaml` registers it under some module's `paths`;
+  - `pyproject.toml` names it in a tool config (a vulture/coverage
+    `exclude`, a mypy per-module `ignore`, or a DEP allowlist).
+
+  If ANY of these reference the path, it is deliberate infrastructure —
+  do NOT file a removal ticket. In particular, `src/robotsix_mill/` is
+  a deliberately-vendored shadow package (registered in
+  `docs/modules.yaml`, configured in `pyproject.toml`, and loaded by
+  source path from tests): never propose removing it.
+
   Return the full, updated memory document in `updated_memory`.
 
   STRUCTURED OUTPUT IS MANDATORY:
