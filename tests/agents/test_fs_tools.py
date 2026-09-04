@@ -2,6 +2,7 @@
 for every agent."""
 
 import asyncio
+import threading
 import types
 
 import pytest
@@ -759,6 +760,42 @@ class TestEditFile:
         assert "syntax error" in result.lower()
         # File on disk unchanged.
         assert (root / "mod.py").read_text() == original
+
+    def test_concurrent_same_path_edits_all_survive(self, tmp_path, settings):
+        """When one model response carries several edit_file calls for
+        the SAME file, the engine executes them concurrently — without
+        serialisation each call reads the same pre-edit baseline and
+        the last write silently clobbers the earlier replacements.
+        The per-path lock must make the batch transactional so every
+        replacement survives."""
+        root = tmp_path / "repo"
+        root.mkdir()
+        _make_file(root, "f.txt", "\n".join(f"line {i}" for i in range(8)) + "\n")
+        tools = _build(root, settings)
+        # Seed the shared content cache so every thread reads the same
+        # baseline, maximising the lost-update window without the lock.
+        tools["read_file"](path="f.txt")
+        edits = [(f"line {i}", f"replaced {i}") for i in range(8)]
+        barrier = threading.Barrier(len(edits))
+        results: list[str] = []
+        results_lock = threading.Lock()
+
+        def apply(old: str, new: str) -> None:
+            barrier.wait()
+            res = tools["edit_file"]("f.txt", old, new)
+            with results_lock:
+                results.append(res)
+
+        threads = [threading.Thread(target=apply, args=(o, n)) for o, n in edits]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert all("replaced 1 occurrence(s)" in r for r in results)
+        assert (root / "f.txt").read_text() == (
+            "\n".join(f"replaced {i}" for i in range(8)) + "\n"
+        )
 
 
 # ===================================================================
