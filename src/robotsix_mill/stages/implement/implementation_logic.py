@@ -759,6 +759,14 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             )
 
         if decision.next_action == "escalate":
+            # If the terminal diagnosis is transient/environmental (an
+            # ENV-ERROR or a sandbox/docker infrastructure signature), the
+            # gate did NOT run to a spec-determined result — do NOT persist
+            # a spec fingerprint, so the next resume re-implements instead
+            # of hitting a false "spec unchanged" re-block.
+            from ...agents.testing import diag_is_transient
+
+            escalate_transient = diag_is_transient(diag)
             cls._finalize(
                 ctx,
                 ticket,
@@ -768,14 +776,20 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                 ok=False,
                 reference_files=ref_files,
                 extra_roots=extra_roots,
+                transient=escalate_transient,
             )
+            note = (
+                f"tests still failing after {max_iters} fix "
+                "attempt(s) — resumable (move to READY)"
+            )
+            if escalate_transient:
+                note += (
+                    " [transient/environmental gate failure — no spec "
+                    "fingerprint recorded; resume re-runs the attempt]"
+                )
             return _SinglePassResult(
                 next_action="escalate",
-                outcome=Outcome(
-                    State.BLOCKED,
-                    f"tests still failing after {max_iters} fix "
-                    "attempt(s) — resumable (move to READY)",
-                ),
+                outcome=Outcome(State.BLOCKED, note),
             )
 
         # retry → feed the diagnosis into the next edit pass.

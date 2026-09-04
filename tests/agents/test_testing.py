@@ -20,11 +20,46 @@ from robotsix_mill.agents.testing import (
     _env_error_diag,
     _evaluate_gate_result,
     _load_file_map,
+    diag_is_transient,
     is_network_dependent_failure,
     run_smoke_agent,
     run_test_agent,
     smoke_paths_match,
 )
+
+# ---------------------------------------------------------------------------
+# diag_is_transient
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("diag", "expected"),
+    [
+        # ENV-ERROR diagnoses are transient/environmental.
+        (f"{ENV_ERROR_PREFIX} sandbox command timed out (rc=124).", True),
+        (f"{ENV_ERROR_PREFIX} command not found in sandbox: 'mypy'", True),
+        # Sandbox / docker infrastructure signatures.
+        ("sandbox unavailable: docker run failed: No such container", True),
+        (
+            (
+                "docker run failed: docker: Error response from daemon: "
+                "No such container: abc123"
+            ),
+            True,
+        ),
+        ("Error response from daemon: something", True),
+        # Case-insensitive.
+        ("SANDBOX UNAVAILABLE", True),
+        # Spec-determined failures must NOT match.
+        ("AssertionError: expected 3, got 4", False),
+        ("2 tests failed: test_foo, test_bar", False),
+        ("tests still failing after 3 fix attempts", False),
+        ("", False),
+    ],
+)
+def test_diag_is_transient(diag, expected):
+    assert diag_is_transient(diag) is expected
+
 
 # ---------------------------------------------------------------------------
 # _detect_missing_binary

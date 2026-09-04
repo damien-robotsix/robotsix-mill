@@ -807,6 +807,67 @@ class TestEvaluateTestResults:
         assert "still failing" in result.outcome.note
         assert finalize_ok == [False]
 
+    def test_escalate_spec_determined_diag_records_fingerprint(self, monkeypatch):
+        """A genuine test failure on the last attempt escalates with
+        ``transient=False`` — _finalize persists a spec fingerprint so the
+        stale-re-spawn guard can block an unchanged-spec re-run."""
+        self._install_default_patches(monkeypatch)
+        finalize_transient = []
+
+        def _fake_finalize(
+            cls, ctx, ticket, repo_dir, branch, summary, *, ok, transient=False, **kw
+        ):
+            finalize_transient.append(transient)
+
+        monkeypatch.setattr(_Stage, "_finalize", classmethod(_fake_finalize))
+        from robotsix_mill.stages import implement as _facade
+
+        monkeypatch.setattr(
+            _facade,
+            "run_test_agent",
+            lambda **kw: (False, "AssertionError: expected 3, got 4"),
+        )
+
+        result = self._call(monkeypatch, attempt=3, max_iters=3)
+        assert result.next_action == "escalate"
+        # Genuine spec-determined failure → fingerprint recorded.
+        assert finalize_transient == [False]
+
+    def test_escalate_transient_diag_skips_fingerprint(self, monkeypatch):
+        """A transient/environmental terminal diagnosis (sandbox/docker
+        infra signature) escalates with ``transient=True`` — _finalize
+        must NOT persist a spec fingerprint, so the next resume
+        re-implements instead of hitting a false 'spec unchanged'
+        re-block."""
+        self._install_default_patches(monkeypatch)
+        finalize_transient = []
+
+        def _fake_finalize(
+            cls, ctx, ticket, repo_dir, branch, summary, *, ok, transient=False, **kw
+        ):
+            finalize_transient.append(transient)
+
+        monkeypatch.setattr(_Stage, "_finalize", classmethod(_fake_finalize))
+        from robotsix_mill.stages import implement as _facade
+
+        monkeypatch.setattr(
+            _facade,
+            "run_test_agent",
+            lambda **kw: (
+                False,
+                (
+                    "docker run failed: docker: Error response from daemon: "
+                    "No such container: abc123"
+                ),
+            ),
+        )
+
+        result = self._call(monkeypatch, attempt=3, max_iters=3)
+        assert result.next_action == "escalate"
+        assert result.outcome.next_state is State.BLOCKED
+        assert finalize_transient == [True]
+        assert "no spec fingerprint recorded" in result.outcome.note
+
     def test_retry_while_iterations_remain(self, monkeypatch):
         """failed test with attempt < max_iters → retry with feedback."""
         self._install_default_patches(monkeypatch)
