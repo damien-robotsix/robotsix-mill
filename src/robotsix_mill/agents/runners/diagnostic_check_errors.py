@@ -3,8 +3,9 @@
 The first concrete :class:`~robotsix_mill.agents.runners.diagnostic_checks.DiagnosticCheck`
 of the daily diagnostic agent. It consumes the shared, fail-safe data
 layer (:mod:`diagnostic_data`) to find errored runs in the last 24h and
-auto-files exactly one deduplicated draft ticket per unique error per
-day.
+emits one deduplicated diagnostic event per unique error per day. It
+files **no tickets** — investigation findings belong in a chat
+subsession, not in a ticket.
 
 Scope is deliberately the runs-log source only: the normalized Langfuse
 trace shape exposes no error/level field yet, so errored-trace detection
@@ -17,9 +18,6 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from ...core.models import SourceKind, TicketKind
-from ...core.service import TicketService
-from ...core.states import DONE_OR_CLOSED
 from ...runtime.run_registry import RESTART_INTERRUPTED_ERROR
 from .diagnostic_checks import (
     DiagnosticCheckContext,
@@ -27,6 +25,7 @@ from .diagnostic_checks import (
     register_check,
 )
 from .diagnostic_data import query_run_errors
+from .diagnostic_events import emit_diagnostic_event
 
 log = logging.getLogger(__name__)
 
@@ -74,7 +73,6 @@ class ErroredRunsCheck:
         board_id = ctx.board_id
 
         since = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
-        today = datetime.now(UTC).strftime("%Y-%m-%d")
 
         errors = query_run_errors(board_id, since=since, settings=settings)
 
@@ -106,9 +104,7 @@ class ErroredRunsCheck:
             log.info("errored_runs: %s (board=%s)", summary, board_id)
             return DiagnosticCheckResult(name=self.name, ok=True, summary=summary)
 
-        service = TicketService(settings, board_id=board_id)
-        drafts_created: list[dict[str, Any]] = []
-
+        emitted = 0
         for (kind, signature), runs in groups.items():
             log.info(
                 "errored_runs: detected %d run(s) for fingerprint "
@@ -117,24 +113,24 @@ class ErroredRunsCheck:
                 kind,
                 signature,
             )
-            short_sig = signature if len(signature) <= 80 else signature[:77] + "..."
-            title = f"[diagnostic] errored run: {kind} — {short_sig} ({today})"
+            # Surface the finding as a diagnostic event only — never a
+            # ticket. Investigation belongs in a chat subsession, not in a
+            # ticket (operator policy). The event store dedups on
+            # (category, ticket_id, normalized_key).
+            first_run_id = str(runs[0].get("id") or "unknown")
             try:
-                if self._is_duplicate(title, service):
-                    log.info("errored_runs: skipping duplicate ticket %r", title)
-                    continue
-                body = self._build_body(board_id, kind, signature, runs)
-                ticket = service.create(
-                    title,
-                    body,
-                    source=SourceKind.AGENT,
-                    kind=TicketKind.TASK,
-                )
-                log.info("errored_runs: created ticket %s — %r", ticket.id, title)
-                drafts_created.append({"id": ticket.id, "title": title})
+                if emit_diagnostic_event(
+                    settings,
+                    board_id,
+                    category="ERRORED_RUN",
+                    ticket_id=first_run_id,
+                    reason=f"{kind}: {signature}",
+                    normalized_key=f"{kind}::{signature}",
+                ):
+                    emitted += 1
             except Exception:
                 log.exception(
-                    "errored_runs: failed to file ticket for fingerprint "
+                    "errored_runs: failed to emit event for fingerprint "
                     "(kind=%s, signature=%r)",
                     kind,
                     signature,
@@ -142,58 +138,13 @@ class ErroredRunsCheck:
 
         summary = (
             f"{len(errors)} errored run(s) in {len(groups)} group(s); "
-            f"{len(drafts_created)} draft(s) filed"
+            f"{emitted} diagnostic event(s) emitted (no tickets filed)"
         )
         return DiagnosticCheckResult(
             name=self.name,
             ok=True,
             summary=summary,
-            drafts_created=drafts_created,
         )
-
-    @staticmethod
-    def _is_duplicate(title: str, service: TicketService) -> bool:
-        """Return True if a non-terminal ticket with *title* already exists."""
-        norm = title.strip().casefold()
-        for t in service.list():
-            if t.title.strip().casefold() == norm and t.state not in DONE_OR_CLOSED:
-                return True
-        return False
-
-    @staticmethod
-    def _build_body(
-        board_id: str,
-        kind: str,
-        signature: str,
-        runs: list[dict[str, Any]],
-    ) -> str:
-        """Build the investigating-context ticket body for an error group."""
-        lines = [
-            "Auto-filed by the daily diagnostic agent (errored_runs check).",
-            "",
-            f"- **Repository / board:** `{board_id}`",
-            f"- **Error kind:** `{kind}`",
-            f"- **Signature:** {signature}",
-            f"- **Affected runs:** {len(runs)}",
-            "",
-            "### Affected run(s)",
-        ]
-        for run in runs:
-            lines.append(
-                f"- run `{run.get('id')}` — started_at "
-                f"`{run.get('started_at')}`, finished_at "
-                f"`{run.get('finished_at')}`"
-            )
-        lines.append("")
-        lines.append("### Raw error(s)")
-        for run in runs:
-            error_text = run.get("error") or run.get("summary") or "(no error text)"
-            lines.append(f"- run `{run.get('id')}`:")
-            lines.append("")
-            lines.append("```")
-            lines.append(str(error_text))
-            lines.append("```")
-        return "\n".join(lines) + "\n"
 
 
 register_check(ErroredRunsCheck())

@@ -7,18 +7,20 @@ monkeypatched (in the check's own namespace, the name as imported). The
 check reads ``ctx.board_id`` / ``ctx.settings`` from the
 :class:`DiagnosticCheckContext` the runner passes, so the tests build a
 context backed by a sandboxed settings whose board DB we initialize.
+
+The check files **no tickets**: findings are surfaced as diagnostic
+events in the JSONL event store, so every test asserts both that no
+ticket is created and that (where expected) events were emitted.
 """
 
 from __future__ import annotations
 
-import logging
-
 from robotsix_mill.agents.runners import diagnostic_check_errors as dce
 from robotsix_mill.agents.runners import diagnostic_checks as dc
 from robotsix_mill.agents.runners.diagnostic_checks import DiagnosticCheckContext
+from robotsix_mill.agents.runners.diagnostic_events import list_diagnostic_events
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
-from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
 
 _BOARD = "robotsix-mill"
@@ -49,10 +51,10 @@ def _error_run(id, kind, started_at, error, summary=""):
     }
 
 
-# --- detection + filing ----------------------------------------------------
+# --- detection: event emitted, no ticket created ---------------------------
 
 
-def test_detection_files_draft_with_full_context(tmp_path, monkeypatch, caplog):
+def test_detection_emits_event_and_no_ticket(tmp_path, monkeypatch):
     settings = _prepare(tmp_path, monkeypatch)
     monkeypatch.setattr(
         dce,
@@ -67,28 +69,20 @@ def test_detection_files_draft_with_full_context(tmp_path, monkeypatch, caplog):
         ],
     )
 
-    with caplog.at_level(logging.INFO, logger=dce.log.name):
-        result = dce.ErroredRunsCheck().run(_ctx(settings))
+    result = dce.ErroredRunsCheck().run(_ctx(settings))
 
     assert result.ok is True
-    assert len(result.drafts_created) == 1
-    ticket_id = result.drafts_created[0]["id"]
+    assert result.drafts_created == []
+    # No ticket was created on the board.
+    assert TicketService(settings, board_id=_BOARD).list() == []
 
-    service = TicketService(settings, board_id=_BOARD)
-    ticket = service.get(ticket_id)
-    assert ticket is not None
-    assert ticket.source == SourceKind.AGENT
-    assert ticket.state.value == "draft"
-    body = service.workspace(ticket).read_description()
-    assert _BOARD in body
-    assert "bc_check" in body
-    assert "run-1" in body
-    assert "2026-06-14T00:00:00+00:00" in body
-    assert "YAML parse error" in body
-
-    messages = [r.getMessage() for r in caplog.records]
-    assert any("detected" in m for m in messages)
-    assert any("created ticket" in m for m in messages)
+    events = list_diagnostic_events(settings, _BOARD, category="ERRORED_RUN")
+    assert len(events) == 1
+    ev = events[0]
+    assert ev.ticket_id == "run-1"
+    assert "bc_check" in ev.reason
+    assert "YAML parse error" in ev.reason
+    assert "no tickets filed" in result.summary
 
 
 # --- dedup -----------------------------------------------------------------
@@ -105,37 +99,22 @@ def test_dedup_no_duplicate_on_second_pass(tmp_path, monkeypatch):
     )
 
     first = dce.ErroredRunsCheck().run(_ctx(settings))
-    assert len(first.drafts_created) == 1
+    assert first.ok is True
 
     second = dce.ErroredRunsCheck().run(_ctx(settings))
-    assert second.drafts_created == []
+    assert second.ok is True
 
-
-def test_terminal_ticket_does_not_block_creation(tmp_path, monkeypatch):
-    settings = _prepare(tmp_path, monkeypatch)
-    monkeypatch.setattr(
-        dce,
-        "query_run_errors",
-        lambda board_id, **k: [
-            _error_run("run-1", "bc_check", "2026-06-14T00:00:00+00:00", "boom")
-        ],
-    )
-
-    first = dce.ErroredRunsCheck().run(_ctx(settings))
-    assert len(first.drafts_created) == 1
-
-    # Drive the existing ticket to a terminal state.
-    service = TicketService(settings, board_id=_BOARD)
-    service.mark_done(first.drafts_created[0]["id"])
-
-    second = dce.ErroredRunsCheck().run(_ctx(settings))
-    assert len(second.drafts_created) == 1  # terminal ticket does not suppress
+    # Same (category, ticket_id, normalized_key) is deduplicated by the
+    # event store, so the second pass emits nothing new and no ticket.
+    events = list_diagnostic_events(settings, _BOARD, category="ERRORED_RUN")
+    assert len(events) == 1
+    assert TicketService(settings, board_id=_BOARD).list() == []
 
 
 # --- per-unique-error separation -------------------------------------------
 
 
-def test_distinct_fingerprints_yield_two_tickets(tmp_path, monkeypatch):
+def test_distinct_fingerprints_yield_two_events(tmp_path, monkeypatch):
     settings = _prepare(tmp_path, monkeypatch)
     monkeypatch.setattr(
         dce,
@@ -146,10 +125,12 @@ def test_distinct_fingerprints_yield_two_tickets(tmp_path, monkeypatch):
         ],
     )
     result = dce.ErroredRunsCheck().run(_ctx(settings))
-    assert len(result.drafts_created) == 2
+    assert result.ok is True
+    assert len(list_diagnostic_events(settings, _BOARD, category="ERRORED_RUN")) == 2
+    assert TicketService(settings, board_id=_BOARD).list() == []
 
 
-def test_identical_fingerprints_collapse_to_one_ticket(tmp_path, monkeypatch):
+def test_identical_fingerprints_collapse_to_one_event(tmp_path, monkeypatch):
     settings = _prepare(tmp_path, monkeypatch)
     monkeypatch.setattr(
         dce,
@@ -160,16 +141,18 @@ def test_identical_fingerprints_collapse_to_one_ticket(tmp_path, monkeypatch):
         ],
     )
     result = dce.ErroredRunsCheck().run(_ctx(settings))
-    assert len(result.drafts_created) == 1
+    assert result.ok is True
+    assert len(list_diagnostic_events(settings, _BOARD, category="ERRORED_RUN")) == 1
+    assert TicketService(settings, board_id=_BOARD).list() == []
 
 
 # --- no errors -------------------------------------------------------------
 
 
-def test_restart_interrupted_runs_are_not_filed(tmp_path, monkeypatch, caplog):
+def test_restart_interrupted_runs_are_not_filed(tmp_path, monkeypatch):
     """Runs killed by a process restart are a deploy artifact, not a defect
-    (mill c05c, 2026-08-26): no ticket, and genuine errors alongside them
-    are still filed."""
+    (mill c05c, 2026-08-26): no event, and genuine errors alongside them
+    are still emitted."""
     from robotsix_mill.runtime.run_registry import RESTART_INTERRUPTED_ERROR
 
     settings = _prepare(tmp_path, monkeypatch)
@@ -197,18 +180,19 @@ def test_restart_interrupted_runs_are_not_filed(tmp_path, monkeypatch, caplog):
             ),
         ],
     )
-    with caplog.at_level(logging.INFO):
-        result = dce.ErroredRunsCheck().run(_ctx(settings))
+    result = dce.ErroredRunsCheck().run(_ctx(settings))
 
     assert result.ok is True
-    titles = [t.title for t in TicketService(settings, board_id=_BOARD).list()]
-    assert len(titles) == 1
-    assert "pin_bump" in titles[0]
-    assert not any("interrupted by process restart" in t for t in titles)
-    assert "skipping 2 run(s) interrupted by process restart" in caplog.text
+    events = list_diagnostic_events(settings, _BOARD, category="ERRORED_RUN")
+    assert len(events) == 1
+    assert "pin_bump" in events[0].reason
+    assert not any(
+        "interrupted by process restart" in ev.reason for ev in events
+    )
+    assert TicketService(settings, board_id=_BOARD).list() == []
 
 
-def test_only_restart_interrupted_runs_is_ok_with_no_drafts(tmp_path, monkeypatch):
+def test_only_restart_interrupted_runs_is_ok_with_no_events(tmp_path, monkeypatch):
     from robotsix_mill.runtime.run_registry import RESTART_INTERRUPTED_ERROR
 
     settings = _prepare(tmp_path, monkeypatch)
@@ -223,49 +207,20 @@ def test_only_restart_interrupted_runs_is_ok_with_no_drafts(tmp_path, monkeypatc
     )
     result = dce.ErroredRunsCheck().run(_ctx(settings))
     assert result.ok is True
+    assert list_diagnostic_events(settings, _BOARD, category="ERRORED_RUN") == []
     assert TicketService(settings, board_id=_BOARD).list() == []
 
 
-def test_no_errors_returns_ok_no_drafts(tmp_path, monkeypatch):
+def test_no_errors_returns_ok_no_events(tmp_path, monkeypatch):
     settings = _prepare(tmp_path, monkeypatch)
     monkeypatch.setattr(dce, "query_run_errors", lambda board_id, **k: [])
     result = dce.ErroredRunsCheck().run(_ctx(settings))
     assert result.ok is True
     assert result.drafts_created == []
+    assert list_diagnostic_events(settings, _BOARD, category="ERRORED_RUN") == []
 
 
 # --- fail-safe -------------------------------------------------------------
-
-
-def test_create_failure_does_not_propagate(tmp_path, monkeypatch, caplog):
-    settings = _prepare(tmp_path, monkeypatch)
-    monkeypatch.setattr(
-        dce,
-        "query_run_errors",
-        lambda board_id, **k: [
-            _error_run("run-1", "bc_check", "2026-06-14T00:00:00+00:00", "alpha"),
-            _error_run("run-2", "audit", "2026-06-14T01:00:00+00:00", "beta"),
-        ],
-    )
-
-    calls = {"n": 0}
-    orig_create = TicketService.create
-
-    def flaky_create(self, *a, **k):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            raise RuntimeError("db exploded")
-        return orig_create(self, *a, **k)
-
-    monkeypatch.setattr(TicketService, "create", flaky_create)
-
-    with caplog.at_level(logging.ERROR, logger=dce.log.name):
-        result = dce.ErroredRunsCheck().run(_ctx(settings))
-
-    # First group failed, but the second still produced a ticket.
-    assert result.ok is True
-    assert len(result.drafts_created) == 1
-    assert any("failed to file ticket" in r.getMessage() for r in caplog.records)
 
 
 def test_outage_empty_errors_is_safe(tmp_path, monkeypatch):
