@@ -785,21 +785,41 @@ class TestRunCoordinator:
 
     # -- language_instructions -------------------------------------------
 
-    def test_language_instructions_injected_into_user_prompt(
+    def test_language_instructions_not_duplicated_into_user_prompt(
         self,
         settings,
         tmp_path,
+        monkeypatch,
     ):
-        """When ``language_instructions`` is non-empty it is prepended
-        in the user prompt under a ``## Language conventions`` heading."""
-        snippet = "Use pytest. Never run uv sync."
-        self._run(settings, tmp_path, language_instructions=snippet)
-        prompt: str = self.captured["user_prompt"]
-        assert "## Language conventions\n\n" + snippet in prompt
-        # The language conventions appear before the ticket-spec.
-        conventions_pos = prompt.index("## Language conventions")
-        spec_pos = prompt.index("````ticket-spec")
-        assert conventions_pos < spec_pos
+        """implement.yaml sets ``inject_language_conventions: true`` so the
+        language-conventions block lives in the (cacheable) SYSTEM prompt,
+        injected by ``build_agent_from_definition`` from
+        ``resolve_language_instructions`` (monkeypatched here).
+        run_coordinator must NOT also inject it into the per-pass user prompt
+        — re-emitting the same block verbatim on every pass is pure token
+        bloat (the block is already present, cached, in the system prompt).
+
+        The ``language_instructions`` argument passed to run_coordinator is a
+        DISTINCT sentinel from the monkeypatched system-prompt snippet: because
+        the definition sets ``inject_language_conventions``, run_coordinator
+        must ignore the argument entirely, so neither string may leak into the
+        user prompt."""
+        sys_snippet = "SYS: Use pytest. Never run uv sync."
+        arg_snippet = "ARG: this must never reach the user prompt."
+        monkeypatch.setattr(
+            "robotsix_mill.config.repo_settings.resolve_language_instructions",
+            lambda *a, **k: sys_snippet,
+        )
+        self._run(settings, tmp_path, language_instructions=arg_snippet)
+        # Present once, in the system prompt (build_agent_from_definition).
+        assert "## Language conventions" in self.captured["system_prompt"]
+        assert sys_snippet in self.captured["system_prompt"]
+        # NOT duplicated into the user prompt — neither the system-prompt
+        # snippet nor the (ignored) run_coordinator argument.
+        user_prompt: str = self.captured["user_prompt"]
+        assert "## Language conventions" not in user_prompt
+        assert sys_snippet not in user_prompt
+        assert arg_snippet not in user_prompt
 
     def test_language_instructions_empty_unchanged(
         self,
