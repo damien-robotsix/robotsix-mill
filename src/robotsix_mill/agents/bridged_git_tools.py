@@ -124,7 +124,10 @@ def build_bridged_git_tools(
         at call time — no stale-lease race from a pre-computed SHA.
         Returns a structured token the agent can match on:
 
-        - ``PUSH_OK`` — push succeeded.
+        - ``PUSH_OK`` — push succeeded AND the tool then re-read the
+          remote branch, confirming it advanced to the local HEAD.  A
+          push that exits 0 without moving the remote is NEVER reported
+          as ``PUSH_OK`` — it is retried once, then fails loudly.
         - ``LEASE_REJECTED: ...`` — the remote advanced since the lease
           was computed. The agent should inspect ancestry and retry
           (self-authored) or report FAILED (foreign push).
@@ -171,57 +174,104 @@ def build_bridged_git_tools(
                 if "couldn't find remote ref" not in stderr.lower():
                     return f"PUSH_ERROR: fetch before push failed: {git_ops.redact_credentials(str(e))}"
                 # else: remote branch absent — fall through to push_with_lease
-            try:
-                git_ops.push_with_lease(repo_dir, branch_name, remote_url, push_token)
+
+            def _push_and_verify(tok: str | None) -> str:
+                """Push with *tok* and verify the remote branch actually
+                advanced to the local HEAD before claiming success.
+
+                Returns ``PUSH_OK`` only when, after re-fetching the remote
+                branch, ``refs/remotes/origin/<branch>`` equals the local
+                HEAD SHA.  A push that exits 0 without moving the remote
+                (e.g. the branch advanced between lease computation and
+                push) returns the sentinel ``NOT_LANDED`` — never ``PUSH_OK``.
+                Failures are returned as ``LEASE_REJECTED: ...`` /
+                ``PUSH_AUTH_ERROR: ...`` / ``PUSH_ERROR: ...`` as before.
+                """
+                try:
+                    git_ops.push_with_lease(repo_dir, branch_name, remote_url, tok)
+                except subprocess.CalledProcessError as e:
+                    stderr = (
+                        e.stderr.decode("utf-8", errors="replace")
+                        if isinstance(e.stderr, bytes)
+                        else str(e.stderr or "")
+                    )
+                    if "stale" in stderr.lower() or "[rejected]" in stderr.lower():
+                        return f"LEASE_REJECTED: {git_ops.redact_credentials(stderr)}"
+                    # Classify auth failures distinctly so the agent (and its
+                    # diagnostic runner) can distinguish a credential blind spot
+                    # from a code defect.
+                    classification = git_ops.classify_push_error(stderr)
+                    if classification == "auth":
+                        return f"PUSH_AUTH_ERROR: {git_ops.redact_credentials(stderr)}"
+                    return f"PUSH_ERROR: {git_ops.redact_credentials(str(e))}"
+
+                # Push exited 0 — verify the remote actually advanced before
+                # reporting success: re-read the branch and compare SHAs.
+                try:
+                    git_ops.fetch(
+                        repo_dir,
+                        remote_url=remote_url,
+                        token=tok,
+                        branch=branch_name,
+                    )
+                    remote_sha = git_ops.remote_branch_sha(repo_dir, branch_name)
+                    local_sha = git_ops.head_sha(repo_dir)
+                except subprocess.CalledProcessError:
+                    return "NOT_LANDED"
+                if remote_sha is None or remote_sha != local_sha:
+                    return "NOT_LANDED"
                 return "PUSH_OK"
-            except subprocess.CalledProcessError as e:
-                stderr = (
-                    e.stderr.decode("utf-8", errors="replace")
-                    if isinstance(e.stderr, bytes)
-                    else str(e.stderr or "")
+
+            def _fail_not_landed() -> str:
+                return (
+                    "PUSH_ERROR: push exited 0 but the remote branch did not "
+                    "advance to the local HEAD (remote HEAD != local HEAD after "
+                    "re-fetch). The push did not land — the agent must NOT "
+                    "report DONE/PUSH_OK."
                 )
-                if "stale" in stderr.lower() or "[rejected]" in stderr.lower():
-                    return f"LEASE_REJECTED: {git_ops.redact_credentials(stderr)}"
-                # Classify auth failures distinctly so the agent (and its
-                # diagnostic runner) can distinguish a credential blind spot
-                # from a code defect.
-                classification = git_ops.classify_push_error(stderr)
-                if classification == "auth":
-                    # Retry once with a fresh token: clear the cache so the
-                    # provider mints a new installation token, then re-fetch
-                    # and re-push.  This handles the common case where the
-                    # token expired between agent start and push time.
-                    if token_cache_clear is not None:
-                        log.info(
-                            "git_push_with_lease: auth failure — "
-                            "clearing token cache and retrying"
-                        )
-                        token_cache_clear()
-                    fresh_token = _get_token()
-                    if fresh_token != push_token:
-                        try:
-                            git_ops.fetch(
-                                repo_dir,
-                                remote_url=remote_url,
-                                token=fresh_token,
-                                branch=branch_name,
-                            )
-                            git_ops.push_with_lease(
-                                repo_dir,
-                                branch_name,
-                                remote_url,
-                                fresh_token,
-                            )
-                            return "PUSH_OK"
-                        except subprocess.CalledProcessError as retry_e:
-                            retry_stderr = (
-                                retry_e.stderr.decode("utf-8", errors="replace")
-                                if isinstance(retry_e.stderr, bytes)
-                                else str(retry_e.stderr or "")
-                            )
-                            return f"PUSH_AUTH_ERROR: {git_ops.redact_credentials(retry_stderr)}"
-                    return f"PUSH_AUTH_ERROR: {git_ops.redact_credentials(stderr)}"
-                return f"PUSH_ERROR: {git_ops.redact_credentials(str(e))}"
+
+            outcome = _push_and_verify(push_token)
+            if outcome == "PUSH_OK":
+                return outcome
+
+            if outcome == "NOT_LANDED":
+                # Push exited 0 but the remote did not move — a false success.
+                # Retry once; a transient lease race may have let a concurrent
+                # push slip in between our fetch and push (a 409/lease rejection
+                # git reported as success). If the retry also fails to land,
+                # fail loudly — never hand the agent a false PUSH_OK.
+                log.warning(
+                    "git_push_with_lease: push exited 0 but remote HEAD != "
+                    "local HEAD — retrying once",
+                )
+                retry = _push_and_verify(push_token)
+                if retry == "PUSH_OK":
+                    return retry
+                return _fail_not_landed()
+
+            if outcome.startswith("PUSH_AUTH_ERROR:"):
+                # Auth failure — clear the token cache and retry once with a
+                # freshly minted token. This handles the common case where a
+                # long-running agent session outlives the GitHub App
+                # installation token's 1-hour TTL.
+                if token_cache_clear is not None:
+                    log.info(
+                        "git_push_with_lease: auth failure — "
+                        "clearing token cache and retrying"
+                    )
+                    token_cache_clear()
+                fresh_token = _get_token()
+                if fresh_token != push_token:
+                    retry = _push_and_verify(fresh_token)
+                    if retry == "PUSH_OK":
+                        return retry
+                    if retry == "NOT_LANDED":
+                        return _fail_not_landed()
+                    return retry
+                return outcome
+
+            # LEASE_REJECTED: ... / PUSH_ERROR: ... — loud failure to the agent.
+            return outcome
 
     def git_branch_ancestry(branch_name: str, target_branch: str) -> str:
         """Return the commits the remote PR branch carries ahead of

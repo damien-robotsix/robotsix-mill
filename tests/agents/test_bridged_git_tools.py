@@ -131,6 +131,12 @@ class TestTokenNeverLeaked:
                 "robotsix_mill.agents.bridged_git_tools.git_ops.remote_branch_sha",
                 return_value="abc1234",
             ),
+            # The tool re-reads the remote after pushing and compares it to
+            # the local HEAD — both must agree for PUSH_OK.
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.head_sha",
+                return_value="abc1234",
+            ),
             patch(
                 "robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease",
             ),
@@ -155,9 +161,10 @@ class TestTokenNeverLeaked:
             assert "ghs_" not in r4
             assert r4 == "(no commits ahead of target — branches are identical)"
 
-            # fetch was called by all four tools (git_fetch x1, git_remote_sha x1,
-            # git_push_with_lease x1, git_branch_ancestry x2) = 5 total.
-            assert mock_fetch.call_count == 5
+            # fetch was called by all four tools: git_fetch x1, git_remote_sha x1,
+            # git_push_with_lease x2 (pre-push + post-push verify), git_branch_ancestry x2
+            # = 6 total.
+            assert mock_fetch.call_count == 6
 
     # -- error: git_fetch & git_remote_sha ---------------------------------
 
@@ -207,14 +214,25 @@ class TestTokenNeverLeaked:
         with (
             patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch") as mock_fetch,
             patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.remote_branch_sha",
+                return_value="abc1234",
+            ),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.head_sha",
+                return_value="abc1234",
+            ),
+            patch(
                 "robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease",
             ) as mock_push,
         ):
-            mock_fetch.side_effect = missing_ref_exc
+            # First fetch (missing remote ref) raises; the post-push verify
+            # fetch must succeed so the tool can confirm the push landed.
+            mock_fetch.side_effect = [missing_ref_exc, None]
             result = git_push_with_lease("mill/t-1")
 
         assert result == "PUSH_OK"
-        mock_fetch.assert_called_once()
+        # Pre-push fetch + post-push verify fetch.
+        assert mock_fetch.call_count == 2
         mock_push.assert_called_once()
 
     # -- error: git_push_with_lease ----------------------------------------
@@ -292,6 +310,64 @@ class TestTokenNeverLeaked:
         assert "Invalid username or token" in result
         mock_fetch.assert_called_once()
 
+    # -- push that does not move remote HEAD -------------------------------
+
+    def test_git_push_with_lease_not_landed_fails_loudly(self, tmp_path):
+        """A push that exits 0 but does NOT advance the remote branch (the
+        post-push re-read shows remote HEAD != local HEAD) must never be
+        reported as PUSH_OK — the tool retries once, then fails loudly, so
+        the agent cannot report DONE on a lost push."""
+        _, _, git_push_with_lease, _ = self._build(tmp_path)
+
+        with (
+            patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch") as mock_fetch,
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.remote_branch_sha",
+                return_value="remote-stale-sha",
+            ),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.head_sha",
+                return_value="local-fix-sha",
+            ),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease",
+            ) as mock_push,
+        ):
+            result = git_push_with_lease("mill/t-1")
+
+        assert result.startswith("PUSH_ERROR:")
+        assert "did not land" in result
+        # Original push + one retry — the remote never advances, so the tool
+        # gives up loudly instead of handing the agent a false PUSH_OK.
+        assert mock_push.call_count == 2
+        # Pre-push fetch + two post-push verify fetches.
+        assert mock_fetch.call_count == 3
+
+    def test_git_push_with_lease_not_landed_retry_recovers(self, tmp_path):
+        """When the first verification shows the remote did not advance but
+        the retry's verification does, the tool reports PUSH_OK (the push
+        landed on the second attempt)."""
+        _, _, git_push_with_lease, _ = self._build(tmp_path)
+
+        with (
+            patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch"),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.remote_branch_sha",
+                side_effect=["remote-stale-sha", "local-fix-sha"],
+            ),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.head_sha",
+                return_value="local-fix-sha",
+            ),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease",
+            ) as mock_push,
+        ):
+            result = git_push_with_lease("mill/t-1")
+
+        assert result == "PUSH_OK"
+        assert mock_push.call_count == 2
+
     # -- error: git_branch_ancestry ----------------------------------------
 
     def test_git_branch_ancestry_error_redacted(self, tmp_path):
@@ -362,6 +438,14 @@ class TestTokenRefreshOnAuthFailure:
 
         with (
             patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch"),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.remote_branch_sha",
+                return_value="abc1234",
+            ),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.head_sha",
+                return_value="abc1234",
+            ),
             patch(
                 "robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease",
                 side_effect=tracking_push,
@@ -506,6 +590,14 @@ class TestTokenRefreshOnAuthFailure:
 
         with (
             patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch"),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.remote_branch_sha",
+                return_value="abc1234",
+            ),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.head_sha",
+                return_value="abc1234",
+            ),
             patch("robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease"),
         ):
             result = git_push_with_lease("mill/t-1")
@@ -592,6 +684,14 @@ class TestTraceStageSpans:
         )
         with (
             patch("robotsix_mill.agents.bridged_git_tools.git_ops.fetch"),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.remote_branch_sha",
+                return_value="abc1234",
+            ),
+            patch(
+                "robotsix_mill.agents.bridged_git_tools.git_ops.head_sha",
+                return_value="abc1234",
+            ),
             patch("robotsix_mill.agents.bridged_git_tools.git_ops.push_with_lease"),
         ):
             result = git_push_with_lease("mill/x")
