@@ -695,7 +695,9 @@ class TestCiLogBodyParts:
     def test_long_logs_truncated_to_tail_with_notice(self):
         # Real job logs are line-oriented and much larger than the cap
         # (the 2026-09-04 incident description was ~129K chars).
-        logs = "\n".join(f"2026-09-04T08:00:{i % 60:02d}Z step output line {i}" for i in range(5000))
+        logs = "\n".join(
+            f"2026-09-04T08:00:{i % 60:02d}Z step output line {i}" for i in range(5000)
+        )
         assert len(logs) > _CI_LOG_EMBED_MAX_CHARS
         parts = _ci_log_body_parts(logs, self._ansi_re)
         assert parts[0].startswith("_Log tail below (truncated")
