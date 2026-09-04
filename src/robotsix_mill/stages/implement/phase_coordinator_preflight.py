@@ -152,7 +152,10 @@ def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
 
     Parses the ``## Scope`` and ``## Acceptance criteria`` sections of
     the spec and looks for references to known repo IDs (from the
-    repos registry).  If *every* referenced repo is external (i.e.
+    repos registry).  A trailing provenance footer (``origin`` /
+    ``source`` / ``origin_session``) is stripped first so it cannot
+    count as a cross-repo reference.  If *every* referenced repo is
+    external (i.e.
     not the current workspace repo), returns a BLOCKED note string.
     Returns ``None`` when the spec references the current repo, when
     no external repos are referenced, or when detection is
@@ -181,6 +184,15 @@ def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
     external_ids: set[str] = {rid for rid in registry.repos if rid != current_repo_id}
     if not external_ids:
         return None
+
+    # Strip the trailing provenance footer (``--- kind: ... | source: ...
+    # | origin: <repo>``) that the filing board appends to every ticket.
+    # It records WHO filed the ticket and from where — not what the
+    # ticket changes — so a footer-only cross-repo token must never
+    # count as external scope (false-positive resume-loop on
+    # robotsix-auto-mail: every spec path targeted the current repo and
+    # the only external token came from ``origin: robotsix-chat``).
+    spec = _strip_provenance_footer(spec)
 
     # Extract the Scope and Acceptance criteria sections from the spec.
     # These are the actionable parts — references in the Problem section
@@ -214,6 +226,61 @@ def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
         "produce a diff here.  Re-route the ticket to the correct board "
         "or split the external work into a separate ticket."
     )
+
+
+_PROVENANCE_KEYS = ("kind", "source", "origin", "origin_session")
+
+
+def _is_provenance_line(line: str) -> bool:
+    """True when *line* is a ``key: value`` metadata line whose key is a
+    provenance-footer field.
+    """
+    m = re.match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:", line)
+    return m is not None and m.group(1) in _PROVENANCE_KEYS
+
+
+def _strip_provenance_footer(spec: str) -> str:
+    """Strip the trailing provenance footer from a spec, if present.
+
+    Tickets filed from another board carry a trailing ``---`` footer
+    recording provenance, e.g.::
+
+        --- kind: bug | source: agent | origin: robotsix-chat
+
+    (or a bare ``---`` followed by ``kind:`` / ``source:`` / ``origin:`` /
+    ``origin_session:`` lines).  This metadata says who filed the ticket
+    and from where — not what the ticket changes — so the external-scope
+    gate must not scan it.  Returns *spec* unchanged when no such footer
+    is present.
+    """
+    lines = spec.splitlines()
+
+    # Walk back over trailing blank lines, then over provenance lines.
+    i = len(lines) - 1
+    while i >= 0 and not lines[i].strip():
+        i -= 1
+    if i < 0:
+        return spec
+
+    while i >= 0 and _is_provenance_line(lines[i]):
+        i -= 1
+
+    # A ``---`` separator must immediately precede the metadata block.
+    if i >= 0:
+        m = re.match(r"^\s*---(.*)$", lines[i])
+        if not m:
+            return spec
+        rest = m.group(1).strip()
+        # The separator may carry the metadata on the same line
+        # (``--- kind: bug | ...``) or be a bare ``---``.
+        if rest and not _is_provenance_line(rest):
+            return spec
+        start = i
+    else:
+        # Metadata ran all the way to the first line with no separator.
+        return spec
+
+    return "\n".join(lines[:start])
 
 
 def _extract_actionable_sections(spec: str) -> str:

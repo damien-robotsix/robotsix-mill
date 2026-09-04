@@ -2232,3 +2232,50 @@ def test_external_scope_gate_blocks_hyphen_external_referenced_by_underscore(
     assert out.next_state is State.BLOCKED
     assert "external scope gate" in out.note
     assert "robotsix-github-workflows" in out.note
+
+
+def test_external_scope_gate_passes_when_only_footer_references_external_repo(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A provenance footer recording who filed a ticket (``origin`` /
+    ``source`` / ``origin_session``) must not count as an external-scope
+    reference.
+
+    Live case: a robotsix-auto-mail spec whose every path targets
+    ``src/robotsix_auto_mail/...`` was blocked because the only
+    ``robotsix-chat`` token lived in the ``origin: robotsix-chat``
+    footer appended by the filing board — a false positive that
+    re-fired deterministically on resume."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Strip dead advanced-config flag",
+        body=(
+            "## Problem\n\n"
+            "There is a dead advanced-config schema flag.\n\n"
+            "## Scope\n\n"
+            "- Remove the dead flag.\n\n"
+            "## Acceptance criteria\n\n"
+            "- The flag no longer appears in the generated schema.\n\n"
+            "--- kind: bug | source: agent | origin: robotsix-chat\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix-chat")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    # The only cross-repo token is in the provenance footer — the
+    # external-scope gate must not block.
+    if out is not None:
+        assert "external scope gate" not in (out.note or "")
