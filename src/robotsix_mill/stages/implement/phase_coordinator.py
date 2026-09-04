@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ...agents.runners.pass_runner import load_memory
-from ...agents.testing import ENV_ERROR_PREFIX
+from ...agents.testing import ENV_ERROR_PREFIX, diag_is_transient
 from ...config import effective_target_branch
 from ...core.constants import NON_FEEDBACK_AUTHORS
 from ...core.models import SourceKind, Ticket
@@ -919,6 +919,11 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     f"times — {diag[:200]} (short-circuited after "
                     f"{attempt} cycle(s))"
                 )
+                # A repeated transient/environmental diagnosis (a sandbox/
+                # docker infra signature, or an ENV-ERROR that the 2-repeat
+                # env_repeat guard above didn't catch) is not a
+                # spec-determined dead end — don't persist a spec
+                # fingerprint, so the next resume re-implements normally.
                 cls._finalize(
                     ctx,
                     ticket,
@@ -928,6 +933,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                     ok=False,
                     reference_files=ic.reference_files,
                     extra_roots=extra_roots,
+                    transient=diag_is_transient(diag),
                 )
                 return Outcome(State.BLOCKED, note)
             if result.ic is not None:

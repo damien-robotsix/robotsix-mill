@@ -133,6 +133,50 @@ def _env_error_diag(rc: int, out: str) -> str | None:
     )
 
 
+# Infrastructure signatures that can leak into a test/smoke *diagnosis*
+# string (not an exception) — the sandbox container could not be launched
+# (docker auto-remove race, daemon hiccup) or a docker command failed. A
+# gate that terminates on one of these did NOT run to a spec-determined
+# result, so the implement stage must not record a spec fingerprint for it
+# (that fingerprint turns the next resume into a free "spec unchanged"
+# re-block that pins the ticket until a human intervenes). Observed live
+# 2026-09-01/02 on two tickets that hit a sandbox "No such container" and
+# then re-blocked on the stale-spec guard after a manual resume.
+_TRANSIENT_DIAG_RE = re.compile(
+    r"(sandbox unavailable"
+    r"|docker run failed"
+    r"|No such container"
+    r"|Error response from daemon)",
+    re.IGNORECASE,
+)
+
+
+def diag_is_transient(diag: str) -> bool:
+    """Return ``True`` when a test/smoke *diagnosis* string signals a
+    transient / environmental failure rather than a spec-determined one.
+
+    Covers the deterministic ``ENV-ERROR:`` diagnoses (missing binary,
+    sandbox timeout, noexec tmpfs — see :func:`_env_error_diag`) and the
+    sandbox/docker infrastructure signatures that can surface as a gate
+    diagnosis. Callers that finalize a BLOCKED attempt use this to decide
+    whether to persist a spec fingerprint: a transient terminal
+    diagnosis means "did not run to a spec result", so no fingerprint is
+    recorded and the next resume re-implements normally.
+
+    Conservative by construction: git failures from workspace setup and
+    other typed exceptions are classified upstream by
+    :func:`robotsix_mill.runtime.transient_errors.classify_stage_error`;
+    this string matcher only fires on the infrastructure phrases that
+    reach the coordinator as a diagnosis, never on a genuine assertion
+    failure.
+    """
+    if not diag:
+        return False
+    if diag.startswith(ENV_ERROR_PREFIX):
+        return True
+    return bool(_TRANSIENT_DIAG_RE.search(diag))
+
+
 def is_network_dependent_failure(out: str) -> bool:
     """Return ``True`` when *out* (raw test log or diag) shows a
     sandbox-hostile network signature — no real assertion failure.
