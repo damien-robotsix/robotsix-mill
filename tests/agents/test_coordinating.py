@@ -838,6 +838,98 @@ class TestRunCoordinator:
         # No language conventions block when language_instructions is empty.
         assert "## Language conventions" not in prompt
 
+    # -- static-block dedup / cacheability (validation) ------------------
+    #
+    # Regression tests validating the "trim per-turn static implement prompt"
+    # refactor (ticket 20260904T172004Z-...-28fb): the large static blocks
+    # (AGENT.md conventions, language conventions, tool-naming, schema) must
+    # live in the SYSTEM prompt — which is byte-stable across coordinator
+    # passes, hence cacheable — and must NOT be re-emitted in the per-pass
+    # (uncached) user prompt. Re-sending them on every turn was the token
+    # bloat this epic set out to remove. Only ``build_agent`` is
+    # monkeypatched, so the REAL ``build_agent_from_definition`` runs and
+    # exercises the AGENT.md / language-conventions system-prompt injection.
+
+    def _write_agent_md(self, tmp_path):
+        """Write an AGENT.md into the repo root and return its body.
+
+        ``build_agent_from_definition`` reads ``<repo>/AGENT.md`` and injects
+        it into the system prompt when ``inject_agent_md`` is set
+        (implement.yaml relies on the default ``True``). The body is padded so
+        it is unmistakably the ~10K static block, not an incidental match."""
+        body = "Solo hobby project. Never weaken a quality gate. " * 40
+        (tmp_path / "AGENT.md").write_text(body, encoding="utf-8")
+        return body
+
+    def test_agent_md_in_system_prompt_not_user_prompt(self, settings, tmp_path):
+        """AGENT.md conventions belong in the (cacheable) system prompt, never
+        the per-pass user prompt."""
+        body = self._write_agent_md(tmp_path)
+        self._run(settings, tmp_path)
+        system_prompt: str = self.captured["system_prompt"]
+        assert "## Repository Conventions (from AGENT.md)" in system_prompt
+        assert body.rstrip() in system_prompt
+        # The conventions block must not leak into the uncached user prompt.
+        user_prompt: str = self.captured["user_prompt"]
+        assert "## Repository Conventions (from AGENT.md)" not in user_prompt
+        assert body.rstrip() not in user_prompt
+
+    def test_static_system_prompt_identical_across_passes(
+        self, settings, tmp_path, monkeypatch
+    ):
+        """The static system prompt (definition preamble + AGENT.md + language
+        conventions) is byte-identical on a first pass and a feedback/retry
+        pass. Identical bytes are what makes it cacheable across turns — the
+        static blocks are not re-varied per turn, while the variable content
+        (feedback, spec) lives in the per-pass user prompt.
+
+        This is the core validation of the token-reduction claim: a stable
+        system prefix is a prompt-cache hit, so the ~10K static block is billed
+        once, not on every coordinator pass."""
+        self._write_agent_md(tmp_path)
+        monkeypatch.setattr(
+            "robotsix_mill.config.repo_settings.resolve_language_instructions",
+            lambda *a, **k: "Use pytest. Never run uv sync.",
+        )
+
+        self._run(settings, tmp_path)
+        first_system: str = self.captured["system_prompt"]
+        first_user: str = self.captured["user_prompt"]
+
+        # Retry/feedback pass — a "mid-session state change".
+        self._run(settings, tmp_path, feedback="test_x failed")
+        retry_system: str = self.captured["system_prompt"]
+        retry_user: str = self.captured["user_prompt"]
+
+        # Static system prompt unchanged across turns → cacheable.
+        assert retry_system == first_system
+        # Both carry the static blocks.
+        assert "## Repository Conventions (from AGENT.md)" in first_system
+        assert "## Language conventions" in first_system
+        # The per-pass user prompt DOES change (feedback is the delta).
+        assert first_user != retry_user
+        assert "test_x failed" in retry_user
+        assert "test_x failed" not in first_user
+
+    def test_static_blocks_absent_from_retry_user_prompt(
+        self, settings, tmp_path, monkeypatch
+    ):
+        """On a retry pass, neither the AGENT.md conventions nor the language
+        conventions are re-emitted in the user prompt — the per-turn payload
+        stays bounded. This is the token-volume reduction expressed as a
+        hermetic per-turn size check (the suite cannot observe a real 24h
+        window; it verifies the structural cause of that reduction)."""
+        body = self._write_agent_md(tmp_path)
+        monkeypatch.setattr(
+            "robotsix_mill.config.repo_settings.resolve_language_instructions",
+            lambda *a, **k: "Use pytest. Never run uv sync.",
+        )
+        self._run(settings, tmp_path, feedback="test_x failed")
+        user_prompt: str = self.captured["user_prompt"]
+        assert body.rstrip() not in user_prompt
+        assert "## Repository Conventions (from AGENT.md)" not in user_prompt
+        assert "## Language conventions" not in user_prompt
+
     # -- usage_limits ----------------------------------------------------
 
     def test_usage_limits_uses_coordinator_request_limit(
