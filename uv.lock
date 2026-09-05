@@ -1658,7 +1658,7 @@ wheels = [
 [[package]]
 name = "robotsix-board"
 version = "0.5.1"
-source = { git = "https://github.com/damien-robotsix/robotsix-board.git?rev=7fc8e9d4cc27ee128c474f36147af87296359215#7fc8e9d4cc27ee128c474f36147af87296359215" }
+source = { git = "https://github.com/damien-robotsix/robotsix-board.git?rev=53000db1ab6c9e6bd49e0f4bbdd12125605f6be9#53000db1ab6c9e6bd49e0f4bbdd12125605f6be9" }
 dependencies = [
     { name = "hypothesis" },
     { name = "robotsix-modules" },
@@ -1780,7 +1780,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2" },
     { name = "pypdf", specifier = ">=6.16.1" },
     { name = "pyyaml", specifier = ">=6" },
-    { name = "robotsix-board", git = "https://github.com/damien-robotsix/robotsix-board.git?rev=7fc8e9d4cc27ee128c474f36147af87296359215" },
+    { name = "robotsix-board", git = "https://github.com/damien-robotsix/robotsix-board.git?rev=53000db1ab6c9e6bd49e0f4bbdd12125605f6be9" },
     { name = "robotsix-config", git = "https://github.com/damien-robotsix/robotsix-config?rev=8b9fa37f53b179986ca8b8f603d8786b9aa06018" },
     { name = "robotsix-github-auth", git = "https://github.com/damien-robotsix/robotsix-github-auth.git?rev=5cfa953ecf346144e98b84b1fea58b8fcfc3c17f" },
     { name = "robotsix-llmio", extras = ["openrouter", "claude-sdk"], git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=60987bbc5e6d4af5146afd88c557411dc396b0eb" },
