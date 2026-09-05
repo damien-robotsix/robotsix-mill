@@ -85,7 +85,7 @@ def _statuses_to_check_runs(statuses_data: dict[str, Any]) -> list[dict[str, Any
     for st in statuses:
         ctx = st.get("context", "")
         by_context.setdefault(ctx, []).append(st)
-    runs = []
+    runs: list[dict[str, Any]] = []
     for ctx, entries in by_context.items():
         # The conclusion for a context comes from THAT context's own
         # ``state`` — NOT the combined ``state`` field, which is the

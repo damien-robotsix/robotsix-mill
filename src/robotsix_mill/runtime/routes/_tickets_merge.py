@@ -453,7 +453,10 @@ def get_merge_status(
     try:
         pr_entries = _load_pr_urls(svc.workspace(ticket).artifacts_dir)
     except ValueError as e:
-        log.warning("pr_urls.json corrupted for ticket %s: %s", ticket_id, e)
+        # Use the store-owned ``ticket.id`` (not the raw ``ticket_id`` path
+        # param) so no user-controlled value flows into the log sink —
+        # avoids a py/log-injection finding while keeping the diagnostic.
+        log.warning("pr_urls.json corrupted for ticket %s: %s", ticket.id, e)
         return {
             "mergeable": None,
             "ci_conclusion": None,
