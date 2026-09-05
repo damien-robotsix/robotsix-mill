@@ -13,6 +13,7 @@ import asyncio
 import contextlib
 import logging
 import re
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -564,6 +565,22 @@ def build_fs_tools(
 
     if pre_seeded:
         _file_cache.update(pre_seeded)
+
+    # Per-path locks serialising same-file mutations.  pydantic-ai
+    # executes the tool calls of one model response concurrently, so
+    # several edit_file calls on the SAME path can read the same
+    # pre-edit baseline and the last write silently clobbers the
+    # earlier ones — even though every call reported success.  Holding
+    # a per-path lock across each read-modify-write makes a concurrent
+    # batch of same-file edits transactional: every replacement
+    # survives, applied in call order.
+    _file_locks: dict[Path, threading.Lock] = {}
+    _file_locks_guard = threading.Lock()
+
+    def _lock_for(p: Path) -> threading.Lock:
+        """Return the per-path mutex guarding mutations of *p*."""
+        with _file_locks_guard:
+            return _file_locks.setdefault(p.resolve(), threading.Lock())
 
     # Per-invocation counter for read_file hard-cap enforcement.
     # When read_file_max_calls is set, each read_file call increments
@@ -1184,14 +1201,15 @@ def build_fs_tools(
         try:
             with trace_stage("write_file"):
                 p = _safe(root, path, extra_roots=extra_roots)
-                p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_text(content, encoding="utf-8")
+                with _lock_for(p):
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    p.write_text(content, encoding="utf-8")
+                    _file_cache.pop(p.resolve(), None)
+                    _served_reads.pop(str(p.resolve()), None)
+                    if explore_served_files is not None:
+                        explore_served_files.discard(str(p.resolve()))
         except (ValueError, OSError) as e:
             return f"error: {e}"
-        _file_cache.pop(p.resolve(), None)
-        _served_reads.pop(str(p.resolve()), None)
-        if explore_served_files is not None:
-            explore_served_files.discard(str(p.resolve()))
         return f"wrote {len(content)} bytes to {path}"
 
     def edit_file(path: str, old_string: str, new_string: str, count: int = 1) -> str:
@@ -1207,35 +1225,36 @@ def build_fs_tools(
         try:
             with trace_stage("edit_file"):
                 p = _safe(root, path, extra_roots=extra_roots)
-                content = _read_cached(p)
-                occurrences = content.count(old_string)
-                if occurrences == 0:
-                    return (
-                        f"edit_file: old_string not found in {path} "
-                        f"— read the file and retry, or use write_file"
-                    )
-                if count == 1 and occurrences > 1 and old_string != "":
-                    return (
-                        f"edit_file: old_string appears {occurrences} times "
-                        f"in {path} — pass count={occurrences} to replace all, "
-                        f"or a smaller count to replace fewer"
-                    )
-                if occurrences < count:
-                    return (
-                        f"edit_file: old_string appears {occurrences} time(s) "
-                        f"in {path}, but {count} replacement(s) were requested "
-                        f"— read the file and retry, or use write_file"
-                    )
-                new_content = content.replace(old_string, new_string, count)
-                syntax_error = _check_python_syntax(path, new_content)
-                if syntax_error is not None:
-                    return syntax_error
-                p.write_text(new_content, encoding="utf-8")
-                _file_cache.pop(p.resolve(), None)
-                _served_reads.pop(str(p.resolve()), None)
-                if explore_served_files is not None:
-                    explore_served_files.discard(str(p.resolve()))
-                return f"edit_file: replaced {count} occurrence(s) in {path}"
+                with _lock_for(p):
+                    content = _read_cached(p)
+                    occurrences = content.count(old_string)
+                    if occurrences == 0:
+                        return (
+                            f"edit_file: old_string not found in {path} "
+                            f"— read the file and retry, or use write_file"
+                        )
+                    if count == 1 and occurrences > 1 and old_string != "":
+                        return (
+                            f"edit_file: old_string appears {occurrences} times "
+                            f"in {path} — pass count={occurrences} to replace all, "
+                            f"or a smaller count to replace fewer"
+                        )
+                    if occurrences < count:
+                        return (
+                            f"edit_file: old_string appears {occurrences} time(s) "
+                            f"in {path}, but {count} replacement(s) were requested "
+                            f"— read the file and retry, or use write_file"
+                        )
+                    new_content = content.replace(old_string, new_string, count)
+                    syntax_error = _check_python_syntax(path, new_content)
+                    if syntax_error is not None:
+                        return syntax_error
+                    p.write_text(new_content, encoding="utf-8")
+                    _file_cache.pop(p.resolve(), None)
+                    _served_reads.pop(str(p.resolve()), None)
+                    if explore_served_files is not None:
+                        explore_served_files.discard(str(p.resolve()))
+                    return f"edit_file: replaced {count} occurrence(s) in {path}"
         except (ValueError, OSError) as e:
             return f"error: {e}"
 
@@ -1247,13 +1266,14 @@ def build_fs_tools(
         try:
             with trace_stage("delete_file"):
                 p = _safe(root, path, extra_roots=extra_roots)
-                p.unlink()
+                with _lock_for(p):
+                    p.unlink()
+                    _file_cache.pop(p.resolve(), None)
+                    _served_reads.pop(str(p.resolve()), None)
+                    if explore_served_files is not None:
+                        explore_served_files.discard(str(p.resolve()))
         except (ValueError, OSError) as e:
             return f"error: {e}"
-        _file_cache.pop(p.resolve(), None)
-        _served_reads.pop(str(p.resolve()), None)
-        if explore_served_files is not None:
-            explore_served_files.discard(str(p.resolve()))
         return f"deleted {path}"
 
     def list_dir(path: str = ".") -> str:
