@@ -222,6 +222,7 @@
         "green_unpromotable_max_polls": 10,
         "ping_pong_max_alternations": 3,
         "empty_rollup_max_polls": 3,
+        "merge_pr_missing_max_polls": 20,
         "pr_summary_enabled": false,
         "prerequisite_gate_enabled": true,
         "prune_clone_on_close": true,

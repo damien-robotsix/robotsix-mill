@@ -135,6 +135,7 @@ __all__ = [
     "_MERGE_MAX_RETRIES",
     "_MERGE_RETRY_COUNTER",
     "_PING_PONG_COUNT",
+    "_PR_MISSING_COUNT",
     "_REBASE_COUNTER",
     "_REBASE_DROPPED",
     "_REBASE_FROM_STATE",
@@ -143,10 +144,12 @@ __all__ = [
     "_is_pr_check_run",
     "_latest_failing_workflows",
     "_merge_rejection_outcome",
+    "_next_consecutive",
     "_read_counter",
     "_read_dropped_files",
     "_reconcile_with_remote_pr",
     "_refresh_branch_for_ci",
+    "_reset_consecutive",
     "_verify_merge_ancestor",
     "_workspace_repo_dir",
     "_write_counter",
@@ -173,6 +176,12 @@ _EMPTY_ROLLUP_COUNT = "empty_rollup_polls.txt"
 # Marker written after a close/reopen self-heal attempt so it runs at most
 # once per PR.
 _EMPTY_ROLLUP_SELF_HEAL_DONE = "empty_rollup_self_heal_done.txt"
+# Consecutive merge polls where the forge reported NO PR for the ticket's
+# branch / every pr_urls.json repo.  Bounded by
+# ``settings.merge_pr_missing_max_polls`` so a dead lookup (e.g. a
+# cross-repo PR polled against the board's own repo) escalates to BLOCKED
+# instead of silently re-polling forever.  Reset whenever a PR is found.
+_PR_MISSING_COUNT = "pr_missing_polls.txt"
 # Bounded retries for a *retryable* forge merge rejection (see
 # ``_merge_rejection_outcome``). Small on purpose: the case it exists for
 # resolves within a minute or two, so anything that survives this many
@@ -259,6 +268,27 @@ def _repo_config_for_entry(entry: dict[str, Any]) -> RepoConfig:
     if not isinstance(repo_id, str) or not repo_id:
         raise ConfigError("pr_urls.json entry is missing a non-empty string 'repo_id'")
     return get_repo_config(repo_id)
+
+
+def _next_consecutive(artifacts_dir: Path, name: str) -> int:
+    """Increment and return the consecutive-cycle counter stored at *name*.
+
+    Used by the spin guards (``_PR_MISSING_COUNT``) so a merge poll that
+    keeps hitting the SAME unresolvable condition escalates to BLOCKED
+    after ``settings.<ceiling>`` cycles instead of re-polling forever.
+    """
+    count = _read_counter(artifacts_dir / name) + 1
+    _write_counter(artifacts_dir / name, count)
+    return count
+
+
+def _reset_consecutive(artifacts_dir: Path, name: str) -> None:
+    """Zero the consecutive-cycle counter stored at *name*.
+
+    Call when the condition the counter tracks no longer holds (e.g. a PR
+    was found), so only *consecutive* same-reason cycles count.
+    """
+    _write_counter(artifacts_dir / name, 0)
 
 
 def _build_failing_summary(

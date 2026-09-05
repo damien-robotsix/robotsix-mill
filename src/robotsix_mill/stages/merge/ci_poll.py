@@ -33,6 +33,7 @@ from ._shared import (
     _GREEN_UNPROMOTABLE_COUNT,
     _LAST_AUTO_FIX_STAGE,
     _PING_PONG_COUNT,
+    _PR_MISSING_COUNT,
     _REBASE_COUNTER,
     _REBASE_FROM_STATE,
     _REBASE_LAST_TS,
@@ -40,8 +41,10 @@ from ._shared import (
     _is_pr_check_run,
     _latest_failing_workflows,
     _merge_rejection_outcome,
+    _next_consecutive,
     _read_counter,
     _refresh_branch_for_ci,
+    _reset_consecutive,
     _verify_merge_ancestor,
     _workspace_repo_dir,
     _write_counter,
@@ -190,7 +193,47 @@ class CIPollMixin(_MergeStageBase):
                                 f"Tracked PR closed ({tracked_url}) — "
                                 "reconcile pass will close",
                             )
-            return None, Outcome(same_state)
+                        # Tracked PR resolved and is still OPEN — a
+                        # legitimately-waiting foreign-PR tracker awaiting an
+                        # external merge, NOT a dead lookup.  Re-poll
+                        # indefinitely (the design before the no-PR spin
+                        # guard) without touching the consecutive no-PR
+                        # counter, which would otherwise BLOCK a live tracker
+                        # with a misleading "branch never pushed" note.
+                        return None, Outcome(same_state)
+            if pr is None:
+                # No PR found for the branch in the board-derived repo (and
+                # no tracked-URL fallback applied).  Count consecutive
+                # same-reason passes and escalate to BLOCKED past the
+                # ceiling instead of silently re-polling the same dead
+                # lookup forever — a cross-repo/meta deliver records the
+                # real PR URL on the ticket, so a branch-keyed lookup
+                # against the wrong repo can never succeed (observed
+                # 2026-09-03: a meta ticket spun in IMPLEMENT_COMPLETE
+                # > 26h on "No PR found for this branch").
+                max_polls = s.merge_pr_missing_max_polls
+                if max_polls:
+                    artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+                    if _next_consecutive(artifacts_dir, _PR_MISSING_COUNT) >= max_polls:
+                        return None, Outcome(
+                            State.BLOCKED,
+                            f"no PR found for branch {branch!r} for {max_polls} "
+                            "consecutive merge polls — the PR may live in a repo "
+                            "other than this board's repo (check the recorded PR "
+                            "URL on the ticket) or the branch was never pushed; "
+                            "manual intervention required",
+                        )
+                log.info(
+                    "%s: no PR found for branch %r (may be in a different repo) — "
+                    "re-polling",
+                    ticket.id,
+                    branch,
+                )
+                return None, Outcome(same_state)
+        # A PR was found — any previous consecutive no-PR streak is over.
+        _reset_consecutive(
+            ctx.service.workspace(ticket).artifacts_dir, _PR_MISSING_COUNT
+        )
         if pr.get("merged"):
             if verify_merge:
                 from robotsix_mill.stages import merge as _facade

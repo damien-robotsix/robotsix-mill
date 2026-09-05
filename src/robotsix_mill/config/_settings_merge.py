@@ -312,6 +312,21 @@ class _MergeSettings(BaseModel):
         ge=0,
     )
 
+    # Ceiling on consecutive merge polls where the forge reports NO PR for
+    # the ticket's branch (single-repo path) or for every repo in
+    # ``pr_urls.json`` (multi-repo path).  The PR may live in a repo OTHER
+    # than the board's own repo — a meta/cross-repo deliver records the
+    # real PR URL on the ticket, but a lookup that re-derives the repo from
+    # the board misses it and re-polls the same dead query forever.
+    # Observed 2026-09-03: a meta ticket sat in IMPLEMENT_COMPLETE > 26h
+    # while every merge poll returned "No PR found for this branch" against
+    # the mill's own repo and did nothing.  Set to 0 to disable.
+    merge_pr_missing_max_polls: int = Field(
+        description="Ceiling on consecutive merge polls with no PR found before escalating to BLOCKED. 0 disables.",
+        default=20,
+        ge=0,
+    )
+
     # Maximum review-revision attempts per ticket before escalating to BLOCKED.
     review_revision_max_attempts: int = Field(
         description="Maximum review-revision attempts per ticket before escalating to BLOCKED.",

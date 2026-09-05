@@ -202,6 +202,121 @@ def _patch_forge(monkeypatch, fake_forge):
     )
 
 
+def _install_meta_registry(monkeypatch, repo_id, remote_url):
+    """Point the global repo registry at a single meta-board repo so
+    ``_repo_config_for_entry`` resolves it."""
+    import robotsix_mill.config as _cfg
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+
+    monkeypatch.setattr(
+        _cfg,
+        "_repos_config",
+        ReposRegistry(
+            repos={
+                repo_id: RepoConfig(
+                    repo_id=repo_id,
+                    board_id="meta",
+                    langfuse_project_name=f"p-{repo_id}",
+                    langfuse_public_key=f"pk-{repo_id}",
+                    langfuse_secret_key=f"sk-{repo_id}",
+                    forge_remote_url=remote_url,
+                )
+            }
+        ),
+    )
+
+
+class _RecordedUrlForge:
+    """Records pr_status_by_url calls; resolves the recorded URL and
+    reports open+mergeable with green CI, unless told to miss."""
+
+    def __init__(self, *, resolved=True, merged=False):
+        self.by_url_calls: list[str] = []
+        self.branch_calls: list[str] = []
+        self._resolved = resolved
+        self._merged = merged
+
+    def pr_status_by_url(self, *, url: str):
+        self.by_url_calls.append(url)
+        if not self._resolved:
+            return None
+        return {
+            "url": url,
+            "merged": self._merged,
+            "state": "closed" if self._merged else "open",
+            "mergeable": True,
+        }
+
+    def pr_status(self, *, source_branch: str):
+        # Must never be reached on the recorded-URL path — the bug this
+        # guards: the board-derived branch-keyed lookup.
+        self.branch_calls.append(source_branch)
+
+    def check_status(self, *, source_branch: str, require_checks=False):
+        return {"conclusion": "success", "failing": []}
+
+
+def _meta_ticket(service, title="Meta ticket"):
+    """Create a meta-board ticket in IMPLEMENT_COMPLETE with a branch."""
+    t = service.create(title)
+    for st in (State.READY, State.DELIVERABLE, State.IMPLEMENT_COMPLETE):
+        service.transition(t.id, st, note=f"-> {st.value}")
+    service.set_branch(t.id, "mill/meta")
+    return service.get(t.id)
+
+
+def test_merge_status_multi_repo_resolves_recorded_url(client, service, monkeypatch):
+    """GET /tickets/{id}/merge-status for a meta ticket resolves the PRs
+    by their recorded ``pr_urls.json`` URLs in each repo's own forge —
+    never by a branch-keyed lookup against the board-derived repo."""
+    remote = "https://github.com/o/meta-a.git"
+    recorded_url = "https://github.com/o/meta-a/pull/9"
+    _install_meta_registry(monkeypatch, "meta-a", remote)
+    fake = _RecordedUrlForge()
+    _patch_forge(monkeypatch, fake)
+
+    t = _meta_ticket(service)
+    ws = service.workspace(t)
+    (ws.artifacts_dir / "pr_urls.json").write_text(
+        json.dumps([{"repo_id": "meta-a", "branch": "mill/meta", "url": recorded_url}]),
+        encoding="utf-8",
+    )
+
+    r = client.get(f"/tickets/{t.id}/merge-status")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["can_merge"] is True
+    assert data["ci_conclusion"] == "success"
+    assert fake.by_url_calls == [recorded_url]
+    assert fake.branch_calls == []  # recorded URL is authoritative
+
+
+def test_merge_status_multi_repo_unresolved_reports_recorded_url(
+    client, service, monkeypatch
+):
+    """When the recorded URL does not resolve, can_merge is False with a
+    reason naming the URL problem — not the board repo's branch."""
+    remote = "https://github.com/o/meta-a.git"
+    recorded_url = "https://github.com/o/meta-a/pull/9"
+    _install_meta_registry(monkeypatch, "meta-a", remote)
+    fake = _RecordedUrlForge(resolved=False)
+    _patch_forge(monkeypatch, fake)
+
+    t = _meta_ticket(service)
+    ws = service.workspace(t)
+    (ws.artifacts_dir / "pr_urls.json").write_text(
+        json.dumps([{"repo_id": "meta-a", "branch": "mill/meta", "url": recorded_url}]),
+        encoding="utf-8",
+    )
+
+    r = client.get(f"/tickets/{t.id}/merge-status")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["can_merge"] is False
+    assert "no PR found for the recorded URL" in data["reason"]
+    assert "meta-a" in data["reason"]
+
+
 def test_merge_now_happy_path(client, service, monkeypatch):
     """POST /tickets/{id}/merge-now on human_mr_approval merges and
     transitions to done."""
