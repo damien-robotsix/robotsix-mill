@@ -578,8 +578,15 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                         # Compute git diff --stat for the compact resume
                         # history so the agent knows which files were
                         # modified during the prior session.
-                        import subprocess
-
+                        #
+                        # NOTE: ``subprocess`` is imported at module scope
+                        # (top of file). Do NOT re-import it here — a
+                        # function-local ``import subprocess`` would make
+                        # ``subprocess`` a local for the ENTIRE method,
+                        # so the verify-failure retry block below (which
+                        # runs on passes where this branch did not) would
+                        # raise UnboundLocalError, silently forcing
+                        # ``verify_git_stat`` to None.
                         git_stat: str | None = None
                         try:
                             git_stat = (

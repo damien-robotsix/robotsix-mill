@@ -258,6 +258,17 @@ def test_loop_verify_failure_retry_builds_compact_resume_history(
     ]
     rec, _fin = _setup_loop(monkeypatch, results)
 
+    # Stub the git diff --stat seam so the compact resume carries real
+    # file-change context.  Guards the regression where a function-local
+    # ``import subprocess`` in the pause branch shadowed the module-level
+    # import, raising UnboundLocalError on this verify-failure tail block
+    # and silently dropping git_stat to None.
+    monkeypatch.setattr(
+        pc.subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(stdout=" src/x.py | 2 +-\n"),
+    )
+
     out = ImplementStage._implement_loop(ctx, t, tmp_path, "mill/x", False, settings)
 
     assert out.next_state is State.DOCUMENTING
@@ -271,6 +282,10 @@ def test_loop_verify_failure_retry_builds_compact_resume_history(
     assert len(resume) == 3
     # Prior summary extracted from the failed pass's own messages.
     assert "Created src/x.py with the helper" in resume[1].parts[0].content
+    # The git diff --stat is threaded into the summary slot (NOT dropped to
+    # "(unavailable)" by an UnboundLocalError).
+    assert "src/x.py | 2 +-" in resume[1].parts[0].content
+    assert "(unavailable)" not in resume[1].parts[0].content
     # The [VERIFY] feedback is the actionable slot of the resume history.
     assert verify_feedback in resume[2].parts[0].content
 
