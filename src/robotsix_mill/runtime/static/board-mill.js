@@ -145,6 +145,7 @@
   ];
 
   const STATE_TRACE = {
+    classifying: "classify",
     draft: "refine",
     ready: "implement",
     human_issue_approval: "refine",
