@@ -1660,10 +1660,11 @@ class TestRunSummaryVerification:
         assert result.next_action == "retry"
         assert result.feedback.startswith("[VERIFY] Verification failed:")
         assert result.ic.feedback == result.feedback
-        assert (
-            result.ic.previous_attempt_summary
-            == "Created src/pkg/new_module.py with the helper"
-        )
+        # The prior summary is NOT re-injected here: _implement_loop feeds
+        # the re-prompt a compact resume history built from the pass's own
+        # messages, so re-injecting the full summary JSON would duplicate it.
+        assert result.ic.previous_attempt_summary is None
+        # new_msgs is carried so the loop can build that compact resume.
         assert result.new_msgs == b"ms"
 
     def test_block_on_second_failure(self, tmp_path):

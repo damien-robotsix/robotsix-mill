@@ -553,6 +553,13 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         # BLOCKED rather than exhaust ``max_fix_iterations``.
         diag_history: list[str] = []
 
+        # Compact resume history for the NEXT iteration, built when a pass
+        # ends in a summary-verification retry (see the tail of this loop).
+        # It is consumed at the top of the following iteration so the
+        # re-prompt pass does not re-inject full read_file preloads or the
+        # repeated structured-summary JSON.
+        verify_resume_history: list[Any] | None = None
+
         for attempt in range(1, max_iters + 1):
             # --- resume awareness: detect if returning from a pause ---
             resume_history: list[Any] | None = None
@@ -617,6 +624,17 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                             ticket.id,
                             len(saved_state),
                         )
+            elif verify_resume_history is not None:
+                # Summary-verification retry: feed the next pass the compact
+                # resume history built from the prior pass's messages (see
+                # the tail of this loop) instead of re-injecting the full
+                # reference-file preloads and the repeated summary JSON.
+                resume_history = verify_resume_history
+                log.info(
+                    "%s: verify-failure retry — compact resume history for pass %d",
+                    ticket.id,
+                    attempt,
+                )
 
             result = cls._run_single_implement_pass(
                 ctx,
@@ -938,6 +956,48 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 return Outcome(State.BLOCKED, note)
             if result.ic is not None:
                 ic = result.ic
+
+            # --- summary-verification retry → compact resume history ------
+            # A [VERIFY] re-prompt re-invokes the agent on the next
+            # iteration.  Build that pass's resume with the compact resume
+            # builder (prior pass summary + git stat + the [VERIFY] feedback)
+            # instead of letting the coordinator re-inject whole reference
+            # files (~1000-line read_file preloads) and the full prior
+            # structured-summary JSON.  The prior summary already travels
+            # inside the compact history, so _run_summary_verification drops
+            # previous_attempt_summary from the retry context.
+            if (
+                result.ic is not None
+                and (result.ic.feedback or "").startswith("[VERIFY]")
+                and result.new_msgs is not None
+            ):
+                verify_git_stat: str | None = None
+                try:
+                    verify_git_stat = (
+                        subprocess.run(
+                            ["git", "diff", "--stat", "HEAD"],
+                            cwd=repo_dir,
+                            capture_output=True,
+                            text=True,
+                        ).stdout.strip()
+                        or None
+                    )
+                except Exception:
+                    verify_git_stat = None
+                verify_feedback = result.ic.feedback or ""
+                verify_resume_history = build_compact_resume_message_history(
+                    result.new_msgs,
+                    verify_feedback,
+                    git_stat=verify_git_stat,
+                )
+                log.info(
+                    "%s: verify-failure retry — built compact resume "
+                    "history for pass %d",
+                    ticket.id,
+                    attempt + 1,
+                )
+            else:
+                verify_resume_history = None
 
         # Defensive fallback — should be unreachable.
         cls._finalize(
