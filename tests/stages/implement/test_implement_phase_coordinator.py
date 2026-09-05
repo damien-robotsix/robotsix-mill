@@ -2130,3 +2130,69 @@ def test_resume_blocked_without_note_keeps_stall_counter(ctx_factory, tmp_path):
         (ws.artifacts_dir / "implement_stall_state.json").read_text(encoding="utf-8")
     )
     assert ss["stall_count"] == 4
+
+
+# --- ruff format/lint self-correction gate --------------------------------
+
+
+def test_ruff_autofix_runs_format_and_check_on_changed_py(tmp_path, monkeypatch):
+    """The gate runs ``ruff format`` then ``ruff check --fix`` on exactly
+    the changed ``.py`` files, so a format-dirty diff never reaches CI."""
+    (tmp_path / "a.py").write_text("x=1\n", encoding="utf-8")
+    (tmp_path / "b.py").write_text("y=2\n", encoding="utf-8")
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(pc.subprocess, "run", fake_run)
+
+    pc._ruff_autofix_changed(tmp_path, ["a.py", "b.py"])
+
+    assert calls == [
+        ["uv", "run", "ruff", "format", "a.py", "b.py"],
+        ["uv", "run", "ruff", "check", "--fix", "a.py", "b.py"],
+    ]
+
+
+def test_ruff_autofix_skips_non_py_and_missing(tmp_path, monkeypatch):
+    """Only existing ``.py`` files are handed to ruff; a deleted file or a
+    non-Python change is dropped, and an all-empty set is a no-op."""
+    (tmp_path / "keep.py").write_text("z=3\n", encoding="utf-8")
+
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        pc.subprocess,
+        "run",
+        lambda cmd, **kw: (
+            calls.append(cmd) or subprocess.CompletedProcess(cmd, 0, "", "")
+        ),
+    )
+
+    # deleted.py never created; docs.md is not Python.
+    pc._ruff_autofix_changed(tmp_path, ["keep.py", "deleted.py", "docs.md"])
+
+    assert calls == [
+        ["uv", "run", "ruff", "format", "keep.py"],
+        ["uv", "run", "ruff", "check", "--fix", "keep.py"],
+    ]
+
+    calls.clear()
+    pc._ruff_autofix_changed(tmp_path, ["docs.md", "gone.py"])
+    assert calls == []
+
+
+def test_ruff_autofix_is_best_effort_on_toolchain_error(tmp_path, monkeypatch):
+    """A missing/failing ``uv``/``ruff`` must not raise — the commit still
+    proceeds and CI stays the backstop."""
+    (tmp_path / "a.py").write_text("x=1\n", encoding="utf-8")
+
+    def boom(cmd, **kwargs):
+        raise FileNotFoundError("uv not found")
+
+    monkeypatch.setattr(pc.subprocess, "run", boom)
+
+    # Must not raise.
+    pc._ruff_autofix_changed(tmp_path, ["a.py"])
