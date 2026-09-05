@@ -225,6 +225,12 @@ def run_implement_agent(
     except AgentBudgetError, AgentRunError:
         raise
     except Exception as e:
+        # Log the full traceback HERE: the stage only persists str(e) in
+        # the block note, so an unlogged wrap makes coordinator crashes
+        # undiagnosable (live: hexarchy de51 2026-09-05, blocked on
+        # "unsupported operand type(s) for /: 'PosixPath' and 'dict'"
+        # with no way to locate the faulty division).
+        log.exception("implement coordinator raised — wrapping as AgentRunError")
         raise AgentRunError(str(e), [], cause=e) from e
 
     from .explore import is_explore_budget_exhausted, reset_explore_budget_exhausted
