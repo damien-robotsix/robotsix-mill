@@ -290,6 +290,67 @@ def test_loop_verify_failure_retry_builds_compact_resume_history(
     assert verify_feedback in resume[2].parts[0].content
 
 
+def test_loop_multiple_verify_failures_each_build_fresh_compact_resume(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Edge case: TWO summary-verification failures in sequence.  Each
+    retry must feed the NEXT pass a compact resume built from that failing
+    pass's OWN messages — not an accumulation of the whole prior transcript
+    — so token volume stays bounded across a verify-failure chain."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    settings = SimpleNamespace(max_fix_iterations=4)
+
+    fb1 = "[VERIFY] Verification failed: src/a.py was claimed but is absent."
+    fb2 = "[VERIFY] Verification failed: src/b.py was claimed but is absent."
+    msgs1 = (
+        b'[{"kind":"response","parts":['
+        b'{"part_kind":"tool-call","tool_name":"edit_file",'
+        b'"args":{"path":"src/a.py"},"tool_call_id":"c1"},'
+        b'{"part_kind":"text","content":"Pass one: created src/a.py"}]}]'
+    )
+    msgs2 = (
+        b'[{"kind":"response","parts":['
+        b'{"part_kind":"tool-call","tool_name":"edit_file",'
+        b'"args":{"path":"src/b.py"},"tool_call_id":"c2"},'
+        b'{"part_kind":"text","content":"Pass two: created src/b.py"}]}]'
+    )
+    results = [
+        _SinglePassResult(
+            next_action="retry", feedback=fb1, ic=_ic(feedback=fb1), new_msgs=msgs1
+        ),
+        _SinglePassResult(
+            next_action="retry", feedback=fb2, ic=_ic(feedback=fb2), new_msgs=msgs2
+        ),
+        _SinglePassResult(next_action="proceed", outcome=Outcome(State.DOCUMENTING)),
+    ]
+    rec, _fin = _setup_loop(monkeypatch, results)
+    monkeypatch.setattr(
+        pc.subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(stdout=" src/x.py | 1 +\n"),
+    )
+
+    out = ImplementStage._implement_loop(ctx, t, tmp_path, "mill/x", False, settings)
+
+    assert out.next_state is State.DOCUMENTING
+    assert len(rec.calls) == 3
+    # Pass 1 starts fresh.
+    assert rec.resume_calls[0] is None
+    # Pass 2's resume is compact and built from pass 1's OWN messages.
+    r1 = rec.resume_calls[1]
+    assert r1 is not None and len(r1) == 3
+    assert "Pass one: created src/a.py" in r1[1].parts[0].content
+    assert fb1 in r1[2].parts[0].content
+    # Pass 3's resume is compact and built from pass 2's OWN messages — it
+    # carries pass 2's summary and feedback, NOT pass 1's (no accumulation).
+    r2 = rec.resume_calls[2]
+    assert r2 is not None and len(r2) == 3
+    assert "Pass two: created src/b.py" in r2[1].parts[0].content
+    assert fb2 in r2[2].parts[0].content
+    assert "Pass one: created src/a.py" not in r2[1].parts[0].content
+
+
 def test_loop_zero_iterations_runs_single_pass(ctx_factory, tmp_path, monkeypatch):
     """``max_fix_iterations == 0`` floors to exactly ONE pass via
     ``max(1, …)``."""

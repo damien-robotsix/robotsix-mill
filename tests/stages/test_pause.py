@@ -17,6 +17,8 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, call, patch
 
+from pydantic_ai.messages import ModelMessagesTypeAdapter
+
 from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.stages.pause import (
     _SENTINEL,
@@ -401,6 +403,73 @@ def test_compact_resume_empty_state_uses_fallback():
     assert second.kind == "response"
     combined_text = " ".join(getattr(p, "content", "") for p in second.parts)
     assert "(prior session contained no text summary)" in combined_text
+
+
+def _bloated_transcript(read_file_payload: str, summary: str) -> bytes:
+    """A realistic verify-failure transcript: a huge ``read_file``
+    tool-return preload plus a repeated structured summary — exactly the
+    two payloads the compact resume must NOT re-upload."""
+    msgs = [
+        _request_msg([_user_prompt_part("Implement the ticket.")]),
+        _response_msg([_tool_call_part("read_file", "tc1")]),
+        _request_msg([_tool_return_part_compact(read_file_payload)]),
+        # Prior structured summary, emitted twice the way a re-prompt would
+        # otherwise duplicate it.
+        _response_msg([_text_part(summary)]),
+        _request_msg([_user_prompt_part(summary)]),
+        _response_msg([_text_part(summary)]),
+    ]
+    return json.dumps(msgs).encode()
+
+
+def test_compact_resume_excludes_large_read_file_output():
+    """Regression: a large ``read_file`` tool-return present in the prior
+    transcript must NOT survive into the compact resume history."""
+    payload = "LINE_OF_FILE_CONTENT\n" * 2000  # ~40 KB read_file preload
+    saved_state = _bloated_transcript(payload, "Final summary: edited src/x.py")
+    result = build_compact_resume_message_history(saved_state, "retry it")
+    rendered = "\n".join(
+        getattr(p, "content", "") or "" for m in result for p in getattr(m, "parts", [])
+    )
+    # The bulky file preload is gone; only the last assistant summary and
+    # the operator reply travel forward.
+    assert "LINE_OF_FILE_CONTENT" not in rendered
+    assert "Final summary: edited src/x.py" in rendered
+    assert "retry it" in rendered
+
+
+def test_compact_resume_does_not_repeat_prior_summary():
+    """The prior summary appears exactly ONCE in the compact resume even
+    when the source transcript repeats it several times — the re-injected
+    full history used to carry every copy."""
+    summary = "Final summary: added the helper and its tests."
+    saved_state = _bloated_transcript("small", summary)
+    result = build_compact_resume_message_history(saved_state, "ok")
+    rendered = "\n".join(
+        getattr(p, "content", "") or "" for m in result for p in getattr(m, "parts", [])
+    )
+    assert rendered.count(summary) == 1
+
+
+def test_compact_resume_token_reduction_benchmark():
+    """Benchmark: the compact resume is dramatically smaller than replaying
+    the full prior transcript in a verify-failure case. Guards against a
+    regression to full-history re-injection."""
+    payload = "LINE_OF_FILE_CONTENT\n" * 2000
+    summary = "Final summary: edited src/x.py"
+    saved_state = _bloated_transcript(payload, summary)
+
+    # Size a caller would re-upload if it replayed the whole transcript.
+    full_history = ModelMessagesTypeAdapter.validate_json(saved_state)
+    full_bytes = len(ModelMessagesTypeAdapter.dump_json(full_history))
+
+    compact = build_compact_resume_message_history(saved_state, "retry it")
+    compact_bytes = len(ModelMessagesTypeAdapter.dump_json(compact))
+
+    # The compact resume must be a small fraction of the full replay — the
+    # 40 KB read_file preload dominates the transcript and is dropped.
+    assert compact_bytes < full_bytes
+    assert compact_bytes < full_bytes * 0.1
 
 
 def test_save_load_namespaced_per_stage(tmp_path):
