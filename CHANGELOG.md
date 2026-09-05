@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.13.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.12.0...v0.13.0) (2026-09-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* agent YAML levels are 1..3; the claude_exhaustion_paid_fallback setting is gone (prod configs must rename it and renumber agent_levels per the mapping above).
+
+### Features
+
+* adopt llmio 3-level provider-failover model selection ([#3084](https://github.com/damien-robotsix/robotsix-mill/issues/3084)) ([734fe54](https://github.com/damien-robotsix/robotsix-mill/commit/734fe54385b92db03185977de9444b2db4081b5e))
+
+
+### Bug Fixes
+
+* Add directive-compliance gate before DELIVERABLE merge on review round-cap (3/3) exhaustion (20260901T135731Z-add-directive-compliance-gate-before-del-5ac0) ([#3100](https://github.com/damien-robotsix/robotsix-mill/issues/3100)) ([bd3025e](https://github.com/damien-robotsix/robotsix-mill/commit/bd3025e96cbae56f7b9a0aa99c7331f6e675bb26))
+* cap CI-failure ticket log embeds at 20K chars so agents can read them ([#3132](https://github.com/damien-robotsix/robotsix-mill/issues/3132)) ([cabf1d7](https://github.com/damien-robotsix/robotsix-mill/commit/cabf1d7399cd2e340913399df4d2dc5795e1ce98))
+* **ci_fix:** dedup out-of-scope escalations across parent tickets ([#3092](https://github.com/damien-robotsix/robotsix-mill/issues/3092)) ([e54fe24](https://github.com/damien-robotsix/robotsix-mill/commit/e54fe240dd3468e0a6e1be2df71a7b48c8329452))
+* ci-fix agent reports PUSH_OK while push did not land (remote HEAD != local HEAD), false-DONE blocks merge gate (20260904T161105Z-ci-fix-agent-reports-push-ok-while-push-7a75) ([#3140](https://github.com/damien-robotsix/robotsix-mill/issues/3140)) ([8d10244](https://github.com/damien-robotsix/robotsix-mill/commit/8d10244369dda9260f6435af09f296370726596c))
+* **core:** mark_done fires unblocks so moot dependencies resume their dependents ([#3107](https://github.com/damien-robotsix/robotsix-mill/issues/3107)) ([60b55a1](https://github.com/damien-robotsix/robotsix-mill/commit/60b55a1ee83ec79511b98152a705101db7872c47))
+* **deploy:** pin mill memory via robotsix.deploy.mem-limit label (4.5g) ([#3104](https://github.com/damien-robotsix/robotsix-mill/issues/3104)) ([4a074fb](https://github.com/damien-robotsix/robotsix-mill/commit/4a074fb380c4197d6af1df961d458dd5b4e21c4e))
+* **deploy:** pin the claude-mount label to /home/mill/.claude ([#3086](https://github.com/damien-robotsix/robotsix-mill/issues/3086)) ([3342c1e](https://github.com/damien-robotsix/robotsix-mill/commit/3342c1e86d36ba009b5a63332ccec0719c30b5ff))
+* **deps:** bump mkdocs-material to 9.7.7 for GHSA-xvg9-69gf-fjrf ([#3133](https://github.com/damien-robotsix/robotsix-mill/issues/3133)) ([1ba7044](https://github.com/damien-robotsix/robotsix-mill/commit/1ba70445f64b0b783a8126dfdadbd9c4e7b89adb))
+* **deps:** bump robotsix-llmio to 70c6ae9 — exact claudeSDK tool-name roster ([#3106](https://github.com/damien-robotsix/robotsix-mill/issues/3106)) ([fdba8a8](https://github.com/damien-robotsix/robotsix-mill/commit/fdba8a8d611e6f54c07f1f452d65910c422fd9ae))
+* **deps:** refresh first-party git pin revs (2026-09-01 caretaker sweep) ([#3096](https://github.com/damien-robotsix/robotsix-mill/issues/3096)) ([6ad47f1](https://github.com/damien-robotsix/robotsix-mill/commit/6ad47f1e728fc30a98c7e4369e00e165ccd9f90e))
+* exempt pin-bump sweep branches from the orphaned-PR check ([#3135](https://github.com/damien-robotsix/robotsix-mill/issues/3135)) ([e461022](https://github.com/damien-robotsix/robotsix-mill/commit/e461022799ce1b18388912c18fa886367a5c5b23))
+* forge check_status must not read a check-run-less SHA as green when workflow runs exist ([#3156](https://github.com/damien-robotsix/robotsix-mill/issues/3156)) ([c750927](https://github.com/damien-robotsix/robotsix-mill/commit/c75092759307184059a45e8ea1d84629086d45cb))
+* Implement stage: run `ruff check` + `ruff format --check` on changed files before certifying/pushing (20260905T102953Z-implement-stage-run-ruff-check-ruff-form-c90c) ([#3154](https://github.com/damien-robotsix/robotsix-mill/issues/3154)) ([12f8bcb](https://github.com/damien-robotsix/robotsix-mill/commit/12f8bcbb72cf899fd1cfbea75ed36dd048bc66ef))
+* log the traceback when wrapping a coordinator crash into AgentRunError ([#3157](https://github.com/damien-robotsix/robotsix-mill/issues/3157)) ([29034c0](https://github.com/damien-robotsix/robotsix-mill/commit/29034c0ff8aecef3ca2cf49b9adc6a7760aa2571))
+* Merge stage cannot find cross-repo PRs: implement_complete tickets with a PR in another repo stall forever (20260903T173801Z-merge-stage-cannot-find-cross-repo-prs-i-4efb) ([#3153](https://github.com/damien-robotsix/robotsix-mill/issues/3153)) ([f28a55b](https://github.com/damien-robotsix/robotsix-mill/commit/f28a55b0c848fb154e4dc4d5fc21315e29fd915f))
+* parallel edit_file calls on the same file race and lose edits (20260904T174230Z-parallel-edit-file-calls-on-the-same-fil-0260) ([#3145](https://github.com/damien-robotsix/robotsix-mill/issues/3145)) ([a4ee92e](https://github.com/damien-robotsix/robotsix-mill/commit/a4ee92e4382955b7c8bc9fd421f0c65829a64d31))
+* **refine:** never cancel dep-gated drafts — defer instead of DONE ([#3108](https://github.com/damien-robotsix/robotsix-mill/issues/3108)) ([7a5c55d](https://github.com/damien-robotsix/robotsix-mill/commit/7a5c55da84e8c1971fb2b03edb2679b42b818b3e))
+* reject 'superseded/replaced by' closures as dedup targets ([#3158](https://github.com/damien-robotsix/robotsix-mill/issues/3158)) ([fd0eca7](https://github.com/damien-robotsix/robotsix-mill/commit/fd0eca7c9ae3cf9b3c966825360a196fc4480f54))
+* Self-heal PRs the forge opened with zero CI runs (empty check rollup) (20260901T071238Z-self-heal-prs-the-forge-opened-with-zero-0182) ([#3091](https://github.com/damien-robotsix/robotsix-mill/issues/3091)) ([7259368](https://github.com/damien-robotsix/robotsix-mill/commit/7259368a5c81e29b721748377ff581d0b5d8d116))
+* Wire meta_exclude into load_repos_config so the opt-out actually works (20260902T223921Z-wire-meta-exclude-into-load-repos-config-3b9b) ([#3119](https://github.com/damien-robotsix/robotsix-mill/issues/3119)) ([c6c605d](https://github.com/damien-robotsix/robotsix-mill/commit/c6c605d487b13e36211ee333835219dd23025461))
+* **worker:** brake the epic re-eval duplicate-children storm ([#3117](https://github.com/damien-robotsix/robotsix-mill/issues/3117)) ([9cf0711](https://github.com/damien-robotsix/robotsix-mill/commit/9cf07118ca8083c43348fbbcdaec1eb3d54a765d))
+* Workspace git prep: self-heal stale .git/index.lock (and refuse pointless resumes on identical terminal block reasons) (20260903T172844Z-workspace-git-prep-self-heal-stale-git-i-5fc1) ([#3130](https://github.com/damien-robotsix/robotsix-mill/issues/3130)) ([c26abb7](https://github.com/damien-robotsix/robotsix-mill/commit/c26abb7581bc6a8242b9abb80c1afd72280704f8))
+
 ## [0.12.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.11.0...v0.12.0) (2026-08-31)
 
 
