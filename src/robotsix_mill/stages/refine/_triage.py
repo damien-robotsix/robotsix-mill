@@ -17,7 +17,7 @@ from ...config.settings import Settings
 from ...core.models import Ticket, TicketKind
 from ...core.service import TicketService
 from ...core.states import State
-from ...core.text_noop import is_degenerate_body
+from ...core.text_noop import is_degenerate_body, is_placeholder_ticket
 from ...core.workspace import Workspace
 from ..base import Outcome, StageContext
 from . import _reconcile, _result_paths
@@ -441,12 +441,37 @@ def deterministic_triage_pre_checks(
     s: Settings,
 ) -> Outcome | None:
     """LLM-free triage pre-checks shared by the legacy triage gate and
-    the collapsed pre-refine classifier: doc-only drafts, a prior
-    triage-SKIP verdict in history, and prescriptive (code-complete)
-    specs all route straight to implement without any LLM spend.
+    the collapsed pre-refine classifier: throwaway fixture tickets,
+    doc-only drafts, a prior triage-SKIP verdict in history, and
+    prescriptive (code-complete) specs all route straight to a terminal
+    outcome without any LLM spend.
 
     Returns an :class:`Outcome` to short-circuit, or ``None``.
     """
+    # Deterministic pre-check: throwaway/test-fixture tickets. Agents
+    # have (mis)used ticket creation to make themselves a live-board
+    # fixture (noop-8835, dummy-2218 leaked and one flowed through
+    # refine into a wasted implement run). report_issue now refuses to
+    # file them, but one created through any other path must not burn a
+    # refine/implement run here either. Mirrors the report_issue guard
+    # via the shared is_placeholder_ticket detector — same shapes, one
+    # source of truth.
+    if is_placeholder_ticket(ticket.title, draft):
+        log.info(
+            "%s: placeholder/test-fixture ticket — closing as DONE "
+            "(no refine/implement run)",
+            ticket.id,
+        )
+        return _triage_outcome(
+            ctx,
+            ws,
+            draft,
+            ticket.id,
+            "triage SKIP: placeholder/test-fixture ticket — nothing to implement",
+            source=ticket.source,
+            state=State.DONE,
+        )
+
     # Deterministic pre-check: documentation-only change.
     # When every file path in the draft is under docs/ or is a .md
     # file (and no code files are touched), skip the LLM triage and

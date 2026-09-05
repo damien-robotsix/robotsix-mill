@@ -331,6 +331,7 @@ modules:
       - tests/stages/refine/test_reconcile.py
       - tests/stages/refine/test_result_paths.py
       - tests/stages/refine/test_triage.py
+      - tests/stages/refine/test_triage_skip.py
       - tests/stages/refine/test_impl_ready.py
       - tests/stages/refine/__init__.py
       - tests/stages/merge/test_core.py
