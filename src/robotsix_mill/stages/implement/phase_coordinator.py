@@ -78,6 +78,47 @@ def _commit_or_raise(repo_dir: Path, commit_message: str) -> None:
         ) from exc
 
 
+def _ruff_autofix_changed(repo_dir: Path, changed: list[str]) -> None:
+    """Mechanically enforce the ruff format/lint gate on the changed files
+    before the branch is committed and pushed.
+
+    The implement agent is told to run ``ruff format`` / ``ruff check`` on
+    its own changes ("Run lint/type checks once, fix what you introduced"),
+    but that manual discipline repeatedly slips: a diff that is not
+    ``ruff format``-clean reaches CI, fails ``ci / Tests`` on
+    ``ruff format --check``, and burns a full implement→CI→fix round-trip
+    (retrospect gap ``implement_ships_ruff_format_dirty``).  Running the
+    formatter and the lint auto-fixer here, on the exact set of changed
+    Python files, converts that convention into a mechanical
+    self-correction pass so a format-dirty diff never leaves the workspace.
+
+    Best-effort: a missing/failing ``uv``/``ruff`` (e.g. a non-Python repo
+    or an unavailable toolchain) leaves the tree untouched — the commit
+    proceeds and CI stays the backstop, exactly as before this gate
+    existed.  Only ``.py`` files that still exist on disk are passed to
+    ruff (a deleted file must not be handed to the formatter).
+    """
+    py_files = [f for f in changed if f.endswith(".py") and (repo_dir / f).is_file()]
+    if not py_files:
+        return
+    for cmd in (
+        ["uv", "run", "ruff", "format", *py_files],
+        ["uv", "run", "ruff", "check", "--fix", *py_files],
+    ):
+        try:
+            subprocess.run(
+                cmd,
+                cwd=str(repo_dir),
+                check=False,
+                capture_output=True,
+                timeout=180,
+            )
+        except OSError, subprocess.SubprocessError:
+            log.warning(
+                "_ruff_autofix_changed: `%s` failed", " ".join(cmd[:4]), exc_info=True
+            )
+
+
 class PhaseCoordinatorMixin(_ImplementStageBase):
     """Run-loop orchestration for :class:`ImplementStage`."""
 
@@ -1351,6 +1392,10 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             # auto-fix commit on the next push.
             _target = effective_target_branch(ctx.settings, ctx.repo_config)
             _changed = git_ops.changed_files(repo_dir, _target)
+            # Mechanical ruff-format/lint self-correction on the changed
+            # files so a format-dirty diff never reaches CI (see
+            # _ruff_autofix_changed).
+            _ruff_autofix_changed(repo_dir, _changed)
             if any("src/robotsix_mill/cli/__init__.py" in f for f in _changed):
                 subprocess.run(
                     ["uv", "run", "python", "scripts/gen_completions.py"],
@@ -1378,6 +1423,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                         ctx.settings, ctx.repo_config
                     )
                     _xtra_changed = git_ops.changed_files(repo_path, _xtra_target)
+                    _ruff_autofix_changed(repo_path, _xtra_changed)
                     if any(
                         f.startswith("src/robotsix_mill/config/") for f in _xtra_changed
                     ):
