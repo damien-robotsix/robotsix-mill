@@ -497,6 +497,7 @@ class GitHubForgeCIMixin:
             # here means check runs haven't been registered YET, not
             # that the repo lacks CI — classify as "pending" so the
             # caller keeps waiting rather than false-passing.
+            wf_runs: list[dict[str, Any]] | None = None
             if not check_runs and not status_runs:
                 if require_checks:
                     result = {
@@ -507,12 +508,36 @@ class GitHubForgeCIMixin:
                         "_no_checks": True,
                     }
                 else:
-                    result = {
-                        "conclusion": "success",
-                        "failing": [],
-                        "pending": [],
-                        "jobs": [],
-                    }
+                    # Empty check-runs is NOT yet proof of "no CI": a
+                    # just-pushed SHA has a window where its workflow RUN
+                    # exists but no check-run is registered, and reading
+                    # that window as no-CI green-lit red merges (hexarchy
+                    # #286/#287, 2026-09-05 — the merge stage's own
+                    # refresh push raced its CI scan). Probe the Actions
+                    # API including in-flight runs; only a SHA with zero
+                    # runs is treated as a repo without CI.
+                    wf_runs = self._safe_list_workflow_runs(
+                        owner, repo, sha, status=None
+                    )
+                    in_flight = [r for r in wf_runs if r.get("conclusion") is None]
+                    if in_flight:
+                        result = {
+                            "conclusion": "pending",
+                            "failing": [],
+                            "pending": [
+                                (r.get("name") or r.get("path") or "workflow")
+                                for r in in_flight
+                            ],
+                            "jobs": [],
+                            "_no_checks": True,
+                        }
+                    else:
+                        result = {
+                            "conclusion": "success",
+                            "failing": [],
+                            "pending": [],
+                            "jobs": [],
+                        }
             else:
                 result = _derive_check_conclusion(
                     c, api, owner, repo, headers, check_runs
@@ -527,26 +552,30 @@ class GitHubForgeCIMixin:
             # fails the gate, including runs whose name is the workflow file
             # path (the parse-failure signature).
             _merge_workflow_run_failures(
-                result, self._safe_list_workflow_runs(owner, repo, sha)
+                result,
+                wf_runs
+                if wf_runs is not None
+                else self._safe_list_workflow_runs(owner, repo, sha),
             )
             result["_sha"] = sha
             return result
         return None
 
     def _safe_list_workflow_runs(
-        self, owner: str, repo: str, sha: str
+        self, owner: str, repo: str, sha: str, status: str | None = "completed"
     ) -> list[dict[str, Any]]:
         """Best-effort ``_list_workflow_runs`` for the parse-failure gate.
 
         Any error (App missing ``actions: read``, transport failure, an
         empty SHA) resolves to an empty list, so a flaky Actions API can
-        never *add* a false failure to the CI gate.
+        never *add* a false failure to the CI gate. ``status=None`` lists
+        runs in ANY state (in-flight included) for the no-check-runs probe.
         """
         if not sha:
             return []
         try:
             return self._list_workflow_runs(
-                owner=owner, repo=repo, branch=None, head_sha=sha
+                owner=owner, repo=repo, branch=None, head_sha=sha, status=status
             )
         except Exception:
             return []
@@ -558,8 +587,11 @@ class GitHubForgeCIMixin:
         repo: str,
         branch: str | None,
         head_sha: str | None,
+        status: str | None = "completed",
     ) -> list[dict[str, Any]]:
-        params: dict[str, Any] = {"status": "completed", "per_page": 30}
+        params: dict[str, Any] = {"per_page": 30}
+        if status is not None:
+            params["status"] = status
         if branch is not None:
             params["branch"] = branch
         if head_sha is not None:
