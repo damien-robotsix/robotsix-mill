@@ -20,7 +20,11 @@ from ..config import Settings
 from ..core.models import SourceKind
 from ..core.service import TicketService
 from ..core.states import DONE_OR_CLOSED
-from ..core.text_noop import is_completion_announcement, is_noop_report
+from ..core.text_noop import (
+    is_completion_announcement,
+    is_noop_report,
+    is_placeholder_ticket,
+)
 from ..runtime import tracing as _tracing
 
 _CATEGORIES = (
@@ -141,6 +145,19 @@ def make_report_issue_tool(
             err = _validate_title(title)
             if err:
                 return err
+
+            # Step 1b: refuse throwaway/test fixture tickets. Agents have
+            # (mis)used report_issue to make themselves a live-board fixture
+            # ticket (noop-8835, dummy-2218 leaked onto production boards and
+            # one flowed through refine into a wasted implement run). A real
+            # fixture belongs on an isolated test board / in-memory service,
+            # never the live API.
+            if is_placeholder_ticket(title, body):
+                return (
+                    "report_issue: placeholder/test ticket not filed — "
+                    "create fixture tickets on an isolated test board or "
+                    "in-memory service, never the live board"
+                )
 
             # Step 2: coerce category
             cat = category if category in _CATEGORIES else "other"

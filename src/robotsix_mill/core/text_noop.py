@@ -169,3 +169,84 @@ def is_degenerate_body(text: str | None) -> bool:
     refine, which is what this guards.
     """
     return degenerate_body_reason(text) is not None
+
+
+# Fully-normalized titles (punctuation stripped, whitespace collapsed,
+# lower-cased) that mark a ticket as a throwaway/test fixture rather than
+# real work.  An agent that (mis)uses ``report_issue`` — or any creation
+# path — to make itself a quick fixture ticket produces one of these,
+# never a genuine blocking issue.  Two such tickets (``noop-8835``,
+# ``dummy-2218``) leaked onto production boards from implement sessions,
+# with ``source=agent`` and empty/placeholder descriptions; one flowed
+# through refine into a real (wasted) implement run before a monitor
+# closed it.  Matched against the WHOLE normalized title so real titles
+# that merely contain such a word survive ("Fix flaky test in X"
+# normalizes to "fix flaky test in x", not "test").
+PLACEHOLDER_TITLE_TOKENS: frozenset[str] = frozenset(
+    {
+        "noop",
+        "no op",
+        "dummy",
+        "dummy ticket",
+        "test",
+        "tests",
+        "testing",
+        "test ticket",
+        "test123",
+        "placeholder",
+        "placeholder ticket",
+        "disregard",
+        "disregard placeholder",
+        "ignore",
+        "ignore me",
+        "ignore this",
+        "delete",
+        "delete me",
+        "deleteme",
+        "throwaway",
+        "throw away",
+        "sample",
+        "example",
+        "foo",
+        "bar",
+        "baz",
+        "asdf",
+        "qwerty",
+        "xxx",
+        "tmp",
+        "temp",
+        "junk",
+        "scratch",
+    }
+)
+
+
+def _normalize_title_words(title: str | None) -> str:
+    """Lower-case *title*, strip non-alphanumerics to spaces, collapse."""
+    import re
+
+    return " ".join(re.sub(r"[^a-z0-9 ]+", " ", (title or "").lower()).split())
+
+
+def is_placeholder_ticket(title: str | None, body: str | None = None) -> bool:
+    """True when *(title, body)* is an obvious placeholder/test fixture.
+
+    Fires when the fully-normalized *title* is a bare throwaway token
+    (``noop``, ``dummy``, ``test``, ``placeholder``, ``disregard``, …), or
+    when a title that merely *starts* with such a token is paired with an
+    empty/placeholder *body* (e.g. title ``"dummy ticket"`` + body
+    ``"disregard placeholder"``).  This is the real data shape of the junk
+    agent tickets that must never enter the pipeline.  An empty title is
+    itself a placeholder.
+
+    Bias is toward NOT firing: a normal terse title survives because only
+    the enumerated throwaway tokens match, and the body-widened branch
+    additionally requires a degenerate body.
+    """
+    norm = _normalize_title_words(title)
+    if not norm:
+        return True
+    if norm in PLACEHOLDER_TITLE_TOKENS:
+        return True
+    first = norm.split(" ", 1)[0]
+    return first in PLACEHOLDER_TITLE_TOKENS and is_degenerate_body(body)

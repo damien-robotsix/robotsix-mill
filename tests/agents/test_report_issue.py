@@ -153,6 +153,28 @@ def test_genuine_terse_title_still_filed(settings):
     assert len(TicketService(settings, board_id="test-board").list()) == 1
 
 
+def test_placeholder_fixture_ticket_not_filed(settings):
+    """Throwaway/test fixture tickets are refused, never reaching the board.
+
+    Regression for the junk agent tickets (noop-8835, dummy-2218) that
+    leaked onto production boards from implement sessions and one of which
+    flowed through refine into a wasted implement run. Real data shape:
+    a bare 'noop'/'dummy' title with an empty or 'disregard placeholder'
+    body, source=agent.
+    """
+    tool = make_report_issue_tool(settings, board_id="robotsix-mill")
+    # noop-8835 shape: bare token title + placeholder body.
+    out = tool("noop", "disregard placeholder")
+    assert "not filed" in out
+    assert "placeholder" in out
+    # dummy-2218 shape: bare token title + empty body.
+    assert "not filed" in tool("dummy", "")
+    # Other throwaway variants.
+    for title in ("test", "delete me", "TMP", "  placeholder  "):
+        assert "not filed" in tool(title, "")
+    assert TicketService(settings, board_id="robotsix-mill").list() == []
+
+
 def test_build_agent_without_report_issue(settings, monkeypatch, secrets_set):
     """build_agent(report_issue=False) omits the report_issue tool."""
     captured = {}
