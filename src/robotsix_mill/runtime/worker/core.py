@@ -33,10 +33,7 @@ from ._gate import PriorityGate
 from .epic import _EPIC_CHILD_TERMINAL
 from .periodic_passes import PeriodicPassesMixin
 from .poll_loops import PollLoopsMixin
-from .processing import (
-    _spawn_epic_reeval,
-    process_ticket,
-)
+from .processing import process_ticket
 
 log = logging.getLogger("robotsix_mill.worker")
 
@@ -281,10 +278,6 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         self._periodic_supervisor_tasks: dict[str, asyncio.Task[None]] = {}
         # ticket_id -> consecutive no-progress cycles in a traced stage
         self._stuck: dict[str, int] = {}
-        # Epic-sweep dedup: epic_id → child count at last sweep re-eval, so the
-        # safety-net sweep re-evaluates an all-children-terminal epic at most
-        # once per stable child set (re-eval again only when children change).
-        self._epic_sweep_seen: dict[str, int] = {}
         # ids queued OR in-flight — dedupe so the same ticket is never
         # processed by two workers at once (the merge poll, emit, and
         # requeue can all enqueue the same id).
@@ -793,33 +786,39 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 queue.task_done()
 
     def _maybe_sweep_orphaned_epic(self, epic, svc) -> None:
-        """Re-evaluate an EPIC_OPEN epic whose children are ALL terminal but
-        which is still open (a missed child-close trigger orphaned it).
+        """Deterministically close an EPIC_OPEN epic whose children are ALL
+        terminal but which is still open (a missed child-close trigger
+        orphaned it).
 
-        Idempotent: re-evaluates at most once per stable terminal child set
-        (keyed on child count), so a healthy epic isn't re-billed every poll.
-        Re-evaluates again only when the child count changes (e.g. epic_status
-        spawned new children). The epic_status agent itself decides whether to
-        actually close — this just ensures it gets the chance.
+        No LLM gate: closure is deterministic. Unlike the child-close hook
+        (which lets the epic_status agent decide), the safety-net sweep closes
+        the epic outright once every child is terminal — a keep_open-style
+        prior answer or a worker restart can never wedge an all-terminal epic
+        open again. Idempotent by state: closing moves the epic out of
+        EPIC_OPEN, so later sweeps skip it; there is no in-memory disarming
+        dict to leak across restarts.
 
         Uses :meth:`~.TicketService.list_children_across_boards` so children
         on other boards (cross-repo epic) are visible to the orphan sweep.
         """
+        if epic.state is not State.EPIC_OPEN:
+            return
         children = svc.list_children_across_boards(epic.id)
         if not children:
             return
         if not all(c.state in _EPIC_CHILD_TERMINAL for c in children):
             return
-        if self._epic_sweep_seen.get(epic.id) == len(children):
-            return  # already swept this stable terminal child set
-        self._epic_sweep_seen[epic.id] = len(children)
         log.info(
             "epic %s: all %d children terminal but still EPIC_OPEN — "
-            "sweep-triggering re-evaluation (missed child-close trigger)",
+            "deterministic sweep closing",
             epic.id,
             len(children),
         )
-        _spawn_epic_reeval(epic.id, self.ctx)
+        svc.transition(
+            epic.id,
+            State.EPIC_CLOSED,
+            note="[auto-closed] All children terminal — closed by orphan sweep",
+        )
 
     def _check_progress(
         self, ticket_id: str, before, after, repo_config: RepoConfig | None = None
