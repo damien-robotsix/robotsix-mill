@@ -855,9 +855,7 @@ def test_triage_skip_skip_decision(ctx_factory, tmp_path):
     assert "SKIP" in base_note
 
 
-def test_triage_skip_reason_asserts_noop_coerces_to_no_change(
-    ctx_factory, tmp_path
-):
+def test_triage_skip_reason_asserts_noop_coerces_to_no_change(ctx_factory, tmp_path):
     """Regression (noop-8835): a SKIP whose reason says there is nothing to
     implement must be coerced to NO_CHANGE — never routed straight to
     implement as if the draft were an implementation-ready spec."""
