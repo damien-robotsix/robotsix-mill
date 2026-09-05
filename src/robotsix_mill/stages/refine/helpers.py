@@ -398,6 +398,14 @@ _EXTERNAL_FIX_PHRASES: tuple[str, ...] = (
     "duplicate of",
     "shipped the fix",
     "parallel ticket",
+    # "Superseded by / replaced by <other ticket>" means the work was
+    # deliberately moved elsewhere and NEVER done here — the inverse of a
+    # valid dedup target. Live: dde5 was mark-done'd "Superseded …
+    # Replaced by the deterministic-closure ticket", then dedup closed
+    # that very replacement (6a68) as a duplicate OF dde5, annihilating
+    # the capability entirely (2026-09-05, robotsix-mill board).
+    "superseded",
+    "replaced by",
 )
 
 # Repo ticket-id shape and commit-SHA-like token.

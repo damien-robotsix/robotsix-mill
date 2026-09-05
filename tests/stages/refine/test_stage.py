@@ -2472,6 +2472,8 @@ def test_no_change_info_only_routes_to_done(
         "fixed in 59f312b already on main",
         "Fixed by PR #1386 — uv copied into the base stage…",
         "Addressed in #42 with the config patch.",
+        "mark done: Superseded before refinement: operator redirected the design.",
+        "Replaced by the deterministic-closure ticket filed 2026-09-04.",
     ],
 )
 def test_rationale_claims_external_fix_true(rationale):
