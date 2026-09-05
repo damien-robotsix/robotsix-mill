@@ -7,10 +7,12 @@ from robotsix_mill.core.text_noop import (
     COMPLETION_ANNOUNCEMENT_MARKERS,
     NOOP_MARKERS,
     PLACEHOLDER_BODY_PHRASES,
+    PLACEHOLDER_TITLE_TOKENS,
     degenerate_body_reason,
     is_completion_announcement,
     is_degenerate_body,
     is_noop_report,
+    is_placeholder_ticket,
     spec_demands_code_change,
 )
 
@@ -200,3 +202,55 @@ def test_non_mandate_text_not_flagged(text):
 def test_spec_demands_code_change_empty_or_none():
     assert not spec_demands_code_change("")
     assert not spec_demands_code_change(None)
+
+
+# -- is_placeholder_ticket ---------------------------------------------------
+
+
+@pytest.mark.parametrize("token", sorted(PLACEHOLDER_TITLE_TOKENS))
+def test_every_placeholder_title_token_flagged(token):
+    """Every enumerated throwaway token is caught as a bare title."""
+    assert is_placeholder_ticket(token)
+    # Case- and punctuation-insensitive: "no op" -> "no-op", "NOOP".
+    assert is_placeholder_ticket(token.upper())
+
+
+@pytest.mark.parametrize("title", ["", "   ", None])
+def test_placeholder_empty_title_is_placeholder(title):
+    assert is_placeholder_ticket(title)
+
+
+@pytest.mark.parametrize(
+    ("title", "body"),
+    [
+        # Real data shape of the leaked junk tickets.
+        ("noop", "disregard placeholder"),
+        ("dummy", ""),
+        ("no-op", None),
+        ("  Placeholder  ", ""),
+        ("TMP", "x"),
+    ],
+)
+def test_placeholder_real_shapes(title, body):
+    assert is_placeholder_ticket(title, body)
+
+
+def test_placeholder_token_prefix_with_degenerate_body():
+    """A throwaway-leading title plus an empty/placeholder body is caught."""
+    assert is_placeholder_ticket("dummy ticket for the flow", "tbd")
+    assert is_placeholder_ticket("test run", "")
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Fix flaky test in refine",
+        "Add tests for the ingest dedup path",
+        "Test coverage for placeholder detection",
+        "Cut retry tokens",
+        "Foobar parser rejects empty input",
+    ],
+)
+def test_genuine_titles_not_placeholders(title):
+    """Real titles that merely contain a throwaway word survive."""
+    assert not is_placeholder_ticket(title, "a real, actionable description here")
