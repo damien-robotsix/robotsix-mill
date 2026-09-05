@@ -563,13 +563,19 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             ticket.id,
             missing_text,
         )
+        # The re-prompt carries NO previous_attempt_summary: _implement_loop
+        # feeds it a compact resume history (build_compact_resume_message_history)
+        # built from the very pass whose summary failed verification, so the
+        # prior summary already travels inside that history.  Re-injecting the
+        # full structured-summary JSON here would duplicate it on every
+        # [VERIFY] re-prompt turn.
         verify_ic = _ImplementContext(
             spec=ic.spec,
             memory_text=ic.memory_text,
             reference_files=updated_ref_files,
             file_map=ic.file_map,
             feedback=feedback,
-            previous_attempt_summary=updated_prev_summary,
+            previous_attempt_summary=None,
             open_thread_ids=ic.open_thread_ids,
         )
         return _SinglePassResult(

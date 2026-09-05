@@ -101,6 +101,7 @@ class _PassRecorder:
     def __init__(self, results):
         self.results = list(results)
         self.calls = []  # the ``ic`` passed to each invocation, in order
+        self.resume_calls = []  # the ``resume_history`` per invocation, in order
 
     def __call__(
         self,
@@ -117,6 +118,7 @@ class _PassRecorder:
         extra_roots=None,
     ):
         self.calls.append(ic)
+        self.resume_calls.append(resume_history)
         return self.results[len(self.calls) - 1]
 
 
@@ -218,6 +220,74 @@ def test_loop_retry_threads_updated_ic(ctx_factory, tmp_path, monkeypatch):
     # First pass got the base ic; the second got the retry's updated ic.
     assert rec.calls[1] is new_ic
     assert rec.calls[0] is not new_ic
+
+
+def test_loop_verify_failure_retry_builds_compact_resume_history(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A summary-verification failure re-prompts the agent with a COMPACT
+    resume history built by ``build_compact_resume_message_history`` instead
+    of a fresh full-context prompt: the next pass receives a small 3-message
+    history carrying the prior summary + git stat + the [VERIFY] feedback —
+    not the full transcript, re-injected file preloads, or repeated summary
+    JSON."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    settings = SimpleNamespace(max_fix_iterations=3)
+    verify_feedback = (
+        "[VERIFY] Verification failed: src/x.py was claimed but does not "
+        "exist on disk — fix and retry."
+    )
+    verify_ic = _ic(feedback=verify_feedback)
+    prior_msgs = (
+        b'[{"kind":"request","parts":[{"part_kind":"user-prompt",'
+        b'"content":"do work"}]},'
+        b'{"kind":"response","parts":[{"part_kind":"tool-call",'
+        b'"tool_name":"read_file","args":{"path":"a.py"},'
+        b'"tool_call_id":"call_1"},'
+        b'{"part_kind":"text","content":"Created src/x.py with the helper"}]}]'
+    )
+    results = [
+        _SinglePassResult(
+            next_action="retry",
+            feedback=verify_feedback,
+            ic=verify_ic,
+            new_msgs=prior_msgs,
+        ),
+        _SinglePassResult(next_action="proceed", outcome=Outcome(State.DOCUMENTING)),
+    ]
+    rec, _fin = _setup_loop(monkeypatch, results)
+
+    # Stub the git diff --stat seam so the compact resume carries real
+    # file-change context.  Guards the regression where a function-local
+    # ``import subprocess`` in the pause branch shadowed the module-level
+    # import, raising UnboundLocalError on this verify-failure tail block
+    # and silently dropping git_stat to None.
+    monkeypatch.setattr(
+        pc.subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(stdout=" src/x.py | 2 +-\n"),
+    )
+
+    out = ImplementStage._implement_loop(ctx, t, tmp_path, "mill/x", False, settings)
+
+    assert out.next_state is State.DOCUMENTING
+    assert len(rec.calls) == 2
+    # First pass starts fresh (no saved conversation state).
+    assert rec.resume_calls[0] is None
+    # The verify-failure re-prompt is a compact 3-message resume, not the
+    # full transcript.
+    resume = rec.resume_calls[1]
+    assert resume is not None
+    assert len(resume) == 3
+    # Prior summary extracted from the failed pass's own messages.
+    assert "Created src/x.py with the helper" in resume[1].parts[0].content
+    # The git diff --stat is threaded into the summary slot (NOT dropped to
+    # "(unavailable)" by an UnboundLocalError).
+    assert "src/x.py | 2 +-" in resume[1].parts[0].content
+    assert "(unavailable)" not in resume[1].parts[0].content
+    # The [VERIFY] feedback is the actionable slot of the resume history.
+    assert verify_feedback in resume[2].parts[0].content
 
 
 def test_loop_zero_iterations_runs_single_pass(ctx_factory, tmp_path, monkeypatch):
