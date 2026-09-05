@@ -2824,6 +2824,84 @@ def test_commit_ci_conclusion_no_ci_configured(tmp_path, monkeypatch):
     assert result["conclusion"] == "success"
 
 
+def test_commit_ci_conclusion_no_checkruns_but_run_in_flight_is_pending(
+    tmp_path, monkeypatch
+):
+    """Zero check-runs + an in-flight workflow run → pending, NOT success.
+
+    A just-pushed SHA has a window where its workflow run exists but no
+    check-run is registered yet. Reading that window as "no CI configured"
+    let the merge stage merge red PRs (hexarchy #286/#287, 2026-09-05).
+    """
+    runs_data = {
+        "workflow_runs": [
+            {
+                "id": 900,
+                "name": "CI",
+                "workflow_id": 77,
+                "head_sha": "abc123",
+                "conclusion": None,
+                "status": "in_progress",
+                "html_url": "https://github.com/o/r/actions/runs/900",
+                "created_at": "2026-09-05T12:42:11Z",
+                "event": "pull_request",
+                "head_branch": "mill/some-ticket",
+                "path": ".github/workflows/ci.yml",
+            }
+        ]
+    }
+    get_map = {
+        "commits/abc123/check-runs": _make_response(200, {"check_runs": []}),
+        "commits/abc123/status": _make_response(200, {"statuses": []}),
+        "actions/runs": _make_response(200, runs_data),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.commit_ci_conclusion(sha="abc123")
+    assert result is not None
+    assert result["conclusion"] == "pending"
+    assert result["pending"] == ["CI"]
+    assert result.get("_no_checks") is True
+
+
+def test_commit_ci_conclusion_no_checkruns_startup_failure_run(tmp_path, monkeypatch):
+    """Zero check-runs + a completed startup_failure run → failure.
+
+    A workflow that fails to parse registers no check-run; the run-level
+    cross-check must fail the gate off the same any-status listing.
+    """
+    runs_data = {
+        "workflow_runs": [
+            {
+                "id": 901,
+                "name": "CI",
+                "workflow_id": 77,
+                "head_sha": "abc123",
+                "conclusion": "startup_failure",
+                "status": "completed",
+                "html_url": "https://github.com/o/r/actions/runs/901",
+                "created_at": "2026-09-05T12:42:11Z",
+                "event": "pull_request",
+                "head_branch": "mill/some-ticket",
+                "path": ".github/workflows/ci.yml",
+            }
+        ]
+    }
+    get_map = {
+        "commits/abc123/check-runs": _make_response(200, {"check_runs": []}),
+        "commits/abc123/status": _make_response(200, {"statuses": []}),
+        "actions/runs": _make_response(200, runs_data),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.commit_ci_conclusion(sha="abc123")
+    assert result is not None
+    assert result["conclusion"] == "failure"
+    assert result["failing"] and result["failing"][0]["name"] == "CI"
+
+
 def test_commit_ci_conclusion_transport_error_returns_none(tmp_path, monkeypatch):
     """When the HTTP client raises (transport error), return None gracefully."""
     # Cause httpx.Client to raise on any call.
