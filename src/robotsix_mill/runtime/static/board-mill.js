@@ -148,6 +148,7 @@
     draft: "refine",
     ready: "implement",
     human_issue_approval: "refine",
+    classifying: "classify",
     code_review: "review",
     documenting: "document",
     deliverable: "deliver",
