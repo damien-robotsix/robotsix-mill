@@ -855,6 +855,76 @@ def test_triage_skip_skip_decision(ctx_factory, tmp_path):
     assert "SKIP" in base_note
 
 
+def test_triage_skip_reason_asserts_noop_coerces_to_no_change(
+    ctx_factory, tmp_path
+):
+    """Regression (noop-8835): a SKIP whose reason says there is nothing to
+    implement must be coerced to NO_CHANGE — never routed straight to
+    implement as if the draft were an implementation-ready spec."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, kind=TicketKind.TASK)
+    ws = ctx.service.workspace(t)
+    draft = (
+        "contains no actionable work and is a deliberate no-op. "
+        "Skip as there is nothing to implement."
+    )
+
+    with (
+        patch.object(
+            _triage.refining,
+            "triage_refine",
+            return_value=_mock_triage_result(
+                "SKIP",
+                "contains no actionable work and is a deliberate no-op. "
+                "Skip as there is nothing to implement.",
+            ),
+        ),
+        patch.object(_reconcile, "persist_triage_complexity"),
+        patch.object(
+            _result_paths, "resolved_outcome", return_value=State.READY
+        ) as mock_resolved,
+        patch.object(_reconcile, "write_file_map"),
+    ):
+        result = _triage.triage_skip(
+            ctx, t, draft, None, None, t.title, ws, ctx.settings, None
+        )
+
+    assert result is not None
+    base_note = mock_resolved.call_args.args[3]
+    assert "NO_CHANGE" in base_note
+    assert "routing to implement" in base_note
+    assert "SKIP" not in base_note
+
+
+def test_triage_skip_placeholder_draft_coerces_to_no_change(ctx_factory, tmp_path):
+    """A SKIP with a placeholder draft body (no actionable content) is coerced
+    to NO_CHANGE even when the reason does not itself say 'nothing to do'."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, kind=TicketKind.TASK)
+    ws = ctx.service.workspace(t)
+
+    with (
+        patch.object(
+            _triage.refining,
+            "triage_refine",
+            return_value=_mock_triage_result("SKIP", "already a precise spec"),
+        ),
+        patch.object(_reconcile, "persist_triage_complexity"),
+        patch.object(
+            _result_paths, "resolved_outcome", return_value=State.READY
+        ) as mock_resolved,
+        patch.object(_reconcile, "write_file_map"),
+    ):
+        result = _triage.triage_skip(
+            ctx, t, "see above", None, None, t.title, ws, ctx.settings, None
+        )
+
+    assert result is not None
+    base_note = mock_resolved.call_args.args[3]
+    assert "NO_CHANGE" in base_note
+    assert "SKIP" not in base_note
+
+
 def test_triage_skip_mechanical_fast_path_deterministic_source(ctx_factory, tmp_path):
     """Deterministic source (e.g. audit) skips auto-approve LLM."""
     ctx = ctx_factory()

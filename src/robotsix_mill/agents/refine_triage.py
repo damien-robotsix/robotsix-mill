@@ -39,7 +39,19 @@ log = logging.getLogger(__name__)
 class TriageResult(BaseModel):
     """Triage agent output — a single cheap classification call."""
 
-    decision: Literal["REFINE", "SKIP", "NO_CHANGE", "MIGRATE"]
+    decision: Literal["REFINE", "SKIP", "NO_CHANGE", "MIGRATE"] = Field(
+        description=(
+            "SKIP means the draft is ALREADY an implementation-ready spec "
+            "(precise, single-scoped, grounded) — route straight to "
+            "implement with auto-approve. It does NOT mean 'nothing to do'. "
+            "NO_CHANGE is the discard verdict — there is nothing to do: the "
+            "draft is a placeholder / deliberate no-op with no actionable "
+            "work, or its deliverable already exists. Never describe a "
+            "nothing-to-do draft as SKIP. REFINE means the draft needs a "
+            "full refine pass. MIGRATE means the ticket belongs on another "
+            "registered board."
+        ),
+    )
     reason: str
     target_board: str | None = Field(
         default=None,

@@ -17,6 +17,7 @@ from ...config.settings import Settings
 from ...core.models import Ticket, TicketKind
 from ...core.service import TicketService
 from ...core.states import State
+from ...core.text_noop import is_degenerate_body
 from ...core.workspace import Workspace
 from ..base import Outcome, StageContext
 from . import _reconcile, _result_paths
@@ -92,6 +93,28 @@ _CODE_EXTENSIONS: frozenset[str] = frozenset(
 # for documentation-only classification.
 _DOC_PATH_RE = re.compile(r"`([^`]+\.[a-zA-Z]{1,10})`")
 
+# Lower-case substrings in a triage SKIP reason that assert there is
+# nothing to implement.  In mill semantics SKIP means "the draft is
+# ALREADY an implementation-ready spec — route to implement"; the discard
+# verdict for nothing-to-do / no-op / placeholder drafts is NO_CHANGE.
+# A SKIP reason that instead says there is nothing to do is a category
+# error that would route a nothing-to-do draft straight to implement with
+# auto-approve (live noop-8835), so we guard against it deterministically.
+_SKIP_NOOP_MARKERS: tuple[str, ...] = (
+    "nothing to implement",
+    "nothing to do",
+    "nothing to change",
+    "nothing to do here",
+    "no actionable work",
+    "no action needed",
+    "no changes needed",
+    "deliberate no-op",
+    "nothing to flag",
+    "not actionable",
+    "no work to do",
+    "no-op",
+)
+
 
 def _count_code_block_lines(text: str) -> int:
     """Return the number of lines inside fenced code blocks in *text*.
@@ -145,6 +168,44 @@ def _is_doc_only_draft(draft: str) -> bool:
         # as doc-only; err on the side of full triage.
         return False
     return True
+
+
+def _skip_reason_asserts_noop(reason: str | None) -> bool:
+    """Return ``True`` when a triage SKIP *reason* asserts there is nothing to do.
+
+    SKIP legitimately means "the draft is already an implementation-ready
+    spec — route to implement."  A SKIP reason that instead says there is
+    nothing to implement is a category error: the discard verdict is
+    NO_CHANGE.  Conservative substring match on the lower-cased reason.
+    """
+    t = (reason or "").strip().lower()
+    if not t:
+        return False
+    return any(m in t for m in _SKIP_NOOP_MARKERS)
+
+
+def _draft_is_placeholder(draft: str | None) -> bool:
+    """Return ``True`` when *draft* is a placeholder with no actionable content.
+
+    Reuses :func:`core.text_noop.is_degenerate_body` — the shared, vetted
+    placeholder detector (empty / punctuation-only / short pointer phrases
+    like "tbd", "see above", "see spec").  Keyed on placeholder content, not
+    raw length, so genuinely terse but real mechanical specs ("Rename
+    ``foo.py`` to ``bar.py``") are never mistaken for a no-op.
+    """
+    return is_degenerate_body(draft)
+
+
+def _triage_skip_is_noop(reason: str | None, draft: str | None) -> bool:
+    """Return ``True`` when a SKIP verdict actually means "nothing to do".
+
+    Coerces a SKIP to NO_CHANGE when the classifier's reason text asserts
+    there is nothing to implement, or the draft body is a placeholder with
+    no actionable content.  Either signal means routing straight to
+    implement with auto-approve would run a real implement pass on a
+    nothing-to-do draft (live noop-8835).
+    """
+    return _skip_reason_asserts_noop(reason) or _draft_is_placeholder(draft)
 
 
 def _triage_outcome(
@@ -475,6 +536,56 @@ def deterministic_triage_pre_checks(
     return None
 
 
+def _emit_no_change(
+    ctx: StageContext,
+    ws: Workspace,
+    draft: str,
+    ticket: Ticket,
+    repo_dir: Path | None,
+    reason: str,
+) -> Outcome:
+    """Emit the NO_CHANGE outcome for *reason* (the discard verdict).
+
+    A TASK-kind (implementation) ticket that hasn't produced a branch, or
+    whose branch is not merged to the base branch, must not be auto-closed
+    from DRAFT.  Route to READY so implement can verify the "no change"
+    claim against the live tree.
+    """
+    short_reason = reason[:400] + ("…" if len(reason) > 400 else "")
+    if ticket.kind == TicketKind.TASK and (
+        not ticket.branch or not _verify_branch_merged(repo_dir, ticket)
+    ):
+        # Deliberately NOT passing triage_note here. A NO_CHANGE
+        # reason says, by definition, "this is already done /
+        # no change is needed" — which is verbatim what
+        # _TRIAGE_REJECTION_PATTERNS looks for. Forwarding it
+        # made the rejection gate fire on the premise of this
+        # very route, converting "route to READY so implement
+        # can verify the claim" into HUMAN_ISSUE_APPROVAL, where
+        # the ticket then sat forever: nothing auto-closes it and
+        # no human ever approves a ticket whose own note says
+        # there is nothing to do. Live, these accumulated for up
+        # to six days. The spec still faces the normal
+        # auto-approve triage below; only the self-referential
+        # rejection match is skipped.
+        return _triage_outcome(
+            ctx,
+            ws,
+            draft,
+            ticket.id,
+            f"triage NO_CHANGE — routing to implement: {short_reason}",
+            source=ticket.source,
+        )
+    return _triage_outcome(
+        ctx,
+        ws,
+        draft,
+        ticket.id,
+        f"triage NO_CHANGE: {short_reason}",
+        state=State.DONE,
+    )
+
+
 def handle_triage_decision(
     ctx: StageContext,
     ticket: Ticket,
@@ -495,45 +606,22 @@ def handle_triage_decision(
     _reconcile.persist_triage_complexity(ws, triage)
 
     if triage.decision == "NO_CHANGE":
-        short_reason = triage.reason[:400] + ("…" if len(triage.reason) > 400 else "")
-        # A TASK-kind (implementation) ticket that hasn't produced a
-        # branch, or whose branch is not merged to the base branch,
-        # must not be auto-closed from DRAFT.  Route to READY so
-        # implement can verify the "no change" claim against the
-        # live tree.
-        if ticket.kind == TicketKind.TASK and (
-            not ticket.branch or not _verify_branch_merged(repo_dir, ticket)
-        ):
-            # Deliberately NOT passing triage_note here. A NO_CHANGE
-            # reason says, by definition, "this is already done /
-            # no change is needed" — which is verbatim what
-            # _TRIAGE_REJECTION_PATTERNS looks for. Forwarding it
-            # made the rejection gate fire on the premise of this
-            # very route, converting "route to READY so implement
-            # can verify the claim" into HUMAN_ISSUE_APPROVAL, where
-            # the ticket then sat forever: nothing auto-closes it and
-            # no human ever approves a ticket whose own note says
-            # there is nothing to do. Live, these accumulated for up
-            # to six days. The spec still faces the normal
-            # auto-approve triage below; only the self-referential
-            # rejection match is skipped.
-            return _triage_outcome(
-                ctx,
-                ws,
-                draft,
-                ticket.id,
-                f"triage NO_CHANGE — routing to implement: {short_reason}",
-                source=ticket.source,
-            )
-        return _triage_outcome(
-            ctx,
-            ws,
-            draft,
-            ticket.id,
-            f"triage NO_CHANGE: {short_reason}",
-            state=State.DONE,
-        )
+        return _emit_no_change(ctx, ws, draft, ticket, repo_dir, triage.reason)
     if triage.decision == "SKIP":
+        # Deterministic guard: a SKIP whose reason asserts there is
+        # nothing to implement, or whose draft body is a placeholder,
+        # is actually a nothing-to-do discard — coerce to NO_CHANGE so
+        # it doesn't route straight to implement with auto-approve
+        # (live noop-8835).  SKIP must mean only "the draft is already
+        # an implementation-ready spec."
+        if _triage_skip_is_noop(triage.reason, draft):
+            log.info(
+                "%s: SKIP reason asserts no-op / draft is placeholder "
+                "(reason=%r) — coercing to NO_CHANGE",
+                ticket.id,
+                triage.reason[:120],
+            )
+            return _emit_no_change(ctx, ws, draft, ticket, repo_dir, triage.reason)
         return _triage_outcome(
             ctx,
             ws,
