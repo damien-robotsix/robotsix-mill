@@ -3689,6 +3689,32 @@ def test_statuses_to_check_runs_uses_per_context_state_not_combined():
     assert legacy[0]["status"] == "in_progress"
 
 
+def test_statuses_to_check_runs_error_state_gates_merge():
+    """A commit-status context whose own state is ``"error"`` must produce a
+    FAILING conclusion and gate the merge.
+
+    Commit-status state is one of error/failure/pending/success, but the
+    Checks-API conclusion vocabulary has no ``"error"`` — so without
+    normalization ``_conclusion_for_check`` classifies an errored context as
+    ``"neutral"`` and it stops gating the merge (regression vs the old
+    combined roll-up, which GitHub reports as ``"failure"`` whenever any
+    context errored).  Normalize ``"error"`` -> ``"failure"``.
+    """
+    from robotsix_mill.forge.github_ci import _conclusion_for_check
+
+    data = {
+        "state": "error",
+        "statuses": [{"context": "deploy/preview", "state": "error"}],
+    }
+    runs = _statuses_to_check_runs(data)
+    assert len(runs) == 1
+    assert runs[0]["name"] == "deploy/preview"
+    assert runs[0]["status"] == "completed"
+    assert runs[0]["conclusion"] == "failure"
+    # And it is classified as a genuine failure that gates the merge.
+    assert _conclusion_for_check(runs[0]) == "failure"
+
+
 # ---------------------------------------------------------------------------
 # _latest_definitive_runs
 # ---------------------------------------------------------------------------

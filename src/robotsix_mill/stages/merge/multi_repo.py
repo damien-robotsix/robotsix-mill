@@ -71,7 +71,6 @@ class MultiRepoMixin(_MergeStageBase):
         s = ctx.settings
 
         statuses: list[dict[str, Any]] = []
-        found_any = False
         for entry in pr_entries:
             repo_id = entry.get("repo_id", "")
             branch = entry.get("branch", "")
@@ -128,17 +127,11 @@ class MultiRepoMixin(_MergeStageBase):
             if pr.get("merged"):
                 # A merged PR is terminal — it cannot help an unresolvable
                 # sibling PR resolve, so it must NOT count as progress that
-                # resets the no-PR streak.  Otherwise a merged+missing ticket
-                # resets its counter every poll and never escalates — the same
-                # silent-spin this guard targets, in a partial variant.
+                # resets the no-PR streak (the streak reset now happens below,
+                # keyed on the aggregate: only an in-flight ``pending`` repo
+                # can still change on a later poll).
                 statuses.append({**base, "status": "merged"})
                 continue
-            # A non-merged PR was found — an active PR is making progress, so
-            # any consecutive no-PR streak is over.
-            found_any = True
-            _reset_consecutive(
-                ctx.service.workspace(ticket).artifacts_dir, _PR_MISSING_COUNT
-            )
             if pr.get("state") == "closed":
                 statuses.append({**base, "status": "closed_unmerged"})
                 continue
@@ -184,11 +177,21 @@ class MultiRepoMixin(_MergeStageBase):
 
         conflicting = [r for r in statuses if r["status"] == "conflicting"]
         if conflicting:
+            # Active recovery in flight — genuine progress this poll, so clear
+            # any consecutive no-PR streak.
+            _reset_consecutive(
+                ctx.service.workspace(ticket).artifacts_dir, _PR_MISSING_COUNT
+            )
             # Rebase one conflicting repo per poll; the rest re-check next cycle.
             return self._multi_repo_rebase(ticket, ctx, conflicting[0])
 
         failing = [r for r in statuses if r["status"] == "failing_ci"]
         if failing:
+            # Active recovery in flight — genuine progress this poll, so clear
+            # any consecutive no-PR streak.
+            _reset_consecutive(
+                ctx.service.workspace(ticket).artifacts_dir, _PR_MISSING_COUNT
+            )
             # Fix one failing repo per poll; the rest re-check next cycle.
             return self._multi_repo_fix_ci(ticket, ctx, failing[0])
 
@@ -219,32 +222,36 @@ class MultiRepoMixin(_MergeStageBase):
         if green and not pending and not missing:
             return self._multi_repo_auto_merge(ticket, ctx, green)
 
-        # Every repo's PR is either merged or unresolvable — a ticket the
-        # merge stage cannot act on for the same reason.  Escalate to
-        # BLOCKED past the consecutive/no-PR ceiling instead of re-polling
-        # the same dead lookups forever (the PRs may live in a repo other
-        # than the one recorded, or were never pushed).  ``found_any`` is now
-        # only set by a NON-merged active PR, so a merged+missing ticket (no
-        # active PR) reaches this escalation instead of resetting forever.
-        if (
-            missing
-            and not found_any
-            and all(r["status"] in ("merged", "pr_missing") for r in statuses)
-        ):
-            max_polls = s.merge_pr_missing_max_polls
-            if max_polls:
-                artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
-                if _next_consecutive(artifacts_dir, _PR_MISSING_COUNT) >= max_polls:
-                    ids = ", ".join(r["repo_id"] for r in missing)
-                    return Outcome(
-                        State.BLOCKED,
-                        f"no PR found for {ids} for {max_polls} consecutive merge "
-                        "polls — the PRs may live in a repo other than the one "
-                        "recorded for this ticket, or the branches were never "
-                        "pushed; manual intervention required",
-                    )
+        artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
 
-        # Mix of green / pending / merged — same-state no-op; re-poll.
+        # A ``pr_missing`` sibling with NO repo a future poll could advance —
+        # every other repo is stable (``merged`` or ``green``, no ``pending``).
+        # Neither a terminal merged PR nor a green PR gated from auto-merge by
+        # this very missing sibling (above) can help it resolve, so re-polling
+        # the same dead lookup forever is pointless: escalate to BLOCKED past
+        # the consecutive/no-PR ceiling (the PRs may live in a repo other than
+        # the one recorded, or were never pushed).  A ``pending`` repo, by
+        # contrast, may still turn green/failing on a later poll, so it holds
+        # the escalation and resets the streak below.
+        if missing and not pending:
+            max_polls = s.merge_pr_missing_max_polls
+            if (
+                max_polls
+                and _next_consecutive(artifacts_dir, _PR_MISSING_COUNT) >= max_polls
+            ):
+                ids = ", ".join(r["repo_id"] for r in missing)
+                return Outcome(
+                    State.BLOCKED,
+                    f"no PR found for {ids} for {max_polls} consecutive merge "
+                    "polls — the PRs may live in a repo other than the one "
+                    "recorded for this ticket, or the branches were never "
+                    "pushed; manual intervention required",
+                )
+            return Outcome(ticket.state)
+
+        # A ``pending`` repo (with or without a missing sibling) is genuine
+        # in-flight work — clear any no-PR streak and re-poll.
+        _reset_consecutive(artifacts_dir, _PR_MISSING_COUNT)
         return Outcome(ticket.state)
 
     def _multi_repo_rebase(

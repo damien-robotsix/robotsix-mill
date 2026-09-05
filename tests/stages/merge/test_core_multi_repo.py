@@ -1719,3 +1719,58 @@ def test_multi_repo_merged_plus_missing_blocks_after_ceiling(tmp_path, monkeypat
     assert final.next_state is State.BLOCKED
     assert "no PR found" in final.note
     assert "repo-b" in final.note
+
+
+def test_multi_repo_green_plus_missing_blocks_after_ceiling(tmp_path, monkeypatch):
+    """One repo green + one repo unresolvable must ALSO escalate.
+
+    A green PR is gated from auto-merge by the missing sibling
+    (test_multi_repo_green_plus_missing_does_not_auto_merge) and — exactly
+    like a terminal merged PR — cannot help that sibling resolve.  So a
+    green+missing ticket must not re-poll forever: past the ceiling it BLOCKs
+    with the same no-PR note.  A green repo must NOT reset the streak."""
+    ctx = _gh(tmp_path)
+    remote_a = "https://github.com/o/a.git"
+    remote_b = "https://github.com/o/b.git"
+    _install_multirepo_registry([("repo-a", remote_a), ("repo-b", remote_b)])
+
+    _route_by_remote(
+        monkeypatch,
+        pr_responses={
+            remote_a: {
+                "merged": False,
+                "state": "open",
+                "url": "u-a",
+                "mergeable": True,
+            },
+            remote_b: None,
+        },
+        ci_responses={remote_a: {"conclusion": "success", "failing": []}},
+        pr_by_url_responses={remote_b: None},
+    )
+
+    t = _make_meta_ticket(ctx)
+    branch = f"mill/{t.id}"
+    _write_pr_urls(
+        ctx,
+        t,
+        [
+            {"repo_id": "repo-a", "branch": branch, "url": "u-a"},
+            {
+                "repo_id": "repo-b",
+                "branch": branch,
+                "url": "https://github.com/o/b/pull/2",
+            },
+        ],
+    )
+
+    stage = MergeStage()
+    ceiling = ctx.settings.merge_pr_missing_max_polls
+    outs = [stage.run(t, ctx) for _ in range(ceiling)]
+    assert [o.next_state for o in outs[:-1]] == [State.IMPLEMENT_COMPLETE] * (
+        ceiling - 1
+    )
+    final = outs[-1]
+    assert final.next_state is State.BLOCKED
+    assert "no PR found" in final.note
+    assert "repo-b" in final.note

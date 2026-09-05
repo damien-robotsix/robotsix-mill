@@ -98,7 +98,20 @@ def _statuses_to_check_runs(statuses_data: dict[str, Any]) -> list[dict[str, Any
         # 2026-09-03 on robotsix-chat#1807's merge polling).
         latest = entries[0]
         state = latest.get("state") or statuses_data.get("state", "success")
-        conclusion = state if state != "pending" else None
+        # Commit-status state vocabulary is error/failure/pending/success;
+        # translate it into the check-run *conclusion* vocabulary here, at the
+        # boundary.  "error" (an infrastructure/exception failure that GitHub
+        # rolls up into the combined "failure" state) has no Checks-API
+        # conclusion equivalent, so normalize it to "failure" — otherwise
+        # _conclusion_for_check would classify the errored context "neutral"
+        # and it would stop gating the merge (regression vs the old combined
+        # roll-up, which reported "failure" whenever any context errored).
+        if state == "pending":
+            conclusion = None
+        elif state == "error":
+            conclusion = "failure"
+        else:
+            conclusion = state
         runs.append(
             {
                 "id": None,  # no detail fetch for statuses
