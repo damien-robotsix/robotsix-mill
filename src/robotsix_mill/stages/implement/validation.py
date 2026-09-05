@@ -914,7 +914,9 @@ class ValidationMixin(_ImplementStageBase):
                 if child_ids:
                     split_note = f" — split into child ticket(s): {child_list}"
                 else:
-                    split_note = " — no scope-split child was spawned (create failed; see logs)"
+                    split_note = (
+                        " — no scope-split child was spawned (create failed; see logs)"
+                    )
                 reason = (
                     f"scope-triage EXPAND cap reached "
                     f"({len(prior_expands)} prior EXPAND events){split_note}"

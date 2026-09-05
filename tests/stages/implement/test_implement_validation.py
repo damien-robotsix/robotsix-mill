@@ -1024,7 +1024,9 @@ def test_scope_guardrail_expand_cap_blocks_and_splits(monkeypatch):
     assert transitioned == []
 
 
-def test_scope_guardrail_expand_cap_split_create_failure_does_not_block_parent(monkeypatch):
+def test_scope_guardrail_expand_cap_split_create_failure_does_not_block_parent(
+    monkeypatch,
+):
     """A scope-split child-creation failure must NOT FATALLY block the parent."""
     from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
 
