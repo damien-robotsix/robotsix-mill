@@ -1019,7 +1019,79 @@ def test_scope_guardrail_expand_cap_blocks_and_splits(monkeypatch):
     assert "child-1" in res.outcome.note
     assert len(created_tickets) == 1
     assert "new_module.py" in created_tickets[0]["desc"]
-    assert transitioned[0][1] is State.DRAFT
+    # A freshly-created child is already DRAFT — no transition is applied,
+    # so no illegal draft -> draft transition is attempted.
+    assert transitioned == []
+
+
+def test_scope_guardrail_expand_cap_split_create_failure_does_not_block_parent(
+    monkeypatch,
+):
+    """A scope-split child-creation failure must NOT FATALLY block the parent."""
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    monkeypatch.setattr(validation_mod, "target_branch_for", lambda *a: "main")
+    monkeypatch.setattr(
+        validation_mod.git_ops,
+        "introduced_files",
+        lambda *a: ["in_scope.py", "new_module.py"],
+    )
+    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(validation_mod, "_vendored_dep_roots", lambda *a, **kw: set())
+    monkeypatch.setattr(
+        ValidationMixin,
+        "_finalize",
+        classmethod(lambda cls, *a, **kw: None),
+        raising=False,
+    )
+    monkeypatch.setattr(validation_mod.git_ops, "tracked_paths_at", lambda *a: set())
+
+    prior_events = [
+        SimpleNamespace(note="scope-triage EXPAND: added `foo.py` (added: foo.py)"),
+        SimpleNamespace(note="scope-triage EXPAND: added `bar.py` (added: bar.py)"),
+    ]
+
+    def _failing_create(*a, **kw):
+        raise RuntimeError("db full")
+
+    ctx = SimpleNamespace(
+        repo_config=SimpleNamespace(),
+        service=SimpleNamespace(
+            add_step_event=lambda *a, **kw: None,
+            history=lambda tid: prior_events,
+            create=_failing_create,
+        ),
+    )
+
+    def _expand_triage(*a, **kw):
+        return ScopeTriageVerdict(
+            action="EXPAND",
+            justification="legitimate expansion",
+            expand_files=["new_module.py"],
+        )
+
+    from robotsix_mill.agents import scope_triage as st
+
+    monkeypatch.setattr(st, "run_scope_triage_agent", _expand_triage)
+
+    res = ValidationMixin._run_scope_guardrail(
+        ctx,
+        SimpleNamespace(id="T-2", board_id=None, priority=False),
+        Path("/repo"),
+        "branch",
+        "summary",
+        None,
+        {"in_scope.py"},
+        _scope_settings(scope_triage_enabled=True, scope_triage_max_files=0),
+        "spec",
+        None,
+    )
+    # The failure is swallowed — the parent is still parked to BLOCKED
+    # gracefully rather than raising a Fatal TransitionError.
+    assert res.action == "return"
+    assert res.outcome is not None
+    assert res.outcome.next_state is State.BLOCKED
+    assert "no scope-split child was spawned" in res.outcome.note
 
 
 def test_scope_guardrail_expand_under_cap_proceeds(monkeypatch):

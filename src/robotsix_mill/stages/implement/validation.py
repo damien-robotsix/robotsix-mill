@@ -96,18 +96,32 @@ def _spawn_scope_split_tickets(
         f"**Scope-triage justification:** {justification}\n\n"
         f"(Spawned from parent `{parent.id}`.)"
     )
-    child = ctx.service.create(
-        title,
-        description,
-        source="agent",
-        kind=TicketKind.TASK,
-        board_id=board_id,
-        priority=parent.priority,
-    )
+    try:
+        child = ctx.service.create(
+            title,
+            description,
+            source="agent",
+            kind=TicketKind.TASK,
+            board_id=board_id,
+            priority=parent.priority,
+        )
+    except Exception as exc:
+        # A failure to spawn the split must NOT FATALLY block the parent.
+        # A freshly-created TASK ticket is already DRAFT, so there is no
+        # transition to apply here; if creation itself fails, log and skip
+        # the split so the caller parks/blocks the parent gracefully instead
+        # of propagating an exception (e.g. a state-machine TransitionError)
+        # onto it.
+        log.error(
+            "%s: failed to spawn scope-split child ticket: %s — skipping split",
+            parent.id,
+            exc,
+        )
+        return []
     child_id = child.id
-    ctx.service.transition(
-        child_id, State.DRAFT, note="Auto-created by scope-triage EXPAND cap"
-    )
+    # The freshly-created child is already DRAFT (the TASK default), so no
+    # transition is needed — an explicit draft -> draft transition is illegal
+    # (TransitionError) and would FATALLY block the parent.
     log.info(
         "%s: spawned scope-split child %s for %d file(s)",
         parent.id,
@@ -897,10 +911,15 @@ class ValidationMixin(_ImplementStageBase):
                     ctx, ticket, new_files, verdict.justification
                 )
                 child_list = ", ".join(f"`{c}`" for c in child_ids)
+                if child_ids:
+                    split_note = f" — split into child ticket(s): {child_list}"
+                else:
+                    split_note = (
+                        " — no scope-split child was spawned (create failed; see logs)"
+                    )
                 reason = (
                     f"scope-triage EXPAND cap reached "
-                    f"({len(prior_expands)} prior EXPAND events) — "
-                    f"split into child ticket(s): {child_list}"
+                    f"({len(prior_expands)} prior EXPAND events){split_note}"
                 )
                 log.warning("%s: %s", ticket.id, reason)
                 cls._finalize(
