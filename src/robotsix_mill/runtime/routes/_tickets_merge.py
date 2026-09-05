@@ -377,8 +377,7 @@ def _multi_repo_merge_status(
             "mergeable": mergeable,
             "ci_conclusion": ci_conclusion,
             "can_merge": False,
-            "reason": "no PR found for the recorded URL(s): "
-            + "; ".join(unresolved),
+            "reason": "no PR found for the recorded URL(s): " + "; ".join(unresolved),
         }
     if mergeable is False:
         return {
@@ -454,11 +453,12 @@ def get_merge_status(
     try:
         pr_entries = _load_pr_urls(svc.workspace(ticket).artifacts_dir)
     except ValueError as e:
+        log.warning("pr_urls.json corrupted for ticket %s: %s", ticket_id, e)
         return {
             "mergeable": None,
             "ci_conclusion": None,
             "can_merge": False,
-            "reason": f"pr_urls.json corrupted: {e}",
+            "reason": "pr_urls.json is corrupted",
         }
 
     if pr_entries:

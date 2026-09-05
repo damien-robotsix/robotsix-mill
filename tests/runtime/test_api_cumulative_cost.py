@@ -251,7 +251,6 @@ class _RecordedUrlForge:
         # Must never be reached on the recorded-URL path — the bug this
         # guards: the board-derived branch-keyed lookup.
         self.branch_calls.append(source_branch)
-        return None
 
     def check_status(self, *, source_branch: str, require_checks=False):
         return {"conclusion": "success", "failing": []}
@@ -279,9 +278,7 @@ def test_merge_status_multi_repo_resolves_recorded_url(client, service, monkeypa
     t = _meta_ticket(service)
     ws = service.workspace(t)
     (ws.artifacts_dir / "pr_urls.json").write_text(
-        json.dumps(
-            [{"repo_id": "meta-a", "branch": "mill/meta", "url": recorded_url}]
-        ),
+        json.dumps([{"repo_id": "meta-a", "branch": "mill/meta", "url": recorded_url}]),
         encoding="utf-8",
     )
 
@@ -308,9 +305,7 @@ def test_merge_status_multi_repo_unresolved_reports_recorded_url(
     t = _meta_ticket(service)
     ws = service.workspace(t)
     (ws.artifacts_dir / "pr_urls.json").write_text(
-        json.dumps(
-            [{"repo_id": "meta-a", "branch": "mill/meta", "url": recorded_url}]
-        ),
+        json.dumps([{"repo_id": "meta-a", "branch": "mill/meta", "url": recorded_url}]),
         encoding="utf-8",
     )
 

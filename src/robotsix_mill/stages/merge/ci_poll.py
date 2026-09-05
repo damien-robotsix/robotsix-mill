@@ -231,7 +231,9 @@ class CIPollMixin(_MergeStageBase):
                 )
                 return None, Outcome(same_state)
         # A PR was found — any previous consecutive no-PR streak is over.
-        _reset_consecutive(ctx.service.workspace(ticket).artifacts_dir, _PR_MISSING_COUNT)
+        _reset_consecutive(
+            ctx.service.workspace(ticket).artifacts_dir, _PR_MISSING_COUNT
+        )
         if pr.get("merged"):
             if verify_merge:
                 from robotsix_mill.stages import merge as _facade

@@ -2994,9 +2994,7 @@ def test_pr_missing_blocks_at_the_ceiling_with_specific_note(tmp_path, monkeypat
     ctx = _pr_missing_ctx(tmp_path, monkeypatch)
     t = _implement_complete(ctx)
     stage = MergeStage()
-    outs = [
-        stage.run(t, ctx) for _ in range(ctx.settings.merge_pr_missing_max_polls)
-    ]
+    outs = [stage.run(t, ctx) for _ in range(ctx.settings.merge_pr_missing_max_polls)]
     assert [o.next_state for o in outs[:-1]] == [State.IMPLEMENT_COMPLETE] * (
         len(outs) - 1
     )
