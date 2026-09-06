@@ -744,6 +744,10 @@ def trace_step_usage_records(trace: dict[str, Any]) -> list[dict[str, Any]]:
 
     seen_observation_usage = False
     for obs in trace.get("observations") or []:
+        # The list endpoint can return observations as bare ID strings
+        # instead of objects; those carry no metadata to read.
+        if not isinstance(obs, dict):
+            continue
         metadata = obs.get("metadata")
         if not isinstance(metadata, dict):
             continue

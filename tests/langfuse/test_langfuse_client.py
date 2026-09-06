@@ -857,3 +857,22 @@ def test_trace_step_usage_records_skips_malformed_and_no_double_count():
     }
     records = trace_step_usage_records(trace)
     assert records == [{"input_tokens": 1, "output_tokens": 2}]
+
+
+def test_trace_step_usage_records_string_observation_ids():
+    """The list endpoint can return ``observations`` as bare ID strings
+    (2026-09-06 prod crash: AttributeError 'str' object has no attribute
+    'get' aborted the whole token-metrics aggregation pass). String entries
+    are skipped and the trace-level fallback still applies."""
+    trace = {
+        "observations": [
+            "c9b2f0e1-7a44-4d2e-9c1e-0b8f2a3d4e5f",
+            "1f2e3d4c-5b6a-4789-8abc-def012345678",
+        ],
+        "metadata": {
+            "mill.step_usage": '{"input_tokens":7,"output_tokens":3}',
+        },
+    }
+    assert trace_step_usage_records(trace) == [
+        {"input_tokens": 7, "output_tokens": 3},
+    ]
