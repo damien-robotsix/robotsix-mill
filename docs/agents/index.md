@@ -37,6 +37,16 @@ Opt-in agents that run independently of the ticket pipeline.
 > is capped at `min(interval / 12, 1 hour)` with a 1-minute floor, so
 > agents with short intervals still space out meaningfully.
 
+> **Dead periodic-config auto-filing:** Per-repo periodic-workflow files
+> (`.robotsix-mill/periodic/<name>.yaml`) that fail to resolve (malformed,
+> missing required fields, unmatched name without `system_prompt`) are tracked
+> across discovery cycles. After N consecutive failures (~30 minutes on the
+> default 10-minute discovery interval), a board ticket is filed once with the
+> resolution error. Log warnings are rate-limited — one on first failure, one
+> when the ticket is filed, then DEBUG-level quiet cycles in between (replacing
+> the prior every-cycle spam). The ticket self-moots automatically when the file
+> is fixed or deleted.
+
 | Agent | Definition | Module | Model var | Trigger | Role |
 |---|---|---|---|---|---|
 | Audit | `agent_definitions/audit.yaml` | `agents/auditing.py` | `MILL_AUDIT_MODEL` | CLI (`audit`), API (`POST /passes/audit/run`), board button, or periodic (`MILL_AUDIT_PERIODIC`) | Meta-audit: identifies gaps in repo quality/security tooling coverage; emits improvement drafts |

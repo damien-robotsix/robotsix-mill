@@ -690,6 +690,8 @@ Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `copy_paste`, `timeout_escalation`, `triage_boilerplate`, `langfuse_cleanup`, `token_metrics_aggregation`, `data_dir_gc`, `dependabot_ingest`, `run_health`, `stale_branch_cleanup`,
 `db_maintenance`, `roadmap_sync`, `sandbox_reaper`, `repo_description_sync`.
 
+**Malformed per-repo periodic files** (e.g., `.robotsix-mill/periodic/<name>.yaml` with a missing `system_prompt` on a bespoke agent, or a leftover presence file for a since-removed built-in) are automatically tracked. When a file fails to resolve for N consecutive discovery cycles, the supervisor files a deduplicated board ticket (source: `periodic_config`) with the resolution error and a recovery note. Log warnings are rate-limited to reduce spam: WARNING on first failure, WARNING when the ticket is filed, then DEBUG-level on quiet cycles. The ticket self-moots — no further tickets filed — once the file resolves or is deleted. This ensures dead-config conditions surface on the board for the team to fix, rather than silently spamming logs forever.
+
 > ¹ The **primary** interval now lives in each agent's base YAML definition
 > (``agent_definitions/periodic/<name>.yaml``), defaulting to **14 days**
 > (``interval: 14d``, i.e. 1,209,600 seconds) for all built-in periodic

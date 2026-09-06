@@ -199,6 +199,59 @@ def test_unknown_key_rejected(tmp_path):
     assert pl.resolve_periodic_workflow(p) is None
 
 
+# --- dead-config failure collection + tracker -------------------------------
+
+
+def test_discover_collects_resolution_failures(tmp_path):
+    # A bespoke file missing system_prompt is a dead-config resolution failure;
+    # a valid audit file resolves.
+    _write(tmp_path, "my-thing", "name: my-thing\ninterval_seconds: 86400\n")
+    _write(tmp_path, "audit", "name: audit\n")
+    failures: list[pl.PeriodicResolutionFailure] = []
+    out = pl.discover_periodic_workflows(tmp_path, failures=failures)
+    assert {w.name for w in out} == {"audit"}
+    assert [f.path.name for f in failures] == ["my-thing.yaml"]
+    assert "resolution failed" in failures[0].reason
+
+
+def test_discover_without_failures_arg_still_works(tmp_path):
+    # Legacy callers (routes) pass no failures list — dead files are just
+    # skipped (and logged), not collected.
+    _write(tmp_path, "my-thing", "name: my-thing\ninterval_seconds: 86400\n")
+    out = pl.discover_periodic_workflows(tmp_path)
+    assert out == []
+
+
+def test_tracker_files_after_threshold():
+    tracker = pl.PeriodicResolutionFailureTracker(threshold=3)
+    f = pl.PeriodicResolutionFailure(path=Path("/x/dead.yaml"), reason="boom")
+    assert tracker.observe([f]) == []  # cycle 1
+    assert tracker.observe([f]) == []  # cycle 2
+    reported = tracker.observe([f])  # cycle 3 → crosses threshold
+    assert [r.path for r in reported] == [Path("/x/dead.yaml")]
+    # Already reported → not re-reported on subsequent cycles.
+    assert tracker.observe([f]) == []
+
+
+def test_tracker_self_moots_when_file_resolves():
+    tracker = pl.PeriodicResolutionFailureTracker(threshold=2)
+    f = pl.PeriodicResolutionFailure(path=Path("/x/dead.yaml"), reason="boom")
+    assert tracker.observe([f]) == []  # cycle 1
+    # File resolves/disappears → empty failure set resets its counter.
+    assert tracker.observe([]) == []
+    # Failing again starts the count over — one failure is below threshold.
+    assert tracker.observe([f]) == []
+
+
+def test_tracker_refiles_after_moot_and_recross():
+    tracker = pl.PeriodicResolutionFailureTracker(threshold=1)
+    f = pl.PeriodicResolutionFailure(path=Path("/x/dead.yaml"), reason="boom")
+    assert [r.path for r in tracker.observe([f])] == [Path("/x/dead.yaml")]
+    # Resolve, then fail again → reported afresh (un-reported on moot).
+    assert tracker.observe([]) == []
+    assert [r.path for r in tracker.observe([f])] == [Path("/x/dead.yaml")]
+
+
 # --- discovery --------------------------------------------------------------
 
 

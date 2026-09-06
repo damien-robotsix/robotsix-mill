@@ -252,32 +252,34 @@ def _bespoke_definition(pwf: PeriodicWorkflowFile) -> AgentDefinition:
     return AgentDefinition.model_validate(data)
 
 
-def resolve_periodic_workflow(
+def _resolve_periodic_workflow(
     path: Path,
-) -> ResolvedPeriodicWorkflow | None:
-    """Parse + resolve a single ``.robotsix-mill/periodic/<name>.yaml`` file.
+) -> tuple[ResolvedPeriodicWorkflow | None, str | None]:
+    """Parse + resolve one file, returning ``(resolved, failure_reason)``.
 
-    Returns a :class:`ResolvedPeriodicWorkflow`, or ``None`` when the file is
-    malformed / unsupported (a ``global_only`` name). Never raises — a bad
-    file is logged and skipped so a managed repo can't take mill down.
+    ``resolved`` is a :class:`ResolvedPeriodicWorkflow` on success, else
+    ``None``. ``failure_reason`` is a short human-readable string ONLY for a
+    *reportable* dead-config failure (unreadable, non-mapping, schema error,
+    or resolution error) — the cases that spam the log every discovery cycle
+    for a file that will never resolve. A benign skip (a ``global_only``
+    workflow that simply isn't per-repo presence-managed) is logged here and
+    returns ``(None, None)`` — it is not a dead-config failure.
+
+    Never raises — a bad file is reported and skipped so a managed repo can't
+    take mill down.
     """
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as exc:
-        log.warning("periodic workflow %s: read/parse error — skipping (%s)", path, exc)
-        return None
+        return None, f"read/parse error ({exc})"
     if not isinstance(raw, dict):
-        log.warning(
-            "periodic workflow %s: top-level must be a mapping — skipping", path
-        )
-        return None
+        return None, "top-level must be a mapping"
     # Default name from the filename stem when the file omits it.
     raw.setdefault("name", path.stem)
     try:
         pwf = PeriodicWorkflowFile.model_validate(raw)
     except ValidationError as exc:
-        log.warning("periodic workflow %s: schema error — skipping (%s)", path, exc)
-        return None
+        return None, f"schema error ({exc})"
 
     kind = kind_for(pwf.name)
     if kind == "global_only":
@@ -287,7 +289,7 @@ def resolve_periodic_workflow(
             path,
             pwf.name,
         )
-        return None
+        return None, None
 
     enabled = True if pwf.enabled is None else bool(pwf.enabled)
 
@@ -299,12 +301,9 @@ def resolve_periodic_workflow(
             definition = _bespoke_definition(pwf)
         # schedule_only carries no prompt; definition stays None.
     except (FileNotFoundError, ValidationError, ValueError) as exc:
-        log.warning(
-            "periodic workflow %s: resolution failed — skipping (%s)", path, exc
-        )
-        return None
+        return None, f"resolution failed ({exc})"
 
-    return ResolvedPeriodicWorkflow(
+    resolved = ResolvedPeriodicWorkflow(
         name=pwf.name,
         kind=kind,
         definition=definition,
@@ -319,16 +318,132 @@ def resolve_periodic_workflow(
         ),
         enabled=enabled,
     )
+    return resolved, None
+
+
+def resolve_periodic_workflow(
+    path: Path,
+) -> ResolvedPeriodicWorkflow | None:
+    """Parse + resolve a single ``.robotsix-mill/periodic/<name>.yaml`` file.
+
+    Returns a :class:`ResolvedPeriodicWorkflow`, or ``None`` when the file is
+    malformed / unsupported (a ``global_only`` name). Never raises — a bad
+    file is logged and skipped so a managed repo can't take mill down.
+    """
+    resolved, reason = _resolve_periodic_workflow(path)
+    if resolved is None and reason is not None:
+        log.warning("periodic workflow %s: %s — skipping", path, reason)
+    return resolved
+
+
+# ---------------------------------------------------------------------------
+# Cross-cycle resolution-failure tracking
+# ---------------------------------------------------------------------------
+
+# Consecutive discovery cycles a file must keep failing before a dead-config
+# board ticket is filed. The supervisor runs discovery roughly every
+# ``bespoke_discovery_interval_seconds`` (~10 min in production), so three
+# cycles is ~30 min of sustained failure — long enough to ignore a transient
+# mid-edit/mid-fetch state, short enough that a genuinely dead file surfaces
+# the same day instead of only via human log-watching.
+RESOLUTION_FAILURE_TICKET_THRESHOLD = 3
+
+
+@dataclass
+class PeriodicResolutionFailure:
+    """One per-repo periodic file that failed to resolve this cycle."""
+
+    path: Path
+    reason: str
+
+
+class PeriodicResolutionFailureTracker:
+    """Cross-cycle state for per-repo periodic-config resolution failures.
+
+    The periodic supervisor owns one tracker per repo and calls
+    :meth:`observe` once per discovery cycle with the failures seen this
+    cycle. The tracker:
+
+    * counts *consecutive* failures per file path;
+    * self-moots — the instant a file resolves again or disappears, its
+      count is dropped and it is un-reported, so a fixed or deleted file
+      stops counting and never files (another) ticket;
+    * rate-limits the warning log — WARNING on the first failure and again on
+      the cycle a ticket is filed, DEBUG on the quiet cycles in between,
+      replacing the every-cycle ``log.warning`` spam that previously required
+      a human to notice;
+    * returns the failures that have just crossed
+      :data:`RESOLUTION_FAILURE_TICKET_THRESHOLD` so the caller can file a
+      deduplicated board ticket (once per file).
+    """
+
+    def __init__(self, threshold: int = RESOLUTION_FAILURE_TICKET_THRESHOLD) -> None:
+        self._threshold = max(1, threshold)
+        self._counts: dict[str, int] = {}
+        self._reported: set[str] = set()
+
+    def observe(
+        self, failures: list[PeriodicResolutionFailure]
+    ) -> list[PeriodicResolutionFailure]:
+        """Fold this cycle's *failures* into the tracker.
+
+        Returns the subset that just crossed the ticket threshold (empty on
+        most cycles). Emits the rate-limited warning/debug log as a side
+        effect.
+        """
+        current = {str(f.path): f for f in failures}
+        # Self-moot: any previously-failing file that resolved or vanished
+        # this cycle drops out of the counters and the reported set.
+        for key in list(self._counts):
+            if key not in current:
+                del self._counts[key]
+                self._reported.discard(key)
+
+        to_report: list[PeriodicResolutionFailure] = []
+        for key, failure in current.items():
+            count = self._counts.get(key, 0) + 1
+            self._counts[key] = count
+            if count >= self._threshold and key not in self._reported:
+                self._reported.add(key)
+                to_report.append(failure)
+                log.warning(
+                    "periodic workflow %s: %s — still failing after %d "
+                    "consecutive cycles; filing a board ticket",
+                    failure.path,
+                    failure.reason,
+                    count,
+                )
+            elif count == 1:
+                log.warning(
+                    "periodic workflow %s: %s — skipping", failure.path, failure.reason
+                )
+            else:
+                log.debug(
+                    "periodic workflow %s: %s — skipping (consecutive failure #%d)",
+                    failure.path,
+                    failure.reason,
+                    count,
+                )
+        return to_report
 
 
 def discover_periodic_workflows(
     repo_dir: Path | None,
+    *,
+    failures: list[PeriodicResolutionFailure] | None = None,
 ) -> list[ResolvedPeriodicWorkflow]:
     """Return every well-formed workflow under ``<repo_dir>/.robotsix-mill/periodic/``.
 
-    Empty list when *repo_dir* is None or the directory is absent. Malformed
-    / unsupported files are skipped with a warning. Duplicate names: first
-    file (alphabetical) wins.
+    Empty list when *repo_dir* is None or the directory is absent. Duplicate
+    names: first file (alphabetical) wins.
+
+    Malformed / unresolvable files are skipped. When *failures* is provided,
+    each dead-config file is appended to it (as a
+    :class:`PeriodicResolutionFailure`) and NOT logged here — the caller (the
+    periodic supervisor) owns rate-limited logging and deduplicated
+    ticket-filing via :class:`PeriodicResolutionFailureTracker`. When
+    *failures* is None (the read-only API routes), the legacy per-call
+    ``log.warning`` is emitted instead.
     """
     if repo_dir is None:
         return []
@@ -338,8 +453,13 @@ def discover_periodic_workflows(
     out: list[ResolvedPeriodicWorkflow] = []
     seen: set[str] = set()
     for path in sorted(pdir.glob("*.yaml")):
-        resolved = resolve_periodic_workflow(path)
+        resolved, reason = _resolve_periodic_workflow(path)
         if resolved is None:
+            if reason is not None:
+                if failures is not None:
+                    failures.append(PeriodicResolutionFailure(path=path, reason=reason))
+                else:
+                    log.warning("periodic workflow %s: %s — skipping", path, reason)
             continue
         if resolved.name in seen:
             log.warning(

@@ -55,6 +55,10 @@ trace_review_dedup_lookback_days
 # docs/config/configuration.md).
 claude_sdk_vision_enabled
 
+# resolve_periodic_workflow — public wrapper around _resolve_periodic_workflow;
+# src callers use the private form directly, so the public entry point is only
+# exercised by tests (vulture only scans src/, 60% confidence).
+resolve_periodic_workflow
 _absorb_summary_typos
 best_k
 failure_summary
