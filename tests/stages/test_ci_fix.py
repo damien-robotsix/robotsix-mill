@@ -2874,6 +2874,35 @@ def test_failure_cycle_writes_history_note(tmp_path, monkeypatch):
     assert "applied ruff fixes" in last_note.note
 
 
+def test_history_note_omits_job_logs(tmp_path, monkeypatch):
+    """The per-cycle history note must NOT embed the raw job-log window.
+
+    Regression (2026-09-06): a ticket with 9 ci-fix cycles carried ~17KB of
+    raw runner logs per note, serving a >100KB /history response that blew
+    the token budget of every agent reading it. Logs stay in the agent
+    prompt and the ci_fix.md artifact; the note keeps the structured part.
+    """
+    ctx = _gh(tmp_path)
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    log_body = "2026-09-05T15:25:48.7115316Z Current runner version: '2.337.0'\n" * 50
+    failing_summary = (
+        "## ❌ Tests\n\n**Summary:**\npytest failed\n\n"
+        "**Job logs:**\n```\n" + log_body + "\n```\n"
+    )
+
+    CIFixStage()._add_ci_fix_history_note(
+        ctx, t, failing_summary, CiFixResult(status="DONE", summary="fixed")
+    )
+
+    last_note = ctx.service.history(t.id)[-1]
+    assert "pytest failed" in last_note.note
+    assert "Current runner version" not in last_note.note
+    assert "job logs omitted" in last_note.note
+    assert len(last_note.note) < 2000
+
+
 def test_ci_fix_history_appends_across_attempts(tmp_path, monkeypatch):
     """ci_fix_history.md accumulates entries across multiple ci_fix runs."""
     ctx = _gh(tmp_path)

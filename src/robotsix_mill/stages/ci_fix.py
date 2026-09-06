@@ -1048,14 +1048,26 @@ class CIFixStage(Stage):
     ) -> None:
         """Record one informative history note per ci-fix cycle.
 
-        Contains the detected failure detail and the agent's recap.
+        Contains the detected failure detail and the agent's recap. The
+        raw job-log window is dropped from the note — it belongs to the
+        agent prompt and the ci_fix.md artifact, and inlining it made a
+        single note ~17KB (a ticket with 9 ci-fix cycles served a >100KB
+        history that blew every reader's token budget; 2026-09-06).
         Best-effort: a failure to write the note is logged, not raised.
         """
         try:
+            detail = failing_summary.strip() or "(no detail available)"
+            marker = "**Job logs:**"
+            idx = detail.find(marker)
+            if idx != -1:
+                detail = (
+                    detail[:idx].rstrip()
+                    + "\n\n_(job logs omitted — see the ci_fix.md artifact)_"
+                )
             lines: list[str] = []
             lines.append("**CI Fix Cycle**\n")
             lines.append("### Detected Failure\n")
-            lines.append(failing_summary.strip() or "(no detail available)")
+            lines.append(detail)
             if result is not None:
                 lines.append("\n### Agent Result\n")
                 lines.append(f"**Verdict:** {result.status}")
