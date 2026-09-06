@@ -38,7 +38,7 @@ from ..runtime import tracing
 from ..vcs import git_ops
 from . import dependency_fix
 from .base import Outcome, Stage, StageContext
-from .ci_failure_buckets import classify_ci_failure
+from .ci_failure_buckets import classify_ci_failure, is_formatter_only_failure
 from .ci_fix_analysis import (
     _build_failure_detail,
     _check_merge_conflict,
@@ -826,6 +826,19 @@ class CIFixStage(Stage):
                 ticket.id,
             )
 
+        # Deterministic formatter-only pre-pass: when the ONLY failing CI
+        # signature is `ruff format --check` reporting files-would-be-
+        # reformatted, run the repo formatter, commit and push it without
+        # spending an LLM cycle. This unblocks the common single-file
+        # reformat failure that otherwise burns all cross-stage cycles. Falls
+        # through to the agent when the signature is not formatter-only or the
+        # deterministic pass could not produce a fix.
+        formatter_outcome = self._try_deterministic_formatter_pass(
+            ticket, ctx, repo_dir, branch, failing_summary, failing
+        )
+        if formatter_outcome is not None:
+            return formatter_outcome
+
         result = self._invoke_agent(ticket, ctx, repo_dir, branch, failing_summary)
 
         # Write the per-cycle ci_fix.md artifact and an informative
@@ -909,6 +922,108 @@ class CIFixStage(Stage):
             "Manual intervention required — resume-blocked to retry from "
             "human_mr_approval.",
         )
+
+    def _try_deterministic_formatter_pass(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        repo_dir: str,
+        branch: str,
+        failing_summary: str,
+        failing: list[dict[str, Any]],
+    ) -> Outcome | None:
+        """Deterministically fix a formatter-only CI failure without the LLM.
+
+        When the failing CI signature is *exclusively* ``ruff format --check``
+        reporting files-would-be-reformatted, run ``ruff format`` on the
+        workspace and — if it produced changes — commit and push them,
+        returning to IMPLEMENT_COMPLETE so the merge stage re-verifies CI.
+        This unblocks the common single-file-reformat failure that would
+        otherwise burn every cross-stage ci-fix cycle on the LLM agent.
+
+        Returns an ``Outcome`` when the deterministic pass pushed a fix
+        (short-circuiting the agent), or ``None`` to fall through to the LLM
+        agent — either because the signature is not formatter-only, ruff is
+        unavailable / failed, or the formatter produced no changes (a second
+        run would not help, so the failure is not really a stale format diff).
+        """
+        if not is_formatter_only_failure(failing, failing_summary):
+            return None
+        repo = Path(repo_dir)
+        log.info(
+            "%s: formatter-only CI failure detected — running deterministic "
+            "`ruff format` pass before the ci-fix agent",
+            ticket.id,
+        )
+        try:
+            # `ruff` is resolved from PATH deliberately — the workspace runs
+            # the same pinned ruff CI uses (S607 narrow: fixed argv, no shell,
+            # no user input).
+            proc = subprocess.run(
+                ["ruff", "format", "."],  # noqa: S607
+                cwd=repo_dir,
+                check=False,
+                capture_output=True,
+                timeout=300,
+            )
+        except OSError, subprocess.SubprocessError:
+            log.warning(
+                "%s: deterministic `ruff format` pass could not run — falling "
+                "through to ci-fix agent",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
+        if proc.returncode != 0:
+            log.warning(
+                "%s: `ruff format` exited %d — falling through to ci-fix agent",
+                ticket.id,
+                proc.returncode,
+            )
+            return None
+        if not git_ops.has_changes(repo):
+            # The formatter changed nothing — the tree is already
+            # formatter-clean (a stale failure, or ruff's local config
+            # differs from CI's). Re-running it will not help, so hand off to
+            # the agent rather than pushing a no-op.
+            log.info(
+                "%s: deterministic `ruff format` produced no changes — falling "
+                "through to ci-fix agent",
+                ticket.id,
+            )
+            return None
+
+        remote_url = _resolve_remote_url(ctx.settings, ctx.repo_config)
+        token = github_push_token(ctx.settings, repo_config=ctx.repo_config)
+        try:
+            git_ops.commit_all(repo, "style: apply ruff format (automated ci-fix)")
+            git_ops.push_with_lease(repo, branch, remote_url, token)
+        except subprocess.SubprocessError:
+            log.warning(
+                "%s: deterministic formatter commit/push failed — falling "
+                "through to ci-fix agent",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
+
+        try:
+            ctx.service.add_history_note(
+                ticket.id,
+                "**CI Fix Cycle**\n\n"
+                "Formatter-only CI failure detected; applied `ruff format` "
+                "deterministically (no LLM cycle) and pushed the reformat.",
+            )
+        except Exception:
+            log.exception(
+                "%s: failed to write deterministic-formatter history note",
+                ticket.id,
+            )
+        log.info(
+            "%s: deterministic `ruff format` pushed — returning to merge poll",
+            ticket.id,
+        )
+        return self._finalize_success(ticket, ctx, repo_dir, branch)
 
     def _ci_recovered_before_block(
         self,
