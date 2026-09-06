@@ -282,3 +282,38 @@ def classify_ci_failure(
         root_cause=_pick_root_cause(failing_summary, bucket, names),
         prevention_rule=DEFAULT_PREVENTION_RULES.get(bucket, ""),
     )
+
+
+# Buckets whose signature, present alongside a formatter signature, means the
+# failure is NOT formatter-only: a deterministic ``ruff format`` pass cannot
+# fix them. ``flaky-network`` and ``unknown`` are excluded — a transient/blip
+# or an unclassified line must not veto an otherwise-clean formatter signature.
+_NON_FORMATTER_BUCKETS: frozenset[str] = BUCKETS - {
+    "ruff-format",
+    "flaky-network",
+    "unknown",
+}
+
+_FORMATTER_PATTERNS: tuple[re.Pattern[str], ...] = dict(_BUCKET_PATTERNS)["ruff-format"]
+
+
+def is_formatter_only_failure(
+    failing: list[dict[str, Any]], failing_summary: str = ""
+) -> bool:
+    """Return ``True`` when the CI failure signature is *exclusively* a
+    ``ruff format --check`` reformat-needed failure.
+
+    Detects the formatter signature (``would reformat`` / ``N files would be
+    reformatted`` / ``ruff format``) in the failing check names + job-log
+    excerpt, and confirms no other tool's failure signature (lint, mypy,
+    pytest, vulture, …) is present. Only then can a deterministic
+    ``ruff format`` pass be expected to turn CI green on its own — so the
+    ci-fix stage may short-circuit the LLM agent.
+    """
+    hay = _haystack(failing, failing_summary)
+    if not any(p.search(hay) for p in _FORMATTER_PATTERNS):
+        return False
+    for name, patterns in _BUCKET_PATTERNS:
+        if name in _NON_FORMATTER_BUCKETS and any(p.search(hay) for p in patterns):
+            return False
+    return True

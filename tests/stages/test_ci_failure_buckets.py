@@ -13,6 +13,7 @@ from robotsix_mill.stages.ci_failure_buckets import (
     BUCKETS,
     DEFAULT_PREVENTION_RULES,
     classify_ci_failure,
+    is_formatter_only_failure,
 )
 
 _TESTS_CHECK = [{"name": "ci / tests", "conclusion": "failure"}]
@@ -160,6 +161,48 @@ def test_root_cause_picks_the_error_line_not_the_scaffolding():
 def test_every_bucket_has_a_default_rule_entry():
     assert set(DEFAULT_PREVENTION_RULES) == BUCKETS
     assert all(DEFAULT_PREVENTION_RULES[b] for b in BUCKETS - {"unknown"})
+
+
+# ---------------------------------------------------------------------------
+# formatter-only detection (deterministic ci-fix short-circuit)
+# ---------------------------------------------------------------------------
+
+
+def test_formatter_only_true_for_pure_reformat_signature():
+    summary = _summary(
+        "Run uv run ruff format --check src tests\n"
+        "Would reformat: src/robotsix_mill/stages/ci_fix.py\n"
+        "1 file would be reformatted, 412 files already formatted\n"
+        "##[error]Process completed with exit code 1."
+    )
+    assert is_formatter_only_failure(_TESTS_CHECK, summary) is True
+
+
+def test_formatter_only_false_when_no_formatter_signature():
+    summary = _summary(
+        "=================================== FAILURES ===================================\n"
+        "FAILED tests/stages/test_merge.py::test_x\n"
+        "1 failed, 2340 passed in 92.11s"
+    )
+    assert is_formatter_only_failure(_TESTS_CHECK, summary) is False
+
+
+def test_formatter_only_false_when_mixed_with_other_failures():
+    # Formatter *and* a pytest failure in the same log — a deterministic
+    # `ruff format` pass cannot turn CI green, so do not short-circuit.
+    summary = _summary(
+        "Would reformat: src/a.py\n"
+        "1 file would be reformatted\n"
+        "FAILED tests/test_x.py::test_y\n"
+        "1 failed, 10 passed"
+    )
+    assert is_formatter_only_failure(_TESTS_CHECK, summary) is False
+
+
+def test_formatter_only_false_when_signature_absent_from_check_name_only():
+    # No log excerpt: the bare check name is not enough to prove it is a
+    # formatter failure, so fall through conservatively.
+    assert is_formatter_only_failure(_TESTS_CHECK, "") is False
 
 
 # ---------------------------------------------------------------------------

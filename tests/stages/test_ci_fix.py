@@ -4255,3 +4255,148 @@ def test_ci_fix_mergeability_probe_failure_does_not_divert(tmp_path, monkeypatch
 
     out = CIFixStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
+
+
+# ---------------------------------------------------------------------------
+# Deterministic formatter-only pre-pass (short-circuits the LLM agent)
+# ---------------------------------------------------------------------------
+
+
+_FORMATTER_SUMMARY = "Would reformat: src/a.py\n1 file would be reformatted"
+
+
+def _formatter_only_check_status(monkeypatch):
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "ci / tests",
+                    "summary": _FORMATTER_SUMMARY,
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+
+
+def test_formatter_only_failure_short_circuits_agent(tmp_path, monkeypatch):
+    """A ruff-format-only failure is fixed deterministically without the agent."""
+    ctx = _gh(tmp_path)
+    _formatter_only_check_status(monkeypatch)
+
+    def _no_agent(**k):
+        raise AssertionError("ci-fix agent must not run for a formatter-only failure")
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.run_ci_fix_agent", _no_agent)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.subprocess.run",
+        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, b"", b""),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.has_changes", lambda repo: True
+    )
+    commits: list[str] = []
+    pushes: list[str] = []
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.commit_all",
+        lambda repo, msg: commits.append(msg),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda repo, branch, url, token: pushes.append(branch),
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert commits and "ruff format" in commits[0]
+    assert pushes == [f"mill/{t.id}"]
+
+
+def test_formatter_pass_no_changes_falls_through_to_agent(tmp_path, monkeypatch):
+    """When `ruff format` produces no diff, hand off to the LLM agent."""
+    ctx = _gh(tmp_path)
+    _formatter_only_check_status(monkeypatch)
+
+    agent_calls = {"n": 0}
+
+    def _agent(**k):
+        agent_calls["n"] += 1
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.run_ci_fix_agent", _agent)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.subprocess.run",
+        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, b"", b""),
+    )
+    # Formatter changed nothing → do not commit/push, run the agent instead.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.has_changes", lambda repo: False
+    )
+
+    def _no_commit(repo, msg):
+        raise AssertionError("must not commit when the formatter produced no changes")
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.git_ops.commit_all", _no_commit)
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert agent_calls["n"] == 1
+
+
+def test_non_formatter_failure_does_not_run_formatter(tmp_path, monkeypatch):
+    """A non-formatter failure must not trigger the deterministic pass."""
+    ctx = _gh(tmp_path)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "ci / tests",
+                    "summary": "1 failed, 2 passed\nFAILED tests/test_x.py::test_y",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+
+    def _no_format(cmd, **kw):
+        raise AssertionError("`ruff format` must not run for a non-formatter failure")
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.subprocess.run", _no_format)
+    agent_calls = {"n": 0}
+
+    def _agent(**k):
+        agent_calls["n"] += 1
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.run_ci_fix_agent", _agent)
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert agent_calls["n"] == 1
