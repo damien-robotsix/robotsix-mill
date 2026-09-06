@@ -963,7 +963,11 @@ class PeriodicPassesMixin(_WorkerBase):
         Cancelling the supervisor cancels every child loop (worker.stop()).
         """
         from ...agents.bespoke_loader import load_bespoke_definitions
-        from ...agents.periodic_loader import discover_periodic_workflows
+        from ...agents.periodic_loader import (
+            PeriodicResolutionFailure,
+            PeriodicResolutionFailureTracker,
+            discover_periodic_workflows,
+        )
         from ...agents.runners.member_sync_runner import run_member_sync_pass
         from ...agents.runners.periodic_runner import _clone_token
         from ...vcs import git_ops
@@ -1004,6 +1008,13 @@ class PeriodicPassesMixin(_WorkerBase):
             for task, _ in running.values():
                 task.cancel()
             running.clear()
+
+        # Cross-cycle tracker for dead periodic-config files (a since-removed
+        # built-in's leftover presence file, a bespoke file missing its
+        # system_prompt, etc). Persists across cycles for this supervisor so a
+        # repeatedly-failing file is escalated to a board ticket once instead
+        # of only spamming the log every cycle.
+        failure_tracker = PeriodicResolutionFailureTracker()
 
         try:
             # Skip the random initial delay: spawning bespoke tasks
@@ -1130,7 +1141,10 @@ class PeriodicPassesMixin(_WorkerBase):
                     ).is_file()
 
                     # (a) Unified per-repo periodic workflows.
-                    for wf in discover_periodic_workflows(clone_dir):
+                    resolution_failures: list[PeriodicResolutionFailure] = []
+                    for wf in discover_periodic_workflows(
+                        clone_dir, failures=resolution_failures
+                    ):
                         if not wf.enabled:
                             continue
                         if wf.kind == "mill_only" and not _is_mill:
@@ -1168,6 +1182,17 @@ class PeriodicPassesMixin(_WorkerBase):
                                 board_id,
                                 wf.name,
                             )
+
+                    # Escalate dead periodic-config files: the tracker
+                    # rate-limits the per-cycle warning and returns only files
+                    # that have failed for enough consecutive cycles to file a
+                    # deduplicated board ticket (self-mooting once the file is
+                    # fixed or removed).
+                    for failure in failure_tracker.observe(resolution_failures):
+                        await self._file_periodic_config_ticket(
+                            repo_config, clone_dir, failure
+                        )
+
                     # (b) Legacy bespoke definitions (gated on the master switch).
                     if settings.bespoke_discovery_interval_seconds > 0:
                         for defn in load_bespoke_definitions(clone_dir):
@@ -1214,3 +1239,74 @@ class PeriodicPassesMixin(_WorkerBase):
             # Supervisor cancelled (worker.stop() or unexpected) ->
             # tear down every child loop so nothing keeps running.
             _cancel_running()
+
+    async def _file_periodic_config_ticket(
+        self,
+        repo_config: RepoConfig,
+        clone_dir: Path,
+        failure: Any,
+    ) -> None:
+        """File a deduplicated board ticket for a dead periodic-config file.
+
+        Called by the supervisor only after a file has failed to resolve for
+        enough consecutive cycles (see
+        :class:`~...agents.periodic_loader.PeriodicResolutionFailureTracker`).
+        Deduplicates by normalized title against recent ``periodic_config``
+        proposals so a still-broken file doesn't refile every worker restart.
+        Best-effort — a failure here never crashes the supervisor.
+        """
+        from ...core.dedup import normalize
+        from ...core.models import SourceKind, Ticket
+        from ...core.service import TicketService
+
+        settings = self.ctx.settings
+        board_id = repo_config.board_id
+        try:
+            rel = str(failure.path.relative_to(clone_dir))
+        except ValueError:
+            rel = failure.path.name
+        title = f"Dead periodic config: {rel}"
+
+        def _create() -> str | None:
+            service = TicketService(settings, board_id=board_id)
+            key = normalize(title)[:60]
+            recent: list[Ticket] = service.recent_proposals_for(
+                SourceKind.PERIODIC_CONFIG, limit=200
+            )
+            for t in recent:
+                if normalize(t.title)[:60] == key:
+                    return None  # already filed — dedup
+            body = (
+                f"The per-repo periodic-workflow file `{rel}` has failed to "
+                "resolve on every discovery cycle and is being skipped "
+                "indefinitely.\n\n"
+                f"Resolution error: {failure.reason}\n\n"
+                "This is usually a leftover presence file for a since-removed "
+                "built-in periodic, or a custom periodic missing a required "
+                "`system_prompt`. Fix the file so it resolves, or delete it "
+                "if the workflow is no longer wanted. This ticket self-moots "
+                "once the file resolves or is removed."
+            )
+            ticket = service.create(
+                title=title,
+                description=body,
+                source=SourceKind.PERIODIC_CONFIG,
+            )
+            return ticket.id
+
+        try:
+            ticket_id = await self._tracked_to_thread(_create)
+        except Exception:
+            log.exception(
+                "periodic supervisor (%s): failed to file dead-config ticket for %s",
+                board_id,
+                failure.path,
+            )
+            return
+        if ticket_id:
+            log.info(
+                "periodic supervisor (%s): filed dead-config ticket %s for %s",
+                board_id,
+                ticket_id,
+                failure.path,
+            )
