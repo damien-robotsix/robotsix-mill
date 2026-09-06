@@ -216,8 +216,17 @@ async def test_per_repo_cleanup_deletes_only_eligible(
     # the first sleep.
     loop_task = asyncio.create_task(w._stale_branch_cleanup_loop())
 
-    # Wait long enough for one iteration to complete, then cancel.
-    await asyncio.sleep(0.2)
+    # Wait deterministically for the iteration to delete — a fixed sleep
+    # races the loop on a loaded runner (main went red on exactly that:
+    # the assert saw [] while the repr rendered after the append landed,
+    # producing an "identical lists differ" failure; 2026-09-06).
+    for _ in range(200):
+        if fake.deleted:
+            break
+        await asyncio.sleep(0.05)
+    # Let the iteration finish scanning the remaining branches so an
+    # over-eager delete would still be caught by the assertion below.
+    await asyncio.sleep(0.1)
     loop_task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await loop_task
