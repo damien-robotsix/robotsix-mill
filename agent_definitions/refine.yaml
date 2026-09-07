@@ -11,7 +11,17 @@ description: >-
 
 category: pipeline
 
-level: 2
+# Level 3 = the top tier on BOTH provider slots (Claude: fable-5; OpenRouter
+# fallback: deepseek pro). Refine authors the spec every later stage trusts,
+# and level 2 degrades to deepseek-FLASH on the fallback slot: on 2026-09-07
+# a level-2 refine running there lost the referent in a 62 KB prompt and
+# rewrote ticket …-a144 into an unrelated task. Operator decision 2026-09-07:
+# refine defaults to level 3. Trivial-scope and forced-cheap re-refines still
+# use ``refine_trivial_model_level``; ``settings.agent_levels.refine`` still
+# overrides this default. Note the Claude model-alias routing
+# (``refine_subscription_model_*``) is consumed by the level-2 branch only —
+# at level 3 the tier's own model is used as-is.
+level: 3
 # Read-only tools for codebase exploration (conditional on repo_dir).
 # The refine stage provides a local clone; tools let the agent ground
 # the spec in real file paths, patterns, and constraints.
