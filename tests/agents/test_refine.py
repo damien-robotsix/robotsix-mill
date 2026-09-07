@@ -2573,8 +2573,8 @@ def test_run_refine_agent_no_refine_level_leaves_level_unchanged(
 
 
 def test_run_refine_agent_passes_refine_model_sonnet(monkeypatch, settings, tmp_path):
-    """When refine_model='sonnet' is passed, a non-downgraded refine build
-    forwards model='sonnet' to build_agent_from_definition."""
+    """When refine_model='sonnet' is passed on the level-2 (Claude alias)
+    branch, the build forwards model='sonnet' to build_agent_from_definition."""
     import robotsix_mill.agents.base as base_module
     import robotsix_mill.agents.retry as retry_module
 
@@ -2599,6 +2599,7 @@ def test_run_refine_agent_passes_refine_model_sonnet(monkeypatch, settings, tmp_
         title="Test",
         draft="test draft",
         repo_dir=repo_dir,
+        refine_level=2,
         refine_model="sonnet",
     )
 
@@ -2635,6 +2636,7 @@ def test_run_refine_agent_passes_refine_model_opus(monkeypatch, settings, tmp_pa
         title="Test",
         draft="test draft",
         repo_dir=repo_dir,
+        refine_level=2,
         refine_model="opus",
     )
 
@@ -2686,6 +2688,44 @@ def test_run_refine_agent_downgrade_skips_model_override(
     assert captured_overrides[0].get("level") == 1, (
         f"Expected level=1 override still present, got {captured_overrides[0]}"
     )
+
+
+def test_run_refine_agent_default_level_ignores_model_alias(
+    monkeypatch, settings, tmp_path
+):
+    """At the YAML default level (3 since 2026-09-07) the Claude model-alias
+    hook does not apply: the tier's own model is used as-is, so a passed
+    refine_model must NOT reach build_agent_from_definition."""
+    import robotsix_mill.agents.base as base_module
+    import robotsix_mill.agents.retry as retry_module
+
+    captured_overrides: list[dict] = []
+
+    def fake_build_agent(*a, **kw):
+        captured_overrides.append(kw)
+        return _simple_agent()
+
+    monkeypatch.setattr(base_module, "build_agent_from_definition", fake_build_agent)
+    monkeypatch.setattr(
+        retry_module,
+        "run_agent",
+        lambda agent, make_run, *, what="model call", sleep=None: make_run(agent),
+    )
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+
+    refining.run_refine_agent(
+        settings=settings,
+        title="Test",
+        draft="test draft",
+        repo_dir=repo_dir,
+        refine_model="sonnet",
+    )
+
+    assert len(captured_overrides) == 1
+    assert "model" not in captured_overrides[0]
+    assert "level" not in captured_overrides[0]
 
 
 def test_run_refine_agent_no_refine_model_no_override(monkeypatch, settings, tmp_path):
