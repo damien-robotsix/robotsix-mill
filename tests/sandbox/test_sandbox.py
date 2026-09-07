@@ -215,6 +215,10 @@ def test_sandbox_never_exposes_management_plane(tmp_path, monkeypatch):
         tmp_path,
         data_dir="/data",
         sandbox_data_mount="/host/.data",
+        # Keep the shared package-cache mount out of the argv so the bind
+        # assertion below sees only this ticket's repo mount, regardless of
+        # whether the ambient data-dir happens to be writable.
+        sandbox_package_cache=False,
     )
     seen = {}
 
@@ -571,7 +575,11 @@ def test_extra_packages_empty_list_no_prefix(tmp_path, monkeypatch):
 
 def test_extra_packages_pip_only_keeps_readonly(tmp_path, monkeypatch):
     """Only pip: packages → --read-only PRESENT, pip install in prefix, no apt."""
-    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="")
+    # Disable the shared cache so the per-call `pip install --user` fallback
+    # (not the cached-install path) is exercised deterministically.
+    s = _settings(
+        tmp_path, data_dir="/data", sandbox_proxy_url="", sandbox_package_cache=False
+    )
     seen = {}
 
     def fake_run(argv, **kw):
@@ -712,7 +720,11 @@ def test_extra_packages_prefix_order(tmp_path, monkeypatch):
 
 def test_extra_packages_error_resilience(tmp_path, monkeypatch):
     """Prefix uses || echo "WARNING:" guards for each package."""
-    s = _settings(tmp_path, data_dir="/data", sandbox_proxy_url="")
+    # Disable the shared cache so the per-call pip install path (which carries
+    # the per-package WARNING guard) is exercised, not the cached-install path.
+    s = _settings(
+        tmp_path, data_dir="/data", sandbox_proxy_url="", sandbox_package_cache=False
+    )
     seen = {}
 
     def fake_run(argv, **kw):
