@@ -119,6 +119,61 @@ def load_settings_block() -> dict[str, Any]:
             keys = block["openrouter"].setdefault("keys", {})
             if "robotsix-mill" not in keys:
                 keys["robotsix-mill"] = flat_key
+    return migrate_v0_13_settings_block(block)
+
+
+# v0.13.0 (llmio 3-level provider-failover model selection, #3084) renumbered
+# agent capability levels from a 1..5 scheme to a 1..3 scheme and renamed the
+# claude_exhaustion_paid_fallback setting to provider_failover_enabled.
+# Old levels collapsed per: 1→1, 2→1, 3→2, 4→2, 5→3.
+_OLD_TO_NEW_AGENT_LEVEL = {1: 1, 2: 1, 3: 2, 4: 2, 5: 3}
+
+# Settings fields that carry a per-agent capability level in the old 1..5
+# numbering and must be remapped to the new 1..3 scheme at load time.
+_LEVEL_BEARING_FIELDS = (
+    "agent_levels",  # dict[str, int] keyed by agent definition name
+    "explore_model_level",
+    "trace_review_model_level",
+    "refine_trivial_model_level",
+)
+
+
+def migrate_v0_13_settings_block(block: dict[str, Any]) -> dict[str, Any]:
+    """Migrate a pre-v0.13.0 settings dict to the v0.13.0 surface.
+
+    Applies only when the removed ``claude_exhaustion_paid_fallback`` key is
+    present (that is the marker of a pre-0.13.0 config). Renames it to its
+    successor ``provider_failover_enabled`` (preserving the operator's opt-in
+    value) and remaps every level-bearing field from the old 1..5 numbering to
+    the new 1..3 scheme. New-scheme configs (which no longer carry the removed
+    key) are returned unchanged, so the migration is idempotent.
+    """
+    if not isinstance(block, dict) or "claude_exhaustion_paid_fallback" not in block:
+        return block
+
+    block = dict(block)
+    # Rename the removed setting, preserving the operator's paid-failover choice.
+    block.setdefault(
+        "provider_failover_enabled",
+        block.pop("claude_exhaustion_paid_fallback"),
+    )
+
+    def _remap(value: Any) -> Any:
+        try:
+            level = int(value)
+        except TypeError, ValueError:
+            return value
+        return _OLD_TO_NEW_AGENT_LEVEL.get(level, level)
+
+    if "agent_levels" in block and isinstance(block["agent_levels"], dict):
+        block["agent_levels"] = {
+            name: _remap(level) for name, level in block["agent_levels"].items()
+        }
+    for field in _LEVEL_BEARING_FIELDS:
+        if field == "agent_levels" or field not in block:
+            continue
+        block[field] = _remap(block[field])
+
     return block
 
 

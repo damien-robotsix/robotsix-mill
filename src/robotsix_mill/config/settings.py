@@ -329,6 +329,28 @@ class Settings(
         log.warning("Dropped removed config keys: %s", present)
         return {k: v for k, v in data.items() if k not in removed}
 
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_v0_13_config(cls, data: Any) -> Any:
+        """Migrate a pre-v0.13.0 config dict onto the v0.13.0 surface.
+
+        v0.13.0 (llmio 3-level provider-failover, #3084) renumbered agent
+        capability levels from 1..5 to 1..3 and renamed
+        ``claude_exhaustion_paid_fallback`` → ``provider_failover_enabled``.
+        When the raw dict still carries the removed key (the pre-0.13.0
+        marker), rename it (preserving the value) and remap the level-bearing
+        fields so the config loads under ``extra="forbid"`` without an outage.
+        New-scheme dicts are returned unchanged — the migration is idempotent.
+
+        The file-load path already migrates in
+        :func:`~robotsix_mill.config.loader.load_settings_block` (before the
+        JSON source filters unknown keys); this validator covers direct
+        construction (``Settings(**raw)`` / ``robotsix_config.load_config``).
+        """
+        from .loader import migrate_v0_13_settings_block
+
+        return migrate_v0_13_settings_block(data)
+
     # -- interval minimums ---------------------------------------------
 
     @field_validator("trace_health_interval_seconds")
