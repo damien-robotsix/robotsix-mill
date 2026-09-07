@@ -300,14 +300,20 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         # duplicate dispatch that slips past the guard below is visible
         # on /active instead of overwriting the entry it collided with.
         self._active: dict[tuple[str, str], dict[str, Any]] = {}
-        # (ticket_id, stage) pairs currently executing in THIS process.
-        # ``_pending`` guards the queue against duplicate *enqueues*;
-        # nothing guarded duplicate *dispatch*, so two consumers could run
-        # the same ticket+stage at once — observed on prod 2026-08-25 with
-        # three implement runs on one ticket in a 3h window, two of them
-        # live simultaneously, racing on the same mill/<ticket> branch and
-        # holding a sandbox slot each.
-        self._in_flight: set[tuple[str, str]] = set()
+        # ticket ids currently executing a stage in THIS process. Keyed on
+        # the ticket id ALONE (not (ticket, stage)): while ANY stage of a
+        # ticket is running, no second run of that ticket may start — even
+        # for a different stage. ``_pending`` guards the queue against
+        # duplicate *enqueues* but is discarded on the pop-time stale-rank
+        # and requeue paths, so a second queue entry can pop for a ticket
+        # mid-processing; when the first run's completion transitions the
+        # state, a (ticket, stage)-keyed claim no longer collides and a
+        # second run of the NEXT stage slips through (observed 2026-09-07:
+        # refine and implement each ran twice on one ticket; the duplicate
+        # implement re-created the workspace under the live run → BLOCKED).
+        # A ticket-id-only claim closes that gap and, being held for the
+        # whole run, also serialises workspace prepare for the ticket.
+        self._in_flight: set[str] = set()
         # Global gate capping total concurrently-running stages across all
         # boards. Created in start() to bind to the running event loop.
         # Priority-aware: the per-board queues rank tickets, but every board
@@ -474,37 +480,40 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
             return None
 
     def _try_claim(self, ticket_id: str, state: State | None) -> tuple[str, str] | None:
-        """Reserve ``(ticket_id, stage)`` for one run, or ``None`` if taken.
+        """Reserve *ticket_id* for one run, or ``None`` if a run is already live.
 
-        ``_pending`` guards the queue against duplicate *enqueues*; nothing
-        guarded duplicate *dispatch*, so two consumers could run the same
-        ticket+stage concurrently.  Observed on prod 2026-08-25: one ticket
-        had three distinct implement runs in a 3h window, two of them live
-        at once (the tell is heartbeat ``elapsed`` going backwards, because
-        each run reports its own age).  They race on the same
-        ``mill/<ticket>`` branch and each holds a sandbox slot, which feeds
-        host overload.
+        The claim is keyed on the ticket id ALONE, so while ANY stage of a
+        ticket is running in this process no second run of that ticket may
+        start — even a different stage. ``_pending`` only de-dupes *enqueues*
+        and is discarded on the pop-time stale-rank / requeue paths, so a
+        second queue entry can pop for a ticket that is mid-processing; once
+        the live run's completion transitions the state, a claim keyed on
+        ``(ticket, stage)`` would no longer collide and a second run of the
+        NEXT stage would slip through. Observed 2026-09-07: refine and
+        implement each ran twice on one ticket; the duplicate implement
+        re-created the workspace under the live run and the ticket ended
+        BLOCKED on the race. Keying on the ticket id closes that gap and, as
+        the claim is held for the whole run, also serialises workspace
+        prepare for the ticket.
 
         Dropping the duplicate cannot starve the ticket: the run that holds
-        the claim is doing the same work, and its completion re-enqueues
-        whatever comes next through the normal transition path.
+        the claim is doing the work, and its completion re-enqueues whatever
+        comes next through the normal transition path.
 
-        The stage key is derived from *state* — the same input
-        ``process_ticket`` uses to pick a stage — so it matches the key the
-        active map records for the run.
+        The returned tuple carries *state* so the caller can label / release
+        the ``_active`` entry, but only the ticket id gates admission.
         """
-        claim = (ticket_id, state.value if state else "")
-        if claim in self._in_flight:
+        if ticket_id in self._in_flight:
             log.warning(
-                "%s: stage %s already in flight in this process — dropping "
-                "the duplicate dispatch. The live run covers it; a second "
-                "would race on the same branch and hold another sandbox slot.",
+                "%s: a stage is already in flight in this process — dropping "
+                "the duplicate dispatch. The live run covers it; a second run "
+                "would race on the same branch/workspace and hold another "
+                "sandbox slot.",
                 ticket_id,
-                claim[1] or "(unknown)",
             )
             return None
-        self._in_flight.add(claim)
-        return claim
+        self._in_flight.add(ticket_id)
+        return (ticket_id, state.value if state else "")
 
     async def _run(self, board_id: str = "") -> None:
         """Consume tickets from one repo's queue.
@@ -779,9 +788,11 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 # merge-poll cycle) is accepted again.
                 self._pending.discard(ticket_id)
                 # Release the claim unconditionally — a leaked claim would
-                # silently block every future run of this ticket+stage.
+                # silently block every future run of this ticket. The claim
+                # is keyed on the ticket id alone (claimed[0]); the tuple's
+                # stage half is only used to clear the /active entry.
                 if claimed is not None:
-                    self._in_flight.discard(claimed)
+                    self._in_flight.discard(claimed[0])
                     self._active.pop(claimed, None)
                 queue.task_done()
 

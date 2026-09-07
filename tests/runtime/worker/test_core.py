@@ -3175,30 +3175,35 @@ def test_try_claim_rejects_a_second_run_of_the_same_ticket_stage(ctx):
     assert w._try_claim("t-1", State.READY) is None
 
 
-def test_try_claim_allows_a_different_stage_of_the_same_ticket(ctx):
-    """Only the identical (ticket, stage) pair is blocked.
+def test_try_claim_blocks_a_different_stage_while_a_run_is_live(ctx):
+    """The claim keys on the ticket id ALONE, not (ticket, stage).
 
-    A ticket that has genuinely moved on is a different unit of work and
-    must not be held back by the claim its previous stage took.
+    While any stage of a ticket is running in this process, a second run
+    of that ticket must be rejected even for a *different* stage. This is
+    the fix for the pop-time requeue race (ticket …-0629): once the live
+    run transitioned the state, a (ticket, stage)-keyed claim no longer
+    collided and a second run of the next stage slipped through — refine
+    and implement each ran twice on one ticket.
     """
     w = Worker(ctx)
 
     assert w._try_claim("t-1", State.READY) is not None
-    assert w._try_claim("t-1", State.FIXING_CI) is not None
+    assert w._try_claim("t-1", State.FIXING_CI) is None
 
 
 def test_try_claim_is_reusable_after_release(ctx):
-    """Releasing a claim frees the pair again.
+    """Releasing a claim frees the ticket again.
 
     The release lives in the consumer's `finally`, so this is the property
     that keeps a leaked claim from silently blocking every future run of a
-    ticket+stage.
+    ticket. The claim gates on the ticket id (``claim[0]``); the release
+    discards that.
     """
     w = Worker(ctx)
 
     claim = w._try_claim("t-1", State.DRAFT)
     assert claim is not None
-    w._in_flight.discard(claim)
+    w._in_flight.discard(claim[0])
     assert w._try_claim("t-1", State.DRAFT) == claim
 
 
@@ -3212,3 +3217,119 @@ def test_try_claim_handles_a_ticket_with_no_state(ctx):
 
     assert w._try_claim("t-1", None) == ("t-1", "")
     assert w._try_claim("t-1", None) is None
+
+
+async def test_duplicate_across_requeue_path_runs_stage_once_per_state(
+    ctx, service, monkeypatch
+):
+    """A duplicate queue entry that pops WHILE a run is live is dropped —
+    even after the live run has transitioned the ticket to a new state.
+
+    Regression (ticket …-0629): the pop-time stale-rank requeue path
+    discards ``_pending``, so a second queue entry survives for a ticket
+    already mid-processing. Once the live run transitioned the state, the
+    old ``(ticket, stage)``-keyed claim no longer collided and the second
+    entry started a second run of the NEXT stage (refine + implement each
+    ran twice on one ticket, racing on the same workspace → BLOCKED). The
+    ticket-id-only claim keeps this to exactly one run per state.
+    """
+    monkeypatch.setattr(Worker, "_repo_config_for_ticket", lambda self, tid: None)
+    monkeypatch.setattr(Worker, "_check_progress", lambda self, *a, **k: None)
+
+    t = service.create("dup across requeue")
+    assert t.state is State.DRAFT
+
+    seen: list[State] = []
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def fake_process_ticket(ticket_id, p_ctx, active_map=None):
+        cur = service.get(ticket_id).state
+        seen.append(cur)
+        if cur is State.DRAFT:
+            # Model the live run's completion advancing the state, then
+            # hold the claim so the duplicate entry pops while we're live.
+            service.transition(ticket_id, State.READY, "refined")
+            started.set()
+            await release.wait()
+
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.process_ticket", fake_process_ticket
+    )
+
+    w = Worker(ctx)
+    board = service.board_id
+    # Entry 1 via the normal path, then a second stale entry forced onto
+    # the queue at the DRAFT rank — exactly what the requeue path leaves
+    # behind after discarding _pending for a mid-processing ticket.
+    w.enqueue(t.id)
+    w._enqueue_seq += 1
+    w._queue_for(board).put_nowait((1, w._stage_rank(t), w._enqueue_seq, t.id))
+
+    # Consumer 1 claims entry 1 and blocks holding the claim (state → READY).
+    task1 = asyncio.create_task(w._run(board))
+    await asyncio.wait_for(started.wait(), timeout=5)
+    assert seen == [State.DRAFT]
+
+    # Consumer 2 pops the stale duplicate: its rank (DRAFT) no longer
+    # matches the current rank (READY) → the pop-time requeue path fires,
+    # re-enqueues, and on re-pop the ticket-id claim (held by consumer 1)
+    # drops it. No second run must start.
+    task2 = asyncio.create_task(w._run(board))
+    await asyncio.sleep(0.2)
+    assert seen == [State.DRAFT], (
+        f"the duplicate entry must be dropped, not run again; saw {seen}"
+    )
+
+    release.set()
+    await asyncio.sleep(0.1)
+    for task in (task1, task2):
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    assert service.get(t.id).state is State.READY
+    assert t.id not in w._in_flight
+
+
+async def test_completed_outcome_recorded_when_ticket_parked_mid_run(
+    ctx, service, monkeypatch
+):
+    """A stage that completes AFTER the ticket was parked to BLOCKED must
+    not crash the consumer — the outcome is recorded to history and the
+    ticket stays blocked.
+
+    Regression (ticket …-0629): when the operator (or a sibling run)
+    changed the state under a live stage, applying ``outcome.next_state``
+    raised TransitionError, which escaped ``_run`` as
+    ``processing … crashed`` and the completed work was lost with nothing
+    on the ticket to show a run had finished.
+    """
+
+    class ParkThenComplete(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, ticket, run_ctx):
+            # Operator parks the ticket while the stage is "running".
+            run_ctx.service.transition(ticket.id, State.BLOCKED, "operator parked")
+            return Outcome(State.HUMAN_ISSUE_APPROVAL, "refined — ready for approval")
+
+    monkeypatch.setitem(registry.STAGES, "refine", ParkThenComplete())
+
+    t = service.create("parked mid-run")
+    assert t.state is State.DRAFT
+
+    # Must NOT raise — the old code let the TransitionError propagate out
+    # of process_ticket and crash the consumer.
+    await process_ticket(t.id, ctx)
+
+    refreshed = service.get(t.id)
+    assert refreshed.state is State.BLOCKED, "an operator park must be preserved"
+    notes = [e.note for e in service.history(t.id) if e.note]
+    assert any("stage outcome discarded" in n for n in notes), (
+        f"the completed outcome must be recorded to history; notes={notes}"
+    )
+    assert any("human_issue_approval" in n.lower() for n in notes), (
+        "the discarded note must record the outcome's next_state"
+    )
