@@ -150,8 +150,9 @@ def test_real_refine_yaml_builds(monkeypatch):
 
     assert kwargs["name"] == "refine"
     assert kwargs["system_prompt"] == definition.system_prompt
-    # refine runs on capability level 2 (the Claude SDK workhorse, opus).
-    assert kwargs["level"] == definition.level == 2
+    # refine runs on capability level 3 (top tier on both provider slots:
+    # Claude fable-5 / deepseek pro) — operator decision 2026-09-07, #3181.
+    assert kwargs["level"] == definition.level == 3
     assert kwargs["web_knowledge"] is True
     assert kwargs["report_issue"] is True
     assert kwargs["retries"] == 2
