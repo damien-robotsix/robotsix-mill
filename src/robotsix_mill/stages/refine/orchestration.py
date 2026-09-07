@@ -42,7 +42,7 @@ from ..pause import (
     load_conversation_state,
     save_conversation_state,
 )
-from . import _checkpoint, _triage
+from . import _checkpoint, _drift, _triage
 from .helpers import (
     OPERATOR_SENDBACK_PREFIX,
     _build_deployed_log_summary,
@@ -226,6 +226,13 @@ class RefineAgentMixin:
         outcome = cast(
             Outcome | None, _reconcile.gitignored_guard(ticket, result, repo_dir)
         )
+        if outcome is not None:
+            return outcome
+
+        # Deterministic subject check BEFORE any title/description/memory
+        # side-effect: a refine that drifted onto another task must not
+        # overwrite the ticket (2026-09-07, ticket …-a144).
+        outcome = _drift.spec_drift_guard(ticket, title, draft, ws, s, result)
         if outcome is not None:
             return outcome
 

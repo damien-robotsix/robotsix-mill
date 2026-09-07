@@ -356,6 +356,29 @@ class _StagesSettings(BaseModel):
         default=150,
         ge=0,
     )
+    # Deterministic subject check on the refine result. A refine run that
+    # lost the referent (observed 2026-09-07 under level-1 fallback: the
+    # draft asked to fix the auto-approve fallback, the refined spec added
+    # docstrings to config/repo_settings.py) rewrote the ticket into another
+    # task with no history event. The guard requires the refined spec to
+    # mention a minimum share of the title's anchor terms (prefix-stemmed);
+    # otherwise the result is discarded and the ticket parks in
+    # human_issue_approval with both titles in the note.
+    refine_drift_guard_enabled: bool = Field(
+        description="When true, a refined spec that no longer mentions the ticket's subject is rejected instead of persisted.",
+        default=True,
+    )
+    refine_drift_guard_min_overlap: float = Field(
+        description="Minimum share (0-1) of the original title's anchor terms the refined spec must mention.",
+        default=0.2,
+        ge=0.0,
+        le=1.0,
+    )
+    refine_drift_guard_min_anchors: int = Field(
+        description="Minimum number of anchor terms needed before the drift guard judges a refine result.",
+        default=3,
+        ge=1,
+    )
     # Claude model alias used when the findings-present downgrade fires.
     # Defaults to sonnet (same tier the "simple" path already trusts). Only
     # the Claude-SDK branch (level 4) consumes this; OpenRouter levels 1/3 ignore it.
