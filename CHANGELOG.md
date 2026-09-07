@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.13.0...v0.13.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* **explore:** size the explore sub-agent timeout to observed Claude SDK latency (30s → 90s) ([#3168](https://github.com/damien-robotsix/robotsix-mill/issues/3168)) ([f915cb6](https://github.com/damien-robotsix/robotsix-mill/commit/f915cb607f328e96cce73876a317cacdc88416a2))
+* **tools:** accept an ignored 'description' label on run_command ([#3169](https://github.com/damien-robotsix/robotsix-mill/issues/3169)) ([efaec71](https://github.com/damien-robotsix/robotsix-mill/commit/efaec7173fec7ff7b3949a2f8fc5470a05fc44b3))
+
 ## [0.13.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.12.0...v0.13.0) (2026-09-06)
 
 
