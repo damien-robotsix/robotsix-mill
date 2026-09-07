@@ -2081,6 +2081,27 @@
           "title": "Refine Delta Reuse Enabled",
           "type": "boolean"
         },
+        "refine_drift_guard_enabled": {
+          "default": true,
+          "description": "When true, a refined spec that no longer mentions the ticket's subject is rejected instead of persisted.",
+          "title": "Refine Drift Guard Enabled",
+          "type": "boolean"
+        },
+        "refine_drift_guard_min_anchors": {
+          "default": 3,
+          "description": "Minimum number of anchor terms needed before the drift guard judges a refine result.",
+          "minimum": 1,
+          "title": "Refine Drift Guard Min Anchors",
+          "type": "integer"
+        },
+        "refine_drift_guard_min_overlap": {
+          "default": 0.2,
+          "description": "Minimum share (0-1) of the original title's anchor terms the refined spec must mention.",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Refine Drift Guard Min Overlap",
+          "type": "number"
+        },
         "refine_dynamic_limit_min": {
           "default": 12,
           "description": "Floor for dynamic request-limit on large/complex specs.",

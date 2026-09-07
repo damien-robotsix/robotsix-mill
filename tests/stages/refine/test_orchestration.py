@@ -3553,3 +3553,55 @@ def test_refine_produced_no_spec_routes_to_blocked(ctx_factory, monkeypatch, tmp
 
     assert out.next_state is State.BLOCKED
     assert "no usable spec" in out.note
+
+
+# ===========================================================================
+# spec-drift guard (2026-09-07 ticket …-a144: refine rewrote the ticket)
+# ===========================================================================
+
+
+def test_drifted_refine_parks_without_touching_title_or_draft(
+    ctx_factory, monkeypatch, tmp_path
+):
+    ctx = ctx_factory()
+    original_title = (
+        "Auto-approve 'triage failed' fallback routes trivially-approvable "
+        "docs-only tickets to human_issue_approval"
+    )
+    t = _ticket(
+        ctx,
+        title=original_title,
+        body=(
+            "The auto-approve classifier reached APPROVE for five docs-only "
+            "SECURITY.md tickets, yet each ended as 'auto-approve: triage "
+            "failed — falling back to human approval' and parked in "
+            "human_issue_approval instead of ready."
+        ),
+    )
+    draft_before = ctx.service.workspace(t).read_description()
+    _apply_default_mocks(
+        monkeypatch,
+        run_refine_agent=_mock_refine_returns(
+            RefineResult(
+                title="Add missing docstrings to config/repo_settings.py",
+                spec_markdown=(
+                    "## Problem\n\nThe docstring_coverage periodic gate flagged "
+                    "config/repo_settings.py below the 100% target.\n\n## Scope\n\n"
+                    "Add one docstring per flagged function.\n\n"
+                    "## Acceptance criteria\n\n- 100% module docstring coverage."
+                ),
+                updated_memory="## Ledger\n- something the drifted run learned",
+            )
+        ),
+    )
+
+    out = _run_agent(ctx, t, tmp_path, title=original_title)
+
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert "refine drift guard" in out.note
+    fresh = ctx.service.get(t.id)
+    assert fresh.title == original_title
+    assert ctx.service.workspace(t).read_description() == draft_before
+    assert (
+        ctx.service.workspace(t).artifacts_dir / "refine-drift-rejected.md"
+    ).exists()
