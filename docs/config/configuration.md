@@ -389,7 +389,7 @@ Node + the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.subtask_request_limit` | `MILL_SUBTASK_REQUEST_LIMIT` | `30` | Per-subtask request cap for `spawn_subtask` sub-agents delegated by the coordinator |
 | `core.limits.explore_requests` | `MILL_EXPLORE_REQUEST_LIMIT` | `100` | Per-call request cap for the explore sub-agent |
 | `core.limits.explore_max_tokens` | `MILL_EXPLORE_MAX_TOKENS` | `4096` | Output token cap for explore sub-agent responses |
-| `core.limits.explore_timeout_seconds` | `MILL_EXPLORE_TIMEOUT_SECONDS` | `30.0` | Wall-clock timeout (seconds) for a single explore sub-agent call. Default 30 s. Minimum 1 s |
+| `core.limits.explore_timeout_seconds` | `MILL_EXPLORE_TIMEOUT_SECONDS` | `90.0` | Wall-clock timeout (seconds) for a single explore sub-agent call. Default 90 s. Minimum 1 s |
 | `core.limits.explore_model_level` | `MILL_EXPLORE_MODEL_LEVEL` | `1` | Capability level for the exploration sub-agent (1 = haiku on the Claude subscription). Claude-backed levels run the scout through the SDK tool loop, so `explore_request_limit` only bounds the OpenRouter fallback slot; the wall-clock timeout applies to both. Range 1–3 |
 | `core.limits.consult_requests` | `MILL_CONSULT_REQUEST_LIMIT` | `15` | Per-call request cap for the domain-expert consultation sub-agent |
 | `core.limits.test_requests` | `MILL_TEST_REQUEST_LIMIT` | `30` | Per-call request cap for the test sub-agent |

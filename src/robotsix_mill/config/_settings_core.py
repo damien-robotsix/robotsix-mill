@@ -467,10 +467,15 @@ class _CoreSettings(BaseModel):
         description="Maximum output tokens for the exploration sub-agent.",
     )
     explore_timeout_seconds: float = Field(
-        default=30.0,
+        default=90.0,
         ge=1.0,
         description="Wall-clock timeout (seconds) for a single explore sub-agent call.",
     )
+    # Sized from live data, 2026-09-05..07: successful explore calls on the
+    # Claude SDK cheap level take p50 20 s / p90 27 s (CLI spawn + tool loop),
+    # so the previous 30 s default killed 10 of 12 first attempts and failed
+    # 6 of them outright after 3×30 s — each timeout is a full haiku run
+    # discarded. 90 s (≈3× p90) leaves headroom without unbounding a hang.
     # The scout runs at the cheap level (haiku on the Claude subscription,
     # ~6.6 s median): it spends quota, not cash.  Claude-backed levels run
     # the scout through the SDK tool loop, so ``explore_request_limit``
