@@ -24,7 +24,7 @@ from typing import Any
 from ...config import RepoConfig, Settings, target_branch_for
 from ...forge.base import get_forge
 from ...vcs import git_ops
-from .periodic_runner import _forge_token
+from .periodic_runner import _clone_token
 
 log = logging.getLogger("robotsix_mill.repo_description_sync_runner")
 
@@ -143,7 +143,12 @@ def run_repo_description_sync_pass(  # noqa: C901 — sequential I/O pipeline: c
             forge_remote_url,
             clone_dir,
             target_branch_for(settings, repo_config),
-            _forge_token(settings, repo_config),
+            # Per-repo forge credential (GitHub App installation token /
+            # GitLab PAT), like every other periodic runner. The static
+            # ``forge_token`` secret is not installed on every repo: the
+            # hexarchy pass failed its clone with "could not read Username
+            # for 'https://github.com'" on 2026-09-07 and skipped silently.
+            _clone_token(settings, repo_config),
         )
     except subprocess.CalledProcessError as e:
         log.warning(
