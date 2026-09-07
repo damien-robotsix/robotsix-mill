@@ -902,6 +902,100 @@ def test_missing_config_file_falls_back_to_defaults(tmp_path, monkeypatch):
 
 
 # ===========================================================================
+#  v0.13.0 migration — agent level renumbering + provider_failover rename
+# ===========================================================================
+
+
+def test_v0_13_config_migration_remaps_levels_and_renames_setting(
+    tmp_path, monkeypatch
+):
+    """A pre-0.13.0 config (still carrying claude_exhaustion_paid_fallback
+    and old 1..5-scheme agent level values) loads cleanly under v0.13.0.
+
+    v0.13.0 (#3084) renumbered agent capability levels 1→1, 2→1, 3→2, 4→2,
+    5→3 and renamed claude_exhaustion_paid_fallback →
+    provider_failover_enabled. Loading such a config must neither raise a
+    ValidationError (agent_levels values must now be 1..3) nor trip
+    extra_forbidden on the removed key.
+    """
+    cfg = tmp_path / "config.json"
+    _write_config(
+        cfg,
+        {
+            # Removed in v0.13.0 → renamed, value preserved.
+            "claude_exhaustion_paid_fallback": True,
+            # Old 1..5-scheme per-agent levels → remapped to 1..3.
+            "agent_levels": {
+                "implement": 5,
+                "refine": 4,
+                "ci_fix": 3,
+                "review": 2,
+                "triage": 1,
+            },
+            # Old-scheme scalar level fields.
+            "explore_model_level": 2,
+            "trace_review_model_level": 4,
+            "refine_trivial_model_level": 3,
+            "api_port": 9125,
+        },
+    )
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+
+    s = Settings()
+    assert s.api_port == 9125
+    # The removed key is renamed (absent under its old name), value preserved.
+    assert not hasattr(s, "claude_exhaustion_paid_fallback")
+    assert s.provider_failover_enabled is True
+    # agent_levels remapped per 1→1, 2→1, 3→2, 4→2, 5→3.
+    assert s.agent_levels == {
+        "implement": 3,
+        "refine": 2,
+        "ci_fix": 2,
+        "review": 1,
+        "triage": 1,
+    }
+    # Scalar level fields remapped too.
+    assert s.explore_model_level == 1
+    assert s.trace_review_model_level == 2
+    assert s.refine_trivial_model_level == 2
+
+
+def test_v0_13_migration_is_idempotent_and_skips_new_scheme(tmp_path, monkeypatch):
+    """A config without the removed key (already-new-scheme) loads unchanged
+    — the migration must not double-remap valid 1..3 values."""
+    cfg = tmp_path / "config.json"
+    _write_config(
+        cfg,
+        {
+            "provider_failover_enabled": True,
+            "agent_levels": {"implement": 3, "refine": 1},
+            "explore_model_level": 1,
+            "api_port": 9126,
+        },
+    )
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+
+    s = Settings()
+    assert s.api_port == 9126
+    assert s.provider_failover_enabled is True
+    assert s.agent_levels == {"implement": 3, "refine": 1}
+    assert s.explore_model_level == 1
+
+
+def test_v0_13_migration_direct_construction_remaps(tmp_path):
+    """The before-validator covers direct Settings(**raw) construction too
+    (the load_settings_block hook only runs on the file path)."""
+    s = Settings(
+        claude_exhaustion_paid_fallback=False,
+        agent_levels={"implement": 4},
+        explore_model_level=5,
+    )
+    assert s.provider_failover_enabled is False
+    assert s.agent_levels == {"implement": 2}
+    assert s.explore_model_level == 3
+
+
+# ===========================================================================
 #  openrouter keys — canonical block migration
 # ===========================================================================
 
