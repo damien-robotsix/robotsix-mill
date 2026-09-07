@@ -878,7 +878,7 @@ def build_fs_tools(
         *,
         path: str,
         offset: int = 1,
-        limit: int = _DEFAULT_READ_LIMIT,
+        limit: int | None = _DEFAULT_READ_LIMIT,
     ) -> str:
         """⚠️  **BEFORE YOU CALL:** Check your conversation history
         first — if a full copy of *path*'s content is already visible
