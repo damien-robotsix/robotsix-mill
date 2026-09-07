@@ -671,6 +671,9 @@ refinement pass.
 | `gates.refine_subscription_model_complex` | `MILL_REFINE_SUBSCRIPTION_MODEL_COMPLEX` | `opus` | Claude alias for escalated (needs-exploration) level-3 refines |
 | `gates.refine_findings_downgrade_enabled` | `MILL_REFINE_FINDINGS_DOWNGRADE_ENABLED` | `true` | Downgrade Opus → cheaper Claude alias when triage findings are substantial (root cause already known) |
 | `gates.refine_findings_downgrade_min_chars` | `MILL_REFINE_FINDINGS_DOWNGRADE_MIN_CHARS` | `150` | Minimum stripped-character length of triage findings for the Opus downgrade to fire |
+| `gates.refine_drift_guard_enabled` | `MILL_REFINE_DRIFT_GUARD_ENABLED` | `true` | Reject a refined spec that no longer mentions the ticket's subject (park in human_issue_approval, keep draft/title) instead of persisting it |
+| `gates.refine_drift_guard_min_overlap` | `MILL_REFINE_DRIFT_GUARD_MIN_OVERLAP` | `0.2` | Minimum share (0–1) of the original title's anchor terms the refined spec must mention |
+| `gates.refine_drift_guard_min_anchors` | `MILL_REFINE_DRIFT_GUARD_MIN_ANCHORS` | `3` | Minimum number of title anchor terms before the drift guard judges a result |
 | `gates.refine_subscription_model_findings` | `MILL_REFINE_SUBSCRIPTION_MODEL_FINDINGS` | `sonnet` | Claude alias used when the findings-present downgrade fires |
 | `gates.max_re_refine_cycles_before_cheap` | `MILL_MAX_RE_REFINE_CYCLES_BEFORE_CHEAP` | `2` | Force cheap model after this many "changes requested" sendbacks; `0` disables |
 | `gates.delta_context_retry_enabled` | `MILL_DELTA_CONTEXT_RETRY_ENABLED` | `true` | When true, retry/audit/re-refine passes receive only the delta rather than full context |

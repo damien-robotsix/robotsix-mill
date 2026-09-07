@@ -277,6 +277,7 @@ modules:
       - src/robotsix_mill/stages/refine/orchestration.py
       - src/robotsix_mill/stages/refine/_checkpoint.py
       - src/robotsix_mill/stages/refine/_reconcile.py
+      - src/robotsix_mill/stages/refine/_drift.py
       - src/robotsix_mill/stages/refine/_result_paths.py
       - src/robotsix_mill/stages/refine/_triage.py
       - src/robotsix_mill/stages/refine/helpers.py
@@ -329,6 +330,7 @@ modules:
       - tests/stages/refine/test_checkpoint.py
       - tests/stages/refine/test_gates.py
       - tests/stages/refine/test_reconcile.py
+      - tests/stages/refine/test_drift.py
       - tests/stages/refine/test_result_paths.py
       - tests/stages/refine/test_triage.py
       - tests/stages/refine/test_triage_skip.py
