@@ -74,7 +74,7 @@ def _split(*children: dict, file_map=None) -> RefineResult:
 
 def _install_refine_spy(
     monkeypatch,
-    spec="## Problem\nx\n## Acceptance criteria\n- [ ] works\n",
+    spec=None,
 ):
     """Install a ``run_refine_agent`` spy and return a dict whose
     ``["called"]`` flips to ``True`` once the refine agent runs.
@@ -82,6 +82,11 @@ def _install_refine_spy(
     Lets the dedup-target-validation tests assert that refine proceeds
     (rather than the dedup guard short-circuiting to DONE) without
     re-declaring the full keyword signature in every test.
+
+    When *spec* is ``None`` the spy answers with a minimal spec that names
+    the ticket's title — the shape a real refine produces, and what the
+    refine spec-drift guard requires (a spec that never mentions its
+    subject is rejected as drift).
     """
     state = {"called": False}
 
@@ -100,7 +105,12 @@ def _install_refine_spy(
         **kwargs,
     ):
         state["called"] = True
-        return _single(spec)
+        body = (
+            spec
+            if spec is not None
+            else f"## Problem\n{title}\n## Acceptance criteria\n- [ ] works\n"
+        )
+        return _single(body)
 
     monkeypatch.setattr(refining, "run_refine_agent", spy)
     return state
