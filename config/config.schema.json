@@ -1400,7 +1400,7 @@
           "type": "integer"
         },
         "explore_timeout_seconds": {
-          "default": 30.0,
+          "default": 90.0,
           "description": "Wall-clock timeout (seconds) for a single explore sub-agent call.",
           "minimum": 1.0,
           "title": "Explore Timeout Seconds",
