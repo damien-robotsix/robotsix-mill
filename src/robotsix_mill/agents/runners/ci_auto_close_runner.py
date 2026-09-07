@@ -24,9 +24,10 @@ Green rule (per operator directive):
   * otherwise two consecutive green runs at-or-after the failing commit.
 
 Never touched: tickets whose workflow is still red (no green at-or-after the
-failing commit), tickets with a branch (an open MR with unmerged work — those
-keep their normal flow), and tickets whose failing run/commit can no longer
-be anchored to a run on the target branch (unverifiable — skip rather than
+failing commit), tickets whose branch has an OPEN MR (unmerged work — those
+keep their normal flow; a branch alone is NOT such evidence, see
+``_has_open_mr``), and tickets whose failing run/commit can no longer be
+anchored to a run on the target branch (unverifiable — skip rather than
 risk a false close).
 
 Deterministic: forge reads + ``service.mark_done`` (the escape hatch that
@@ -148,10 +149,6 @@ def _maybe_close(
     wf, target = _parse_workflow_branch(ticket, body)
     if not wf or not target:
         return False
-    # A ticket with a branch has an open MR with unmerged work — keep its
-    # normal flow (ci-failure monitor tickets have no branch).
-    if ticket.branch:
-        return False
 
     f_sha = _failing_head(body)
     if not f_sha:
@@ -159,6 +156,36 @@ def _maybe_close(
 
     try:
         forge = get_forge(settings, repo_config=repo_config)
+    except Exception:
+        log.warning(
+            "ci_auto_close: get_forge failed for repo %s, ticket %s",
+            getattr(repo_config, "repo_id", "?"),
+            ticket.id,
+            exc_info=True,
+        )
+        return False
+
+    # Keep the ticket's normal flow ONLY when its branch has an open MR
+    # with unmerged work.  A branch by itself proves nothing: implement
+    # sets ``ticket.branch`` the moment it starts, long before any MR
+    # exists.  Incident 2026-09-07 (mill ticket
+    # 20260907T144701Z-ci-failure-ci-on-main-ef8e): implement created the
+    # branch, misdiagnosed the red suite and parked the ticket BLOCKED
+    # with no PR; main's CI was green again from 14:58Z, yet the old
+    # ``if ticket.branch: return False`` skipped it every 15 min.
+    try:
+        if _has_open_mr(forge, ticket):
+            return False
+    except Exception:
+        log.warning(
+            "ci_auto_close: pr_status failed for repo %s, ticket %s",
+            getattr(repo_config, "repo_id", "?"),
+            ticket.id,
+            exc_info=True,
+        )
+        return False  # cannot tell whether an MR exists — skip, never guess
+
+    try:
         runs = forge.list_workflow_runs(branch=target)
     except Exception:
         log.warning(
@@ -175,6 +202,28 @@ def _maybe_close(
 
     _close(service, ticket.id, wf, target, green_runs)
     return True
+
+
+def _has_open_mr(forge: Any, ticket: Any) -> bool:
+    """Return True when *ticket*'s branch has an OPEN (unmerged) MR.
+
+    This is the same forge question the API's read-model ``pr_url`` field
+    answers (``runtime.deps._pr_url`` → ``forge.pr_status``); the row
+    itself stores no PR url, only ``branch``.  Every merge-family state
+    (IMPLEMENT_COMPLETE, HUMAN_MR_APPROVAL, WAITING_AUTO_MERGE, REBASING,
+    FIXING_CI, ADDRESSING_REVIEW) means "PR open", so asking the forge
+    covers them all — including a ticket BLOCKED out of one of them —
+    without a state table that could drift.  A closed-unmerged MR is not
+    unmerged work in flight (the merge stage blocks such tickets), so it
+    does not keep the ticket alive either.  Raises on forge failure so
+    the caller can skip rather than guess.
+    """
+    if not ticket.branch:
+        return False
+    pr = forge.pr_status(source_branch=ticket.branch)
+    if not pr:
+        return False
+    return not pr.get("merged") and (pr.get("state") or "open") == "open"
 
 
 def _green_since_failure(
