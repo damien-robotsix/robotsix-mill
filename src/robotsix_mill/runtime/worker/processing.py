@@ -1082,7 +1082,20 @@ async def _process_ticket_inner(
                         f"{stage_name} run; outcome was "
                         f"{outcome.next_state.value}; note: {outcome.note or ''}"
                     )
-                    log.warning("%s: %s", ticket_id, discard_note)
+                    # Log only the state transition (enum values, not
+                    # free-form text): the outcome ``note`` is operator-
+                    # authored and may carry sensitive content, so it stays
+                    # out of the log sink and lives only in the history note
+                    # below (a store write, not a clear-text log).
+                    log.warning(
+                        "%s: stage outcome discarded: ticket moved %s -> %s "
+                        "during %s run; outcome was %s",
+                        ticket_id,
+                        ticket.state.value,
+                        now_state,
+                        stage_name,
+                        outcome.next_state.value,
+                    )
                     with contextlib.suppress(Exception):
                         ctx.service.add_history_note(ticket_id, discard_note[:500])
                     return
