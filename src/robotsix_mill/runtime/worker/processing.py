@@ -1060,9 +1060,34 @@ async def _process_ticket_inner(
                         outcome.note,
                         block_reason=outcome.block_reason,
                     )
+                    log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
                 else:
-                    raise
-            log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
+                    # The ticket's state changed under the run — an operator
+                    # parked it to blocked / awaiting_user_reply, closed it,
+                    # or a sibling run advanced it — so applying this
+                    # completed outcome is no longer a legal transition. The
+                    # run's work is real and must NOT be lost: record the
+                    # outcome as a history note and finish cleanly, instead of
+                    # letting the TransitionError escape and crash the
+                    # consumer (which discarded the outcome and left nothing
+                    # on the ticket to show a completed run had existed).
+                    # Where the change was an operator park to blocked, the
+                    # ticket stays parked but the work is discoverable from
+                    # the history.
+                    current = ctx.service.get(ticket_id)
+                    now_state = current.state.value if current is not None else "(gone)"
+                    discard_note = (
+                        f"stage outcome discarded: ticket moved "
+                        f"{ticket.state.value} -> {now_state} during "
+                        f"{stage_name} run; outcome was "
+                        f"{outcome.next_state.value}; note: {outcome.note or ''}"
+                    )
+                    log.warning("%s: %s", ticket_id, discard_note)
+                    with contextlib.suppress(Exception):
+                        ctx.service.add_history_note(ticket_id, discard_note[:500])
+                    return
+            else:
+                log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
         # Best-effort push notification for human-attention states.
         if outcome.next_state in _TRIGGER_STATES:
             ticket = ctx.service.get(ticket_id)
