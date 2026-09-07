@@ -905,6 +905,24 @@ class TestRunCommand:
         result = tools["run_command"]("echo hello")
         assert result == "exit=0\nhello\n"
 
+    def test_accepts_description_label(self, tmp_path, settings, fake_sandbox):
+        """A Claude Code-style ``description`` label must not fail schema
+        validation (regression: 2026-09-07 implement turns rejected with
+        "Additional properties are not allowed ('description' was unexpected)").
+        The check goes through the real tool schema, not the Python call: on
+        the claude_sdk path the schema is validated BEFORE the function body.
+        """
+        from pydantic_ai import Tool
+
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        schema = Tool(tools["run_command"]).tool_def.parameters_json_schema
+        assert "description" in schema["properties"]
+        assert schema.get("required") == ["command"]
+        result = tools["run_command"]("echo hello", description="say hello")
+        assert result == "exit=0\nhello\n"
+
     def test_false_nonzero(self, tmp_path, settings, fake_sandbox):
         root = tmp_path / "repo"
         root.mkdir()

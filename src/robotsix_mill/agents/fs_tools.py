@@ -1348,11 +1348,17 @@ def build_fs_tools(
         except (ValueError, OSError) as e:
             return f"error: {e}"
 
-    def run_command(command: str) -> str:
+    def run_command(command: str, description: str | None = None) -> str:
         """Run a shell command against the repository (tests, linters,
         build steps, generators, ...). Returns exit code + combined
         stdout/stderr (truncated). Runs in an isolated, network-less
         sandbox — no internet, nothing outside the repo is reachable.
+
+        ``description`` is an optional short label of what the command
+        does; it is accepted and ignored (Claude Code-style callers attach
+        one by habit — live 2026-09-07, five implement turns were rejected
+        with "Additional properties are not allowed ('description' was
+        unexpected)" and had to retry).
 
         Commands automatically execute in the repository root
         directory — the sandbox sets the working directory for you;
@@ -1626,7 +1632,7 @@ def build_fs_tools(
             name="run_command",
             description="Run a shell command against the repository (tests, linters, build steps, generators, ...).",
             category="shell",
-            parameters={"command": "str"},
+            parameters={"command": "str", "description": "str | None = None"},
         )
     )
     ToolRegistry.register(
