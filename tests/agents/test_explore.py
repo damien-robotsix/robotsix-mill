@@ -89,9 +89,7 @@ def test_run_explore_uses_light_lane_and_abandons_on_timeout(tmp_path, monkeypat
     are skipped (ticket 79a2). The context is restored afterwards."""
     from robotsix_mill.sandbox._slots import sandbox_abandon, sandbox_lane
 
-    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
-    _reset_secrets()
-    s = _settings(tmp_path, explore_timeout_seconds=1)
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_timeout_seconds=1)
     seen: dict[str, object] = {}
 
     async def fake_attempt(*, agent, prompt, limits, settings):
