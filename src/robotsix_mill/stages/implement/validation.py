@@ -221,6 +221,39 @@ class ValidationMixin(_ImplementStageBase):
         # matches the individual ".deps/<pkg>/..." paths and a directory
         # removal floods the scope check (live case: auto-mail 6624, 118
         # "out-of-scope" files that WERE the ticket's deliverable).
+        # --- spec-cited file auto-inclusion ---
+        # The refine stage's file_map.json can under-enumerate: a spec whose
+        # body explicitly names a file (in a Suggested-fix block or an inline
+        # file_map enumeration) but omits it from file_map.json makes that
+        # in-scope file look out-of-scope.  Each such file then triggers a
+        # needless scope-triage EXPAND, and after the per-ticket EXPAND cap
+        # the parent is force-split into a child even though its work is
+        # entirely in scope.  Fold any changed file whose path is named
+        # verbatim in the spec body into the file_map before the diff, so it
+        # never reaches scope-triage.  Reuses the same substring test as the
+        # standard-config auto-revert guard: these are distinctive paths, and
+        # biasing toward "in scope" for a spec-cited file is exactly the
+        # intent (a false positive costs nothing; a false negative splits an
+        # in-scope ticket).
+        spec_cited = {
+            f for f in changed if f not in file_map and _spec_names_path(spec, f)
+        }
+        if spec_cited:
+            file_map |= spec_cited
+            log.info(
+                "%s: scope auto-EXPAND — %d spec-cited file(s) folded into "
+                "file_map: %s",
+                ticket.id,
+                len(spec_cited),
+                ", ".join(sorted(spec_cited)),
+            )
+            ctx.service.add_step_event(
+                ticket.id,
+                "scope-triage auto-EXPAND: "
+                + ", ".join(f"`{f}`" for f in sorted(spec_cited))
+                + " cited in the spec body — in-scope, not scope creep",
+            )
+
         dir_prefixes = tuple(e for e in file_map if e.endswith("/"))
         out_of_scope = [
             f
