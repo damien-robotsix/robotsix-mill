@@ -629,7 +629,11 @@ def make_explore_tool(
     can refuse redundant re-reads of the same content.
     """
 
-    async def explore(question: str, known_context: str | None = None) -> str:
+    async def explore(
+        question: str | None = None,
+        known_context: str | None = None,
+        prompt: str | None = None,
+    ) -> str:
         """Ask a fresh, context-isolated sub-agent ONE focused question
         about the repository. Keep each call to a single, self-contained
         topic — a multi-part megaproject drags latency and cost for no
@@ -648,7 +652,12 @@ def make_explore_tool(
         exploration instead of re-discovering them. Keep it terse — paths
         and symbols, not whole file dumps. Leave it unset when you have
         nothing relevant to share.
+
+        ``prompt`` is an accepted alias of ``question``.
         """
+        question = question or prompt
+        if not question:
+            return "explore: pass the question to investigate as `question`"
         # Only forward known_context / pre_seeded_paths when populated, so
         # the default call shape (and existing seam fakes) stays unchanged.
         extra: dict[str, object] = (
@@ -696,7 +705,10 @@ def make_repo_scoped_explore_tool(settings: Settings, repo_clones: dict[str, Pat
     repo_list = ", ".join(sorted(repo_clones))
 
     async def explore(
-        repo: str, question: str, known_context: str | None = None
+        repo: str,
+        question: str | None = None,
+        known_context: str | None = None,
+        prompt: str | None = None,
     ) -> str:
         """Ask a fresh, context-isolated sub-agent a complex, multi-step
         question about ONE selected repository clone.
@@ -709,6 +721,9 @@ def make_repo_scoped_explore_tool(settings: Settings, repo_clones: dict[str, Pat
         Optionally pass ``known_context``: COMPACT facts you ALREADY have
         (paths, symbols, line ranges) so the scout skips redundant work.
         """
+        question = question or prompt
+        if not question:
+            return "explore: pass the question to investigate as `question`"
         clone = repo_clones.get(repo)
         if clone is None:
             return f"explore: unknown repo {repo!r}. Choose exactly one of: {repo_list}"

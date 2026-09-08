@@ -45,6 +45,26 @@ class TestGuardrailRejections:
     """Each tool rejects a mismatched branch/target argument with a
     deterministic error string (no shell-out, no mocks needed)."""
 
+    def test_git_fetch_branch_alias_and_default(self, monkeypatch):
+        """``branch`` is an alias of ``target_branch`` and a bare call fetches
+        the configured target (2026-09-08: ``git_fetch({"branch": "main"})``
+        was schema-rejected)."""
+        from pydantic_ai import Tool
+
+        from robotsix_mill.agents import bridged_git_tools as _bgt
+
+        calls: list[str] = []
+        monkeypatch.setattr(
+            _bgt.git_ops, "fetch", lambda repo_dir, **kw: calls.append(kw["branch"])
+        )
+        git_fetch, _, _, _ = _make_tools()
+        schema = Tool(git_fetch).tool_def.parameters_json_schema
+        assert {"target_branch", "branch"} <= set(schema["properties"])
+        assert git_fetch(branch="main") == "fetched origin/main"
+        assert git_fetch() == "fetched origin/main"
+        assert git_fetch(branch="other").startswith("error: git_fetch is guardrailed")
+        assert calls == ["main", "main"]
+
     def test_git_fetch_guardrail_rejects_other_branch(self):
         git_fetch, _, _, _ = _make_tools()
         result = git_fetch("other")

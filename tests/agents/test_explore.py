@@ -61,6 +61,27 @@ def test_missing_repo_degrades_not_raises(tmp_path):
     assert "not been cloned yet" in out
 
 
+def test_explore_prompt_alias(tmp_path, monkeypatch):
+    """``prompt`` is accepted as an alias of ``question`` on both explore
+    variants (2026-09-08: two implement turns were schema-rejected with
+    "Additional properties are not allowed ('prompt' was unexpected)")."""
+    from pydantic_ai import Tool
+
+    s = _settings(tmp_path)
+
+    async def fake(*, settings, repo_dir, question, extra_roots=None, **_kw):
+        return f"ANS:{question}"
+
+    monkeypatch.setattr(explore, "run_explore", fake)
+    tool = explore.make_explore_tool(s, tmp_path)
+    schema = Tool(tool).tool_def.parameters_json_schema
+    assert {"question", "prompt"} <= set(schema["properties"])
+    assert asyncio.run(tool(prompt="where is X?")) == "ANS:where is X?"
+    assert asyncio.run(tool()).startswith("explore: pass the question")
+    scoped = explore.make_repo_scoped_explore_tool(s, {"repo": tmp_path})
+    assert asyncio.run(scoped(repo="repo", prompt="where is Y?")) == "ANS:where is Y?"
+
+
 def test_parallel_explore_fans_out_labeled(tmp_path, monkeypatch):
     """parallel_explore batches questions into a single run_explore
     call and returns every answer labeled by question."""

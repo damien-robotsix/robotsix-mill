@@ -923,6 +923,21 @@ class TestRunCommand:
         result = tools["run_command"]("echo hello", description="say hello")
         assert result == "exit=0\nhello\n"
 
+    def test_accepts_timeout_label(self, tmp_path, settings, fake_sandbox):
+        """``timeout`` is accepted and ignored like ``description`` — two
+        implement turns on 2026-09-08 sent ``"timeout": "300000"`` and were
+        rejected at the schema level."""
+        from pydantic_ai import Tool
+
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        schema = Tool(tools["run_command"]).tool_def.parameters_json_schema
+        assert "timeout" in schema["properties"]
+        assert schema.get("required") == ["command"]
+        result = tools["run_command"]("echo hello", timeout="300000")
+        assert result == "exit=0\nhello\n"
+
     def test_false_nonzero(self, tmp_path, settings, fake_sandbox):
         root = tmp_path / "repo"
         root.mkdir()
@@ -1468,6 +1483,34 @@ class TestParallelCommands:
         monkeypatch.setattr(sandbox, "run", _fake_run)
         result = asyncio.run(tools["parallel_commands"](["cat hello.txt"]))
         assert "exit=0" in result
+
+    def test_command_alias_accepts_list_and_json_string(
+        self, tmp_path, settings, monkeypatch
+    ):
+        """Models habitually send the singular ``command`` — as a real list
+        or as a JSON-encoded list string (three schema rejections on
+        2026-09-08). Both shapes must run like ``commands``."""
+        from pydantic_ai import Tool
+
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        schema = Tool(tools["parallel_commands"]).tool_def.parameters_json_schema
+        assert {"commands", "command"} <= set(schema["properties"])
+        assert not schema.get("required")
+
+        def _fake_run(cmd, **kw):
+            return (0, f"out: {cmd}")
+
+        monkeypatch.setattr(sandbox, "run", _fake_run)
+        result = asyncio.run(tools["parallel_commands"](command=["cat a.txt"]))
+        assert "cat a.txt" in result
+        result = asyncio.run(
+            tools["parallel_commands"](command='["grep -rn foo .", "ls -la"]')
+        )
+        assert "grep -rn foo ." in result and "ls -la" in result
+        bad = asyncio.run(tools["parallel_commands"](command="[not json"))
+        assert bad.startswith("parallel_commands: `command` looked like a JSON list")
 
     def test_multiple_independent_commands(self, tmp_path, settings, monkeypatch):
         root = tmp_path / "repo"
