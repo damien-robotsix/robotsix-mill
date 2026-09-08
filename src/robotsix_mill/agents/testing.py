@@ -220,6 +220,34 @@ def is_network_dependent_failure(out: str) -> bool:
     )
 
 
+_RESOURCE_EXHAUSTION_RE = re.compile(
+    r"(?:exit(?: code|=)\s*137\b|\breturned 137\b|\bSIGKILL\b|"
+    r"^\s*Killed\b|Killed process \d+|\bMemoryError\b|"
+    r"\bout of memory\b|\bOOM[- ]?kill)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def is_resource_exhaustion_failure(out: str) -> bool:
+    """Return ``True`` when *out* (raw test log or diag) shows the sandbox
+    memory cap killing the run — exit code 137 / SIGKILL / OOM — rather
+    than a test assertion failing.
+
+    The implement sandbox runs with ``sandbox_memory`` (1g in prod) and a
+    large suite can exceed it regardless of the code under test; live
+    2026-09-08 the mill repo's own ``pytest -q`` on main died at ~970 MB
+    anon-rss (dmesg ``Memory cgroup out of memory: Killed process … pytest``),
+    the baseline gate read the ``exit code 137`` diag as "pre-existing test
+    failures on main", blocked the ticket and spawned a bogus baseline-fix
+    ticket (fe7b → PR #3188 "moved an import to prevent rc=137").
+
+    Conservative: a plain ``AssertionError``/``FAILED`` line never matches;
+    ``Killed`` is matched only at line start or as the kernel's
+    ``Killed process N`` form so a test named ``test_killed`` does not.
+    """
+    return bool(_RESOURCE_EXHAUSTION_RE.search(out or ""))
+
+
 def _load_file_map(repo_dir: Path) -> list[str] | None:
     """Load the file_map from ``artifacts/file_map.json``, or ``None``."""
     fm_path = repo_dir.parent / "artifacts" / "file_map.json"

@@ -9,7 +9,10 @@ from pathlib import Path
 import yaml
 
 from ...agents import prerequisite
-from ...agents.testing import is_network_dependent_failure
+from ...agents.testing import (
+    is_network_dependent_failure,
+    is_resource_exhaustion_failure,
+)
 from ...config import Settings, target_branch_for
 from ...core.models import SourceKind, Ticket, TicketEvent, TicketKind
 from ...core.states import State
@@ -135,6 +138,7 @@ def classify_baseline_verdict(
     ci_conclusion: str
     | None,  # forge commit_ci_conclusion(...)["conclusion"], or None when unavailable
     network_dependent: bool,  # is_network_dependent_failure(out)
+    resource_exhausted: bool = False,  # is_resource_exhaustion_failure(out)
 ) -> str:
     """Pure decision helper: should the baseline gate proceed or block?
 
@@ -143,11 +147,19 @@ def classify_baseline_verdict(
     signature).
 
     Decision table:
+    - sandbox run OOM-killed (*resource_exhausted*) → ``"proceed"`` (always):
+      the sandbox memory cap says nothing about the base commit, and any
+      other check on the commit (image publish, scan) being red is not a
+      pre-existing TEST failure either — blocking here only manufactures a
+      bogus baseline-fix ticket (2026-09-08: fe7b/#3188 while main was red
+      on an unrelated sandbox-image build).
     - CI green  → ``"proceed"`` (always).
     - CI red    → ``"block"`` (real breakage).
     - CI unknown (``None`` / ``"pending"``):
       ``"proceed"`` iff *network_dependent*, else ``"block"``.
     """
+    if resource_exhausted:
+        return "proceed"
     if ci_conclusion == "success":
         return "proceed"
     if ci_conclusion == "failure":
@@ -1297,12 +1309,22 @@ class ValidationMixin(_ImplementStageBase):
             status = None
         ci_conclusion = status.get("conclusion") if status else None
         network_dependent = is_network_dependent_failure(diag)
-        verdict = classify_baseline_verdict(ci_conclusion, network_dependent)
+        resource_exhausted = is_resource_exhaustion_failure(diag)
+        verdict = classify_baseline_verdict(
+            ci_conclusion, network_dependent, resource_exhausted=resource_exhausted
+        )
 
         if verdict == "proceed":
             # Sandbox artifact — record a warning and proceed.
             names_or_diag = diag[:300]
-            if ci_conclusion == "success":
+            if resource_exhausted:
+                warning_msg = (
+                    f"baseline suite on {base_sha[:8]} was killed by the "
+                    f"sandbox memory cap (exit 137 / OOM) — not a pre-existing "
+                    f"test failure; proceeding. Raise `sandbox_memory` or narrow "
+                    f"`test_command` for this repo: {names_or_diag}"
+                )
+            elif ci_conclusion == "success":
                 warning_msg = (
                     f"sandbox suite failed but GitHub CI on {base_sha[:8]} "
                     f"is green — proceeding; failing tests likely "

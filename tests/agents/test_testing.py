@@ -1041,3 +1041,36 @@ def test_run_smoke_agent_broken_pyproject_toml_short_circuits(monkeypatch, tmp_p
 )
 def test_is_network_dependent_failure(out, expected):
     assert is_network_dependent_failure(out) == expected
+
+
+@pytest.mark.parametrize(
+    ("out", "expected"),
+    [
+        # --- True cases: the sandbox memory cap killed the run ---
+        ("exit=137\n", True),
+        # the test agent's prose diag (live 2026-09-08, ticket 26f1 block note)
+        (
+            (
+                "I see the test output is empty (exit code 137 = timeout/resource "
+                "exhaustion). I need to investigate what's failing."
+            ),
+            True,
+        ),
+        ("The command failed with exit code 137 and produced no output.", True),
+        ("Killed\n", True),
+        ("Memory cgroup out of memory: Killed process 1514007 (pytest)", True),
+        ("MemoryError: Unable to allocate 512 MiB", True),
+        ("Process received SIGKILL", True),
+        # --- False cases: genuine test failures or unrelated text ---
+        ("AssertionError: assert 1 == 2", False),
+        ("FAILED tests/test_foo.py::test_bar - assert 1 == 2", False),
+        ("exit=1\n", False),
+        # a test NAME mentioning killed is not a kill
+        ("PASSED tests/test_proc.py::test_killed_child_is_reaped", False),
+        ("", False),
+    ],
+)
+def test_is_resource_exhaustion_failure(out, expected):
+    from robotsix_mill.agents.testing import is_resource_exhaustion_failure
+
+    assert is_resource_exhaustion_failure(out) == expected
