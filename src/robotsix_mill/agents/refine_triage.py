@@ -340,6 +340,8 @@ def _parse_auto_approve_answer(text: str) -> AutoApproveResult:
             if decision in ("APPROVE", "NEEDS_APPROVAL"):
                 return AutoApproveResult(decision=decision, reason=reason)
     except ValueError, TypeError:
+        # Not strict JSON (or an unexpected shape) — fall through to the
+        # leading-verdict-token heuristic below.
         pass
 
     # Fall back to a leading verdict token in prose.

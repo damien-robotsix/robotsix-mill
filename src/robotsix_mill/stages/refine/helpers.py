@@ -1002,6 +1002,10 @@ def _auto_approve_triage_with_retry(
                 continue
             raise
 
+    # Unreachable: the loop above always returns on success or raises on the
+    # final attempt. Present so the function has no implicit ``None`` return.
+    raise AssertionError("auto-approve retry loop exited without returning")
+
 
 # ---------------------------------------------------------------------------
 # Advisory dedup helpers
