@@ -303,3 +303,37 @@ def test_page_counter_increments():
     assert calls[0]["params"]["page"] == 1  # type: ignore[index]
     assert calls[1]["params"]["page"] == 2  # type: ignore[index]
     assert calls[2]["params"]["page"] == 3  # type: ignore[index]
+
+
+# -- failure visibility -----------------------------------------------------
+
+
+def test_non_401_exception_logs_warning_naming_url_and_fallback(caplog):
+    """Regression (2026-09-08): the orphaned-PR runner reported ``scanned=0``
+    for all 26 repos while every ``/pulls`` listing was failing — the
+    helper swallowed the exception and handed back the fallback, which
+    callers read as "no open PRs". The swallow must leave a trace naming
+    the endpoint, the page, the exception and the fallback value."""
+    import logging
+
+    page1_500: tuple[int, list[dict[str, object]]] = (500, [])
+    http, _ = _make_http([page1_500])
+
+    with caplog.at_level(
+        logging.WARNING, logger="robotsix_mill.forge._github_pagination"
+    ):
+        result = _paginated_get(
+            http,
+            "/repos/o/r/pulls",
+            item_fn=_item_fn,
+            fallback=[],
+        )
+
+    assert result == []
+    records = [r for r in caplog.records if "pagination" in r.getMessage()]
+    assert len(records) == 1
+    msg = records[0].getMessage()
+    assert "/repos/o/r/pulls" in msg
+    assert "page 1" in msg
+    assert "HTTPStatusError" in msg
+    assert "EMPTY result" in msg

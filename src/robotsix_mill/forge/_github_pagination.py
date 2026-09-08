@@ -7,10 +7,13 @@ and fixes the silent-truncation bug affecting repos with more than
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
 from ._http import _ApiClient
+
+log = logging.getLogger(__name__)
 
 T = TypeVar("T")
 R = TypeVar("R")
@@ -58,6 +61,7 @@ def _paginated_get[T](
     convention).
     """
     out: list[T] = []
+    page = 0
     try:
         for _retry, c, api, headers in http.retrying_client(on_retry=out.clear):
             page = 1
@@ -85,6 +89,20 @@ def _paginated_get[T](
             if hit_401:
                 continue
             break
-    except Exception:
+    except Exception as exc:
+        # Callers treat *fallback* as "nothing there" (an empty PR list, no
+        # branches, no reviews) — indistinguishable from a real empty result.
+        # Live 2026-09-08: the orphaned-PR runner logged ``scanned=0`` for all
+        # 26 repos while every one of its ``/pulls`` listings was failing on a
+        # forge without credentials, and nothing said so. Name the failure.
+        log.warning(
+            "GitHub pagination of %s failed on page %d (%s: %s) — returning "
+            "fallback %r; callers will see an EMPTY result, not an error",
+            url_suffix,
+            page,
+            type(exc).__name__,
+            exc,
+            fallback,
+        )
         return fallback
     return out

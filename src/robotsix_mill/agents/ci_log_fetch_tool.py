@@ -28,6 +28,61 @@ CiLogFetchFn = Callable[[int, bool], str]
 #   https://github.com/owner/repo/actions/runs/12345/...
 _RUN_URL_RE = re.compile(r"/runs/(\d+)")
 
+# Hard ceiling on the text a single ``fetch_ci_logs`` call hands back to the
+# model, regardless of *full_log*.  The forge only size-caps the default
+# failure-window path; ``full_log=True`` returned the complete job logs
+# verbatim — 4.05 MB (~1M tokens) for a chat run on 2026-09-08 (ticket
+# 20260908T094911Z-…-8a6b), which blew the provider's 1,048,576-token context
+# on the very next model call and crashed the ci-fix agent into ``blocked``.
+# 150K chars ≈ 40K tokens: large enough for real diagnosis, small enough to
+# fit any tier's context alongside the agent's history.
+_FULL_LOG_MAX_CHARS = 150_000
+# Share of the per-job budget kept from the START of the job log; the rest
+# is the tail (where the failure and its traceback almost always live).
+_HEAD_SHARE = 0.25
+_JOB_HEADER = "### Job: "
+
+
+def _cap_log_text(logs: str, max_chars: int = _FULL_LOG_MAX_CHARS) -> str:
+    """Return *logs* capped to *max_chars*, keeping head + tail of EVERY job.
+
+    The forge concatenates one ``### Job: <name> (id=...)`` section per
+    failed job.  Splitting the budget per section keeps the tail of each
+    job visible (a blind global tail would drop the first jobs entirely).
+    Untouched when the text already fits.
+    """
+    if len(logs) <= max_chars:
+        return logs
+    marker = "\n" + _JOB_HEADER
+    sections = logs.split(marker)
+    # Re-attach the header prefix stripped by split() (first section keeps
+    # its original leading text, which may or may not start with a header).
+    sections = [sections[0]] + [_JOB_HEADER + sec for sec in sections[1:]]
+    total_len = sum(len(sec) for sec in sections)
+    parts: list[str] = []
+    for sec in sections:
+        # Proportional budget so a huge job doesn't starve the small ones.
+        budget = max(2_000, int(max_chars * len(sec) / max(total_len, 1)))
+        if len(sec) <= budget:
+            parts.append(sec)
+            continue
+        head_n = int(budget * _HEAD_SHARE)
+        tail_n = budget - head_n
+        dropped = len(sec) - head_n - tail_n
+        parts.append(
+            sec[:head_n]
+            + f"\n\n[... fetch_ci_logs truncated {dropped:,} chars of this job's "
+            f"log ({len(sec):,} total; the result is capped at "
+            f"{max_chars:,} chars) ...]\n\n" + sec[-tail_n:]
+        )
+    body = "\n".join(parts)
+    return (
+        body + f"\n\n[fetch_ci_logs: the full log was {len(logs):,} chars — capped "
+        f"to ~{max_chars:,}. Head and tail of every failed job are kept. "
+        "Prefer full_log=False (failure-anchored window), or narrow the "
+        "failure locally in the sandbox instead of re-fetching.]"
+    )
+
 
 def build_ci_log_fetch_tool(
     *,
@@ -63,7 +118,8 @@ def build_ci_log_fetch_tool(
         When *full_log* is ``False`` (default), returns the log tail anchored on
         the first failure marker — enough to diagnose most failures.  Set
         *full_log=True* for the complete logs when the truncated window doesn't
-        show enough context.
+        show enough context.  Even full logs are capped (head + tail of every
+        failed job) so one call can never exceed the model's context.
 
         Returns the log text with ``### Job: <name> (id=...)`` headers
         separating each failed job, or a clear error string when the run has no
@@ -117,7 +173,7 @@ def build_ci_log_fetch_tool(
                     f"passed or the run was cancelled before any job ran)"
                 )
 
-            return logs
+            return _cap_log_text(logs)
 
     return fetch_ci_logs
 
