@@ -32,6 +32,8 @@ from typing import Any
 
 import yaml
 
+from robotsix_mill._resources import effective_language_instructions_dir
+
 log = logging.getLogger("robotsix_mill.config.repo_settings")
 
 # Every top-level key the loaders in this module read (plus the
@@ -375,8 +377,6 @@ def _load_language_snippet(settings, repo_dir: Path | None, lang: str) -> str:
                 return override.read_text(encoding="utf-8")
         except OSError:
             pass
-    from robotsix_mill._resources import effective_language_instructions_dir
-
     builtin = (
         effective_language_instructions_dir(settings.language_instructions_dir)
         / f"{lang}.md"
