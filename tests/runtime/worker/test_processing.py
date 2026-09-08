@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections import Counter
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -9,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from robotsix_mill.core.models import TicketKind
+from robotsix_mill.core.service._helpers import TransitionError
 from robotsix_mill.core.states import State
 from robotsix_mill.runtime.worker.processing import (
     _TERMINAL,
@@ -1237,3 +1239,75 @@ class TestTerminal:
     def test_done_is_not_terminal(self):
         """Regression: DONE must NOT be in _TERMINAL — retrospect owns it."""
         assert State.DONE not in _TERMINAL
+
+
+# ---------------------------------------------------------------------------
+# stale [ASK_USER] threads on terminal transitions
+# ---------------------------------------------------------------------------
+
+
+class TestStaleAskUserThreadsOnTerminalTransition:
+    """Regression (2026-09-08, ticket f15f): the retrospect agent posted its
+    own ``[ASK_USER]`` thread, the retrospect deadline fired, and the timeout
+    close path called ``service.transition(CLOSED)`` directly — the terminal
+    guard refused it, the consumer crashed and the merged ticket stayed in
+    DONE. Every terminal auto-completion must close stale threads first."""
+
+    @staticmethod
+    def _ask_user_error(ticket_id: str = "ticket-1") -> TransitionError:
+        return TransitionError(
+            f"{ticket_id}: cannot transition to closed while 1 [ASK_USER] "
+            "thread(s) are open (IDs: 632)"
+        )
+
+    def test_is_stale_ask_user_block_only_for_terminal_states(self):
+        from robotsix_mill.runtime.worker.processing import _is_stale_ask_user_block
+
+        err = self._ask_user_error()
+        assert _is_stale_ask_user_block(State.CLOSED, err)
+        assert _is_stale_ask_user_block(State.DONE, err)
+        assert not _is_stale_ask_user_block(State.BLOCKED, err)
+        assert not _is_stale_ask_user_block(
+            State.CLOSED, TransitionError("ticket-1: done -> closed not allowed")
+        )
+
+    def test_timeout_close_path_closes_threads_and_retries(self, ctx, caplog):
+        from robotsix_mill.runtime.worker.processing import (
+            _transition_closing_stale_threads,
+        )
+
+        ctx.service.transition = MagicMock(side_effect=[self._ask_user_error(), None])
+        ctx.service.close_open_ask_user_threads = MagicMock(return_value=1)
+
+        with caplog.at_level(logging.WARNING):
+            _transition_closing_stale_threads(
+                ctx,
+                "ticket-1",
+                State.CLOSED,
+                "retrospect timed out",
+                stage_name="retrospect",
+            )
+
+        ctx.service.close_open_ask_user_threads.assert_called_once_with("ticket-1")
+        assert ctx.service.transition.call_count == 2
+        assert ctx.service.transition.call_args_list[-1].args[:2] == (
+            "ticket-1",
+            State.CLOSED,
+        )
+        assert "closed 1 stale [ASK_USER] thread(s)" in caplog.text
+
+    def test_timeout_close_path_reraises_other_transition_errors(self, ctx):
+        from robotsix_mill.runtime.worker.processing import (
+            _transition_closing_stale_threads,
+        )
+
+        ctx.service.transition = MagicMock(
+            side_effect=TransitionError("ticket-1: done -> closed not allowed")
+        )
+        ctx.service.close_open_ask_user_threads = MagicMock()
+
+        with pytest.raises(TransitionError):
+            _transition_closing_stale_threads(
+                ctx, "ticket-1", State.CLOSED, "note", stage_name="retrospect"
+            )
+        ctx.service.close_open_ask_user_threads.assert_not_called()

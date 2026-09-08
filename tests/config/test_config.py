@@ -1043,3 +1043,76 @@ def test_fernet_encrypted_key_lifts_into_canonical(tmp_path, monkeypatch):
     assert s.openrouter is not None
     assert s.openrouter.keys.get("robotsix-mill") is not None
     assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-from-fernet"
+
+
+# ===========================================================================
+#  load_settings_block — degraded file is named, not silently defaulted
+# ===========================================================================
+
+
+def test_load_settings_block_warns_when_settings_block_missing(
+    tmp_path, monkeypatch, caplog
+):
+    """Regression (2026-09-08): a stray ``load_settings()`` from an exec
+    shell rewrote the mill config to ``{langfuse, repos}``; every runner
+    built from ``Settings()`` for the next hour ran on code defaults (the
+    orphaned-PR check flipped to dry_run, the forge lost its credentials)
+    and nothing said so. A present file without settings must warn."""
+    import json
+    import logging
+
+    from robotsix_mill.config.loader import load_settings_block
+
+    cfg = tmp_path / "config.json"
+    cfg.write_text(json.dumps({"langfuse": {"host": "x"}, "repos": {}}))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.loader"):
+        block = load_settings_block()
+
+    assert "langfuse" in block  # the lift of the top-level block still happens
+    assert not any(k not in ("langfuse", "openrouter") for k in block)
+    warnings = [
+        r.getMessage() for r in caplog.records if "code defaults" in r.getMessage()
+    ]
+    assert len(warnings) == 1
+    assert "no 'settings' block" in warnings[0]
+
+
+def test_load_settings_block_warns_when_settings_block_empty(
+    tmp_path, monkeypatch, caplog
+):
+    import json
+    import logging
+
+    from robotsix_mill.config.loader import load_settings_block
+
+    cfg = tmp_path / "config.json"
+    cfg.write_text(json.dumps({"settings": {}, "repos": {}}))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.loader"):
+        load_settings_block()
+
+    warnings = [
+        r.getMessage() for r in caplog.records if "code defaults" in r.getMessage()
+    ]
+    assert len(warnings) == 1
+    assert "empty 'settings' block" in warnings[0]
+
+
+def test_load_settings_block_silent_for_populated_file(tmp_path, monkeypatch, caplog):
+    import json
+    import logging
+
+    from robotsix_mill.config.loader import load_settings_block
+
+    cfg = tmp_path / "config.json"
+    cfg.write_text(json.dumps({"settings": {"max_global_concurrency": 3}, "repos": {}}))
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.config.loader"):
+        block = load_settings_block()
+
+    assert block["max_global_concurrency"] == 3
+    assert not [r for r in caplog.records if "code defaults" in r.getMessage()]

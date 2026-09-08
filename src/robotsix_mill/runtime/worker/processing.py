@@ -144,6 +144,67 @@ class _StageDeadlineExceeded(Exception):
     """
 
 
+def _is_stale_ask_user_block(next_state: State, err: TransitionError) -> bool:
+    """True when *err* is the terminal-state guard refusing *next_state*
+    because of an open ``[ASK_USER]`` thread.
+    """
+    return next_state in _TERMINAL_STATES and "[ASK_USER]" in str(err)
+
+
+def _close_stale_threads_and_transition(
+    ctx: Any,
+    ticket_id: str,
+    next_state: State,
+    note: str | None,
+    *,
+    stage_name: str,
+    block_reason: Any = None,
+) -> None:
+    """Close every open ``[ASK_USER]`` thread on *ticket_id*, then apply the
+    terminal transition to *next_state*.
+
+    The pipeline auto-completing a ticket (merge → DONE once the PR merged,
+    retrospect → CLOSED, the retrospect deadline closing a merged ticket)
+    must not be blocked by a stale ``[ASK_USER]`` thread — the work shipped,
+    so the question is moot. Closing it (record preserved) and retrying
+    beats crash-looping the consumer on every poll. Live 2026-09-08 (f15f):
+    the retrospect agent posted its own ``[ASK_USER]`` thread, its deadline
+    fired, and the timeout close path — which did not have this guard —
+    raised ``TransitionError`` and left the merged ticket parked in DONE.
+    """
+    n = ctx.service.close_open_ask_user_threads(ticket_id)
+    log.warning(
+        "%s: %s auto-completing to %s — closed %d stale "
+        "[ASK_USER] thread(s) that would have blocked it",
+        stage_name,
+        ticket_id,
+        next_state,
+        n,
+    )
+    ctx.service.transition(ticket_id, next_state, note, block_reason=block_reason)
+
+
+def _transition_closing_stale_threads(
+    ctx: Any,
+    ticket_id: str,
+    next_state: State,
+    note: str | None,
+    *,
+    stage_name: str,
+) -> None:
+    """``ctx.service.transition`` to a terminal *next_state*, closing stale
+    ``[ASK_USER]`` threads on the guard's refusal instead of raising.
+    """
+    try:
+        ctx.service.transition(ticket_id, next_state, note=note)
+    except TransitionError as e:
+        if not _is_stale_ask_user_block(next_state, e):
+            raise
+        _close_stale_threads_and_transition(
+            ctx, ticket_id, next_state, note, stage_name=stage_name
+        )
+
+
 async def process_ticket(
     ticket_id: str,
     ctx: StageContext,
@@ -938,7 +999,9 @@ async def _process_ticket_inner(
                             }
                         )
                     _post_trace_event(ctx, ticket_id, trace_id, stage_name)
-                    ctx.service.transition(ticket_id, State.CLOSED, note=note[:200])
+                    _transition_closing_stale_threads(
+                        ctx, ticket_id, State.CLOSED, note[:200], stage_name=stage_name
+                    )
                     return
                 # --- all other stages: hard block ---
                 log.error(
@@ -1039,25 +1102,13 @@ async def _process_ticket_inner(
                     block_reason=outcome.block_reason,
                 )
             except TransitionError as e:
-                # The pipeline auto-completing a ticket (e.g. merge → DONE
-                # once the PR merged) must not be blocked by a stale
-                # [ASK_USER] thread — the work shipped, so the question is
-                # moot. Closing it (record preserved) and retrying beats
-                # crash-looping the consumer on every poll.
-                if outcome.next_state in _TERMINAL_STATES and "[ASK_USER]" in str(e):
-                    n = ctx.service.close_open_ask_user_threads(ticket_id)
-                    log.warning(
-                        "%s: %s auto-completing to %s — closed %d stale "
-                        "[ASK_USER] thread(s) that would have blocked it",
-                        stage_name,
-                        ticket_id,
-                        outcome.next_state,
-                        n,
-                    )
-                    ctx.service.transition(
+                if _is_stale_ask_user_block(outcome.next_state, e):
+                    _close_stale_threads_and_transition(
+                        ctx,
                         ticket_id,
                         outcome.next_state,
                         outcome.note,
+                        stage_name=stage_name,
                         block_reason=outcome.block_reason,
                     )
                     log.info("%s: %s -> %s", stage_name, ticket_id, outcome.next_state)
