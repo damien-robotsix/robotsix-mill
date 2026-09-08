@@ -99,6 +99,39 @@ def test_run_config_sync_agent_web_false(monkeypatch):
     assert build_calls[0]["level"] == 1
 
 
+def test_run_config_sync_agent_passes_request_limit(monkeypatch):
+    """run_sync is invoked with a UsageLimits derived from the setting.
+
+    Regression: config_sync previously passed no usage_limits, so it hit
+    pydantic-ai's implicit default of 50 ("The next request would exceed
+    the request_limit of 50"). It must now pass an explicit, configurable
+    request limit.
+    """
+    from robotsix_mill.config import Settings
+
+    captured = {}
+
+    def fake_build_agent(settings, **kwargs):
+        from unittest.mock import MagicMock
+
+        def fake_run_sync(prompt, *, usage_limits=None):
+            captured["usage_limits"] = usage_limits
+            return config_syncing.ConfigSyncResult()
+
+        mock_agent = MagicMock()
+        mock_agent.run_sync.side_effect = fake_run_sync
+        return mock_agent
+
+    monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
+    monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", _wrap_retry)
+
+    s = Settings(data_dir="/tmp/test_config_sync", config_sync_request_limit=77)
+    config_syncing.run_config_sync_agent(settings=s, memory="")
+
+    assert captured["usage_limits"] is not None
+    assert captured["usage_limits"].request_limit == 77
+
+
 def test_run_config_sync_agent_max_gaps_clipping(monkeypatch):
     """Draft titles/bodies/gap_ids are clipped to MAX_GAPS."""
     from robotsix_mill.config import Settings
@@ -189,6 +222,7 @@ def test_config_sync_config_defaults():
 
     s = Settings()
     assert s.config_sync_interval_seconds == 86400
+    assert s.config_sync_request_limit == 80
 
 
 def test_config_sync_interval_config():
