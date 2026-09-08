@@ -103,6 +103,18 @@ def _created_at(run: dict[str, Any]) -> str:
     return str(run.get("created_at") or "")
 
 
+def _attempt(run: dict[str, Any]) -> int:
+    """Return the 1-based ``run_attempt`` for *run* (missing/None → 1).
+
+    A value ``> 1`` means the run is a re-run of the SAME commit — the most
+    common way a transient CI failure gets fixed without a new head.
+    """
+    try:
+        return int(run.get("run_attempt") or 1)
+    except TypeError, ValueError:
+        return 1
+
+
 def _close(
     service: TicketService,
     ticket_id: str,
@@ -117,11 +129,13 @@ def _close(
     DRAFT, BLOCKED, etc. ``mark_done`` treats ci-source tickets as
     force-close (they have no feature branch to merge-verify).
     """
-    refs = ", ".join(
-        f"[{r.get('id')}]({r.get('html_url')})"
-        for r in green_runs
-        if r.get("id") is not None
-    )
+
+    def _label(r: dict[str, Any]) -> str:
+        attempt = _attempt(r)
+        suffix = f" (re-run attempt {attempt})" if attempt > 1 else ""
+        return f"[{r.get('id')}{suffix}]({r.get('html_url')})"
+
+    refs = ", ".join(_label(r) for r in green_runs if r.get("id") is not None)
     note = (
         f"CI auto-close: workflow '{wf}' is green on {target} at-or-after the "
         f"failing commit; green run(s): {refs}. Closed by the ci-auto-close "
@@ -148,10 +162,12 @@ def _maybe_close(
         body = ""
     wf, target = _parse_workflow_branch(ticket, body)
     if not wf or not target:
+        log.info("ci_auto_close: skip %s — unparseable workflow/branch", ticket.id)
         return False
 
     f_sha = _failing_head(body)
     if not f_sha:
+        log.info("ci_auto_close: skip %s — cannot anchor", ticket.id)
         return False  # cannot anchor the failure — skip
 
     try:
@@ -175,6 +191,7 @@ def _maybe_close(
     # ``if ticket.branch: return False`` skipped it every 15 min.
     try:
         if _has_open_mr(forge, ticket):
+            log.info("ci_auto_close: skip %s — open MR with unmerged work", ticket.id)
             return False
     except Exception:
         log.warning(
@@ -196,8 +213,9 @@ def _maybe_close(
         )
         return False
 
-    green_runs = _green_since_failure(runs, wf, f_sha)
+    green_runs, skip_reason = _green_since_failure(runs, wf, f_sha)
     if not green_runs:
+        log.info("ci_auto_close: skip %s — %s", ticket.id, skip_reason)
         return False  # still red / not enough greens / cannot anchor
 
     _close(service, ticket.id, wf, target, green_runs)
@@ -228,15 +246,22 @@ def _has_open_mr(forge: Any, ticket: Any) -> bool:
 
 def _green_since_failure(
     runs: list[dict[str, Any]], wf: str, f_sha: str
-) -> list[dict[str, Any]] | None:
-    """Return the green runs at-or-after *f_sha* when the workflow *wf* is
-    fixed, else ``None``.
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """Return ``(green_runs, None)`` when the workflow *wf* is fixed at-or-after
+    *f_sha*, else ``(None, reason)`` naming why the ticket is skipped.
 
-    Two consecutive greens at-or-after the failing commit, OR a single green
-    on a head strictly newer than the failing commit (an identifiable fix
-    commit: main advanced to a new green head) both count as fixed. A still-red
-    workflow, a lone green on the same commit, or a failing commit that is no
-    longer in the recent run window all return ``None``.
+    A fix is identifiable — one green suffices — when a green run is either on
+    a head strictly newer than the failing commit (main advanced to a new
+    green head) OR a *re-run* of the failing commit itself (``run_attempt >
+    1``: a transient failure fixed by re-running the same run, which never
+    produces a new head). Otherwise two consecutive greens at-or-after the
+    failing commit are required.
+
+    ``reason`` is one of ``cannot anchor`` (no completed runs for the
+    workflow), ``failing head outside run window`` (the failing commit is no
+    longer among the recent runs), ``still red`` (the newest run at-or-after
+    the failing commit is a failure), or ``lone green on failing head, attempt
+    1`` (a single first-attempt green on the same commit — need a second).
     """
     completed = [
         r
@@ -246,13 +271,13 @@ def _green_since_failure(
     ]
     completed.sort(key=_created_at, reverse=True)
     if not completed:
-        return None
+        return None, "cannot anchor"
     idx = next(
         (i for i, r in enumerate(completed) if (r.get("head_sha") or "") == f_sha),
         None,
     )
     if idx is None:
-        return None
+        return None, "failing head outside run window"
     since = completed[: idx + 1]
     streak = 0
     for r in since:
@@ -261,12 +286,14 @@ def _green_since_failure(
         else:
             break
     if streak == 0:
-        return None
+        return None, "still red"
     green_runs = [r for r in since if r.get("conclusion") == "success"]
-    fix_identifiable = any((r.get("head_sha") or "") != f_sha for r in green_runs)
-    if streak < 2 and not (streak >= 1 and fix_identifiable):
-        return None
-    return green_runs
+    fix_identifiable = any(
+        (r.get("head_sha") or "") != f_sha or _attempt(r) > 1 for r in green_runs
+    )
+    if streak < 2 and not fix_identifiable:
+        return None, "lone green on failing head, attempt 1"
+    return green_runs, None
 
 
 def _process_board(

@@ -634,6 +634,7 @@ class GitHubForgeCIMixin:
                 "workflow_id": run.get("workflow_id"),
                 "head_sha": run.get("head_sha", ""),
                 "conclusion": run.get("conclusion"),
+                "run_attempt": run.get("run_attempt"),
                 "html_url": run.get("html_url", ""),
                 "created_at": run.get("created_at", ""),
                 "event": run.get("event", ""),

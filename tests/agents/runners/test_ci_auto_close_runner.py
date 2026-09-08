@@ -495,3 +495,81 @@ def test_parse_workflow_branch_from_title_fallback():
     wf, branch = car._parse_workflow_branch(ticket, "")
     assert wf == "ci / tests"
     assert branch == "main"
+
+
+def test_rerun_success_same_head_closes(tmp_path, monkeypatch):
+    # A transient failure fixed by RE-RUNNING the same run: attempt 1 failed,
+    # attempt 2 (same run id, same head) succeeded.  One green on the failing
+    # head with ``run_attempt > 1`` is an identifiable fix → close, and the
+    # note names the re-run.
+    settings, service = _prepare(
+        tmp_path,
+        monkeypatch,
+        runs=[
+            {
+                "name": "ci / tests",
+                "head_sha": "abc123",
+                "conclusion": "success",
+                "run_attempt": 2,
+                "id": 100,
+                "html_url": "https://x/run/100",
+                "created_at": "2026-09-01T02:00:00Z",
+            },
+            {
+                "name": "ci / tests",
+                "head_sha": "abc123",
+                "conclusion": "failure",
+                "run_attempt": 1,
+                "id": 100,
+                "html_url": "https://x/run/100",
+                "created_at": "2026-09-01T00:00:00Z",
+            },
+        ],
+    )
+    t = _ci_ticket(service, settings, f_sha="abc123")
+
+    result = _run(settings)
+
+    assert result["closed"] == 1
+    fresh = service.get(t.id)
+    assert fresh.state is State.DONE
+    done = [e for e in service.history(t.id) if e.state is State.DONE]
+    assert done and "re-run attempt 2" in done[-1].note
+
+
+def test_lone_first_attempt_green_same_head_logs_and_skips(
+    tmp_path, monkeypatch, caplog
+):
+    # A lone FIRST-attempt green on the same failing head must NOT close, and
+    # the skip must emit one INFO line naming the reason.
+    settings, service = _prepare(
+        tmp_path,
+        monkeypatch,
+        runs=[
+            {
+                "name": "ci / tests",
+                "head_sha": "abc123",
+                "conclusion": "success",
+                "run_attempt": 1,
+                "id": 200,
+                "html_url": "https://x/run/200",
+                "created_at": "2026-09-02T02:00:00Z",
+            },
+        ],
+    )
+    t = _ci_ticket(service, settings, f_sha="abc123")
+
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="robotsix_mill.ci_auto_close"):
+        result = _run(settings)
+
+    assert result["closed"] == 0
+    assert service.get(t.id).state is State.DRAFT
+    skip_lines = [
+        r.getMessage()
+        for r in caplog.records
+        if "lone green on failing head, attempt 1" in r.getMessage()
+    ]
+    assert len(skip_lines) == 1
+    assert t.id in skip_lines[0]

@@ -279,6 +279,9 @@ class GitLabForgeCIMixin:
                 "workflow_id": None,
                 "head_sha": p.get("sha", ""),
                 "conclusion": _PIPELINE_CONCLUSION_MAP.get(p.get("status", "")),
+                # GitLab pipelines have no re-run/attempt counter on the list
+                # endpoint (a retry creates a fresh pipeline id) — always None.
+                "run_attempt": None,
                 "html_url": p.get("web_url", ""),
                 "created_at": p.get("created_at", ""),
                 "path": "",
