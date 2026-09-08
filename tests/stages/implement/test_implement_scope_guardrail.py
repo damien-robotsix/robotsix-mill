@@ -276,6 +276,63 @@ def test_run_scope_guardrail_reject_cleans_resumed_wip_history(
     assert "a.txt" in net
 
 
+def test_run_scope_guardrail_spec_cited_file_folded_into_scope(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A changed file that the file_map.json under-enumerates but the spec
+    body names verbatim is folded into the file_map before the diff: it
+    never reaches scope-triage (no EXPAND, no split) and the scope check
+    passes with the file recorded as in-scope."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    # In-scope a.txt plus b.txt, which the spec cites but file_map.json omits.
+    (repo / "a.txt").write_text("in scope")
+    (repo / "b.txt").write_text("also in scope per spec")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "wip")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "file_map.json").write_text(
+        '[{"file": "a.txt", "note": "only a.txt enumerated"}]', encoding="utf-8"
+    )
+
+    # scope-triage must NOT be invoked for a spec-cited file.
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+
+    monkeypatch.setattr(
+        scope_triage_mod,
+        "run_scope_triage_agent",
+        lambda **_k: (_ for _ in ()).throw(
+            AssertionError("scope-triage must not run for a spec-cited file")
+        ),
+    )
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=ctx.settings,
+        spec="Update `a.txt` and `b.txt` as described in the Suggested-fix.",
+        current_feedback=None,
+    )
+
+    assert result.action == "skip_iteration"
+    assert result.file_map is not None
+    assert "b.txt" in result.file_map
+    # The auto-inclusion is recorded as a step event, not a scope violation.
+    notes = [ev.note for ev in ctx.service.history(t.id) if ev.note]
+    assert any(n.startswith("scope-triage auto-EXPAND") and "b.txt" in n for n in notes)
+
+
 # --- .robotsix-mill/config.yaml write-path guard --------------------------
 
 
