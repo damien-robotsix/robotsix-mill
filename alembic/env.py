@@ -42,7 +42,18 @@ from robotsix_mill.core import models  # noqa: F401
 # pre-existing handlers such as pytest caplog) and restore them
 # after so both the alembic console handler and any prior handlers
 # coexist.
-_logging_configured: bool = False
+# The once-per-process sentinel lives on the ROOT LOGGER, not in this module:
+# alembic executes env.py as a brand-new module object on every
+# ``command.upgrade`` / ``command.stamp`` call (``load_python_file``), so a
+# module-level flag is reset each time. Under the test suite (one ``init_db``
+# per test) that re-ran ``fileConfig`` per test — every run added another
+# console ``StreamHandler`` to the root logger and re-attached all the ones
+# saved before it, so the root carried 400+ handlers pointing at pytest's
+# capture stream, each log record was written hundreds of times, the captured
+# stderr retained per test grew to ~3 MB and a 4-worker xdist run peaked at
+# ~7 GB — enough to have every hosted CI runner reaped on 2026-09-08 (mill
+# runs 34214732246, 34217309511, 34225665779).
+_LOGGING_CONFIGURED_ATTR = "_robotsix_mill_alembic_logging_configured"
 
 
 def _setup_alembic_logging() -> None:
@@ -51,17 +62,16 @@ def _setup_alembic_logging() -> None:
     Must be called from inside ``run_migrations_online()`` or
     ``run_migrations_offline()`` where ``context.config`` is valid.
     """
-    global _logging_configured
-    if _logging_configured:
+    import logging
+
+    _root = logging.getLogger()
+    if getattr(_root, _LOGGING_CONFIGURED_ATTR, False):
         return
-    _logging_configured = True
+    setattr(_root, _LOGGING_CONFIGURED_ATTR, True)
 
     if context.config.config_file_name is None:
         return
 
-    import logging
-
-    _root = logging.getLogger()
     _saved_handlers = list(_root.handlers)
     try:
         fileConfig(context.config.config_file_name, disable_existing_loggers=False)
