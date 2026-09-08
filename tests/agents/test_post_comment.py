@@ -68,6 +68,25 @@ class TestPostComment:
         assert comments[0].author == "implement"
         assert "Findings" in comments[0].body
 
+    def test_comment_alias_posts(self, settings, ticket, monkeypatch):
+        """``comment`` (and a stray ``ticket_id``) are accepted as aliases of
+        ``body`` — live 2026-09-08 three calls were schema-rejected with
+        "Additional properties are not allowed ('comment' was unexpected)"."""
+        from pydantic_ai import Tool
+
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.tracing.current_session",
+            lambda: ticket.id,
+        )
+        tool = _pc.make_post_comment_tool(settings, agent_name="implement")
+        schema = Tool(tool).tool_def.parameters_json_schema
+        assert {"body", "comment", "ticket_id"} <= set(schema["properties"])
+        assert not schema.get("required")
+        out = tool(comment="No change needed.", ticket_id="current")
+        assert out.startswith("posted comment ")
+        svc = TicketService(settings, board_id="test-board")
+        assert svc.list_comments(ticket.id)[0].body == "No change needed."
+
     def test_empty_body_refused(self, settings, ticket, monkeypatch):
         """An empty / whitespace body must not produce a comment. The
         risk is an agent ending a tool round by 'posting' an empty

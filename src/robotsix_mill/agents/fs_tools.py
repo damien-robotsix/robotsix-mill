@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import re
 import threading
@@ -494,6 +495,47 @@ def full_suite_pytest_segment(command: str) -> str | None:
     return None
 
 
+def _coerce_read_limit(limit: int | str | None) -> int | str | None:
+    """Normalise ``read_file``'s ``limit``: ints pass through, ``None`` and
+    the literal strings ``"None"``/``"null"``/``""`` mean "whole file",
+    numeric strings are parsed. Returns an ``error:`` string for anything
+    else so the model can self-correct instead of failing schema validation.
+    """
+    if limit is None or isinstance(limit, bool):
+        return None if limit is None else int(limit)
+    if isinstance(limit, int):
+        return limit
+    text = limit.strip()
+    if text.lower() in ("", "none", "null"):
+        return None
+    try:
+        return int(text)
+    except ValueError:
+        return f"error: read_file `limit` must be an integer or None, got {limit!r}"
+
+
+def _coerce_command_list(command: list[str] | str) -> list[str] | str:
+    """Turn ``parallel_commands``' ``command`` alias into a list of shell
+    strings; a JSON-encoded list string is decoded. Returns an error string
+    when the value cannot be interpreted as a list of commands.
+    """
+    if isinstance(command, list):
+        return [str(c) for c in command]
+    text = command.strip()
+    if text.startswith("["):
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, list) and all(isinstance(c, str) for c in parsed):
+            return parsed
+        return (
+            "parallel_commands: `command` looked like a JSON list but could not "
+            "be decoded — pass `commands` as a real list of shell strings"
+        )
+    return [text] if text else []
+
+
 def build_fs_tools(
     root: Path,
     settings: Settings,
@@ -876,9 +918,11 @@ def build_fs_tools(
     def read_file(
         ctx: RunContext[None] = None,
         *,
-        path: str,
+        path: str | None = None,
         offset: int = 1,
-        limit: int | None = _DEFAULT_READ_LIMIT,
+        limit: int | str | None = _DEFAULT_READ_LIMIT,
+        file_path: str | None = None,
+        target_file: str | None = None,
     ) -> str:
         """⚠️  **BEFORE YOU CALL:** Check your conversation history
         first — if a full copy of *path*'s content is already visible
@@ -923,10 +967,25 @@ def build_fs_tools(
         PDF's text layer via ``pypdf``.  Encrypted PDFs return an
         error string.  Scanned PDFs with no text layer return an
         empty string.
+
+        ``file_path`` / ``target_file`` are accepted as aliases of
+        ``path`` (Claude Code / Cursor-style callers use them by habit —
+        live 2026-09-08, 20 read_file calls in one mill boot window were
+        rejected with "Additional properties are not allowed
+        ('file_path' was unexpected)"), and ``limit`` also accepts the
+        literal string ``"None"`` (four rejections the same day).
         """
         cap_error = _check_read_file_cap()
         if cap_error is not None:
             return cap_error
+
+        path = path or file_path or target_file
+        if not path:
+            return "error: read_file requires `path` (the repo-relative file to read)"
+        coerced_limit = _coerce_read_limit(limit)
+        if isinstance(coerced_limit, str):
+            return coerced_limit
+        limit = coerced_limit
 
         resolved_note = ""
         try:
@@ -1348,7 +1407,11 @@ def build_fs_tools(
         except (ValueError, OSError) as e:
             return f"error: {e}"
 
-    def run_command(command: str, description: str | None = None) -> str:
+    def run_command(
+        command: str,
+        description: str | None = None,
+        timeout: int | str | None = None,
+    ) -> str:
         """Run a shell command against the repository (tests, linters,
         build steps, generators, ...). Returns exit code + combined
         stdout/stderr (truncated). Runs in an isolated, network-less
@@ -1358,7 +1421,9 @@ def build_fs_tools(
         does; it is accepted and ignored (Claude Code-style callers attach
         one by habit — live 2026-09-07, five implement turns were rejected
         with "Additional properties are not allowed ('description' was
-        unexpected)" and had to retry).
+        unexpected)" and had to retry). ``timeout`` is likewise accepted
+        and ignored — the sandbox applies its own command deadline
+        (two rejections on 2026-09-08 passed ``"timeout": "300000"``).
 
         Commands automatically execute in the repository root
         directory — the sandbox sets the working directory for you;
@@ -1521,7 +1586,10 @@ def build_fs_tools(
     # Maximum number of commands accepted per parallel_commands call.
     _PARALLEL_COMMANDS_BATCH_CAP = 20
 
-    async def parallel_commands(commands: list[str]) -> str:
+    async def parallel_commands(
+        commands: list[str] | None = None,
+        command: list[str] | str | None = None,
+    ) -> str:
         """Run several independent shell commands concurrently and return
         their combined output. Use this to batch multiple grep, find, or
         other independent lookups — commands that do NOT depend on each
@@ -1531,7 +1599,16 @@ def build_fs_tools(
 
         At most 20 commands per call. Commands that depend on a
         previous result must still use ``run_command`` sequentially.
+
+        ``command`` is accepted as an alias of ``commands`` — either a
+        list or a JSON-encoded list string (models habitually send the
+        singular; three calls were schema-rejected on 2026-09-08).
         """
+        if commands is None and command is not None:
+            coerced = _coerce_command_list(command)
+            if isinstance(coerced, str):
+                return coerced
+            commands = coerced
         if not commands:
             return "parallel_commands: no commands provided"
 

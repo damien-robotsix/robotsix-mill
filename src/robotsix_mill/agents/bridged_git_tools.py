@@ -65,14 +65,19 @@ def build_bridged_git_tools(
     else:
         _get_token = lambda: None
 
-    def git_fetch(target_branch: str) -> str:
+    def git_fetch(target_branch: str | None = None, branch: str | None = None) -> str:
         """Fetch ``origin/<target_branch>`` to refresh the local
         remote-tracking ref. The agent calls this BEFORE rebasing so
         it works against current main, not a stale ref.
 
+        ``branch`` is an accepted alias of ``target_branch``; with neither
+        given the configured target branch is fetched (the only value
+        the guardrail accepts anyway).
+
         Guardrailed: only the ticket's configured target branch is
         accepted — arbitrary branches are rejected.
         """
+        target_branch = target_branch or branch or target
         with trace_stage("git_fetch"):
             if target_branch != target:
                 return (

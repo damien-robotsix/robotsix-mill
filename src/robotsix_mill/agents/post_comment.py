@@ -40,7 +40,11 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
     # closure with an empty seen-set.
     _seen: set[int] = set()
 
-    def post_comment(body: str) -> str:
+    def post_comment(
+        body: str | None = None,
+        comment: str | None = None,
+        ticket_id: str | None = None,
+    ) -> str:
         """Post a top-level comment on the current ticket.
 
         Use when the ticket's deliverable is information rather than
@@ -51,13 +55,18 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
         thread, use ``reply_to_thread`` instead.
 
         Args:
-            body: The comment body (Markdown is fine).
+            body: The comment body (Markdown is fine). ``comment`` is an
+                accepted alias (three calls were schema-rejected for it on
+                2026-09-08).
+            comment: Alias of ``body``.
+            ticket_id: Accepted and ignored — the comment always goes to
+                the CURRENT ticket (the one this run implements).
 
         Returns:
             A short status string with the new comment's id, or an
             error message starting with ``post_comment:``.
         """
-        body = (body or "").strip()
+        body = (body or comment or "").strip()
         if not body:
             return "post_comment: empty body — refusing to post"
 
@@ -78,7 +87,7 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
             )
         svc, ticket_id = result
         try:
-            comment = svc.add_comment(
+            created = svc.add_comment(
                 ticket_id,
                 body,
                 author=agent_name,
@@ -91,7 +100,7 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
             return f"post_comment: could not post ({exc!r})"
 
         _seen.add(h)
-        return f"posted comment {comment.id}"
+        return f"posted comment {created.id}"
 
     from .tool_registry import ToolInfo, ToolRegistry
 
