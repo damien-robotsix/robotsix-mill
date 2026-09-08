@@ -9,6 +9,7 @@ Extracted from ``refining.py`` to keep that module under 1 000 lines.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from pathlib import Path
@@ -283,14 +284,74 @@ def triage_auto_approve(
 
     user_prompt = section("spec", spec)
 
+    # The level-1 fallback model sometimes answers the structured classifier
+    # with prose (`` APPROVE — <reason>``) or a fenced ```json block instead
+    # of the bare JSON object structured output expects.  Request plain text
+    # and leniently parse the verdict ourselves so a formatting quirk is not
+    # mistaken for a triage failure.
     result = load_and_run_agent(
         settings=settings,
         definition_name="auto-approve",
         tools=[],
         prompt=user_prompt,
         what="auto-approve triage",
+        output_type=str,
     )
-    return cast(AutoApproveResult, result.output)
+    return _parse_auto_approve_answer(result.output)
+
+
+# Matches a fenced ```json (or bare ```) block, tolerating leading/trailing
+# whitespace and an optional ``json`` language tag.
+_AUTO_APPROVE_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?\s*```\s*$", re.DOTALL)
+
+# Matches a leading verdict token (``APPROVE`` / ``NEEDS_APPROVAL``) that the
+# level-1 model sometimes emits in prose before a ``—``/``:`` separator.
+_AUTO_APPROVE_TOKEN_RE = re.compile(
+    r"^\s*(APPROVE|NEEDS_APPROVAL)\b[:\s—-]*(.*)$", re.IGNORECASE | re.DOTALL
+)
+
+
+def _parse_auto_approve_answer(text: str) -> AutoApproveResult:
+    """Leniently parse the auto-approve classifier's plain-text answer.
+
+    Tolerates the observed answer shapes from the level-1 fallback model:
+
+    * a bare JSON object (``{"decision": "APPROVE", "reason": "..."}``)
+    * a fenced ```json block wrapping that object
+    * prose that leads with the verdict token (`` APPROVE — <reason>``)
+
+    Raises ``ValueError`` when no verdict can be recovered, so a genuinely
+    unparseable answer still surfaces as a real triage failure (and is
+    retried once / logged as an error by the caller).
+    """
+    raw = (text or "").strip()
+    if not raw:
+        raise ValueError("auto-approve classifier returned an empty answer")
+
+    fenced = _AUTO_APPROVE_FENCE_RE.match(raw)
+    candidate = fenced.group(1).strip() if fenced else raw
+
+    # Try the strict JSON object first (covers bare + fenced JSON).
+    try:
+        data = json.loads(candidate)
+        if isinstance(data, dict):
+            decision = str(data.get("decision", "")).strip().upper()
+            reason = str(data.get("reason", "") or "").strip()
+            if decision in ("APPROVE", "NEEDS_APPROVAL"):
+                return AutoApproveResult(decision=decision, reason=reason)
+    except ValueError, TypeError:
+        pass
+
+    # Fall back to a leading verdict token in prose.
+    m = _AUTO_APPROVE_TOKEN_RE.match(raw)
+    if m:
+        decision = m.group(1).upper()
+        reason = m.group(2).strip() or f"{decision} — no reason given"
+        return AutoApproveResult(decision=decision, reason=reason)
+
+    raise ValueError(
+        f"could not parse auto-approve verdict from answer: {text[:200]!r}"
+    )
 
 
 def triage_reviewer_agreement(

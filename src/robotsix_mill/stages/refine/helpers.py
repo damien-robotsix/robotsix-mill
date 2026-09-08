@@ -949,29 +949,58 @@ def _resolve_next_state(
     # Fallback: legacy LLM call (for paths that don't go through
     # the post-refine check, e.g. multi-scope split children).
     try:
-        result = refining.triage_auto_approve(
-            settings=ctx.settings,
-            spec=_summarize_spec_for_auto_approve(spec),
-        )
-        if result.decision == "APPROVE":
-            return State.READY, f"auto-approve: APPROVE — {result.reason}"
-        return (
-            State.HUMAN_ISSUE_APPROVAL,
-            f"auto-approve: NEEDS_APPROVAL — {result.reason}",
-        )
+        result = _auto_approve_triage_with_retry(ctx.settings, spec)
     except Exception as exc:
         from ...runtime.transient_errors import is_model_unavailable_error
 
         if is_model_unavailable_error(exc):
             raise
-        log.warning(
-            "auto-approve triage failed, falling back to human approval",
-            exc_info=True,
+        log.exception(
+            "auto-approve triage failed after retry, falling back to "
+            "human approval: %s",
+            type(exc).__name__,
         )
+        return (
+            State.HUMAN_ISSUE_APPROVAL,
+            "auto-approve: triage failed — falling back to human approval",
+        )
+    if result.decision == "APPROVE":
+        return State.READY, f"auto-approve: APPROVE — {result.reason}"
     return (
         State.HUMAN_ISSUE_APPROVAL,
-        "auto-approve: triage failed — falling back to human approval",
+        f"auto-approve: NEEDS_APPROVAL — {result.reason}",
     )
+
+
+def _auto_approve_triage_with_retry(
+    settings: Settings,
+    spec: str,
+) -> refining.AutoApproveResult:
+    """Run the auto-approve triage classifier, retrying once on failure.
+
+    A genuine triage-step failure is retried exactly once before the caller
+    falls back to the human gate.  Model-unavailable errors are NOT retried —
+    they propagate so the worker parks the ticket (re-running a doomed model
+    call would just spend twice).
+    """
+    from ...runtime.transient_errors import is_model_unavailable_error
+
+    for attempt in range(2):
+        try:
+            return refining.triage_auto_approve(
+                settings=settings,
+                spec=_summarize_spec_for_auto_approve(spec),
+            )
+        except Exception as exc:
+            if is_model_unavailable_error(exc):
+                raise
+            if attempt == 0:
+                log.exception(
+                    "auto-approve triage failed (attempt 1/2), retrying: %s",
+                    type(exc).__name__,
+                )
+                continue
+            raise
 
 
 # ---------------------------------------------------------------------------
