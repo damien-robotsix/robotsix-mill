@@ -32,6 +32,19 @@ If the agent re-creates files that were already rejected in a prior run (detecte
 
 This prevents the loop from stalling while still refusing to ship previously-rejected scope creep without an explicit EXPAND verdict.
 
+## The EXPAND cap: split the overflow and keep the parent moving
+
+Repeated EXPAND verdicts are the costliest churn pattern, so each ticket is allowed at most **2** EXPAND events. A further EXPAND hits the cap, and rather than blocking the parent, the implement stage:
+
+1. Spawns a `scope split from <parent>` child ticket for the overflow (would-be-expanded) files.
+2. Records a machine-parsable `scope-triage SPLIT` history event naming the overflow files (backticked) and the child id.
+3. **Reverts the overflow changes from the parent's working tree** (the full out-of-scope set, via `git_ops.restore_paths`), leaving only the in-scope changes.
+4. Falls through to the **test gate** — the parent is **NOT blocked**, so its in-scope work proceeds to PR delivery.
+
+If the parent is later resumed and the agent re-creates the same overflow files, a repeat cap hit whose files were **all already covered by a prior `scope-triage SPLIT` event** restores the tree and proceeds **without spawning a duplicate child** (a dedup guard mirroring the REJECT dedup above). This makes `resume-blocked` productive for tickets that hit the cap before this behavior existed.
+
+The only case that still blocks on the cap is a rare infrastructure failure where the child ticket could not be created: the parent is then gracefully blocked with a clear note, since its overflow work has nowhere to go.
+
 ## Configuration
 
 | Knob | Env var | Default | Purpose |
