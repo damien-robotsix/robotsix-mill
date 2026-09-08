@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock
+
 import pytest
 
 from robotsix_mill.agents import refining
@@ -939,3 +941,203 @@ def test_auto_approve_criteria_needs_approval_high_risk(label, spec, monkeypatch
         f"{label!r} expected NEEDS_APPROVAL → HUMAN_ISSUE_APPROVAL, got {state}"
     )
     assert "NEEDS_APPROVAL" in (note or "")
+
+
+# ---------------------------------------------------------------------------
+# auto-approve lenient answer parsing (observed level-1 fallback shapes)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        # Observed shape 1: prose verdict with a leading space and em-dash.
+        " APPROVE — This change adds a documentation file (SECURITY.md) to the repo root",
+        # Observed shape 2: a fenced ```json block wrapping the object.
+        '```json\n{"decision": "APPROVE", "reason": "Adds SECURITY.md, no design risk"}\n```',
+    ],
+)
+def test_auto_approve_parse_tolerates_observed_answer_shapes(answer):
+    """A single-file docs-only classifier answer in either observed shape
+    (leading prose verdict or a fenced JSON block) must parse to APPROVE —
+    a formatting quirk must never be a triage failure."""
+    from robotsix_mill.agents.refine_triage import _parse_auto_approve_answer
+
+    result = _parse_auto_approve_answer(answer)
+    assert result.decision == "APPROVE"
+    assert result.reason
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        # Observed shape 1: prose verdict with a leading space and em-dash.
+        " APPROVE — This change adds a documentation file (SECURITY.md) to the repo root",
+        # Observed shape 2: a fenced ```json block wrapping the object.
+        '```json\n{"decision": "APPROVE", "reason": "Adds SECURITY.md, no design risk"}\n```',
+    ],
+)
+def test_triage_auto_approve_parses_observed_shapes_end_to_end(answer, monkeypatch):
+    """End-to-end: triage_auto_approve running through load_and_run_agent
+    (mocked to return the observed prose / fenced-JSON answer) must yield an
+    APPROVE result — the formatting quirk is parsed, not a triage failure."""
+    from robotsix_mill.agents.refine_triage import triage_auto_approve
+
+    def fake_load_and_run(**kw):
+        return MagicMock(output=answer)
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.yaml_loader.load_and_run_agent", fake_load_and_run
+    )
+    # Also assert the real loader would be asked for plain-text output.
+    import robotsix_mill.agents.yaml_loader as yaml_loader_mod
+
+    seen_kwargs = {}
+
+    def fake_loader_with_capture(**kw):
+        seen_kwargs.update(kw)
+        return MagicMock(output=answer)
+
+    monkeypatch.setattr(yaml_loader_mod, "load_and_run_agent", fake_loader_with_capture)
+
+    settings = MagicMock()
+    result = triage_auto_approve(settings=settings, spec="## Problem\nAdd SECURITY.md")
+
+    assert result.decision == "APPROVE"
+    assert result.reason
+    # The classifier requests plain text output so the lenient parser can
+    # recover the verdict from prose / fenced JSON.
+    assert seen_kwargs.get("output_type") is str
+
+
+def test_auto_approve_parse_tolerates_bare_json():
+    from robotsix_mill.agents.refine_triage import _parse_auto_approve_answer
+
+    result = _parse_auto_approve_answer(
+        '{"decision": "NEEDS_APPROVAL", "reason": "touches auth"}'
+    )
+    assert result.decision == "NEEDS_APPROVAL"
+    assert "auth" in result.reason
+
+
+def test_auto_approve_parse_rejects_unparseable_answer():
+    """A genuinely unparseable answer (neither JSON nor a leading verdict
+    token) raises ValueError so it surfaces as a real triage failure."""
+    from robotsix_mill.agents.refine_triage import _parse_auto_approve_answer
+
+    with pytest.raises(ValueError):
+        _parse_auto_approve_answer("Not sure what to do with this spec.")
+
+
+def test_auto_approve_triage_with_retry_retries_once_then_raises(monkeypatch):
+    """_auto_approve_triage_with_retry retries exactly once on a genuine
+    (non-model-unavailable) failure, then raises for the caller to fall back."""
+    from robotsix_mill.stages.refine.helpers import _auto_approve_triage_with_retry
+
+    calls: list[int] = []
+
+    def flaky_auto_approve(*, settings, spec):
+        calls.append(1)
+        raise RuntimeError("auto-approve classifier exploded")
+
+    monkeypatch.setattr(refining, "triage_auto_approve", flaky_auto_approve)
+
+    with pytest.raises(RuntimeError, match="classifier exploded"):
+        _auto_approve_triage_with_retry(MagicMock(), "## Problem\nAdd SECURITY.md")
+
+    assert len(calls) == 2
+
+
+def test_auto_approve_triage_with_retry_model_unavailable_not_retried(monkeypatch):
+    """A model-unavailable error is NOT retried — it propagates immediately
+    so the worker parks the ticket instead of re-running a doomed call."""
+    from robotsix_mill.stages.refine.helpers import _auto_approve_triage_with_retry
+
+    calls: list[int] = []
+
+    def unavailable_auto_approve(*, settings, spec):
+        calls.append(1)
+        raise RuntimeError("model xiaomi/mimo-v2.5-pro is currently unavailable")
+
+    monkeypatch.setattr(refining, "triage_auto_approve", unavailable_auto_approve)
+
+    with pytest.raises(RuntimeError, match="currently unavailable"):
+        _auto_approve_triage_with_retry(MagicMock(), "## Problem\nAdd SECURITY.md")
+
+    assert len(calls) == 1
+
+
+def test_auto_approve_triage_retries_once_then_falls_back(
+    ctx, service, monkeypatch, tmp_path, repo_config, caplog
+):
+    """A genuine triage failure is retried once and logged as a distinct
+    error with the exception, before falling back to human approval."""
+    spec = "## Problem\nFix typo in README\n## Scope\n- README.md line 5\n## Acceptance criteria\n- [ ] typo is fixed\n"
+
+    calls: list[int] = []
+
+    def flaky_auto_approve(*, settings, spec):
+        calls.append(1)
+        raise RuntimeError("auto-approve classifier exploded")
+
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+    monkeypatch.setattr(refining, "triage_auto_approve", flaky_auto_approve)
+
+    gated = Settings(
+        data_dir=str(tmp_path),
+        require_approval="true",
+        # Disable the combined post-refine check so _resolve_next_state
+        # takes the legacy triage_auto_approve fallback — the retry seam
+        # this test verifies.
+        spec_review_enabled="false",
+    )
+    gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
+
+    t = service.create("Fix typo", "fix a typo in README.md")
+    with caplog.at_level("ERROR", logger="robotsix_mill.stages.refine"):
+        out = RefineStage().run(t, gated_ctx)
+
+    # Retried exactly once before falling back.
+    assert len(calls) == 2
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert "auto-approve: triage failed — falling back to human approval" in out.note
+    # The distinct error log carries the exception type.
+    assert any(
+        "auto-approve triage failed" in r.message and "RuntimeError" in r.message
+        for r in caplog.records
+    )
+
+
+def test_auto_approve_triage_retry_succeeds_second_attempt(
+    ctx, service, monkeypatch, tmp_path, repo_config
+):
+    """When the first triage attempt fails but the retry succeeds, the
+    ticket auto-approves to READY — a single transient hiccup must not
+    strand a trivially-approvable ticket at the human gate."""
+    spec = "## Problem\nFix typo in README\n## Scope\n- README.md line 5\n## Acceptance criteria\n- [ ] typo is fixed\n"
+
+    calls: list[int] = []
+
+    def recover_auto_approve(*, settings, spec):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("transient blip")
+        return refining.AutoApproveResult(
+            decision="APPROVE", reason="single-file docs change"
+        )
+
+    monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))
+    monkeypatch.setattr(refining, "triage_auto_approve", recover_auto_approve)
+
+    gated = Settings(
+        data_dir=str(tmp_path),
+        require_approval="true",
+    )
+    gated_ctx = StageContext(settings=gated, service=service, repo_config=repo_config)
+
+    t = service.create("Fix typo", "fix a typo in README.md")
+    out = RefineStage().run(t, gated_ctx)
+
+    assert len(calls) == 2
+    assert out.next_state is State.READY
+    assert "auto-approve: APPROVE — single-file docs change" in out.note
