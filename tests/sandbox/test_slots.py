@@ -27,6 +27,25 @@ def test_acquire_and_release_track_usage():
     assert pool.in_use() == 1
 
 
+def test_abandoned_waiter_leaves_the_queue_quickly():
+    """A waiter whose caller gave up (explore attempt cancelled) must not hold
+    a queue position for a spawn nobody reads — 2026-09-07 three orphan
+    ``mill-sbx-*`` containers were launched by cancelled scouts."""
+    import time
+
+    pool = PrioritySlots(1)
+    assert pool.acquire((0, 0), 1)
+    flag = threading.Event()
+    flag.set()
+    t0 = time.monotonic()
+    assert not pool.acquire((0, 0), 30, abandoned=flag.is_set)
+    assert time.monotonic() - t0 < 5, "abandoned waiter should return promptly"
+    # The waiter dropped out: releasing lets a fresh caller in immediately.
+    pool.release()
+    assert pool.acquire((0, 0), 1)
+    pool.release()
+
+
 def test_cap_is_enforced():
     """The ceiling is the whole point — sandboxes are what cost memory."""
     pool = PrioritySlots(1)

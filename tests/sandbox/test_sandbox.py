@@ -1678,11 +1678,15 @@ def test_run_raises_on_genuine_daemon_error_without_retry(tmp_path, monkeypatch)
 def _reset_sandbox_slots():
     """Drop the process-wide slot semaphore around every test so a cap
     from one test can't leak into the next."""
-    sandbox._slot_sem = None
+    sandbox._slot_pool = None
     sandbox._slot_cap = 0
+    sandbox._light_slot_pool = None
+    sandbox._light_slot_cap = 0
     yield
-    sandbox._slot_sem = None
+    sandbox._slot_pool = None
     sandbox._slot_cap = 0
+    sandbox._light_slot_pool = None
+    sandbox._light_slot_cap = 0
 
 
 def _concurrency_probe(monkeypatch, tmp_path, cap, threads, run_impl=None):
@@ -1776,6 +1780,82 @@ def test_no_slot_available_raises(monkeypatch, tmp_path):
             sandbox.run("pytest -q", repo_dir=tmp_path, settings=s)
     finally:
         pool.release()
+
+
+def test_light_lane_has_its_own_pool(monkeypatch, tmp_path):
+    """Explore's read-only commands take a ``sandbox_light_slots`` slot, so a
+    saturated heavy pool (implement test runs) no longer queues them —
+    2026-09-07: 64 % of explore attempts killed at 90 s while their greps
+    waited behind pytest (ticket 79a2)."""
+    from robotsix_mill.sandbox._slots import sandbox_lane
+
+    s = _settings(
+        tmp_path,
+        max_global_concurrency=1,
+        sandbox_slot_timeout=1,
+        sandbox_light_slots=1,
+    )
+    monkeypatch.setattr(
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"],
+    )
+    spawned: list[list[str]] = []
+
+    def fake_run(argv, **kwargs):
+        spawned.append(argv)
+        return subprocess.CompletedProcess(argv, 0, stdout=b"hit", stderr=b"")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    heavy = sandbox._slot_semaphore(1)
+    assert heavy.acquire(sandbox.DEFAULT_RANK, 1)  # implement holds the only heavy slot
+    token = sandbox_lane.set("light")
+    try:
+        rc, out = sandbox.run("grep -rn foo src", repo_dir=tmp_path, settings=s)
+    finally:
+        sandbox_lane.reset(token)
+        heavy.release()
+    assert (rc, out) == (0, "hit")
+    assert len(spawned) == 1
+    # ...while the same command in the heavy lane still waits and fails.
+    assert heavy.acquire(sandbox.DEFAULT_RANK, 1)
+    try:
+        with pytest.raises(sandbox.SandboxError, match="no sandbox slot free"):
+            sandbox.run("grep -rn foo src", repo_dir=tmp_path, settings=s)
+    finally:
+        heavy.release()
+
+
+def test_abandoned_caller_never_spawns(monkeypatch, tmp_path):
+    """Once the caller's abandon Event is set (explore attempt cancelled by
+    ``asyncio.wait_for``), the queued thread must not launch ``docker run``."""
+    from robotsix_mill.sandbox._slots import sandbox_abandon
+
+    s = _settings(tmp_path, max_global_concurrency=1, sandbox_slot_timeout=30)
+    monkeypatch.setattr(
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"],
+    )
+    spawned: list[list[str]] = []
+
+    def fake_run(argv, **kwargs):
+        spawned.append(argv)
+        return subprocess.CompletedProcess(argv, 0, stdout=b"", stderr=b"")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    heavy = sandbox._slot_semaphore(1)
+    assert heavy.acquire(sandbox.DEFAULT_RANK, 1)
+    ev = threading.Event()
+    ev.set()
+    token = sandbox_abandon.set(ev)
+    try:
+        with pytest.raises(sandbox.SandboxError, match="abandoned"):
+            sandbox.run("grep -rn foo src", repo_dir=tmp_path, settings=s)
+    finally:
+        sandbox_abandon.reset(token)
+        heavy.release()
+    assert spawned == []
 
 
 # --- Package cache lives on disk, not in the RAM-backed /tmp ---------------

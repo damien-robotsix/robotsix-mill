@@ -297,6 +297,8 @@
         "sandbox_cpus": 0.0,
         "sandbox_data_mount": null,
         "sandbox_image": "robotsix/mill-sandbox:latest",
+        "sandbox_light_op_timeout": 60,
+        "sandbox_light_slots": 2,
         "sandbox_memory": "2g",
         "sandbox_network": "mill-sandbox-net",
         "sandbox_op_timeout": 300,

@@ -28,10 +28,23 @@ from __future__ import annotations
 
 import heapq
 import threading
+from collections.abc import Callable
 from contextvars import ContextVar
 from time import monotonic
 
-__all__ = ["DEFAULT_RANK", "PrioritySlots", "current_rank", "sandbox_rank"]
+# How often a waiter re-checks its ``abandoned`` predicate while queued.
+_ABANDON_POLL_S = 0.5
+
+__all__ = [
+    "DEFAULT_RANK",
+    "PrioritySlots",
+    "current_abandon",
+    "current_lane",
+    "current_rank",
+    "sandbox_abandon",
+    "sandbox_lane",
+    "sandbox_rank",
+]
 
 # Rank for a caller that declares none. Mirrors the worker's
 # "not flagged" priority rank and its unknown-stage fallback, so an
@@ -50,6 +63,37 @@ sandbox_rank: ContextVar[tuple[int, int]] = ContextVar(
 def current_rank() -> tuple[int, int]:
     """Rank of the work running in this context, or :data:`DEFAULT_RANK`."""
     return sandbox_rank.get()
+
+
+# Which slot pool a sandbox command takes. ``"heavy"`` (default) is the
+# ``max_global_concurrency`` pool that implement/ci_fix test runs hold for
+# minutes; ``"light"`` is the small ``sandbox_light_slots`` pool reserved for
+# the explore scout's read-only greps/finds/reads. Before the lane existed
+# (2026-09-07) 64 % of explore attempts were killed at the 90 s timeout while
+# their greps queued behind implement pytest runs at the same rank — the scout
+# model itself was idle ~80 s of the 90 (ticket 79a2).
+sandbox_lane: ContextVar[str] = ContextVar("sandbox_lane", default="heavy")
+
+# Cooperative abandonment. ``asyncio.wait_for`` cancels the awaiting coroutine,
+# but the fs tool runs ``sandbox.run()`` in a worker thread that keeps waiting
+# for a slot and then launches the ``docker run`` anyway — a container whose
+# result nobody reads (three ``mill-sbx-*`` spawned within 2 s while 3
+# implements ran, 2026-09-07 23:15Z). The explore runner sets a fresh Event
+# per attempt and sets it when the attempt is cancelled; slot acquisition polls
+# it and the spawn is skipped once it fires.
+sandbox_abandon: ContextVar[threading.Event | None] = ContextVar(
+    "sandbox_abandon", default=None
+)
+
+
+def current_lane() -> str:
+    """Slot lane of the work running in this context (``heavy``/``light``)."""
+    return sandbox_lane.get()
+
+
+def current_abandon() -> threading.Event | None:
+    """Abandon event of the work running in this context, if any."""
+    return sandbox_abandon.get()
 
 
 class PrioritySlots:
@@ -77,12 +121,20 @@ class PrioritySlots:
         with self._cv:
             return self._in_use
 
-    def acquire(self, rank: tuple[int, int], timeout: float) -> bool:
+    def acquire(
+        self,
+        rank: tuple[int, int],
+        timeout: float,
+        abandoned: Callable[[], bool] | None = None,
+    ) -> bool:
         """Take a slot, waiting at most *timeout* seconds.
 
-        Returns True when a slot was taken, False on timeout. A caller only
-        takes a slot when it is the best-ranked waiter, so a newcomer cannot
-        barge past someone already queued.
+        Returns True when a slot was taken, False on timeout — or as soon as
+        *abandoned()* returns True (polled at least every
+        :data:`_ABANDON_POLL_S`): a waiter whose caller has given up leaves
+        the queue instead of holding a place for a spawn nobody will read.
+        A caller only takes a slot when it is the best-ranked waiter, so a
+        newcomer cannot barge past someone already queued.
         """
         deadline = monotonic() + timeout
         with self._cv:
@@ -100,10 +152,14 @@ class PrioritySlots:
                         self._cv.notify_all()
                         return True
                     remaining = deadline - monotonic()
-                    if remaining <= 0:
+                    if remaining <= 0 or (abandoned is not None and abandoned()):
                         self._drop(entry)
                         return False
-                    self._cv.wait(remaining)
+                    self._cv.wait(
+                        remaining
+                        if abandoned is None
+                        else min(remaining, _ABANDON_POLL_S)
+                    )
             except BaseException:
                 self._drop(entry)
                 raise

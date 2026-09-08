@@ -2526,6 +2526,20 @@
           "title": "Sandbox Image",
           "type": "string"
         },
+        "sandbox_light_op_timeout": {
+          "default": 60,
+          "description": "Per-command timeout (seconds) for light-lane sandbox commands; 0 falls back to sandbox_op_timeout.",
+          "minimum": 0,
+          "title": "Sandbox Light Op Timeout",
+          "type": "integer"
+        },
+        "sandbox_light_slots": {
+          "default": 2,
+          "description": "Sandbox slots reserved for the explore scout's read-only commands (separate pool from max_global_concurrency).",
+          "minimum": 1,
+          "title": "Sandbox Light Slots",
+          "type": "integer"
+        },
         "sandbox_memory": {
           "default": "2g",
           "description": "Memory limit for sandbox containers.",
