@@ -185,6 +185,7 @@ def test_list_workflow_runs_by_branch(tmp_path, monkeypatch):
                 "workflow_id": 100,
                 "head_sha": "abc",
                 "conclusion": "failure",
+                "run_attempt": 2,
                 "html_url": "http://x",
                 "created_at": "2025-01-01T00:00:00Z",
                 "event": "push",
@@ -201,6 +202,7 @@ def test_list_workflow_runs_by_branch(tmp_path, monkeypatch):
     assert result[0]["id"] == 1
     assert result[0]["conclusion"] == "failure"
     assert result[0]["head_sha"] == "abc"
+    assert result[0]["run_attempt"] == 2
     assert result[0]["event"] == "push"
     assert result[0]["head_branch"] == "main"
 
@@ -269,6 +271,7 @@ def test_list_workflow_runs_missing_event_and_head_branch(tmp_path, monkeypatch)
     assert len(result) == 1
     assert result[0]["event"] == ""
     assert result[0]["head_branch"] is None
+    assert result[0]["run_attempt"] is None
 
 
 # ---------------------------------------------------------------------------

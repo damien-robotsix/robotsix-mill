@@ -290,7 +290,13 @@ class Forge(ABC):
 
         Returns a list of dicts, each with keys:
         ``id``, ``name``, ``workflow_id``, ``head_sha``, ``conclusion``,
-        ``html_url``, ``created_at``, ``event``, ``head_branch``, ``path``.
+        ``run_attempt``, ``html_url``, ``created_at``, ``event``,
+        ``head_branch``, ``path``.
+
+        ``run_attempt`` is the 1-based attempt counter for a run (GitHub
+        Actions ``run_attempt``): ``> 1`` marks a re-run of the same
+        commit.  Forges without a per-run attempt counter (e.g. GitLab,
+        where a retry yields a new pipeline id) report ``None``.
         """
 
     @abstractmethod
