@@ -549,6 +549,23 @@ def test_dockerfile_installs_github_cli():
     assert "curl" in dockerfile
 
 
+def test_dockerfile_bakes_in_dart_sdk():
+    """The sandbox image must bake in a pinned Dart SDK so the implement
+    agent can run `dart format` and commit reformatted Dart/Flutter files
+    without operator intervention (the runtime egress proxy blocks
+    storage.googleapis.com / dl.google.com / pub.dev, so it cannot be
+    fetched at runtime). Asserted against the Dockerfile text so it's
+    testable without a Docker daemon or network."""
+    dockerfile = (
+        Path(__file__).resolve().parents[2] / "sandbox" / "Dockerfile"
+    ).read_text(encoding="utf-8")
+    assert "ARG DART_VERSION=" in dockerfile
+    assert "dart-archive" in dockerfile
+    assert "dartsdk-linux-${DARCH}-release.zip" in dockerfile
+    assert "/usr/local/bin/dart" in dockerfile
+    assert "dart --version" in dockerfile
+
+
 # ── extra sandbox packages ────────────────────────────────────────────
 
 

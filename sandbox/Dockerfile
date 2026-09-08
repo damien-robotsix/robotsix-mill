@@ -74,3 +74,38 @@ RUN pip install --no-cache-dir "playwright==${PLAYWRIGHT_VERSION}" \
 # extra_sandbox_packages in each repo's .robotsix-mill/config.yaml.
 # hadolint ignore=DL3013
 RUN pip install --no-cache-dir pytest pytest-asyncio pytest-cov
+
+# Dart SDK so the implement agent can run `dart format` (and other Dart
+# tooling) and commit reformatted files itself — no operator handoff.
+# Like Chromium and `gh`, the SDK is baked in at build time because the
+# runtime egress proxy (sandbox/proxy/filter) blocks storage.googleapis.com
+# / dl.google.com / pub.dev, so a runtime download would fail. `docker
+# build` has full host network, so fetching the pinned archive here is fine.
+#
+# `dart format` is a pure local formatter and does not need pub.dev at
+# runtime, so no egress-allowlist change is required for this capability.
+#
+# The SDK zip extracts a `dart-sdk/` tree; `dart` is symlinked into
+# /usr/local/bin (world-readable, off-PATH for the NON-root runtime user
+# `--user $UID:$GID`, HOME=/tmp) — the same install-location trick used
+# for uv and Chromium above. Multi-arch handled like the Docker CLI layer.
+#
+# Image-size impact: the Dart SDK adds roughly ~250 MB to the sandbox
+# image, on top of Chromium's ~300 MB. Dart is a hard requirement for the
+# Dart/Flutter boards, so it is baked into this single dedicated image
+# (no opt-in variant).
+ARG DART_VERSION=3.13.3
+# hadolint ignore=DL3008
+RUN ARCH="$(dpkg --print-architecture)" \
+    && case "$ARCH" in \
+         amd64) DARCH=x64 ;; \
+         arm64) DARCH=arm64 ;; \
+         *) echo "unsupported architecture for Dart SDK: $ARCH" >&2; exit 1 ;; \
+       esac \
+    && curl -fsSL "https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_VERSION}/sdk/dartsdk-linux-${DARCH}-release.zip" \
+        -o /tmp/dartsdk.zip \
+    && python -m zipfile -e /tmp/dartsdk.zip /usr/local/lib/dart \
+    && ln -sf /usr/local/lib/dart/dart-sdk/bin/dart /usr/local/bin/dart \
+    && chmod -R a+rX /usr/local/lib/dart \
+    && rm /tmp/dartsdk.zip \
+    && /usr/local/bin/dart --version
