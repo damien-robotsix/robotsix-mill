@@ -107,5 +107,11 @@ RUN ARCH="$(dpkg --print-architecture)" \
     && python -m zipfile -e /tmp/dartsdk.zip /usr/local/lib/dart \
     && ln -sf /usr/local/lib/dart/dart-sdk/bin/dart /usr/local/bin/dart \
     && chmod -R a+rX /usr/local/lib/dart \
+    # python -m zipfile drops the zip's unix mode bits, so every extracted
+    # file lands 0644 and `a+rX` (capital X) has no exec bit to propagate:
+    # the image build died with "/usr/local/bin/dart: Permission denied"
+    # (Release run 34193343315, 2026-09-08). Grant exec on the SDK's
+    # executables explicitly.
+    && chmod -R a+rx /usr/local/lib/dart/dart-sdk/bin \
     && rm /tmp/dartsdk.zip \
     && /usr/local/bin/dart --version
