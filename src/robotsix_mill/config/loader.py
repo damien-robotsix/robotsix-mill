@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,9 @@ from cryptography.fernet import Fernet
 
 class ConfigError(Exception):
     """Raised for config-loading failures."""
+
+
+log = logging.getLogger(__name__)
 
 
 def _resolve_main_config_path() -> Path | None:
@@ -74,6 +78,29 @@ def load_settings_block() -> dict[str, Any]:
     block = data.get("settings")
     if isinstance(block, dict):
         block = dict(block)
+        if not block and data:
+            # A present file whose ``settings`` block is EMPTY is not "all
+            # defaults by choice": live 2026-09-08 a stray ``load_settings()``
+            # from an exec shell rewrote the mill config to {langfuse, repos}
+            # and every runner built from ``Settings()`` for the next hour
+            # ran on code defaults (orphaned-PR check flipped to dry_run,
+            # forge without credentials) without a single line saying so.
+            log.warning(
+                "config %s has an empty 'settings' block — every Settings() "
+                "built from it runs on code defaults (operator pins ignored)",
+                main_path,
+            )
+    elif data and not any(
+        k not in ("secrets", "repos", "core", "langfuse", "openrouter") for k in data
+    ):
+        log.warning(
+            "config %s has no 'settings' block and no flat settings keys "
+            "(top-level: %s) — every Settings() built from it runs on code "
+            "defaults (operator pins ignored)",
+            main_path,
+            sorted(data),
+        )
+        block = {}
     else:
         # Flat file: everything except the sibling blocks is a setting.
         block = {

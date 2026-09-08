@@ -345,3 +345,25 @@ def test_reset_engine_disposes_engines(tmp_path: Path):
     db.reset_engine()
     # After reset, the engine should no longer be in cache.
     assert "board-dispose" not in db._engines
+
+
+def test_init_db_does_not_accumulate_root_log_handlers(tmp_path: Path):
+    """Regression (2026-09-08): alembic re-executes ``env.py`` as a fresh
+    module on every ``upgrade``, so its module-level "configured once" flag
+    never held — each ``init_db`` ran ``fileConfig`` again, adding one more
+    console handler to the root logger and re-attaching every handler saved
+    before it. Across the suite that left 400+ root handlers writing every
+    record into pytest's capture stream (~3 MB of captured stderr per test,
+    ~7 GB peak under ``-n 4``, hosted runners reaped). The sentinel must
+    survive module reloads: N boards → at most one extra root handler.
+    """
+    import logging
+
+    pytest.importorskip("alembic")
+    s = Settings(data_dir=str(tmp_path))
+    root = logging.getLogger()
+    db.init_db(s, "board-a")
+    after_first = len(root.handlers)
+    for board in ("board-b", "board-c", "board-d"):
+        db.init_db(s, board)
+    assert len(root.handlers) == after_first
