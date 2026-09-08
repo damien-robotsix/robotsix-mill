@@ -1491,6 +1491,21 @@ def test_classify_baseline_verdict(ci_conclusion, network_dependent, expected):
     )
 
 
+@pytest.mark.parametrize("ci_conclusion", ["success", "failure", None, "pending"])
+def test_classify_baseline_verdict_oom_always_proceeds(ci_conclusion):
+    """A sandbox OOM kill (exit 137) says nothing about the base commit, so
+    the gate proceeds even when CI is red on an unrelated job — live
+    2026-09-08 main was red on the sandbox-image publish while the mill
+    suite OOM'd at the 1g cap, and the gate spawned bogus baseline-fix
+    ticket fe7b (PR #3188)."""
+    assert (
+        validation_mod.classify_baseline_verdict(
+            ci_conclusion, False, resource_exhausted=True
+        )
+        == "proceed"
+    )
+
+
 # ---------------------------------------------------------------------------
 # _run_baseline_check — CI cross-check integration tests
 # ---------------------------------------------------------------------------
