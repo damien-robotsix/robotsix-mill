@@ -18,11 +18,13 @@ import logging
 import random
 import re
 import subprocess
+import threading
 from pathlib import Path
 from typing import Any
 
 from ..config import Settings, get_secrets
 from ..runtime.tracing import trace_stage
+from ..sandbox._slots import sandbox_abandon, sandbox_lane
 
 log = logging.getLogger(__name__)
 
@@ -402,6 +404,42 @@ def _extract_explored_paths(result: str, repo_dir: Path) -> set[str]:
     return paths
 
 
+async def _run_attempt_in_light_lane(
+    *,
+    agent: Any,
+    prompt: str,
+    limits: Any,
+    settings: Settings,
+) -> str:
+    """Run one explore attempt under the wall-clock timeout, in the LIGHT
+    sandbox lane, with cooperative abandonment.
+
+    ``sandbox_lane="light"`` routes the scout's read-only ``run_command`` /
+    ``parallel_commands`` to the separate ``sandbox_light_slots`` pool so
+    they never queue behind implement test runs (2026-09-07: 64 % of
+    attempts killed at 90 s with the model idle, ticket 79a2). The abandon
+    Event is set when the attempt ends — on timeout ``asyncio.wait_for``
+    cancels the coroutine but the fs tool's worker thread keeps waiting for
+    a slot and would launch the ``docker run`` anyway; slot acquisition
+    polls the Event and skips the spawn. ``asyncio.to_thread`` copies the
+    context, so the thread sees the same Event object.
+    """
+    abandon = threading.Event()
+    lane_token = sandbox_lane.set("light")
+    abandon_token = sandbox_abandon.set(abandon)
+    try:
+        return await asyncio.wait_for(
+            _run_single_explore_attempt(
+                agent=agent, prompt=prompt, limits=limits, settings=settings
+            ),
+            timeout=settings.explore_timeout_seconds,
+        )
+    finally:
+        abandon.set()
+        sandbox_abandon.reset(abandon_token)
+        sandbox_lane.reset(lane_token)
+
+
 async def run_explore(
     *,
     settings: Settings,
@@ -494,14 +532,11 @@ async def run_explore(
         )
 
         try:
-            result = await asyncio.wait_for(
-                _run_single_explore_attempt(
-                    agent=agent,
-                    prompt=current_prompt,
-                    limits=limits,
-                    settings=settings,
-                ),
-                timeout=settings.explore_timeout_seconds,
+            result = await _run_attempt_in_light_lane(
+                agent=agent,
+                prompt=current_prompt,
+                limits=limits,
+                settings=settings,
             )
             return result
         except TimeoutError:
@@ -568,14 +603,11 @@ async def run_explore(
                             fb_limits = UsageLimits(
                                 request_limit=settings.explore_request_limit
                             )
-                            return await asyncio.wait_for(
-                                _run_single_explore_attempt(
-                                    agent=fallback_agent,
-                                    prompt=current_prompt,
-                                    limits=fb_limits,
-                                    settings=settings,
-                                ),
-                                timeout=settings.explore_timeout_seconds,
+                            return await _run_attempt_in_light_lane(
+                                agent=fallback_agent,
+                                prompt=current_prompt,
+                                limits=fb_limits,
+                                settings=settings,
                             )
                         except Exception:
                             last_error = e

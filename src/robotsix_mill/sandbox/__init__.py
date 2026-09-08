@@ -42,7 +42,15 @@ from ._slots import (
 )
 from ._slots import (
     PrioritySlots,
+    current_abandon,
+    current_lane,
     current_rank,
+)
+from ._slots import (
+    sandbox_abandon as sandbox_abandon,
+)
+from ._slots import (
+    sandbox_lane as sandbox_lane,
 )
 from ._slots import (
     sandbox_rank as sandbox_rank,
@@ -92,6 +100,10 @@ class SandboxError(RuntimeError):
 _slot_lock = threading.Lock()
 _slot_pool: PrioritySlots | None = None
 _slot_cap = 0
+# Separate small pool for the light lane (explore's read-only commands), so a
+# grep never waits behind an implement test run. See ``_slots.sandbox_lane``.
+_light_slot_pool: PrioritySlots | None = None
+_light_slot_cap = 0
 
 
 def _slot_semaphore(cap: int) -> PrioritySlots:
@@ -109,30 +121,65 @@ def _slot_semaphore(cap: int) -> PrioritySlots:
         return _slot_pool
 
 
+def _light_slot_semaphore(cap: int) -> PrioritySlots:
+    """Return the process-wide LIGHT-lane slot pool, sized to *cap*."""
+    global _light_slot_pool, _light_slot_cap
+    with _slot_lock:
+        if _light_slot_pool is None or _light_slot_cap != cap:
+            _light_slot_pool = PrioritySlots(cap)
+            _light_slot_cap = cap
+        return _light_slot_pool
+
+
 @contextmanager
 def _sandbox_slot(settings: Settings) -> Iterator[None]:
-    """Hold one of ``max_global_concurrency`` sandbox slots for the block.
+    """Hold one sandbox slot of the current lane for the block.
 
+    The ``heavy`` lane (default) is the ``max_global_concurrency`` pool;
+    the ``light`` lane (set by the explore runner via
+    :data:`sandbox_lane`) is the separate ``sandbox_light_slots`` pool, so
+    read-only scout commands never queue behind implement test runs.
     Waiters are admitted best-rank-first (see :data:`sandbox_rank`), FIFO
     within a rank.
 
     Raises :class:`SandboxError` if no slot frees up within
     ``sandbox_slot_timeout`` — a bounded wait so a leaked slot surfaces
-    as a stage error instead of hanging a worker thread forever.
+    as a stage error instead of hanging a worker thread forever — or as
+    soon as the caller's :data:`sandbox_abandon` event fires (the awaiting
+    coroutine was cancelled; spawning would only burn a slot).
     """
-    cap = max(1, settings.max_global_concurrency)
-    pool = _slot_semaphore(cap)
+    lane = current_lane()
+    if lane == "light":
+        cap = max(1, settings.sandbox_light_slots)
+        pool = _light_slot_semaphore(cap)
+    else:
+        cap = max(1, settings.max_global_concurrency)
+        pool = _slot_semaphore(cap)
     timeout = max(1, settings.sandbox_slot_timeout)
     rank = current_rank()
+    abandon = current_abandon()
     if pool.in_use() >= cap:
         # Queueing is normal under load, but it is also the signal that the
         # cap is what's slowing the board down — worth a line in the log.
-        log.info("sandbox cap (%d) saturated; waiting for a slot at rank %s", cap, rank)
-    if not pool.acquire(rank, timeout):
+        log.info(
+            "sandbox cap (%d, %s lane) saturated; waiting for a slot at rank %s",
+            cap,
+            lane,
+            rank,
+        )
+    if not pool.acquire(rank, timeout, abandoned=abandon.is_set if abandon else None):
+        if abandon is not None and abandon.is_set():
+            raise SandboxError(
+                "command abandoned by its caller before a sandbox slot freed — "
+                "not spawned"
+            )
         raise SandboxError(
             f"no sandbox slot free after {timeout}s "
-            f"(cap={cap}); too many concurrent sandboxes"
+            f"(cap={cap}, lane={lane}); too many concurrent sandboxes"
         )
+    if abandon is not None and abandon.is_set():
+        pool.release()
+        raise SandboxError("command abandoned by its caller — not spawned")
     try:
         yield
     finally:

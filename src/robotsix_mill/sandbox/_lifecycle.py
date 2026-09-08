@@ -219,6 +219,13 @@ def run(
         if settings.sandbox_op_timeout > 0
         else settings.command_timeout
     )
+    # Light-lane commands are orientation greps/finds/reads for the explore
+    # scout, never test suites: cap them tighter so one runaway command
+    # cannot hold a light slot for the full heavy budget.
+    from robotsix_mill.sandbox._slots import current_lane
+
+    if current_lane() == "light" and settings.sandbox_light_op_timeout > 0:
+        op_timeout = min(op_timeout, settings.sandbox_light_op_timeout)
     max_attempts = 3
     # The slot is held across the retries on purpose: a retry re-spawns the
     # same container name, so releasing between attempts would let the live

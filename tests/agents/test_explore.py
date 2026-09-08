@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import threading
 
 import pytest
 from pydantic import ValidationError
@@ -80,6 +81,41 @@ def test_explore_prompt_alias(tmp_path, monkeypatch):
     assert asyncio.run(tool()).startswith("explore: pass the question")
     scoped = explore.make_repo_scoped_explore_tool(s, {"repo": tmp_path})
     assert asyncio.run(scoped(repo="repo", prompt="where is Y?")) == "ANS:where is Y?"
+
+
+def test_run_explore_uses_light_lane_and_abandons_on_timeout(tmp_path, monkeypatch):
+    """Each attempt runs with ``sandbox_lane == "light"`` and a fresh abandon
+    Event that is set when the attempt times out, so queued sandbox spawns
+    are skipped (ticket 79a2). The context is restored afterwards."""
+    from robotsix_mill.sandbox._slots import sandbox_abandon, sandbox_lane
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k", explore_timeout_seconds=1)
+    seen: dict[str, object] = {}
+
+    async def fake_attempt(*, agent, prompt, limits, settings):
+        seen["lane"] = sandbox_lane.get()
+        seen["abandon"] = sandbox_abandon.get()
+        await asyncio.sleep(5)  # outlives explore_timeout_seconds
+        return "never"
+
+    monkeypatch.setattr(explore, "_run_single_explore_attempt", fake_attempt)
+    from robotsix_mill.agents import base as _base
+
+    monkeypatch.setattr(_base, "build_subagent", lambda *a, **k: (object(), None))
+    monkeypatch.setattr(explore, "_EXPLORE_MAX_ATTEMPTS", 1)
+
+    out = asyncio.run(
+        explore.run_explore(
+            settings=s, repo_dir=tmp_path, question="where is the slot pool?"
+        )
+    )
+    assert "timed out" in out or "explore failed" in out
+    assert seen["lane"] == "light"
+    ev = seen["abandon"]
+    assert isinstance(ev, threading.Event) and ev.is_set()
+    # The caller's context is back to the heavy lane with no abandon event.
+    assert sandbox_lane.get() == "heavy"
+    assert sandbox_abandon.get() is None
 
 
 def test_parallel_explore_fans_out_labeled(tmp_path, monkeypatch):

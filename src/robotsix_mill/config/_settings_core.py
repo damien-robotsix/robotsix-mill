@@ -1014,6 +1014,27 @@ class _CoreSettings(BaseModel):
             "(ceiling = max_global_concurrency)."
         ),
     )
+    # Light lane: the explore scout's read-only commands (grep/find/read) take
+    # a slot from this SEPARATE small pool instead of max_global_concurrency,
+    # so they never queue behind implement test runs. 2026-09-07: 64 % of
+    # explore attempts were killed at the 90 s timeout while their greps
+    # waited for a heavy slot (ticket 79a2).
+    sandbox_light_slots: int = Field(
+        default=2,
+        ge=1,
+        description=(
+            "Sandbox slots reserved for the explore scout's read-only "
+            "commands (separate pool from max_global_concurrency)."
+        ),
+    )
+    sandbox_light_op_timeout: int = Field(
+        default=60,
+        ge=0,
+        description=(
+            "Per-command timeout (seconds) for light-lane sandbox commands; "
+            "0 falls back to sandbox_op_timeout."
+        ),
+    )
     sandbox_readonly: bool = Field(
         default=True,
         description="When true, sandbox containers run with read-only root filesystem.",
