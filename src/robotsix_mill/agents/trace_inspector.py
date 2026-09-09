@@ -542,17 +542,33 @@ def run_trace_inspector(
     # NEVER include write_file/edit_file/delete_file: the inspector
     # is analysis-only, no side effects.
     from ._repo_tools import _build_repo_tools
-    from .base import _close_async_client, build_openrouter_model
+    from .base import _close_async_client, build_openrouter_model, level_uses_claude
 
     # Decide whether to enable code-access tools.  When a trace
     # exceeds the observation threshold, deep per-file code
     # verification is impractical — the explore fan-out is exactly
     # what exhausts the budget — so fall back to the cheap tool-less
     # summary path even when *repo_dir* is supplied.
+    #
+    # The inspector is a plain pydantic-ai ``Agent``; when the active
+    # provider slot for its level is the Claude SDK, that model rejects
+    # ``function_tools`` outright ("ClaudeSDKModel does not support
+    # function/tool calling") — every tools-on inspection on the default
+    # slot failed that way on 2026-09-08 (trace-review pass: scanned=100,
+    # flagged=43, drafts=0).  Run tool-less there; the summary path needs
+    # no function tools.
+    on_claude = level_uses_claude(settings.trace_review_model_level)
     tools_on = (
         repo_dir is not None
         and obs_count <= settings.trace_review_inspector_max_obs_for_tools
+        and not on_claude
     )
+    if repo_dir is not None and on_claude:
+        log.info(
+            "trace inspector: level %d routes to the Claude SDK — running "
+            "tool-less (the SDK model rejects pydantic-ai function tools)",
+            settings.trace_review_model_level,
+        )
 
     # Build tools: pass repo_dir=None when tools are off so
     # _build_repo_tools returns an empty list (no explore /
