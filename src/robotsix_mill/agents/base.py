@@ -420,6 +420,7 @@ def compose_prompt(
     skills: list[str] | None = None,
     modules: bool = False,
     workflows: bool = False,
+    repo_dir: Path | None = None,
 ) -> str:
     """Compose the final system prompt: the YAML ``system_prompt`` plus
     any ``skills`` sections.
@@ -468,7 +469,16 @@ def compose_prompt(
         import yaml
 
         logger = logging.getLogger(__name__)
-        modules_path = Path("docs/modules.yaml")
+        # The taxonomy belongs to the TARGET repo: resolve it against the
+        # ticket workspace when the caller has one.  A bare relative path
+        # resolved against the mill process cwd (never a checkout) and the
+        # refine agent logged "Cannot load module taxonomy" on every run
+        # (2026-09-08) — the module map silently never reached the prompt.
+        modules_path = (
+            Path(repo_dir) / "docs" / "modules.yaml"
+            if repo_dir is not None
+            else Path("docs/modules.yaml")
+        )
         try:
             with modules_path.open(encoding="utf-8") as fh:
                 taxonomy = yaml.safe_load(fh)
@@ -713,6 +723,7 @@ def build_agent(
         skills=skills,
         modules=modules,
         workflows=workflows,
+        repo_dir=repo_dir,
     )
     # Deterministic build-time guard (PR #755, PR #780): the prompt must
     # not instruct the agent to *call* a tool absent from its resolved
