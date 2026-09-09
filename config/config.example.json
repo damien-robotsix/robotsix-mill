@@ -21,8 +21,7 @@
         "ntfy_url": "SECRET",
         "openrouter_api_key": "SECRET",
         "openrouter_management_key": "SECRET",
-        "sandbox_push_token": "SECRET",
-        "subscriber_shared_secret": "SECRET"
+        "sandbox_push_token": "SECRET"
     },
     "settings": {
         "forge_auth": "token",
@@ -345,6 +344,7 @@
         "startup_jitter_seconds": 30,
         "state_sync_interval_seconds": 604800,
         "subscriber_urls": [],
+        "subscriber_shared_secret": "SECRET",
         "subtask_request_limit": 30,
         "survey_interval_seconds": 1209600,
         "survey_request_limit": 40,
