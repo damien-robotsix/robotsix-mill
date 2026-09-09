@@ -2501,3 +2501,302 @@ def test_blocked_history_is_eventful(ctx_factory, monkeypatch):
         [_Ev(State.READY), _Ev(State.BLOCKED), _Ev(State.READY)]
     ) == ["blocked"]
     assert _eventful_states([_Ev("fixing_ci"), _Ev("FIXING_CI")]) == ["fixing_ci"]
+
+
+# ------------------------------------------------------------------
+# 19. Retrospect chain guard — suppress retrospect→retrospect re-filing
+# ------------------------------------------------------------------
+
+
+def _chain_seams(monkeypatch):
+    """Install the common seams used by the chain-guard tests."""
+    from robotsix_mill.agents.runners import pass_runner
+    from robotsix_mill.langfuse import client as langfuse_client
+
+    monkeypatch.setattr(
+        langfuse_client,
+        "fetch_session_summary",
+        lambda settings, session_id, **kw: "summary",
+    )
+    monkeypatch.setattr(
+        langfuse_client,
+        "_langfuse_api_get",
+        lambda settings, path, params=None, repo_config=None: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.current_session",
+        lambda: "sess-abc",
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.retrospect.prune_clone",
+        lambda ws: None,
+    )
+    monkeypatch.setattr(
+        pass_runner,
+        "_verify_prior_proposals",
+        lambda service, settings, source_label: {},
+    )
+
+
+def _advance_to_done(ctx, t):
+    """Transition *t* from its current DRAFT state through to DONE."""
+    ctx.service.transition(t.id, State.READY)
+    ctx.service.transition(t.id, State.DOCUMENTING)
+    ctx.service.transition(t.id, State.DELIVERABLE)
+    ctx.service.transition(t.id, State.IMPLEMENT_COMPLETE)
+    ctx.service.transition(t.id, State.HUMAN_MR_APPROVAL)
+    ctx.service.transition(t.id, State.DONE)
+    return ctx.service.get(t.id)
+
+
+def _build_retrospect_chain(
+    ctx,
+    *,
+    root_title,
+    f1_title,
+    f2_title,
+    f1_close_note,
+    close_root=False,
+):
+    """Build root(user) ← f1(retrospect, CLOSED) ← f2(retrospect, DONE).
+
+    Returns (root, f1, f2) refreshed from the DB. When *close_root* is
+    True the root is driven to CLOSED (terminal) to exercise the
+    transition-fallback path.
+    """
+    from robotsix_mill.core.models import SourceKind
+
+    root = ctx.service.create(root_title, "root body")
+    root = _advance_to_done(ctx, root)
+    ctx.service.set_branch(root.id, "mill/root")
+    if close_root:
+        ctx.service.transition(root.id, State.CLOSED, note="root retrospected")
+
+    f1 = ctx.service.create(f1_title, "f1 body", source=SourceKind.RETROSPECT)
+    ctx.service.set_parent(f1.id, root.id)
+    f1 = _advance_to_done(ctx, f1)
+    ctx.service.transition(f1.id, State.CLOSED, note=f1_close_note)
+    ctx.service.set_branch(f1.id, "mill/f1")
+
+    f2 = ctx.service.create(f2_title, "f2 body", source=SourceKind.RETROSPECT)
+    ctx.service.set_parent(f2.id, f1.id)
+    f2 = _advance_to_done(ctx, f2)
+    ctx.service.set_branch(f2.id, "mill/f2")
+
+    return ctx.service.get(root.id), ctx.service.get(f1.id), ctx.service.get(f2.id)
+
+
+def test_chain_guard_fires_on_third_generation(ctx_factory, monkeypatch):
+    """Real incident shape: root ← f1(retrospect, 'could not be verified')
+    ← f2(retrospect). A follow-up whose title shares ≥0.5 Jaccard with f1
+    fires the guard on this third generation: no ticket created, root gets
+    a `retrospect chain guard:` comment and is routed to HUMAN_ISSUE_APPROVAL,
+    and _maybe_spawn_follow_up returns None (no 'follow-up' in note)."""
+    from robotsix_mill.stages.retrospect import _CHAIN_GUARD_NOTE_PREFIX
+
+    ctx = ctx_factory()
+    _chain_seams(monkeypatch)
+
+    root, f1, f2 = _build_retrospect_chain(
+        ctx,
+        root_title="Add economy-objective config gating",
+        f1_title="Run economy-objective acceptance batch verification",
+        f2_title="Execute acceptance-test batch verification",
+        f1_close_note=(
+            "retrospect did not execute the required acceptance batch; the "
+            "economy criterion could not be verified"
+        ),
+    )
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            follow_up_title=(
+                "Run economy-objective acceptance batch verification twenty games"
+            ),
+            follow_up_body="POST /api/batch/jobs against the deployed hexarchy.",
+        ),
+    )
+
+    before = {tk.id for tk in ctx.service.list()}
+    out = RetrospectStage().run(f2, ctx)
+
+    assert out.next_state is State.CLOSED
+    assert "follow-up" not in (out.note or "")
+    # No new ticket created (guard suppressed the follow-up).
+    assert {tk.id for tk in ctx.service.list()} == before
+    # Root got the chain-guard comment.
+    comments = ctx.service.list_comments(root.id)
+    guard_comments = [
+        c for c in comments if c.body.startswith(_CHAIN_GUARD_NOTE_PREFIX)
+    ]
+    assert len(guard_comments) == 1
+    assert guard_comments[0].author == "mill"
+    assert "Run economy-objective acceptance batch verification twenty games" in (
+        guard_comments[0].body
+    )
+    # Root routed to HUMAN_ISSUE_APPROVAL.
+    assert ctx.service.get(root.id).state is State.HUMAN_ISSUE_APPROVAL
+
+
+def test_chain_guard_marker_only_path(ctx_factory, monkeypatch):
+    """Guard fires on an ancestor history-note marker even when the
+    follow-up title has ~0 Jaccard with any ancestor title."""
+    from robotsix_mill.stages.retrospect import _CHAIN_GUARD_NOTE_PREFIX
+
+    ctx = ctx_factory()
+    _chain_seams(monkeypatch)
+
+    root, f1, f2 = _build_retrospect_chain(
+        ctx,
+        root_title="Add economy-objective config gating",
+        f1_title="Run economy-objective acceptance batch verification",
+        f2_title="Execute acceptance-test batch verification",
+        f1_close_note="the acceptance batch remains outstanding",
+    )
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            follow_up_title="Deploy monitoring dashboards for the queue",
+            follow_up_body="Wire up the metrics exporter.",
+        ),
+    )
+
+    before = {tk.id for tk in ctx.service.list()}
+    out = RetrospectStage().run(f2, ctx)
+
+    assert out.next_state is State.CLOSED
+    assert "follow-up" not in (out.note or "")
+    assert {tk.id for tk in ctx.service.list()} == before
+    assert any(
+        c.body.startswith(_CHAIN_GUARD_NOTE_PREFIX)
+        for c in ctx.service.list_comments(root.id)
+    )
+    assert ctx.service.get(root.id).state is State.HUMAN_ISSUE_APPROVAL
+
+
+def test_chain_guard_jaccard_only_path(ctx_factory, monkeypatch):
+    """Guard fires on title Jaccard ≥0.5 even when no ancestor note carries
+    an unmet-criterion marker."""
+    from robotsix_mill.stages.retrospect import _CHAIN_GUARD_NOTE_PREFIX
+
+    ctx = ctx_factory()
+    _chain_seams(monkeypatch)
+
+    root, f1, f2 = _build_retrospect_chain(
+        ctx,
+        root_title="Add economy-objective config gating",
+        f1_title="Run economy-objective acceptance batch verification",
+        f2_title="Execute acceptance-test batch verification",
+        f1_close_note="closed cleanly after audit",  # no marker
+    )
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            follow_up_title="Run economy-objective acceptance batch verification now",
+            follow_up_body="Kick off the batch run.",
+        ),
+    )
+
+    before = {tk.id for tk in ctx.service.list()}
+    out = RetrospectStage().run(f2, ctx)
+
+    assert out.next_state is State.CLOSED
+    assert "follow-up" not in (out.note or "")
+    assert {tk.id for tk in ctx.service.list()} == before
+    assert any(
+        c.body.startswith(_CHAIN_GUARD_NOTE_PREFIX)
+        for c in ctx.service.list_comments(root.id)
+    )
+    assert ctx.service.get(root.id).state is State.HUMAN_ISSUE_APPROVAL
+
+
+def test_chain_guard_negative_first_generation(ctx_factory, monkeypatch):
+    """First-generation follow-up: the retrospected ticket's only ancestor
+    is a source=user root (no retrospect ancestor within 2 generations) →
+    guard does NOT fire and the follow-up is created as today."""
+    from robotsix_mill.core.models import SourceKind
+
+    ctx = ctx_factory()
+    _chain_seams(monkeypatch)
+
+    root = ctx.service.create("Add economy-objective config gating", "root body")
+    root = _advance_to_done(ctx, root)
+    ctx.service.set_branch(root.id, "mill/root")
+
+    f1 = ctx.service.create(
+        "First retrospect follow-up", "f1 body", source=SourceKind.RETROSPECT
+    )
+    ctx.service.set_parent(f1.id, root.id)
+    f1 = _advance_to_done(ctx, f1)
+    ctx.service.set_branch(f1.id, "mill/f1")
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            follow_up_title="Run economy-objective acceptance batch verification",
+            follow_up_body="Concrete follow-up with real detail.",
+        ),
+    )
+
+    before = {tk.id for tk in ctx.service.list()}
+    out = RetrospectStage().run(ctx.service.get(f1.id), ctx)
+
+    assert out.next_state is State.CLOSED
+    assert "follow-up" in (out.note or "")
+    # A new follow-up ticket WAS created.
+    new_ids = {tk.id for tk in ctx.service.list()} - before
+    assert len(new_ids) == 1
+    spawned = ctx.service.get(next(iter(new_ids)))
+    assert spawned.title == "Run economy-objective acceptance batch verification"
+    # Root NOT routed to human review.
+    assert ctx.service.get(root.id).state is State.DONE
+
+
+def test_chain_guard_closed_root_comment_only_fallback(ctx_factory, monkeypatch):
+    """When the resolved root is CLOSED (terminal), the transition to
+    HUMAN_ISSUE_APPROVAL raises and is swallowed: the comment is still
+    posted, the follow-up is still suppressed, and no exception propagates."""
+    from robotsix_mill.stages.retrospect import _CHAIN_GUARD_NOTE_PREFIX
+
+    ctx = ctx_factory()
+    _chain_seams(monkeypatch)
+
+    root, f1, f2 = _build_retrospect_chain(
+        ctx,
+        root_title="Add economy-objective config gating",
+        f1_title="Run economy-objective acceptance batch verification",
+        f2_title="Execute acceptance-test batch verification",
+        f1_close_note="the acceptance batch must be executed on adequate hardware",
+        close_root=True,
+    )
+
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            follow_up_title="Run economy-objective acceptance batch verification again",
+            follow_up_body="POST /api/batch/jobs on the deployed service.",
+        ),
+    )
+
+    before = {tk.id for tk in ctx.service.list()}
+    out = RetrospectStage().run(f2, ctx)
+
+    assert out.next_state is State.CLOSED
+    assert "follow-up" not in (out.note or "")
+    # Follow-up suppressed despite the failed transition.
+    assert {tk.id for tk in ctx.service.list()} == before
+    # Comment still posted on the (CLOSED) root.
+    assert any(
+        c.body.startswith(_CHAIN_GUARD_NOTE_PREFIX)
+        for c in ctx.service.list_comments(root.id)
+    )
+    # Root remains CLOSED — the illegal transition was swallowed.
+    assert ctx.service.get(root.id).state is State.CLOSED
