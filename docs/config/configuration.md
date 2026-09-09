@@ -406,6 +406,7 @@ Node + the `claude` CLI in the container). These knobs govern that path:
 | `core.limits.refine_web_fetch_max_total_bytes` | — | `500000` | (config-file-only) Cumulative fetch-bytes ceiling across one refine trace; `0` disables |
 | `core.limits.refine_web_search_max_calls` | — | `5` | (config-file-only) Max `web_search` calls across one whole refine trace (cross-consult) |
 | `core.limits.audit_requests` | `MILL_AUDIT_REQUEST_LIMIT` | `80` | Per-call request cap for the periodic audit agent |
+| `core.limits.bespoke_requests` | `MILL_BESPOKE_REQUEST_LIMIT` | `80` | Per-call request cap for bespoke per-repo periodic agents' tool loops |
 | `core.limits.doc_requests` | `MILL_DOC_REQUEST_LIMIT` | `32` | Per-run request cap for the document agent |
 | `core.limits.doc_classifier_requests` | `MILL_DOC_CLASSIFIER_REQUEST_LIMIT` | `3` | Per-call request cap for the doc-classifier gate |
 | `core.limits.doc_classifier_diff_max_chars` | `MILL_DOC_CLASSIFIER_DIFF_MAX_CHARS` | `6000` | Caps the git diff (characters) fed to the doc-classifier gate; truncation is safe as the classifier is biased toward `user_facing=True`, and the full doc agent still receives the untruncated diff |

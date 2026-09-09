@@ -74,6 +74,7 @@ def run_bespoke_agent(
     board.
     """
     from pydantic_ai import PromptedOutput
+    from pydantic_ai.usage import UsageLimits
 
     from ._repo_tools import _build_repo_tools
     from .base import _safe_close, build_agent
@@ -114,10 +115,11 @@ def run_bespoke_agent(
         + "Perform the inspection and return your result."
     )
 
+    limits = UsageLimits(request_limit=settings.bespoke_request_limit)
     try:
         result = run_agent(
             agent,
-            lambda h: h.run_sync(prompt),
+            lambda h: h.run_sync(prompt, usage_limits=limits),
             what=f"bespoke:{definition.name}",
         )
     finally:

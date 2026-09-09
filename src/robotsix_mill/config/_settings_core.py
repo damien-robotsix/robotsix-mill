@@ -543,6 +543,16 @@ class _CoreSettings(BaseModel):
         ge=1,
         description="Per-call request cap for the periodic audit agent's tool loop.",
     )
+    # Per-call cap for bespoke per-repo periodic agents. Bespoke
+    # agents previously ran on pydantic-ai's implicit default of 50
+    # (no usage_limits passed) and broad checkers like
+    # security-posture-audit saturated it on genuine runs; 80 matches
+    # the audit agent's budget for the same workload class.
+    bespoke_request_limit: int = Field(
+        default=80,
+        ge=1,
+        description="Per-call request cap for bespoke per-repo periodic agents' tool loops.",
+    )
     # Per-call cap for the docstring-coverage agent's tool loop. The
     # docstring-coverage agent does broad work (explore storms scanning
     # the full repo for docstring gaps) and can saturate the pydantic-ai

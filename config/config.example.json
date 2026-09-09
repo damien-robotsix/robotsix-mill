@@ -53,6 +53,7 @@
         ],
         "bc_check_interval_seconds": 604800,
         "bespoke_discovery_interval_seconds": 600,
+        "bespoke_request_limit": 80,
         "board_hygiene_draft_ttl_days": 7,
         "board_hygiene_max_open_tickets": 0,
         "board_list_cache_ttl_seconds": 3.0,

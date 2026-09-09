@@ -384,3 +384,48 @@ def test_output_type_is_prompted_bespoke_result(settings, monkeypatch):
     ot = captured["output_type"]
     assert isinstance(ot, PromptedOutput)
     assert ot.outputs is BespokeResult
+
+
+# ---------------------------------------------------------------------------
+#  usage_limits is settings-driven (guards against the implicit 50 default)
+# ---------------------------------------------------------------------------
+
+
+class _RecordingHandle:
+    """Fake pydantic-ai agent handle that records run_sync kwargs."""
+
+    def __init__(self):
+        self.kwargs = {}
+
+    def run_sync(self, prompt, **kwargs):
+        self.kwargs = kwargs
+        return SimpleNamespace(output=BespokeResult())
+
+
+@pytest.mark.parametrize("limit", [80, 137])
+def test_run_sync_receives_settings_request_limit(settings, monkeypatch, limit):
+    """run_sync is called with usage_limits whose request_limit equals
+    settings.bespoke_request_limit — proving the cap is settings-driven
+    (not pydantic-ai's implicit 50 default, and not hardcoded)."""
+    settings.bespoke_request_limit = limit
+    handle = _RecordingHandle()
+
+    from robotsix_mill.agents import base, retry
+
+    monkeypatch.setattr(base, "build_agent", lambda *a, **k: object())
+    monkeypatch.setattr(base, "_safe_close", lambda agent: None)
+    # Drive the closure the runner hands to run_agent with our recording
+    # handle so we can inspect the usage_limits kwarg it forwards.
+    monkeypatch.setattr(retry, "run_agent", lambda agent, fn, **k: fn(handle))
+
+    definition = BespokeAgentDefinition(
+        name="limit-test",
+        interval_seconds=3600,
+        system_prompt="You are a checker.",
+    )
+
+    run_bespoke_agent(settings=settings, definition=definition)
+
+    limits = handle.kwargs.get("usage_limits")
+    assert limits is not None
+    assert limits.request_limit == limit

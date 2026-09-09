@@ -707,6 +707,13 @@
           "title": "Bespoke Discovery Interval Seconds",
           "type": "integer"
         },
+        "bespoke_request_limit": {
+          "default": 80,
+          "description": "Per-call request cap for bespoke per-repo periodic agents' tool loops.",
+          "minimum": 1,
+          "title": "Bespoke Request Limit",
+          "type": "integer"
+        },
         "blocked_auto_resume_cooldown_seconds": {
           "default": 1800,
           "description": "Minimum seconds a ticket must have been BLOCKED before it is auto-resumed.",
