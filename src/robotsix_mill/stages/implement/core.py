@@ -115,13 +115,17 @@ class ImplementStage(
             timings = collect_phase_timings()
             if not timings:
                 return
+            # Millisecond precision: a run that raises in its first phase
+            # (clone + baseline explode) legitimately totals a few tens of
+            # ms, which 1-decimal rounding turned into 0.0 and made
+            # ``total_s > 0`` flake in CI (2026-09-09, mill #3215's run).
             total_s = round(
                 sum(
                     float(v)
                     for k, v in timings.items()
                     if k not in _TIMING_COUNTER_KEYS
                 ),
-                1,
+                3,
             )
             payload: dict[str, float | int] = dict(timings)
             payload["total_s"] = total_s
