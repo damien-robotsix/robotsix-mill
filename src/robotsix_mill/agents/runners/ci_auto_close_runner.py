@@ -59,6 +59,7 @@ _TITLE_RE = re.compile(r"CI failure: (.+?) on (\S+)$", re.IGNORECASE)
 # Body markers written by the CI monitor (``poll_loops._poll_one_repo_ci``).
 _BODY_WF_RE = re.compile(r"\*\*Workflow:\*\*\s*(.+)")
 _BODY_COMMIT_RE = re.compile(r"\*\*Commit:\*\*\s*`([0-9a-fA-F]{6,})`")
+_BODY_CREATED_RE = re.compile(r"\*\*Created:\*\*\s*(\d{4}-\d{2}-\d{2}T[0-9:.]+Z?)")
 
 _TERMINAL_CONCLUSIONS = frozenset({"success", "failure"})
 
@@ -96,6 +97,16 @@ def _failing_head(body: str) -> str | None:
     if not body:
         return None
     m = _BODY_COMMIT_RE.search(body)
+    return m.group(1) if m else None
+
+
+def _failing_created_at(body: str) -> str | None:
+    """Return the failing run's ISO timestamp from the body ``**Created:**``
+    marker (written by the CI monitor next to ``**Run:**``), or ``None``.
+    """
+    if not body:
+        return None
+    m = _BODY_CREATED_RE.search(body)
     return m.group(1) if m else None
 
 
@@ -213,7 +224,9 @@ def _maybe_close(
         )
         return False
 
-    green_runs, skip_reason = _green_since_failure(runs, wf, f_sha)
+    green_runs, skip_reason = _green_since_failure(
+        runs, wf, f_sha, failing_created_at=_failing_created_at(body)
+    )
     if not green_runs:
         log.info("ci_auto_close: skip %s — %s", ticket.id, skip_reason)
         return False  # still red / not enough greens / cannot anchor
@@ -245,10 +258,25 @@ def _has_open_mr(forge: Any, ticket: Any) -> bool:
 
 
 def _green_since_failure(
-    runs: list[dict[str, Any]], wf: str, f_sha: str
+    runs: list[dict[str, Any]],
+    wf: str,
+    f_sha: str,
+    *,
+    failing_created_at: str | None = None,
 ) -> tuple[list[dict[str, Any]] | None, str | None]:
     """Return ``(green_runs, None)`` when the workflow *wf* is fixed at-or-after
     *f_sha*, else ``(None, reason)`` naming why the ticket is skipped.
+
+    *failing_created_at* (the ticket's ``**Created:**`` marker, ISO-8601 Z)
+    anchors the failure when its run has already aged out of the forge's
+    run window: the listing is a fixed-size page across EVERY workflow of the
+    repo, so on a busy repo the failing run drops off within hours (mill
+    2026-09-09: a 03:27Z Security Audit failure was gone from the page by
+    the 03:53Z pass, and the ticket was skipped every 15 min as ``failing
+    head outside run window`` while main had been green on that workflow
+    since 04:18Z).  When every completed run of *wf* in the window post-dates
+    the failure, the whole window IS "at-or-after the failing commit" and the
+    normal streak rule applies to it.
 
     A fix is identifiable — one green suffices — when a green run is either on
     a head strictly newer than the failing commit (main advanced to a new
@@ -277,8 +305,16 @@ def _green_since_failure(
         None,
     )
     if idx is None:
-        return None, "failing head outside run window"
-    since = completed[: idx + 1]
+        if failing_created_at and all(
+            _created_at(r) > failing_created_at for r in completed
+        ):
+            # The failing run aged out of the page; everything we can see
+            # ran after it, so the window is the "since" set.
+            since = completed
+        else:
+            return None, "failing head outside run window"
+    else:
+        since = completed[: idx + 1]
     streak = 0
     for r in since:
         if r.get("conclusion") == "success":

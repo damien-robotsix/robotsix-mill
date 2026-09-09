@@ -573,3 +573,97 @@ def test_lone_first_attempt_green_same_head_logs_and_skips(
     ]
     assert len(skip_lines) == 1
     assert t.id in skip_lines[0]
+
+
+# --- failing run aged out of the forge's run page (live mill 2026-09-09:
+# --- Security Audit failed 03:27Z on 88a837f, the page held only newer runs
+# --- by the next pass, main green on that workflow since 04:18Z, ticket
+# --- skipped every 15 min as "failing head outside run window") ---
+
+
+def test_failing_run_aged_out_of_window_closes_on_newer_green(tmp_path, monkeypatch):
+    settings, service = _prepare(
+        tmp_path,
+        monkeypatch,
+        runs=[
+            {
+                "name": "ci / tests",
+                "head_sha": "e95be55",
+                "conclusion": "success",
+                "id": 300,
+                "html_url": "https://x/run/300",
+                "created_at": "2026-09-01T04:18:00Z",
+            },
+            {
+                "name": "ci / tests",
+                "head_sha": "d3b7e4c",
+                "conclusion": "success",
+                "id": 200,
+                "html_url": "https://x/run/200",
+                "created_at": "2026-09-01T03:45:00Z",
+            },
+            # the failing run (abc123 @ 00:00:00Z, per the ticket body) is
+            # NOT in the page any more
+        ],
+    )
+    t = _ci_ticket(service, settings, f_sha="abc123")
+
+    result = _run(settings)
+
+    assert result["closed"] == 1
+    done = service.get(t.id)
+    assert done.state is State.DONE
+    notes = " ".join(e.note or "" for e in service.history(t.id))
+    assert "https://x/run/300" in notes
+
+
+def test_failing_run_aged_out_but_newest_red_stays(tmp_path, monkeypatch):
+    settings, service = _prepare(
+        tmp_path,
+        monkeypatch,
+        runs=[
+            {
+                "name": "ci / tests",
+                "head_sha": "e95be55",
+                "conclusion": "failure",
+                "id": 300,
+                "html_url": "https://x/run/300",
+                "created_at": "2026-09-01T04:18:00Z",
+            },
+            {
+                "name": "ci / tests",
+                "head_sha": "d3b7e4c",
+                "conclusion": "success",
+                "id": 200,
+                "html_url": "https://x/run/200",
+                "created_at": "2026-09-01T03:45:00Z",
+            },
+        ],
+    )
+    t = _ci_ticket(service, settings, f_sha="abc123")
+
+    result = _run(settings)
+
+    assert result["closed"] == 0
+    assert service.get(t.id).state is State.DRAFT
+
+
+def test_window_older_than_failure_still_unanchored():
+    """A page whose runs PRE-date the failure proves nothing — keep skipping."""
+    runs = [
+        {
+            "name": "ci / tests",
+            "head_sha": "old1",
+            "conclusion": "success",
+            "id": 50,
+            "created_at": "2026-08-31T00:00:00Z",
+        }
+    ]
+    green, reason = car._green_since_failure(
+        runs, "ci / tests", "abc123", failing_created_at="2026-09-01T00:00:00Z"
+    )
+    assert green is None
+    assert reason == "failing head outside run window"
+    # and without a Created marker the behaviour is unchanged
+    green, reason = car._green_since_failure(runs, "ci / tests", "abc123")
+    assert (green, reason) == (None, "failing head outside run window")
