@@ -27,6 +27,7 @@ MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
         "fleet_notify_url",
         "openrouter_management_key",
         "sandbox_push_token",
+        "subscriber_shared_secret",
         # -- Langfuse config — canonical block at top-level ``langfuse:``,
         #    not a flat SecretStr field --
         "langfuse",
@@ -65,6 +66,7 @@ MODEL_FIELDS_NOT_IN_JSON_RATIONALES: dict[str, str] = {
     "fleet_notify_url": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
     "openrouter_management_key": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
     "sandbox_push_token": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
+    "subscriber_shared_secret": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
     "langfuse": "Langfuse config — canonical block at top-level langfuse:, not a flat SecretStr field",
     "openrouter": "OpenRouter config — canonical block at top-level openrouter:, not a flat SecretStr field",
     "repos": "Repos registry — not a flat setting field",

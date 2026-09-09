@@ -573,6 +573,21 @@
           "format": "password",
           "title": "Sandbox Push Token",
           "writeOnly": true
+        },
+        "subscriber_shared_secret": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "",
+          "format": "password",
+          "title": "Subscriber Shared Secret",
+          "writeOnly": true
         }
       },
       "title": "Secrets",
