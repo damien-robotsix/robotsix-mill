@@ -124,6 +124,16 @@ def _summary(log: str, name: str = "ci / tests") -> str:
         ),
         (
             _TESTS_CHECK,
+            (
+                "Finalizing artifact upload\n"
+                "##[error]Failed to FinalizeArtifact: Received non-retryable "
+                "error: Failed request: (403) Forbidden: Error from intermediary "
+                'with HTTP status code 403 "Forbidden"'
+            ),
+            "flaky-network",
+        ),
+        (
+            _TESTS_CHECK,
             "Run make weird-step\nSomething odd happened, no tool named",
             "unknown",
         ),

@@ -131,6 +131,23 @@ class TestIsTransientCiFailure:
         )
         assert is_transient_ci_failure(summary) is True
 
+    def test_detects_artifact_finalize_403(self):
+        """actions/upload-artifact: blob upload done, FinalizeArtifact 403 from
+        GitHub's storage intermediary (mill main 2026-09-08 16:53Z — the only
+        red step after 8448 green tests)."""
+        summary = (
+            "## ❌ FAILED: ci / Tests\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "Finished uploading artifact content to blob storage!\n"
+            "Finalizing artifact upload\n"
+            "##[error]Failed to FinalizeArtifact: Received non-retryable error: "
+            "Failed request: (403) Forbidden: Error from intermediary with HTTP "
+            'status code 403 "Forbidden"\n'
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
     def test_detects_runner_lost_communication(self):
         summary = (
             "## ❌ FAILED: deploy\n\n"

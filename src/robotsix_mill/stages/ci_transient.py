@@ -44,6 +44,16 @@ TRANSIENT_PATTERNS: list[re.Pattern[str]] = [
         r"The job was canceled|The operation was canceled|job was abandoned",
         re.IGNORECASE,
     ),
+    # actions/upload-artifact: the blob upload succeeds and the final
+    # FinalizeArtifact call gets a 403 from GitHub's storage intermediary —
+    # pure infrastructure (mill main 2026-09-08 16:53Z: 8448 tests green,
+    # the only red step; the CI-failure ticket then burned a 2 h implement
+    # stall to conclude "no code change").
+    re.compile(r"Failed to FinalizeArtifact", re.IGNORECASE),
+    re.compile(
+        r"Error from intermediary with HTTP status code (?:403|5\d\d)",
+        re.IGNORECASE,
+    ),
     # API rate limiting / server errors
     re.compile(r"API rate limit exceeded|secondary rate limit", re.IGNORECASE),
     re.compile(r"HTTP 5\d\d|502 Bad Gateway|503 Service", re.IGNORECASE),
