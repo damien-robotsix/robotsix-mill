@@ -964,6 +964,26 @@ class _CoreSettings(BaseModel):
         default=2400,
         description="Per-stage wall-clock timeout (seconds). 0 disables.",
     )
+    # Progress-aware soft deadline. At stage_timeout_seconds (the "soft"
+    # deadline) a stage is killed ONLY if it made no model/tool progress
+    # within this window; a run still actively calling tools survives past
+    # the soft deadline (bounded by the hard ceiling below). 0 disables
+    # progress-awareness entirely — legacy behavior: kill at the soft
+    # deadline regardless of activity.
+    stage_stall_window_seconds: int = Field(
+        default=900,
+        ge=0,
+        description="At the soft stage deadline, kill only if no model/tool progress occurred within this window (seconds). 0 disables progress-awareness (kill at the soft deadline).",
+    )
+    # Unconditional hard ceiling = stage_timeout_for(stage) * this
+    # multiplier. A run is killed at the ceiling even while it keeps
+    # making progress, so a genuinely runaway-but-busy stage can't run
+    # forever.
+    stage_deadline_hard_multiplier: int = Field(
+        default=3,
+        ge=1,
+        description="Hard stage-deadline ceiling as a multiple of the soft timeout; a run is killed here even while progressing.",
+    )
     # Per-stage timeout overrides (JSON dict via env var, e.g.
     # MILL_STAGE_TIMEOUT_OVERRIDES='{"merge":0,"refine":1200}').
     # Keys are stage names; values are seconds.  Falls back to
