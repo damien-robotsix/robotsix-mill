@@ -14,7 +14,7 @@ from typing import Any
 
 from ...agents import refining
 from ...config.settings import Settings
-from ...core.models import Ticket, TicketKind
+from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.service import TicketService
 from ...core.states import State
 from ...core.text_noop import is_degenerate_body, is_placeholder_ticket
@@ -31,6 +31,7 @@ from .helpers import (
     _triage_note_signals_wrong_repo,
     _verify_branch_merged,
     log,
+    ops_shape_marker,
 )
 
 # ---------------------------------------------------------------------------
@@ -734,6 +735,35 @@ def handle_triage_decision(
             f"migrated to board {resolved_board!r}: {triage.reason}",
             state=State.DRAFT,
         )
+
+    # --- ops-shaped retrospect follow-up gate ---
+    # A retrospect follow-up that asks to RUN something against a deployed
+    # service or a high-memory host (e.g. `POST /api/batch/jobs`, "on an
+    # environment with adequate memory") cannot be satisfied by a mill
+    # implement run — the network-less ~1 GiB sandbox OOMs.  Today the
+    # mechanical fast-path auto-approves such a draft precisely BECAUSE it
+    # has "no code changes", sending it straight to implement.  Gate it
+    # here, ahead of the fast-path (so it takes precedence over both the
+    # deterministic-source fast-path and triage_auto_approve, and skips
+    # the full refine agent) and route it to a human/ops approval gate.
+    # Scoped to retrospect only — user/CI tickets legitimately quote API
+    # routes in specs.  Returns an explicit state, bypassing
+    # _resolve_next_state, so it fires regardless of require_approval.
+    # NOTE: this gate lives on the fast-path seam; when refine_triage is
+    # disabled the standard full-refine + require_approval routing applies
+    # instead — acceptable, as the incident path is the fast-path.
+    if ticket.source == SourceKind.RETROSPECT:
+        marker = ops_shape_marker(f"{ticket.title}\n{draft}")
+        if marker is not None:
+            return _triage_outcome(
+                ctx,
+                ws,
+                draft,
+                ticket.id,
+                f"ops-shaped retrospect follow-up (matched {marker!r}) — "
+                f"requires operator routing, not auto-implement",
+                state=State.HUMAN_ISSUE_APPROVAL,
+            )
 
     # --- mechanical draft fast-path ---
     # Empty/whitespace drafts cannot be auto-approved — they'd

@@ -1253,6 +1253,116 @@ def test_mechanical_draft_fast_path_falls_through_on_empty_draft_user_source(
 
 
 # ===========================================================================
+# Ops-shaped retrospect follow-up gate
+# ===========================================================================
+
+
+@pytest.mark.parametrize(
+    "draft",
+    [
+        "Run the acceptance batch: `POST /api/batch/jobs` with 20 games.",
+        "Re-run the verification on an environment with adequate memory.",
+        "Execute the batch against the deployed service and report results.",
+    ],
+    ids=["post-api", "adequate-memory", "deployed-service"],
+)
+def test_ops_shaped_retrospect_followup_routes_to_human_gate(
+    ctx_factory, monkeypatch, tmp_path, draft
+):
+    """A retrospect follow-up whose draft is ops-shaped (asks to RUN
+    something against a deployed service / high-memory host) is routed to
+    HUMAN_ISSUE_APPROVAL ahead of the mechanical fast-path — neither
+    triage_auto_approve nor the full refine agent is invoked."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="retrospect")
+    calls = _spy_refine(monkeypatch)
+
+    auto_approve_calls: list[dict] = []
+
+    def _spy_auto_approve(**kw):
+        auto_approve_calls.append(kw)
+        return refining.AutoApproveResult(decision="APPROVE", reason="ok")
+
+    monkeypatch.setattr(refining, "triage_auto_approve", _spy_auto_approve)
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    assert out.next_state == State.HUMAN_ISSUE_APPROVAL
+    assert "ops-shaped retrospect follow-up" in out.note
+    assert auto_approve_calls == []  # auto-approve never invoked
+    assert calls == []  # full refine agent never invoked
+
+
+def test_ops_shaped_gate_does_not_fire_for_user_source(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A user-source ticket that legitimately quotes an API route in its
+    spec must NOT be caught by the ops-shape gate — the existing fast-path
+    behaviour is unchanged."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="user")
+    _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+    from robotsix_mill.agents.refining import AutoApproveResult
+
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda **kw: AutoApproveResult(
+            decision="APPROVE",
+            reason="Mechanical — no design decisions",
+        ),
+    )
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft="Add a handler for `POST /api/batch/jobs` in `src/foo/bar.py`.",
+    )
+
+    assert out.next_state != State.HUMAN_ISSUE_APPROVAL
+    assert "ops-shaped retrospect follow-up" not in out.note
+    assert out.note.startswith("mechanical draft fast-path")
+
+
+def test_retrospect_followup_without_ops_markers_falls_through(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A retrospect follow-up with no ops markers falls through to today's
+    fast-path/full-refine behaviour — the gate does not fire."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="retrospect")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+    from robotsix_mill.agents.refining import AutoApproveResult
+
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda **kw: AutoApproveResult(
+            decision="APPROVE",
+            reason="Mechanical rename — no design decisions",
+        ),
+    )
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft="Rename `old_func` to `new_func` in `src/foo/bar.py`.",
+    )
+
+    assert "ops-shaped retrospect follow-up" not in out.note
+    assert out.note.startswith("mechanical draft fast-path")
+    assert calls == []  # full refine agent skipped by fast-path
+
+
+# ===========================================================================
 # _no_change_path — external-fix claim re-verification branch
 # ===========================================================================
 

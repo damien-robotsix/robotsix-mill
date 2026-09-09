@@ -31,6 +31,7 @@ from robotsix_mill.stages.refine.helpers import (
     _fast_path_scope_checks,
     _strip_advisory_block,
     _triage_note_signals_wrong_repo,
+    ops_shape_marker,
     verify_claim,
 )
 
@@ -1166,3 +1167,40 @@ def test_prior_skip_replay_strips_the_appended_routing_verdict():
 def test_prior_skip_reason_split_semantics(stored, expected):
     """The split keeps the reasoning and drops any appended verdict."""
     assert stored.split(" | auto-approve:", 1)[0].strip() == expected
+
+
+# ---------------------------------------------------------------------------
+# ops_shape_marker
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Run the acceptance batch: POST /api/batch/jobs with 20 games.",
+        "Fetch state via GET /api/board/cards after the run.",
+        "delete /API/jobs/123",  # case-insensitive verb + path
+        "Execute the batch against the deployed service.",
+        "Re-run on an environment with adequate memory.",
+        "Requires a high-memory host to complete without OOM.",
+    ],
+)
+def test_ops_shape_marker_hits(text):
+    """Each ops-shape pattern matches and returns a non-empty marker."""
+    marker = ops_shape_marker(text)
+    assert marker is not None
+    assert marker in text or marker.lower() in text.lower()
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Rename `old_func` to `new_func` in `src/foo/bar.py`.",
+        "Add a mypy annotation to the config loader and update the docstring.",
+        "Refactor the deployment pipeline module to reduce duplication.",
+        "",
+    ],
+)
+def test_ops_shape_marker_misses_plain_code_prose(text):
+    """Plain code-change prose returns None — no false positive."""
+    assert ops_shape_marker(text) is None
