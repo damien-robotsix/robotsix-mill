@@ -3629,3 +3629,47 @@ class TestBuildPreseedHistoryExcerpts:
             "offset": 1,
             "limit": None,
         }
+
+
+# ===================================================================
+# abandoned stage run → tools refuse (live 2026-09-09, ticket 9d32)
+# ===================================================================
+
+
+class TestAbandonedStageGuard:
+    def test_tools_raise_once_the_abandon_event_is_set(
+        self, tmp_path, settings, monkeypatch
+    ):
+        import threading
+
+        from robotsix_mill.sandbox import StageAbandonedError
+        from robotsix_mill.sandbox._slots import sandbox_abandon
+
+        root = tmp_path / "repo"
+        root.mkdir()
+        (root / "a.txt").write_text("alpha\n")
+        tools = _build(root, settings)
+        monkeypatch.setattr(sandbox, "run", lambda cmd, **kw: (0, "out"))
+
+        ev = threading.Event()
+        token = sandbox_abandon.set(ev)
+        try:
+            # Clear flag: tools work normally.
+            assert "alpha" in tools["read_file"](path="a.txt")
+            assert "exit=0" in tools["run_command"]("echo hi")
+            ev.set()
+            with pytest.raises(StageAbandonedError, match="abandoned"):
+                tools["read_file"](path="a.txt")
+            with pytest.raises(StageAbandonedError):
+                tools["edit_file"]("a.txt", "alpha", "beta")
+            with pytest.raises(StageAbandonedError):
+                tools["run_command"]("echo again")
+            with pytest.raises(StageAbandonedError):
+                asyncio.run(tools["parallel_commands"](["echo a"]))
+        finally:
+            sandbox_abandon.reset(token)
+        # No event in context → no-op guard (a fresh file: a.txt was already
+        # served in full and read_file refuses re-reads by design).
+        (root / "b.txt").write_text("bravo\n")
+        assert "bravo" in tools["read_file"](path="b.txt")
+        assert (root / "a.txt").read_text() == "alpha\n"

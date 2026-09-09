@@ -2050,6 +2050,60 @@ async def test_stage_timeout_respects_override_not_global(ctx, service, monkeypa
     assert "timed out" in note
 
 
+async def test_stage_deadline_signals_abandon_to_the_running_thread(
+    ctx, service, monkeypatch
+):
+    """The deadline cannot kill the ``to_thread`` worker; it must SIGNAL it.
+
+    Live 2026-09-09 (ticket 9d32): after ``STALL … timed out after 7200s`` the
+    implement agent kept calling the model for 15+ min while the transient
+    retry re-cloned the same workspace. The stage thread must see a
+    context-local abandon Event that flips at the deadline, and the tools
+    must refuse once it is set."""
+    import threading
+
+    from robotsix_mill.sandbox import (
+        StageAbandonedError,
+        current_abandon,
+        raise_if_abandoned,
+    )
+
+    ctx.settings.stage_timeout_overrides = {"refine": 1}
+    seen: dict[str, object] = {}
+    finished = threading.Event()
+
+    class ZombieRefine(Stage):
+        name = "refine"
+        input_state = State.DRAFT
+
+        def run(self, _t, _c):
+            ev = current_abandon()
+            seen["event"] = ev
+            assert ev is not None
+            # Emulate the agent loop: work until the deadline flips the flag.
+            seen["set_within"] = ev.wait(10)
+            try:
+                raise_if_abandoned("read_file")
+            except StageAbandonedError as exc:
+                seen["tool_refused"] = str(exc)
+            finished.set()
+            return Outcome(State.READY, "should never be applied")
+
+    monkeypatch.setitem(registry.STAGES, "refine", ZombieRefine())
+    t = service.create("zombie")
+    await process_ticket(t.id, ctx)
+
+    # The worker side: deadline handled as before.
+    assert service.get(t.id).state is State.BLOCKED
+    assert "timed out" in service.history(t.id)[-1].note
+    # The thread side: it observed the flag and its tools refused.
+    assert finished.wait(10), "stage thread never observed the abandon flag"
+    assert seen["set_within"] is True
+    assert "abandoned" in str(seen["tool_refused"])
+    # The worker's own context is clean again for the next ticket.
+    assert current_abandon() is None
+
+
 async def test_implement_stage_timeout_uses_stage_timeout_seconds(
     ctx, service, monkeypatch
 ):

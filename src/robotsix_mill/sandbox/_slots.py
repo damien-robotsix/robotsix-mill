@@ -39,9 +39,11 @@ _ABANDON_POLL_S = 0.5
 __all__ = [
     "DEFAULT_RANK",
     "PrioritySlots",
+    "StageAbandonedError",
     "current_abandon",
     "current_lane",
     "current_rank",
+    "raise_if_abandoned",
     "sandbox_abandon",
     "sandbox_lane",
     "sandbox_rank",
@@ -105,6 +107,31 @@ sandbox_abandon: ContextVar[threading.Event | None] = ContextVar(
 def current_lane() -> str:
     """Slot lane of the work running in this context (``heavy``/``light``)."""
     return sandbox_lane.get()
+
+
+class StageAbandonedError(RuntimeError):
+    """Raised by a tool when the run that owns it has been abandoned.
+
+    The worker's stage deadline cancels the ``asyncio.to_thread`` coroutine,
+    but Python cannot stop the thread: the agent loop inside kept calling the
+    model and editing the workspace for 15+ min after its ``STALL`` on
+    2026-09-09 (ticket 9d32), racing the transient retry that had already
+    re-cloned the same workspace. Tools raise this at their entry once the
+    stage-level abandon Event is set, so the pydantic-ai loop unwinds on its
+    next tool call instead of running to its own end.
+    """
+
+
+def raise_if_abandoned(what: str) -> None:
+    """Raise :class:`StageAbandonedError` when the current context's abandon
+    Event is set (no-op when there is no Event or it is clear).
+    """
+    ev = sandbox_abandon.get()
+    if ev is not None and ev.is_set():
+        raise StageAbandonedError(
+            f"{what}: the stage run owning this tool was abandoned "
+            "(deadline expired) — stop; a fresh run has taken over the ticket"
+        )
 
 
 def current_abandon() -> threading.Event | None:
