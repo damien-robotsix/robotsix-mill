@@ -211,6 +211,8 @@ _BUCKET_PATTERNS: tuple[tuple[str, tuple[re.Pattern[str], ...]], ...] = (
             ),
             re.compile(r"the runner has received a shutdown signal"),
             re.compile(r"the operation was canceled"),
+            re.compile(r"failed to finalizeartifact"),
+            re.compile(r"error from intermediary with http status code"),
             re.compile(r"connection timed out"),
             re.compile(r"read timed out"),
         ),
