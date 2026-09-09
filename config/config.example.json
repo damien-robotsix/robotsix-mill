@@ -88,6 +88,7 @@
         "config_pin_drift_baseline": [],
         "config_pin_drift_interval_seconds": 86400,
         "config_sync_interval_seconds": 86400,
+        "config_sync_request_limit": 80,
         "consult_request_limit": 15,
         "coordinator_max_tool_calls": 300,
         "coordinator_request_limit": 500,

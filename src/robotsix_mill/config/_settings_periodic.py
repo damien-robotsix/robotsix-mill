@@ -462,6 +462,18 @@ class _PeriodicSettings(BaseModel):
         default=86400,
         description="Seconds between automatic config-sync passes. 0 = disabled.",
     )
+    # Per-call request cap for the config-sync agent's tool loop. The
+    # agent inspects config.py, .env, and docs/config/configuration.md
+    # with read_file/list_dir/explore — a broad drift scan that can
+    # saturate the old implicit pydantic-ai default of 50 (observed:
+    # "The next request would exceed the request_limit of 50"). 80 gives
+    # headroom matching the audit/test-gap agents' budgets for a similar
+    # broad-scan workload; per-run cost stays negligible.
+    config_sync_request_limit: int = Field(
+        default=80,
+        ge=1,
+        description="Per-call request cap for the config-sync agent's tool loop.",
+    )
 
     # --- member-sync (deterministic workspace-member discovery/registration) ---
     # MILL_MEMBER_SYNC_PERIODIC=true. Default 86400 (1 day). Minimum

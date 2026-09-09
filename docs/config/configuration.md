@@ -972,6 +972,7 @@ and as environment variables:
 | `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `1209600` | Seconds between completeness-check passes. Set to `0` to disable. |
 | `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
 | `MILL_CONFIG_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between config-sync passes (1 day). Set to `0` to disable. |
+| `MILL_CONFIG_SYNC_REQUEST_LIMIT` | `80` | Per-call request cap for the config-sync agent's tool loop |
 | `MILL_DIAGNOSTIC_EVENTS_PATH` | `None` | Explicit file path for the diagnostic event store JSONL file |
 | `MILL_DIAGNOSTIC_EVENTS_MAX_AGE_DAYS` | `90` | Days after which diagnostic events are considered stale and excluded from recurring-failure counts and from the `ci_prevention_rules` digest. Set to `0` to disable aging (keep events indefinitely) |
 | `MILL_DIAGNOSTIC_CI_FAILURE_THRESHOLD` | `3` | Legacy, inert. The recurring-CI diagnostic check no longer files report tickets (recurring failures feed the `ci_prevention_rules` pass instead); the field is kept only so configs that pin it still load. |

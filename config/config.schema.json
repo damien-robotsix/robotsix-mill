@@ -1020,6 +1020,13 @@
           "title": "Config Sync Interval Seconds",
           "type": "integer"
         },
+        "config_sync_request_limit": {
+          "default": 80,
+          "description": "Per-call request cap for the config-sync agent's tool loop.",
+          "minimum": 1,
+          "title": "Config Sync Request Limit",
+          "type": "integer"
+        },
         "consult_request_limit": {
           "default": 15,
           "description": "Per-call request cap for the domain-expert consultation sub-agent.",

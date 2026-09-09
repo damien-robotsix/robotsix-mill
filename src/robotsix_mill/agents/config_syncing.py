@@ -322,10 +322,17 @@ def run_config_sync_agent(
         + "\n\n"
         + "Perform the config-sync drift inspection and return your result."
     )
+    from pydantic_ai.usage import UsageLimits
+
     from .retry import run_agent
 
+    usage_limits = UsageLimits(request_limit=settings.config_sync_request_limit)
     try:
-        result = run_agent(agent, lambda h: h.run_sync(prompt), what="config-sync")
+        result = run_agent(
+            agent,
+            lambda h: h.run_sync(prompt, usage_limits=usage_limits),
+            what="config-sync",
+        )
     finally:
         _safe_close(agent)
     result.output.draft_titles = result.output.draft_titles[:MAX_GAPS]
