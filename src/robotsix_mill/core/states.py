@@ -254,8 +254,20 @@ TRANSITIONS: dict[State, set[State]] = {
         State.ERRORED,
         State.AWAITING_USER_REPLY,
     },
-    # done = merged: retrospect analyses it -> reviewed
-    State.DONE: {State.CLOSED, State.ERRORED, State.BLOCKED, State.AWAITING_USER_REPLY},
+    # done = merged: retrospect analyses it -> reviewed.
+    # DONE → HUMAN_ISSUE_APPROVAL is produced *solely* by the retrospect
+    # chain guard (stages/retrospect.py::_follow_up_chain_guard): when a
+    # retrospect→retrospect follow-up chain re-files an
+    # unverifiable-in-sandbox criterion, the merged root is routed here so
+    # the operator/chat decides where the verification runs rather than
+    # spawning another doomed implement run.
+    State.DONE: {
+        State.CLOSED,
+        State.ERRORED,
+        State.BLOCKED,
+        State.AWAITING_USER_REPLY,
+        State.HUMAN_ISSUE_APPROVAL,
+    },
     State.CLOSED: set(),
     # inquiry states: asked -> answered (terminal), or errored/blocked
     State.ASKED: {

@@ -183,6 +183,14 @@ def test_draft_to_human_issue_approval():
     assert can_transition(State.DRAFT, State.HUMAN_ISSUE_APPROVAL) is True
 
 
+def test_done_to_human_issue_approval():
+    """DONE → HUMAN_ISSUE_APPROVAL is valid — produced solely by the
+    retrospect chain guard routing an already-merged root to a human when
+    a retrospect→retrospect chain re-files an unverifiable-in-sandbox
+    criterion."""
+    assert can_transition(State.DONE, State.HUMAN_ISSUE_APPROVAL) is True
+
+
 # --- IMPLEMENT_COMPLETE gate-check state ---
 
 

@@ -19,7 +19,7 @@ from typing import Any
 from ..agents import retrospecting
 from ..agents.retrospecting import MemoryEdit, RetrospectResult
 from ..config import ConfigError, Settings, get_repo_config
-from ..core.models import SourceKind, Ticket
+from ..core.models import SourceKind, Ticket, TicketEvent
 from ..core.states import DONE_OR_CLOSED, State
 from ..core.text_noop import is_degenerate_body, is_noop_report
 from ..core.text_utils import truncate_at_boundary
@@ -30,6 +30,24 @@ from ..runtime.tracing import current_session
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.retrospect")
+
+
+#: Substrings (matched case-insensitively) that a retrospect ancestor's
+#: closing note carries when its acceptance criterion was NOT met by the
+#: implement run — the signal that re-filing a follow-up would only spawn
+#: another doomed generation.
+_UNMET_CRITERION_MARKERS: tuple[str, ...] = (
+    "did not execute",
+    "remains outstanding",
+    "must be executed",
+    "could not be verified",
+)
+
+#: Prefix stamped on the chain-guard comment and the root's
+#: HUMAN_ISSUE_APPROVAL transition note — the operator's signal that the
+#: normal approve/reject semantics of human_issue_approval do NOT apply
+#: (the root is already merged; this is an ops-routing decision).
+_CHAIN_GUARD_NOTE_PREFIX = "retrospect chain guard:"
 
 
 # Word-to-number mapping for parsing count claims like "Eleven tickets".
@@ -427,6 +445,22 @@ class RetrospectStage(Stage):
 
         target_service = ctx.service
 
+        # Chain guard — deterministic, no LLM. Detect a retrospect→retrospect
+        # chain re-filing the same unverifiable-in-sandbox criterion under a
+        # fresh title. Runs BEFORE the title-dedup loop and create() so it
+        # fires even when the prior same-titled follow-up is already closed.
+        root = self._follow_up_chain_guard(ticket, follow_up_title, ctx)
+        if root is not None:
+            self._signal_chain_guard(root, follow_up_title, ticket, ctx)
+            log.info(
+                "%s: retrospect chain guard suppressed follow-up %r — routed "
+                "root %s to human_issue_approval",
+                ticket.id,
+                follow_up_title,
+                root.id,
+            )
+            return None
+
         # Dedup: skip if an open (non-closed, non-done) ticket with the
         # same case-insensitive title already exists ON THE TARGET
         # BOARD. Dedup is per-board because two ticket-databases can
@@ -460,6 +494,141 @@ class RetrospectStage(Stage):
             target_service.board_id or "<default>",
         )
         return draft.id
+
+    def _follow_up_chain_guard(
+        self,
+        ticket: Ticket,
+        follow_up_title: str,
+        ctx: StageContext,
+    ) -> Ticket | None:
+        """Detect a retrospect→retrospect chain re-filing the same criterion.
+
+        Walks up to **2 generations** of ancestors from the retrospected
+        *ticket*. The guard fires when any ancestor ``A`` satisfies
+        ``A.source == RETROSPECT`` AND (a history note of ``A`` contains an
+        ``_UNMET_CRITERION_MARKERS`` substring OR the Jaccard similarity of
+        *follow_up_title* and ``A.title`` is ≥ 0.5). When it fires, the
+        ROOT ticket (last reachable ancestor) is returned; otherwise
+        ``None``. Pure DB/service reads — no LLM call.
+        """
+        from ..agents.dedup import tokenize
+
+        title_tokens = tokenize(follow_up_title)
+
+        def _jaccard(other: str) -> float:
+            b = tokenize(other)
+            if not title_tokens or not b:
+                return 0.0
+            return len(title_tokens & b) / len(title_tokens | b)
+
+        visited: set[str] = {ticket.id}
+        current = ticket
+        fired = False
+        for _ in range(2):  # at most 2 generations
+            parent_id = current.parent_id
+            if parent_id is None or parent_id in visited:
+                break
+            visited.add(parent_id)
+            ancestor = ctx.service.get(parent_id)
+            if ancestor is None:
+                break
+            current = ancestor
+            if ancestor.source != SourceKind.RETROSPECT:
+                continue
+            events: list[TicketEvent] = ctx.service.history(ancestor.id)
+            marker_hit = any(
+                marker in (e.note or "").casefold()
+                for e in events
+                for marker in _UNMET_CRITERION_MARKERS
+            )
+            if marker_hit or _jaccard(ancestor.title) >= 0.5:
+                fired = True
+                break
+
+        if not fired:
+            return None
+        return self._resolve_root(ticket, ctx)
+
+    def _resolve_root(self, ticket: Ticket, ctx: StageContext) -> Ticket:
+        """Follow ``parent_id`` from *ticket* to the last reachable ancestor.
+
+        Bounded (10 hops) and cycle-safe; the last ticket reached is the
+        chain root.
+        """
+        root = ticket
+        seen: set[str] = {ticket.id}
+        for _ in range(10):
+            pid = root.parent_id
+            if pid is None or pid in seen:
+                break
+            seen.add(pid)
+            nxt = ctx.service.get(pid)
+            if nxt is None:
+                break
+            root = nxt
+        return root
+
+    def _signal_chain_guard(
+        self,
+        root: Ticket,
+        follow_up_title: str,
+        retrospected: Ticket,
+        ctx: StageContext,
+    ) -> None:
+        """Comment on *root* and (best-effort) route it to human review.
+
+        Posts a ``retrospect chain guard:`` comment naming the suppressed
+        follow-up, the ancestor chain walked, and that the operator/chat
+        must decide where the verification runs, then attempts to move the
+        root to ``HUMAN_ISSUE_APPROVAL``. An illegal edge (e.g. a CLOSED
+        root, or a cross-board dangling parent) is caught and logged — the
+        comment stands alone.
+        """
+        from ..core.service import TransitionError
+
+        # Ancestor chain ids from the retrospected ticket up to the root
+        # (bounded + cycle-safe), for the audit note in the comment.
+        chain: list[str] = [retrospected.id]
+        seen: set[str] = {retrospected.id}
+        cur = retrospected
+        for _ in range(10):
+            pid = cur.parent_id
+            if pid is None or pid in seen:
+                break
+            seen.add(pid)
+            nxt = ctx.service.get(pid)
+            if nxt is None:
+                break
+            chain.append(pid)
+            cur = nxt
+        chain_str = " → ".join(chain)
+
+        body = (
+            f"{_CHAIN_GUARD_NOTE_PREFIX} the acceptance criterion behind the "
+            f"suppressed retrospect follow-up {follow_up_title!r} is "
+            "unverifiable in the mill sandbox (network-less, memory-capped) "
+            "and cannot be met by another implement run. Ancestor chain "
+            f"walked: {chain_str}. The operator/chat must decide where the "
+            "verification runs.\n"
+        )
+        ctx.service.add_comment(root.id, body, author="mill")
+        try:
+            ctx.service.transition(
+                root.id,
+                State.HUMAN_ISSUE_APPROVAL,
+                note=(
+                    f"{_CHAIN_GUARD_NOTE_PREFIX} unverifiable-in-sandbox "
+                    "criterion — operator decision needed"
+                ),
+            )
+        except (TransitionError, ValueError, KeyError) as e:
+            log.warning(
+                "%s: retrospect chain guard could not route root %s to "
+                "human_issue_approval (%r) — comment stands alone",
+                retrospected.id,
+                root.id,
+                e,
+            )
 
     def _suppress_duplicate_agented_proposals(
         self,
