@@ -2,7 +2,7 @@ import itertools
 import subprocess
 import threading
 import time
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -1664,6 +1664,169 @@ def test_run_raises_on_genuine_daemon_error_without_retry(tmp_path, monkeypatch)
         sandbox.run("pytest -q", repo_dir="/data/work/repo", settings=s)
     # Exactly one docker run — genuine daemon errors are not retried.
     assert sum(1 for a in call_log if a[:2] == ["docker", "run"]) == 1
+
+
+# --- rc 137 (SIGKILL) diagnosis ------------------------------------------
+#
+# 137 == 128 + SIGKILL. `docker run --rm` already removed the container, so
+# the daemon's event buffer (docker events --since <spawn>) is the only
+# surviving evidence of WHY the command died. Diagnosis runs only on rc 137 —
+# the happy path must never touch docker events.
+
+
+def _rc137_settings(tmp_path):
+    return _settings(
+        tmp_path,
+        data_dir="/data",
+        data_volume="mill_data",
+        sandbox_image="python:3.14-slim",
+        sandbox_proxy_url="",
+    )
+
+
+def test_run_rc137_external_sigkill_appends_diagnosis(tmp_path, monkeypatch):
+    """A docker run killed with SIGKILL from OUTSIDE the memory cgroup (the
+    fleet monitor's second remover racing `--rm`, or the container GC) is
+    reported as an external SIGKILL — not a bare 'failed with exit code 137'."""
+    s = _rc137_settings(tmp_path)
+    call_log = []
+
+    def fake_run(argv, **kw):
+        call_log.append(argv)
+        if argv[:2] == ["docker", "run"]:
+            return subprocess.CompletedProcess(argv, 137, stdout=b"", stderr=b"")
+        # docker events: no oom event in the buffer → external kill.
+        return subprocess.CompletedProcess(argv, 0, stdout=b"", stderr=b"")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: [
+            "--mount",
+            "type=volume,src=mill_data,dst=/data/work/repo,volume-subpath=work/repo",
+        ],
+    )
+    rc, out = sandbox.run("pytest -q", repo_dir="/data/work/repo", settings=s)
+
+    assert rc == 137
+    assert "killed: external SIGKILL (no OOM event)" in out
+    # The diagnosis tailed the daemon event buffer for exactly this container,
+    # from the spawn timestamp.
+    events_calls = [a for a in call_log if a[:2] == ["docker", "events"]]
+    assert len(events_calls) == 1
+    events_argv = events_calls[0]
+    assert events_argv[events_argv.index("--since") + 1]
+    assert "--filter" in events_argv
+    assert events_argv[events_argv.index("--filter") + 1].startswith(
+        "container=mill-sbx-"
+    )
+
+
+def test_run_rc137_oom_event_reported_as_cgroup_oom(tmp_path, monkeypatch):
+    """A sandbox the memory cgroup OOM-killed (daemon buffer shows
+    `container oom`) is reported as a cgroup OOM — the sandbox hit its
+    --memory cap."""
+    s = _rc137_settings(tmp_path)
+    events_out = (
+        f"{datetime.now(UTC).isoformat()} container create abc123 "
+        f"(image=python:3.14-slim, name=mill-sbx-deadbeef)\n"
+        f"{datetime.now(UTC).isoformat()} container oom abc123 "
+        f"(image=python:3.14-slim, name=mill-sbx-deadbeef)\n"
+    )
+
+    def fake_run(argv, **kw):
+        if argv[:2] == ["docker", "run"]:
+            return subprocess.CompletedProcess(argv, 137, stdout=b"", stderr=b"")
+        return subprocess.CompletedProcess(
+            argv, 0, stdout=events_out.encode(), stderr=b""
+        )
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"],
+    )
+    rc, out = sandbox.run("pytest -q", repo_dir=tmp_path, settings=s)
+
+    assert rc == 137
+    # sandbox_memory default is "2g" → reported in the diagnosis.
+    assert "killed: cgroup OOM (memory.max 2g)" in out
+
+
+def test_run_rc137_keeps_command_output_and_appends_diagnosis(tmp_path, monkeypatch):
+    """rc 137 with partial command output keeps it and appends the one-line
+    diagnosis — the agent sees both the tail and the cause."""
+    s = _rc137_settings(tmp_path)
+
+    def fake_run(argv, **kw):
+        if argv[:2] == ["docker", "run"]:
+            return subprocess.CompletedProcess(
+                argv, 137, stdout=b"partial output before kill\n", stderr=b""
+            )
+        return subprocess.CompletedProcess(argv, 0, stdout=b"", stderr=b"")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"],
+    )
+    rc, out = sandbox.run("pytest -q", repo_dir=tmp_path, settings=s)
+
+    assert rc == 137
+    assert out.startswith("partial output before kill\n")
+    assert "killed: external SIGKILL (no OOM event)" in out
+
+
+def test_run_happy_path_never_touches_docker_events(tmp_path, monkeypatch):
+    """Diagnosis runs ONLY on rc 137 — a clean exit must not spawn a docker
+    events call (no happy-path latency change)."""
+    s = _rc137_settings(tmp_path)
+    call_log = []
+
+    def fake_run(argv, **kw):
+        call_log.append(argv)
+        return subprocess.CompletedProcess(argv, 0, stdout=b"ok", stderr=b"")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"],
+    )
+    rc, out = sandbox.run("pytest -q", repo_dir=tmp_path, settings=s)
+
+    assert rc == 0
+    assert out == "ok"
+    assert all(a[:2] != ["docker", "events"] for a in call_log)
+
+
+def test_classify_killed_oom_event():
+    from robotsix_mill.sandbox._lifecycle import _classify_killed
+
+    events = (
+        "2026-09-09T03:38:15.123456789Z container create abc123 "
+        "(image=python:3.14-slim, name=mill-sbx-foo)\n"
+        "2026-09-09T03:38:16.123456789Z container oom abc123 "
+        "(image=python:3.14-slim, name=mill-sbx-foo)\n"
+        "2026-09-09T03:38:16.200000000Z container kill abc123 (signal=9)\n"
+    )
+    assert _classify_killed(events, "2g") == "killed: cgroup OOM (memory.max 2g)"
+
+
+def test_classify_killed_no_oom_external():
+    from robotsix_mill.sandbox._lifecycle import _classify_killed
+
+    events = "2026-09-09T03:38:16.200000000Z container die abc123 (reason=removal)\n"
+    assert _classify_killed(events, "2g") == "killed: external SIGKILL (no OOM event)"
+
+
+def test_classify_killed_empty_stream():
+    from robotsix_mill.sandbox._lifecycle import _classify_killed
+
+    assert _classify_killed("", "2g") == "killed: external SIGKILL (no OOM event)"
 
 
 # --- Hard ceiling on live sandbox containers -------------------------------
