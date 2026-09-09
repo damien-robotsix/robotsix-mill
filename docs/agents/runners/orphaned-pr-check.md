@@ -54,18 +54,29 @@ By default the pass only considers **board-authored** PRs (branch starts
 with `settings.branch_prefix`, e.g. `mill/`). Set
 `orphaned_pr_check.track_foreign_prs` to `true` (default `false`,
 opt-in) to also file a tracking ticket for **foreign** PRs — open PRs
-whose head branch does *not* start with the branch prefix (e.g.
-Dependabot `dependabot/*` bumps or human `feature/*` branches).
+whose head branch does *not* start with the branch prefix (e.g. a human
+`feature/*` branch or a fleet agent's `fix/*` branch).
 
+- Foreign PRs whose head branch starts with one of
+  `orphaned_pr_check.foreign_ignore_branch_prefixes` (default
+  `dependabot/`, `renovate/`, `release-please--`, `pin-bump/`, `bump/`,
+  `deps/`) are **ignored outright** — no ticket is filed and they do not
+  consume the per-pass caps. Those PRs are owned by other automation
+  (the weekly repo-hygiene periodic merges dependency and pin bumps, the
+  release periodic gates release-please PRs); tracking them here would
+  duplicate that work and flood the board with drafts (55 drafts in one
+  pass on 2026-09-09 when the flag was first enabled fleet-wide). They
+  are logged as `action=IGNORED_PREFIX`. Set the list to `[]` to track
+  every foreign PR.
 - Foreign PRs are **never closed** — they are external, so the board
   decides what to do. The pass only files a tracking ticket.
 - The tracking ticket uses a deterministic, idempotent title
   `Track external PR: <repo_id>#<pr_number>` (falling back to
   `Track external PR: <repo_id>/<branch>` when the forge dict lacks a
   PR number), routed via `SourceKind.ORPHANED_PR_CHECK`. A second pass
-  is a no-op — the title is de-duped against non-terminal
-  `ORPHANED_PR_CHECK` tickets exactly like the board-PR tracking
-  tickets.
+  is a no-op — the title is de-duped against *all* `ORPHANED_PR_CHECK`
+  tickets, terminal ones included, so a tracking ticket the board marked
+  `done` or `closed` keeps its PR suppressed.
 - The ticket body carries the PR number, URL, author login, branch and
   title, plus a one-line instruction to review-and-merge or close.
 - Foreign file-ticket actions count against the same
@@ -110,4 +121,11 @@ periodic:
     max_actions_per_pass: 5         # max combined close+file actions per pass
     dry_run: true                   # log intent only, no forge mutations
     track_foreign_prs: false        # also file tracking tickets for non-mill PRs (never closes them)
+    foreign_ignore_branch_prefixes: # foreign PRs owned by other automation — never tracked
+      - dependabot/
+      - renovate/
+      - release-please--
+      - pin-bump/
+      - bump/
+      - deps/
 ```

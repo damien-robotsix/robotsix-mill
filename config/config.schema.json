@@ -1962,6 +1962,14 @@
           "title": "Orphaned Pr Dry Run",
           "type": "boolean"
         },
+        "orphaned_pr_foreign_ignore_branch_prefixes": {
+          "description": "Foreign PR head-branch prefixes the orphaned-PR pass never files a tracking ticket for (dependency / release / pin-bump automation owned by other periodics). Empty list = track every foreign PR.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Orphaned Pr Foreign Ignore Branch Prefixes",
+          "type": "array"
+        },
         "orphaned_pr_max_actions_per_pass": {
           "default": 5,
           "description": "Maximum combined close+file actions per orphaned-PR pass.",

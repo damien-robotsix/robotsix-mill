@@ -1093,16 +1093,24 @@ class TestSplitActionCap:
 
 def _foreign_pr(
     number: int,
-    branch: str = "dependabot/pip/requests-2.32.0",
-    author: str = "dependabot[bot]",
+    branch: str = "feature/human-change",
+    author: str = "some-human",
 ):
     return {
         "branch": branch,
         "author_login": author,
         "number": number,
         "url": f"https://github.com/test-owner/test-repo/pull/{number}",
-        "title": f"Bump requests from 2.31.0 to 2.32.0 (#{number})",
+        "title": f"Add a human-authored change (#{number})",
     }
+
+
+def _dependabot_pr(number: int):
+    return _foreign_pr(
+        number,
+        branch="dependabot/pip/requests-2.32.0",
+        author="dependabot[bot]",
+    )
 
 
 class TestForeignPrTracking:
@@ -1139,10 +1147,10 @@ class TestForeignPrTracking:
         title = svc.create.call_args.kwargs["title"]
         assert title == "Track external PR: test-owner/test-repo#101"
         body = svc.create.call_args.kwargs["description"]
-        assert "dependabot[bot]" in body
-        assert "dependabot/pip/requests-2.32.0" in body
+        assert "some-human" in body
+        assert "feature/human-change" in body
         assert "pull/101" in body
-        assert "Bump requests" in body
+        assert "human-authored change" in body
         # never closes a foreign PR
         forge.close_pr.assert_not_called()
         forge.post_pr_comment.assert_not_called()
@@ -1279,9 +1287,7 @@ class TestForeignPrTracking:
         repo = _repo()
         svc = MagicMock()
         svc.get.return_value = None
-        open_prs = [
-            _foreign_pr(500 + i, branch=f"dependabot/pip/lib-{i}") for i in range(6)
-        ]
+        open_prs = [_foreign_pr(500 + i, branch=f"feature/human-{i}") for i in range(6)]
         forge = _mock_forge(open_prs=open_prs)
         _install_seams(monkeypatch, s, forge, svc)
 
@@ -1367,6 +1373,112 @@ class TestForeignPrTracking:
 # ---------------------------------------------------------------------------
 # Reconcile closed-tracker-PR tests
 # ---------------------------------------------------------------------------
+
+
+class TestForeignIgnoreBranchPrefixes:
+    """``orphaned_pr_foreign_ignore_branch_prefixes`` — foreign PRs owned by
+    other automation (dependabot, release-please, pin-bump runners) are
+    never tracked and never consume the per-pass caps."""
+
+    _AUTOMATION_BRANCHES = [
+        "dependabot/pip/requests-2.32.0",
+        "renovate/major-pytest",
+        "release-please--branches--main",
+        "pin-bump/sweep",
+        "bump/robotsix-modules-16bcb9aebf36",
+        "deps/refresh-git-deps",
+    ]
+
+    def test_default_ignores_automation_prefixes(self, monkeypatch):
+        """Default list: dependabot / release-please / pin-bump PRs file nothing."""
+        s = _settings(orphaned_pr_track_foreign_prs=True)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(
+            open_prs=[
+                _foreign_pr(700 + i, branch=b, author="bot[bot]")
+                for i, b in enumerate(self._AUTOMATION_BRANCHES)
+            ]
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.foreign_filed == 0
+        assert result.foreign_skipped == 0
+        assert result.foreign_ignored == len(self._AUTOMATION_BRANCHES)
+        svc.create.assert_not_called()
+        forge.close_pr.assert_not_called()
+        ignored = [a for a in result.actions if "action=IGNORED_PREFIX" in a]
+        assert len(ignored) == len(self._AUTOMATION_BRANCHES)
+        assert all("classification=foreign_pr" in a for a in ignored)
+
+    def test_ignored_prs_do_not_consume_the_cap(self, monkeypatch):
+        """Six ignored bumps + one human PR with a cap of 5 → the human PR is filed."""
+        s = _settings(
+            orphaned_pr_track_foreign_prs=True,
+            orphaned_pr_max_actions_per_pass=5,
+            orphaned_pr_max_files_per_pass=5,
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        # Ignored PRs sort first (lower numbers) so a naive cap would
+        # exhaust before reaching the human PR.
+        open_prs = [
+            _foreign_pr(100 + i, branch=b, author="bot[bot]")
+            for i, b in enumerate(self._AUTOMATION_BRANCHES)
+        ] + [_foreign_pr(999)]
+        forge = _mock_forge(open_prs=open_prs)
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.foreign_ignored == len(self._AUTOMATION_BRANCHES)
+        assert result.foreign_filed == 1
+        assert svc.create.call_count == 1
+        assert (
+            svc.create.call_args.kwargs["title"]
+            == "Track external PR: test-owner/test-repo#999"
+        )
+        assert not any("foreign action cap reached" in a for a in result.actions)
+
+    def test_empty_list_tracks_every_foreign_pr(self, monkeypatch):
+        """``[]`` opts out of the filter: a dependabot PR gets a tracking ticket."""
+        s = _settings(
+            orphaned_pr_track_foreign_prs=True,
+            orphaned_pr_foreign_ignore_branch_prefixes=[],
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(open_prs=[_dependabot_pr(101)])
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.foreign_ignored == 0
+        assert result.foreign_filed == 1
+        body = svc.create.call_args.kwargs["description"]
+        assert "dependabot[bot]" in body
+        assert "dependabot/pip/requests-2.32.0" in body
+
+    def test_prefix_match_is_exact_prefix_not_substring(self, monkeypatch):
+        """A branch merely *containing* an ignored token is still tracked."""
+        s = _settings(orphaned_pr_track_foreign_prs=True)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(
+            open_prs=[_foreign_pr(101, branch="fix/dependabot/config-parse")]
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.foreign_ignored == 0
+        assert result.foreign_filed == 1
 
 
 class TestReconcileClosedTrackers:

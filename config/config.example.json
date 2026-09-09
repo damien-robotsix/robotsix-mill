@@ -214,6 +214,14 @@
         "orphaned_pr_bot_logins": [],
         "orphaned_pr_check_interval_seconds": 0,
         "orphaned_pr_dry_run": true,
+        "orphaned_pr_foreign_ignore_branch_prefixes": [
+            "dependabot/",
+            "renovate/",
+            "release-please--",
+            "pin-bump/",
+            "bump/",
+            "deps/"
+        ],
         "orphaned_pr_max_actions_per_pass": 5,
         "orphaned_pr_max_closes_per_pass": 10,
         "orphaned_pr_max_files_per_pass": 5,

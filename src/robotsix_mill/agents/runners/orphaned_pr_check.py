@@ -212,6 +212,7 @@ class OrphanedPrCheckResult:
     human_pr_skipped: int = 0  # PRs skipped because author is not the bot
     foreign_filed: int = 0  # tracking tickets filed for non-board (foreign) PRs
     foreign_skipped: int = 0  # foreign PRs skipped (dedup / dry-run / cap)
+    foreign_ignored: int = 0  # foreign PRs ignored (prefix owned by other automation)
     dry_run: bool = True
     actions: list[str] = field(default_factory=list)
     classifications: list[ClassifiedOrphanPr] = field(default_factory=list)
@@ -566,10 +567,16 @@ def _process_foreign_prs(
     """File tracking tickets for FOREIGN (non-board) open PRs.
 
     A foreign PR is one whose head branch does NOT start with
-    ``settings.branch_prefix`` (e.g. ``dependabot/*`` or human
-    ``feature/*`` branches).  Foreign PRs are NEVER closed — the mill
-    only files a deterministic tracking ticket so the board can review
-    and merge or close them.
+    ``settings.branch_prefix`` (e.g. a human ``feature/*`` branch or a
+    fleet agent's ``fix/*`` branch).  Foreign PRs are NEVER closed — the
+    mill only files a deterministic tracking ticket so the board can
+    review and merge or close them.
+
+    Foreign PRs whose head branch starts with one of
+    ``settings.orphaned_pr_foreign_ignore_branch_prefixes`` (dependabot /
+    renovate bumps, release-please release PRs, pin-bump runners) are
+    owned by other automation and are ignored outright: no ticket, no
+    cap consumption — they are only logged as ``IGNORED_PREFIX``.
 
     File actions count against the same combined
     (``orphaned_pr_max_actions_per_pass``) and per-type file
@@ -578,12 +585,29 @@ def _process_foreign_prs(
     """
     max_actions = settings.orphaned_pr_max_actions_per_pass
     max_files = settings.orphaned_pr_max_files_per_pass
+    ignore_prefixes = tuple(settings.orphaned_pr_foreign_ignore_branch_prefixes)
 
-    for idx, pr in enumerate(foreign_prs):
+    candidates: list[dict[str, Any]] = []
+    for pr in foreign_prs:
+        branch = pr["branch"]
+        if ignore_prefixes and branch.startswith(ignore_prefixes):
+            log_line = (
+                f"repo={repo_config.repo_id} branch={branch} "
+                f"ticket_state=NOT_FOUND action=IGNORED_PREFIX "
+                f"classification=foreign_pr "
+                f"dry_run={settings.orphaned_pr_dry_run}"
+            )
+            log.info("orphaned-pr-check: %s", log_line)
+            result.actions.append(log_line)
+            result.foreign_ignored += 1
+            continue
+        candidates.append(pr)
+
+    for idx, pr in enumerate(candidates):
         combined_taken = result.closed + result.filed + result.foreign_filed
         files_taken = result.filed + result.foreign_filed
         if combined_taken >= max_actions or files_taken >= max_files:
-            remaining = len(foreign_prs) - idx
+            remaining = len(candidates) - idx
             cap_msg = (
                 f"orphaned-pr-check: foreign action cap reached "
                 f"(files={files_taken}/{max_files}, "
