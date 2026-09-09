@@ -15,6 +15,7 @@ from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ...forge import get_forge
 from ...forge.auth import _resolve_remote_url, github_token
+from ...runtime.tracing import trace_phase
 from ...vcs import git_ops
 from .. import short_circuit_verify
 from .._conventional import (
@@ -136,6 +137,14 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
 
         Catches known-no-op conditions (empty spec, spawn limit, cycle
         limit) without consuming a spawn slot or emitting a $0.00 trace.
+
+        NOTE (phase timing): preflight is deliberately NOT wrapped in a
+        ``trace_phase`` probe.  It runs in ``processing.py`` BEFORE
+        ``start_ticket_root_span`` opens the root span and before
+        ``ImplementStage.run`` installs the phase-timing accumulator, so any
+        probe here would have no dict to accumulate into and no span to
+        parent.  Preflight is a cheap pre-trace gate, so its cost is
+        intentionally excluded from the implement latency breakdown.
         """
         from .phase_coordinator_preflight import run_preflight_checks
 
@@ -175,9 +184,10 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
 
             ws = ctx.service.workspace(ticket)
             spec = ws.read_description()
-            repo_dir, extra_roots, outcome = build_triaged_meta_workspace(
-                ctx, ticket, ws, spec, author="implement"
-            )
+            with trace_phase("clone_and_branch"):
+                repo_dir, extra_roots, outcome = build_triaged_meta_workspace(
+                    ctx, ticket, ws, spec, author="implement"
+                )
             if outcome is not None:
                 return outcome
             branch = f"{s.branch_prefix}{ticket.id}"
@@ -205,7 +215,8 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 return Outcome(State.BLOCKED, "forge_remote_url not configured")
 
             # Phase 1: clone and branch (or resume)
-            result = self._clone_and_branch(ctx, ticket, s)
+            with trace_phase("clone_and_branch"):
+                result = self._clone_and_branch(ctx, ticket, s)
             if isinstance(result, Outcome):
                 return result
             repo_dir, branch, resuming = result
@@ -215,7 +226,8 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         ws = ctx.service.workspace(ticket)
         from ..hooks import run_prepare_hook
 
-        hook_error = run_prepare_hook(repo_dir, ticket.id, ws.dir)
+        with trace_phase("prepare_hook"):
+            hook_error = run_prepare_hook(repo_dir, ticket.id, ws.dir)
         if hook_error is not None:
             return Outcome(State.BLOCKED, hook_error)
 
@@ -246,13 +258,14 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         # first. Verify that external symbol/import prerequisites the
         # spec declares are satisfiable in the cloned repo's environment
         # BEFORE spending the baseline run or the coordinator agent.
-        prereq_outcome = self._run_prerequisite_gate(
-            ctx,
-            ticket,
-            spec_text,
-            repo_dir,
-            s,
-        )
+        with trace_phase("prereq_gate"):
+            prereq_outcome = self._run_prerequisite_gate(
+                ctx,
+                ticket,
+                spec_text,
+                repo_dir,
+                s,
+            )
         if prereq_outcome is not None:
             return prereq_outcome
 
@@ -265,14 +278,15 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         # ticket itself ("Ticket cannot depend on itself" → Fatal), wedging
         # the ticket and everything parked behind it (board-wide deadlock).
         if ticket.source != SourceKind.IMPLEMENT_BASELINE_DEPENDENCY:
-            baseline_outcome = self._run_baseline_check(
-                ctx,
-                ticket,
-                repo_dir,
-                branch,
-                resuming,
-                s,
-            )
+            with trace_phase("baseline_check"):
+                baseline_outcome = self._run_baseline_check(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    resuming,
+                    s,
+                )
             if baseline_outcome is not None:
                 return baseline_outcome
 
@@ -1069,6 +1083,40 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
 
     @classmethod
     def _finalize(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        summary: str,
+        *,
+        ok: bool,
+        reference_files: list[str] | None = None,
+        extra_roots: list[Path] | None = None,
+        transient: bool = False,
+        write_spec_fingerprint: bool = True,
+    ) -> None:
+        """Time the finalize phase (commit/push/artifact persistence) and
+        delegate to :meth:`_finalize_impl`.  The ``trace_phase`` wrapper
+        accumulates the ``finalize`` duration and opens the matching child
+        span; the accounting is best-effort and never changes the outcome.
+        """
+        with trace_phase("finalize"):
+            cls._finalize_impl(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                summary,
+                ok=ok,
+                reference_files=reference_files,
+                extra_roots=extra_roots,
+                transient=transient,
+                write_spec_fingerprint=write_spec_fingerprint,
+            )
+
+    @classmethod
+    def _finalize_impl(
         cls,
         ctx,
         ticket,

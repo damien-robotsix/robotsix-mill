@@ -26,6 +26,7 @@ themselves.
 
 from __future__ import annotations
 
+import contextlib
 import heapq
 import threading
 from collections.abc import Callable
@@ -63,6 +64,21 @@ sandbox_rank: ContextVar[tuple[int, int]] = ContextVar(
 def current_rank() -> tuple[int, int]:
     """Rank of the work running in this context, or :data:`DEFAULT_RANK`."""
     return sandbox_rank.get()
+
+
+def _record_slot_wait(seconds: float) -> None:
+    """Accumulate sandbox slot-contention wall time into the phase-timing
+    accumulator.
+
+    Imported lazily and best-effort so instrumentation can never break slot
+    acquisition; ``runtime.tracing`` does not import ``sandbox``, so there is
+    no import cycle.  No-op when no accumulator is installed (e.g. periodic
+    passes outside an instrumented implement run).
+    """
+    with contextlib.suppress(Exception):
+        from ..runtime.tracing import add_phase_time
+
+        add_phase_time("sandbox_slot_wait", seconds)
 
 
 # Which slot pool a sandbox command takes. ``"heavy"`` (default) is the
@@ -136,7 +152,8 @@ class PrioritySlots:
         A caller only takes a slot when it is the best-ranked waiter, so a
         newcomer cannot barge past someone already queued.
         """
-        deadline = monotonic() + timeout
+        entry_time = monotonic()
+        deadline = entry_time + timeout
         with self._cv:
             self._seq += 1
             entry = (rank, self._seq)
@@ -150,6 +167,9 @@ class PrioritySlots:
                         self._in_use += 1
                         # The head changed — let the new head re-evaluate.
                         self._cv.notify_all()
+                        # Account the entry->grant wall time (slot contention)
+                        # into the phase-timing accumulator (best-effort).
+                        _record_slot_wait(monotonic() - entry_time)
                         return True
                     remaining = deadline - monotonic()
                     if remaining <= 0 or (abandoned is not None and abandoned()):

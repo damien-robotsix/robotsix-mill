@@ -200,6 +200,33 @@ def test_transient_then_success(tmp_path):
     assert len(slept) == 2  # two backoffs before the 3rd, successful call
 
 
+def test_retry_wait_accounted_into_phase_timings(tmp_path):
+    """A transient-then-success run accumulates the retry backoff time into
+    the ``retry_wait`` phase and bumps the ``retries`` counter — the seam the
+    implement latency breakdown reads to attribute session-limit / transient
+    wait time."""
+    from robotsix_mill.runtime import tracing
+
+    tracing.reset_phase_timings()
+    try:
+        calls = {"n": 0}
+
+        def fn():
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise ModelHTTPError(429, "hy3")
+            return "ok"
+
+        out = call_with_retry(fn, sleep=lambda _d: None)
+        assert out == "ok"
+        snap = tracing.collect_phase_timings()
+        assert snap is not None
+        assert snap.get("retries") == 2  # two backoffs before success
+        assert snap.get("retry_wait", 0.0) > 0  # positive cumulative backoff
+    finally:
+        tracing._phase_timings.set(None)
+
+
 # NOTE: retry COUNT/BACKOFF/flush semantics now live in robotsix-llmio (baked
 # constants, internal OTel flush) and are covered by that package's tests. Mill
 # keeps only the classification re-exports + the boundary/fallback behaviour.

@@ -17,6 +17,7 @@ from ...config import Settings, target_branch_for
 from ...config.repo_settings import load_repo_smoke_command
 from ...core.models import Ticket
 from ...core.states import State
+from ...runtime.tracing import bump_phase_counter, trace_phase
 from ...vcs import git_ops
 from .. import short_circuit_verify
 from ..base import Outcome, StageContext
@@ -611,28 +612,33 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         from robotsix_mill.stages import implement as _facade
 
         ticket_summary = (ic.spec or ticket.title or "")[:200]
-        skip, skip_diag = _should_skip_test_gate(
-            repo_dir, target, settings, ticket_summary
-        )
-        if skip:
-            passed, diag = True, skip_diag
-        else:
-            passed, diag = _facade.run_test_agent(
-                settings=settings,
-                repo_dir=repo_dir,
-                repo_config=ctx.repo_config,
+        # Time the whole test-suite execution (unit gate + optional smoke)
+        # under the ``test_gate`` phase — the sandboxed suite runs are a prime
+        # implement-latency suspect.  Kept out of ``finalize`` so the two
+        # phases never double-count.
+        with trace_phase("test_gate"):
+            skip, skip_diag = _should_skip_test_gate(
+                repo_dir, target, settings, ticket_summary
             )
-        # --- path-scoped smoke gate (runs ONLY after unit tests pass) ---
-        # No point smoking a red build; a smoke failure folds into the
-        # SAME passed/diag → ValidationResult.decide machinery as a test
-        # failure (retry while iterations remain, escalate on the last,
-        # transient-retry on sandbox-unavailable). Strictly opt-in: skipped
-        # entirely unless a smoke command is set (repo file wins over the
-        # global fallback), and skipped when the ticket's introduced
-        # files don't match the repo's smoke_paths globs.
-        passed, diag = cls._run_smoke_gate(
-            ctx, ticket, repo_dir, target, settings, passed, diag
-        )
+            if skip:
+                passed, diag = True, skip_diag
+            else:
+                passed, diag = _facade.run_test_agent(
+                    settings=settings,
+                    repo_dir=repo_dir,
+                    repo_config=ctx.repo_config,
+                )
+            # --- path-scoped smoke gate (runs ONLY after unit tests pass) ---
+            # No point smoking a red build; a smoke failure folds into the
+            # SAME passed/diag → ValidationResult.decide machinery as a test
+            # failure (retry while iterations remain, escalate on the last,
+            # transient-retry on sandbox-unavailable). Strictly opt-in: skipped
+            # entirely unless a smoke command is set (repo file wins over the
+            # global fallback), and skipped when the ticket's introduced
+            # files don't match the repo's smoke_paths globs.
+            passed, diag = cls._run_smoke_gate(
+                ctx, ticket, repo_dir, target, settings, passed, diag
+            )
         if not passed and diag.startswith("sandbox unavailable"):
             # "sandbox unavailable" means the sandbox container could not be
             # launched (docker run failed — e.g. the docker-py auto-remove
@@ -980,21 +986,25 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
 
         head_before = git_ops.head_sha(repo_dir)
 
-        agent_result = cls._invoke_implement_agent(
-            ctx,
-            ticket,
-            repo_dir,
-            branch,
-            settings,
-            ic,
-            language_instructions,
-            agent_level,
-            resume_history,
-            extra_roots,
-            memory_board_id,
-            ws,
-            target_branch=target,
-        )
+        # Count this LLM implement attempt and time the agent pass.  Aggregated
+        # across attempts under the same phase key (see the accumulator).
+        bump_phase_counter("passes")
+        with trace_phase("agent_pass"):
+            agent_result = cls._invoke_implement_agent(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                settings,
+                ic,
+                language_instructions,
+                agent_level,
+                resume_history,
+                extra_roots,
+                memory_board_id,
+                ws,
+                target_branch=target,
+            )
         if agent_result.failure is not None:
             return agent_result.failure
         (
