@@ -1391,6 +1391,13 @@
           "title": "Epic Dedup Lookback Days",
           "type": "integer"
         },
+        "explore_fallback_timeout_factor": {
+          "default": 3.0,
+          "description": "Multiplier applied to explore_timeout_seconds while the scout's level resolves to the OpenRouter fallback slot (provider failover armed); a timed-out fallback attempt is not retried.",
+          "minimum": 1.0,
+          "title": "Explore Fallback Timeout Factor",
+          "type": "number"
+        },
         "explore_max_tokens": {
           "default": 4096,
           "description": "Maximum output tokens for the exploration sub-agent.",
@@ -1414,8 +1421,8 @@
           "type": "integer"
         },
         "explore_timeout_seconds": {
-          "default": 90.0,
-          "description": "Wall-clock timeout (seconds) for a single explore sub-agent call.",
+          "default": 150.0,
+          "description": "Wall-clock timeout (seconds) for a single explore sub-agent call on the default (Claude) slot.",
           "minimum": 1.0,
           "title": "Explore Timeout Seconds",
           "type": "number"

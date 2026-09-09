@@ -404,12 +404,29 @@ def _extract_explored_paths(result: str, repo_dir: Path) -> set[str]:
     return paths
 
 
+def _attempt_timeout(settings: Settings, *, on_claude: bool) -> float:
+    """Wall-clock budget for one scout attempt.
+
+    ``explore_timeout_seconds`` is sized for haiku on the Claude SDK. While
+    provider failover has the scout's level on the OpenRouter slot the same
+    prompt runs on deepseek-flash, whose tool turns are several times slower
+    (2026-09-09: 51 of 74 killed attempts were fallback scouts that never
+    finished in 90 s), so the fallback slot gets the configured multiple.
+    """
+    if on_claude:
+        return float(settings.explore_timeout_seconds)
+    return float(settings.explore_timeout_seconds) * float(
+        settings.explore_fallback_timeout_factor
+    )
+
+
 async def _run_attempt_in_light_lane(
     *,
     agent: Any,
     prompt: str,
     limits: Any,
     settings: Settings,
+    timeout: float | None = None,
 ) -> str:
     """Run one explore attempt under the wall-clock timeout, in the LIGHT
     sandbox lane, with cooperative abandonment.
@@ -427,12 +444,14 @@ async def _run_attempt_in_light_lane(
     abandon = threading.Event()
     lane_token = sandbox_lane.set("light")
     abandon_token = sandbox_abandon.set(abandon)
+    if timeout is None:
+        timeout = float(settings.explore_timeout_seconds)
     try:
         return await asyncio.wait_for(
             _run_single_explore_attempt(
                 agent=agent, prompt=prompt, limits=limits, settings=settings
             ),
-            timeout=settings.explore_timeout_seconds,
+            timeout=timeout,
         )
     finally:
         abandon.set()
@@ -531,24 +550,32 @@ async def run_explore(
             workspace_root=repo_dir,
         )
 
+        # Re-resolve per attempt: failover can arm or clear between them.
+        on_claude_now = level_uses_claude(level)
+        attempt_timeout = _attempt_timeout(settings, on_claude=on_claude_now)
         try:
             result = await _run_attempt_in_light_lane(
                 agent=agent,
                 prompt=current_prompt,
                 limits=limits,
                 settings=settings,
+                timeout=attempt_timeout,
             )
             return result
         except TimeoutError:
-            last_error = TimeoutError(
-                f"explore timed out after {settings.explore_timeout_seconds:.0f}s"
-            )
+            last_error = TimeoutError(f"explore timed out after {attempt_timeout:.0f}s")
             log.warning(
-                "explore attempt %d/%d timed out after %.0fs",
+                "explore attempt %d/%d timed out after %.0fs (slot=%s)",
                 attempt,
                 _EXPLORE_MAX_ATTEMPTS,
-                settings.explore_timeout_seconds,
+                attempt_timeout,
+                "claude" if on_claude_now else "fallback",
             )
+            if not on_claude_now:
+                # A fallback scout that could not finish in the widened budget
+                # will not finish a re-run either (2026-09-09: every retried
+                # fallback timeout timed out again); return the failure now.
+                break
             if attempt < _EXPLORE_MAX_ATTEMPTS:
                 delay = min(_EXPLORE_BACKOFF_CAP, 2.0**attempt)
                 delay += random.uniform(0, delay / 2)
