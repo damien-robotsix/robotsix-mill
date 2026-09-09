@@ -40,6 +40,7 @@ _SECRET_FIELD_NAMES: frozenset[str] = frozenset(
         "fleet_notify_token",
         "ntfy_url",
         "ntfy_token",
+        "subscriber_shared_secret",
     }
 )
 
@@ -292,6 +293,11 @@ class Secrets:
     def ntfy_token(self) -> str | None:
         """Return the ntfy.sh bearer token."""
         return self._ntfy_token  # type: ignore[no-any-return]
+
+    @property
+    def subscriber_shared_secret(self) -> str | None:
+        """Return the shared secret for outbound event subscribers."""
+        return self._subscriber_shared_secret  # type: ignore[no-any-return]
 
     # --- Debug logging for field access ----------------------------------
 
