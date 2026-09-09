@@ -47,6 +47,12 @@ from ._slots import (
     current_rank,
 )
 from ._slots import (
+    StageAbandonedError as StageAbandonedError,
+)
+from ._slots import (
+    raise_if_abandoned as raise_if_abandoned,
+)
+from ._slots import (
     sandbox_abandon as sandbox_abandon,
 )
 from ._slots import (

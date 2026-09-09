@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import threading
 import time
 from collections import Counter
 from datetime import UTC, datetime
@@ -23,7 +24,7 @@ from ...core.service._helpers import TransitionError
 from ...core.service._transition_mixin import _TERMINAL_STATES
 from ...core.states import STAGE_FOR_STATE, State
 from ...notify import _TRIGGER_STATES, send_notification
-from ...sandbox import reap_orphan_sandboxes
+from ...sandbox import reap_orphan_sandboxes, sandbox_abandon
 from ...stages import Outcome, StageContext, get_stage
 from .. import tracing
 from ..tracing import langfuse_trace_url
@@ -857,6 +858,17 @@ async def _process_ticket_inner(
                 # Resolved via Settings so the ci_fix floor (its agent's own
                 # verify-loop budget) is applied — see stage_timeout_for.
                 _stage_timeout = ctx.settings.stage_timeout_for(stage_name)
+                # Cooperative abandonment for the stage thread. Cancelling the
+                # ``to_thread`` coroutine at the deadline does NOT stop the
+                # thread — the agent loop inside kept calling the model and
+                # editing the workspace for 15+ min after its STALL on
+                # 2026-09-09 (ticket 9d32), racing the transient retry that
+                # had re-cloned the same workspace. ``to_thread`` copies the
+                # context, so the thread sees this Event; every fs/sandbox
+                # tool checks it at entry (``sandbox.raise_if_abandoned``) and
+                # the slot pool skips queued spawns once it is set.
+                stage_abandon = threading.Event()
+                abandon_token = sandbox_abandon.set(stage_abandon)
                 coro = asyncio.to_thread(stage.run, ticket, ctx)
                 # --- progress heartbeat ---
                 # Emit periodic heartbeat logs so stalled stages are
@@ -900,6 +912,7 @@ async def _process_ticket_inner(
                     else:
                         outcome = await coro
                 finally:
+                    sandbox_abandon.reset(abandon_token)
                     if _heartbeat_task is not None:
                         _heartbeat_task.cancel()
                     if active_map is not None:
@@ -912,6 +925,15 @@ async def _process_ticket_inner(
                         "outcome.next_state", outcome.next_state.value
                     )
             except _StageDeadlineExceeded:
+                # Tell the still-running stage thread to unwind at its next
+                # tool call before anything else touches the ticket.
+                stage_abandon.set()
+                log.warning(
+                    "%s: %s stage deadline expired — abandon signalled to the "
+                    "stage thread (tools refuse from here on)",
+                    stage_name,
+                    ticket_id,
+                )
                 # --- implement stage: transient retry, not immediate block ---
                 # The stage_timeout_seconds wraps the full stage (scope-triage,
                 # rebase, sandbox setup/teardown, agent call). When it fires,

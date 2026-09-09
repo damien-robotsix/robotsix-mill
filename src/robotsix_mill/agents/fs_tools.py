@@ -343,6 +343,10 @@ def build_preseed_history(
 
 
 def _safe(root: Path, rel: str, *, extra_roots: list[Path] | None = None) -> Path:
+    # Every file tool resolves its path here, so this is the one entry point
+    # that lets an abandoned stage run's agent loop unwind (see
+    # sandbox.StageAbandonedError) before it touches the workspace again.
+    sandbox.raise_if_abandoned(f"path {rel!r}")
     if not root.exists():
         raise ValueError(
             "workspace repo directory does not exist — "
@@ -1440,6 +1444,7 @@ def build_fs_tools(
         ``read_file`` loops — it finds the files that matter in one
         command so you can then ``read_file`` only those.
         """
+        sandbox.raise_if_abandoned("run_command")
         # -- full-suite guard: the stage-owned gate runs the whole suite ----
         # -- once the agent stops; inside the loop it is pure waste. Live   --
         # -- (7d to 2026-08-29): 2,302 agent pytest runs = 91 h, single    --
@@ -1604,6 +1609,7 @@ def build_fs_tools(
         list or a JSON-encoded list string (models habitually send the
         singular; three calls were schema-rejected on 2026-09-08).
         """
+        sandbox.raise_if_abandoned("parallel_commands")
         if commands is None and command is not None:
             coerced = _coerce_command_list(command)
             if isinstance(coerced, str):
