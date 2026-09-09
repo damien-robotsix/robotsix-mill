@@ -387,6 +387,66 @@ def test_success_to_deliverable(ctx_factory, tmp_path, monkeypatch):
     assert (ctx.service.workspace(t).artifacts_dir / "implement.md").exists()
 
 
+def test_implement_writes_phase_timings_artifact(ctx_factory, tmp_path, monkeypatch):
+    """After an implement run, ``artifacts/implement_timings.json`` exists with
+    the wrapped per-phase durations, the ``passes`` counter, and a positive
+    ``total_s`` (acceptance criterion 1)."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        forge_remote_url=remote, test_command="true", review_enabled="false"
+    )
+    monkeypatch.setattr(
+        coding, "run_implement_agent", _fake_agent({"feature.txt": "x"})
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    out = ImplementStage().run(t, ctx)
+    assert out.next_state is State.DOCUMENTING
+
+    timings_path = ctx.service.workspace(t).artifacts_dir / "implement_timings.json"
+    assert timings_path.exists()
+    data = json.loads(timings_path.read_text(encoding="utf-8"))
+    # Sequential phases that always run on the LLM path.
+    for key in ("clone_and_branch", "agent_pass", "test_gate", "finalize"):
+        assert key in data, f"missing phase key {key!r} in {data!r}"
+    assert data["passes"] >= 1
+    assert data["total_s"] > 0
+
+
+def test_phase_timings_artifact_written_even_when_phase_raises(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A raising phase must not suppress the timing artifact: emission happens
+    in ``ImplementStage.run``'s ``finally`` regardless of outcome (acceptance
+    criterion 5 — instrumentation is exception-safe end-to-end)."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(
+        forge_remote_url=remote, test_command="true", review_enabled="false"
+    )
+
+    def _boom(*_a, **_kw):
+        raise RuntimeError("baseline exploded")
+
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", _boom)
+    monkeypatch.setattr(
+        coding, "run_implement_agent", _fake_agent({"feature.txt": "x"})
+    )
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "feature.txt")
+
+    with pytest.raises(RuntimeError, match="baseline exploded"):
+        ImplementStage().run(t, ctx)
+
+    timings_path = ctx.service.workspace(t).artifacts_dir / "implement_timings.json"
+    assert timings_path.exists()
+    data = json.loads(timings_path.read_text(encoding="utf-8"))
+    # The phases that ran before the raise are captured; total is positive.
+    assert "clone_and_branch" in data
+    assert "baseline_check" in data
+    assert data["total_s"] > 0
+
+
 def test_no_changes_terminates_done_when_already_satisfied(
     ctx_factory, tmp_path, monkeypatch
 ):

@@ -11,6 +11,7 @@ mill-specific surface that stays: the export-failure registry, the
 import contextlib
 import json
 import os
+import time
 from datetime import UTC
 from datetime import datetime as _real_datetime
 
@@ -1089,3 +1090,79 @@ def test_record_exception_skips_non_recording_span(monkeypatch):
 
     record_exception(RuntimeError("boom"))
     assert captured == {}
+
+
+# --- phase-timing accumulator ------------------------------------------
+#
+# The implement latency-breakdown accumulator (a ContextVar-held dict of
+# phase name -> cumulative seconds + integer counters).  Every helper is
+# best-effort and must never raise into an instrumented caller.
+
+
+@pytest.fixture(autouse=True)
+def _clear_phase_timings():
+    """Isolate the module-level phase-timing ContextVar between tests."""
+    tracing._phase_timings.set(None)
+    yield
+    tracing._phase_timings.set(None)
+
+
+def test_phase_timings_reset_accumulate_snapshot():
+    tracing.reset_phase_timings()
+    tracing.add_phase_time("agent_pass", 1.5)
+    tracing.add_phase_time("agent_pass", 0.5)
+    tracing.bump_phase_counter("passes")
+    tracing.bump_phase_counter("passes", 2)
+    snap = tracing.collect_phase_timings()
+    assert snap == {"agent_pass": 2.0, "passes": 3}
+    # The snapshot is a copy — mutating it never touches the live dict.
+    snap["agent_pass"] = 99
+    assert tracing.collect_phase_timings()["agent_pass"] == 2.0
+
+
+def test_reset_phase_timings_clears_prior_run():
+    tracing.reset_phase_timings()
+    tracing.add_phase_time("finalize", 3.0)
+    tracing.reset_phase_timings()
+    assert tracing.collect_phase_timings() == {}
+
+
+def test_add_phase_time_noops_without_installed_dict():
+    # No accumulator installed → probes are silent no-ops and the snapshot
+    # reports None (so out-of-implement sandbox/retry calls cost nothing).
+    tracing._phase_timings.set(None)
+    tracing.add_phase_time("agent_pass", 1.0)
+    tracing.bump_phase_counter("passes")
+    assert tracing.collect_phase_timings() is None
+
+
+def test_trace_phase_measures_duration():
+    tracing.reset_phase_timings()
+    with tracing.trace_phase("baseline_check"):
+        time.sleep(0.01)
+    snap = tracing.collect_phase_timings()
+    assert snap is not None
+    assert snap["baseline_check"] >= 0.01
+
+
+def test_trace_phase_is_exception_safe():
+    tracing.reset_phase_timings()
+    with pytest.raises(ValueError), tracing.trace_phase("agent_pass"):
+        raise ValueError("boom")
+    snap = tracing.collect_phase_timings()
+    # The duration is still accumulated even though the body raised.
+    assert snap is not None
+    assert "agent_pass" in snap
+    assert snap["agent_pass"] >= 0.0
+
+
+def test_phase_accumulation_works_with_tracing_disabled():
+    # _provider_ready is False (autouse fixture) → trace_phase still measures
+    # and accumulates; only the child span is skipped.
+    assert tracing._provider_ready is False
+    tracing.reset_phase_timings()
+    with tracing.trace_phase("test_gate"):
+        pass
+    snap = tracing.collect_phase_timings()
+    assert snap is not None
+    assert "test_gate" in snap

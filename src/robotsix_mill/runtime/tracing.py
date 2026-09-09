@@ -18,6 +18,7 @@ absent, every function is a cheap no-op.
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager, nullcontext
@@ -750,6 +751,106 @@ def trace_stage(
     tracer = trace.get_tracer("robotsix-mill")
     with tracer.start_as_current_span(stage_name):
         yield
+
+
+# ---------------------------------------------------------------------------
+# Per-phase timing accumulator (implement latency breakdown)
+# ---------------------------------------------------------------------------
+#
+# A single mutable dict (phase name -> cumulative seconds, plus integer
+# counters) held in a ContextVar so timing probes deep in retry / sandbox /
+# stage code accumulate into one per-ticket record without threading a handle
+# through every call site.  The contextvar propagates through
+# ``asyncio.to_thread`` (the seam the worker offloads stage.run onto), so a
+# dict installed at the top of ``ImplementStage.run`` is visible to every
+# synchronous probe below it.  Every helper is best-effort: a timing failure
+# must never raise into the instrumented caller.
+
+_phase_timings: ContextVar[dict[str, float | int] | None] = ContextVar(
+    "mill.phase_timings", default=None
+)
+
+# Keys whose values are integer counts (everything else is duration seconds).
+# Used by callers computing a duration ``total_s`` so counters aren't summed
+# into it.
+_PHASE_COUNTER_KEYS: frozenset[str] = frozenset(
+    {"passes", "sandbox_spawns", "retries", "tier_fallbacks"}
+)
+
+
+def reset_phase_timings() -> None:
+    """Install a fresh, empty timing accumulator for the current context.
+
+    Called once at the top of ``ImplementStage.run`` so a reused worker
+    context cannot leak a prior ticket's timings into this run.
+    """
+    _phase_timings.set({})
+
+
+def add_phase_time(name: str, seconds: float) -> None:
+    """Accumulate *seconds* under phase *name* (``+=``).
+
+    Silent no-op when no accumulator is installed in the current context —
+    so sandbox / retry probes running outside an instrumented implement run
+    cost nothing.  Never raises.
+    """
+    try:
+        d = _phase_timings.get()
+        if d is None:
+            return
+        d[name] = d.get(name, 0.0) + seconds
+    except Exception:
+        log.debug("add_phase_time: failed", exc_info=True)
+
+
+def bump_phase_counter(name: str, n: int = 1) -> None:
+    """Accumulate an integer count *n* under counter *name* (``+=``).
+
+    Silent no-op when no accumulator is installed.  Never raises.
+    """
+    try:
+        d = _phase_timings.get()
+        if d is None:
+            return
+        d[name] = d.get(name, 0) + n
+    except Exception:
+        log.debug("bump_phase_counter: failed", exc_info=True)
+
+
+@contextmanager
+def trace_phase(name: str) -> Iterator[None]:
+    """Measure the wall-clock duration of the block and accumulate it.
+
+    Two effects, both best-effort:
+
+    * measures the ``time.monotonic()`` delta of the block (exception-safe
+      via ``finally``) and accumulates it via :func:`add_phase_time` — this
+      works even when tracing is disabled (``_provider_ready`` false); and
+    * opens a child OTel span named ``implement:<name>`` (reusing the
+      :func:`trace_stage` machinery) so per-phase durations are natively
+      visible in the Langfuse trace tree.  The span is skipped when tracing
+      is off; only the accumulation happens.
+    """
+    start = time.monotonic()
+    try:
+        with trace_stage(f"implement:{name}"):
+            yield
+    finally:
+        add_phase_time(name, time.monotonic() - start)
+
+
+def collect_phase_timings() -> dict[str, float | int] | None:
+    """Return a snapshot copy of the current timing accumulator, or ``None``
+    when none is installed.
+    """
+    try:
+        d = _phase_timings.get()
+        if d is None:
+            return None
+        return dict(d)
+    except Exception:
+        log.debug("collect_phase_timings: failed", exc_info=True)
+        return None
 
 
 @contextmanager

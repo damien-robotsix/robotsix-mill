@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import subprocess
 import uuid
@@ -11,6 +12,45 @@ from ..config import Settings
 
 
 def run(
+    command: str,
+    *,
+    repo_dir: Path,
+    settings: Settings,
+    install_project: bool = True,
+    sandbox_image: str | None = None,
+) -> tuple[int, str]:
+    """Timing-instrumented wrapper around :func:`_run_impl`.
+
+    Records the total wall time of a sandbox spawn under the ``sandbox_run``
+    phase and bumps the ``sandbox_spawns`` counter in the phase-timing
+    accumulator.  Both are best-effort and lazy-imported so a timing failure
+    can never affect sandbox execution; ``runtime.tracing`` does not import
+    ``sandbox``, so there is no import cycle.  See :func:`_run_impl` for the
+    full behaviour.
+    """
+    from time import monotonic
+
+    _t0 = monotonic()
+    try:
+        return _run_impl(
+            command,
+            repo_dir=repo_dir,
+            settings=settings,
+            install_project=install_project,
+            sandbox_image=sandbox_image,
+        )
+    finally:
+        with contextlib.suppress(Exception):
+            from robotsix_mill.runtime.tracing import (
+                add_phase_time,
+                bump_phase_counter,
+            )
+
+            add_phase_time("sandbox_run", monotonic() - _t0)
+            bump_phase_counter("sandbox_spawns")
+
+
+def _run_impl(
     command: str,
     *,
     repo_dir: Path,

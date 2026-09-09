@@ -251,6 +251,34 @@ def _current_event_loop() -> asyncio.AbstractEventLoop | None:
         return None
 
 
+def _instrumented_sleep(
+    sleep: Callable[[float], None],
+) -> Callable[[float], None]:
+    """Wrap a retry-backoff *sleep* so every retry wait is accounted into the
+    phase-timing accumulator.
+
+    Each invocation bumps the ``retries`` counter and adds the requested delay
+    to ``retry_wait`` before delegating to the underlying sleep.  Accounting
+    the requested delay (rather than measured wall time) keeps the record
+    correct even when the caller injects a no-op sleep (tests) and reflects the
+    retry policy's chosen backoff.  Best-effort: a timing failure never
+    perturbs the sleep itself.  No-op accounting when no accumulator is
+    installed (see :func:`~robotsix_mill.runtime.tracing.add_phase_time`).
+    """
+
+    def _wrapped(delay: float) -> None:
+        try:
+            from ..runtime.tracing import add_phase_time, bump_phase_counter
+
+            bump_phase_counter("retries")
+            add_phase_time("retry_wait", delay)
+        except Exception:
+            log.debug("_instrumented_sleep: accounting failed", exc_info=True)
+        sleep(delay)
+
+    return _wrapped
+
+
 def call_with_retry[T](
     fn: Callable[[], T],
     *,
@@ -265,6 +293,8 @@ def call_with_retry[T](
     ``asyncio.run()`` (RuntimeError).  In that case the call is delegated to a
     thread so the library can create its own event loop safely.
     """
+    # Account every retry backoff sleep into the phase-timing accumulator.
+    sleep = _instrumented_sleep(sleep)
     try:
         asyncio.get_running_loop()
     except RuntimeError:
@@ -421,6 +451,10 @@ def run_agent[T](
     :func:`call_with_retry`, the whole retry session is then delegated to a
     thread so a fresh event loop can be created safely.
     """
+    # Account every retry backoff sleep (primary and provider-failover paths,
+    # which both receive this wrapped callable) into the phase-timing
+    # accumulator.
+    sleep = _instrumented_sleep(sleep)
     retry_count = 0
     last_reason = ""
 
@@ -532,6 +566,14 @@ def _run_at_fallback_slot[T](
     rebuild = getattr(agent, "_failover_rebuild", None)
     if not callable(rebuild):
         raise original
+
+    # Account the tier fallback in the phase-timing accumulator (best-effort).
+    try:
+        from ..runtime.tracing import bump_phase_counter
+
+        bump_phase_counter("tier_fallbacks")
+    except Exception:
+        log.debug("_run_at_fallback_slot: counter accounting failed", exc_info=True)
 
     # Inform the process-wide failover tracker so subsequent builds resolve
     # the fallback slot directly (and the UI shows failover as active). Only
