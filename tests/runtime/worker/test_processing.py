@@ -1223,7 +1223,27 @@ class TestStageDeadlineExceeded:
     def test_can_be_caught(self):
         """It can be raised and caught."""
         with pytest.raises(_StageDeadlineExceeded):
-            raise _StageDeadlineExceeded("deadline")
+            raise _StageDeadlineExceeded(1.0)
+
+    def test_stall_attributes_round_trip(self):
+        """The stall constructor carries elapsed / age / stalled."""
+        exc = _StageDeadlineExceeded(2410.0, 1100.0, stalled=True)
+        assert exc.elapsed == 2410.0
+        assert exc.last_activity_age == 1100.0
+        assert exc.stalled is True
+
+    def test_hard_ceiling_attributes_round_trip(self):
+        """The hard-ceiling constructor: stalled=False, age may be set."""
+        exc = _StageDeadlineExceeded(7200.0, 3.0, stalled=False)
+        assert exc.elapsed == 7200.0
+        assert exc.last_activity_age == 3.0
+        assert exc.stalled is False
+
+    def test_defaults_age_none_not_stalled(self):
+        """last_activity_age defaults to None; stalled defaults to False."""
+        exc = _StageDeadlineExceeded(5.0)
+        assert exc.last_activity_age is None
+        assert exc.stalled is False
 
 
 # ===================================================================

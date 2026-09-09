@@ -29,6 +29,7 @@ from ...stages import Outcome, StageContext, get_stage
 from .. import tracing
 from ..tracing import langfuse_trace_url
 from ..transient_errors import first_full_path
+from . import stage_progress
 from .epic import _EPIC_CHILD_TERMINAL, _run_epic_reeval
 
 log = logging.getLogger("robotsix_mill.worker")
@@ -137,12 +138,81 @@ class _StageDeadlineExceeded(Exception):
     Since Python 3.11 ``asyncio.TimeoutError`` IS the builtin
     ``TimeoutError``, so a timeout raised *inside* ``stage.run`` (an HTTP
     call, a sandbox exec) is indistinguishable from the stage deadline by
-    exception type alone. The wait block below converts only a genuine
-    deadline expiry into this sentinel; every other ``TimeoutError`` falls
-    through to the ordinary stage-error path (transient classification +
-    bounded retries) instead of being misreported as
+    exception type alone. The wait block below raises this sentinel
+    directly on a genuine deadline expiry; every other ``TimeoutError``
+    falls through to the ordinary stage-error path (transient
+    classification + bounded retries) instead of being misreported as
     "stage timed out after Ns" and hard-BLOCKing the ticket.
+
+    Carries the kill telemetry so the handler can name the kind:
+    ``elapsed`` (seconds the stage ran), ``last_activity_age`` (seconds
+    since the last recorded model/tool progress, or ``None`` when the
+    stage never marked progress), and ``stalled`` (True → killed at the
+    soft deadline for lack of progress; False → killed at the hard
+    ceiling while still progressing).
     """
+
+    def __init__(
+        self,
+        elapsed: float,
+        last_activity_age: float | None = None,
+        stalled: bool = False,
+    ) -> None:
+        self.elapsed = elapsed
+        self.last_activity_age = last_activity_age
+        self.stalled = stalled
+        super().__init__(
+            f"stage deadline exceeded after {elapsed}s "
+            f"(stalled={stalled}, last_activity_age={last_activity_age})"
+        )
+
+
+async def _await_stage_with_deadline(
+    coro: Any,
+    *,
+    ticket_id: str,
+    stage_name: str,
+    soft: float,
+    hard: float,
+    window: float,
+) -> Any:
+    """Await *coro* (the ``stage.run`` worker thread) under a
+    progress-aware deadline.
+
+    Polls the running stage instead of using a flat ``asyncio.timeout`` so
+    a slow-but-progressing run survives past the soft deadline. Raises
+    :class:`_StageDeadlineExceeded` on a genuine deadline expiry:
+
+    * ``elapsed >= hard`` → hard-ceiling kill (``stalled=False``) even
+      while the stage keeps making progress.
+    * ``elapsed >= soft`` AND no model/tool progress within *window*
+      (``age >= window``), OR the stage never marked progress
+      (``age is None`` — e.g. an uninstrumented non-agent stage like
+      merge) → stall kill (``stalled=True``). ``window == 0`` collapses
+      this to "kill at the soft deadline" regardless of activity (legacy
+      behavior).
+
+    A ``TimeoutError`` raised by the stage itself propagates unchanged —
+    the sentinel is raised directly here, never inferred from the inner
+    error, so an inner timeout is never misreported as the deadline.
+    """
+    task = asyncio.ensure_future(coro)
+    start = time.monotonic()
+    # Poll fast enough that short test timeouts still fire promptly, but
+    # not so fast we spin on hour-scale production stages.
+    poll = min(15.0, max(0.5, soft / 10))
+    while True:
+        done, _pending = await asyncio.wait({task}, timeout=poll)
+        if task in done:
+            return task.result()
+        elapsed = time.monotonic() - start
+        age = stage_progress.last_activity_age(ticket_id, stage_name)
+        if elapsed >= hard:
+            task.cancel()
+            raise _StageDeadlineExceeded(elapsed, age, stalled=False)
+        if elapsed >= soft and (window == 0 or age is None or age >= window):
+            task.cancel()
+            raise _StageDeadlineExceeded(elapsed, age, stalled=True)
 
 
 def _is_stale_ask_user_block(next_state: State, err: TransitionError) -> bool:
@@ -869,6 +939,10 @@ async def _process_ticket_inner(
                 # the slot pool skips queued spawns once it is set.
                 stage_abandon = threading.Event()
                 abandon_token = sandbox_abandon.set(stage_abandon)
+                # Register this run in the cross-thread progress registry
+                # BEFORE spawning the worker thread so the polling deadline
+                # can read its last-activity age. Cleared in finally.
+                stage_progress.begin(ticket_id, stage_name)
                 coro = asyncio.to_thread(stage.run, ticket, ctx)
                 # --- progress heartbeat ---
                 # Emit periodic heartbeat logs so stalled stages are
@@ -887,34 +961,43 @@ async def _process_ticket_inner(
                         while True:
                             await asyncio.sleep(_interval)
                             elapsed = time.monotonic() - start
+                            age = stage_progress.last_activity_age(_ticket_id, _stage)
                             log.info(
                                 "heartbeat: %s still running for %s "
-                                "(%.0fs elapsed, timeout=%ds)",
+                                "(%.0fs elapsed, timeout=%ds, "
+                                "last_activity_age=%s)",
                                 _stage,
                                 _ticket_id,
                                 elapsed,
                                 _timeout,
+                                f"{age:.0f}s" if age is not None else "n/a",
                             )
 
                     _heartbeat_task = asyncio.create_task(_heartbeat())
                 try:
                     if _stage_timeout > 0:
-                        deadline = asyncio.timeout(_stage_timeout)
-                        try:
-                            async with deadline:
-                                outcome = await coro
-                        except TimeoutError:
-                            if deadline.expired():
-                                raise _StageDeadlineExceeded from None
-                            # TimeoutError raised by stage.run itself
-                            # (HTTP/sandbox/...) — not our deadline.
-                            raise
+                        # Progress-aware polling deadline: a run that keeps
+                        # making tool/model progress survives past the soft
+                        # deadline (up to the hard ceiling); an idle stall
+                        # is killed at the soft deadline.
+                        outcome = await _await_stage_with_deadline(
+                            coro,
+                            ticket_id=ticket_id,
+                            stage_name=stage_name,
+                            soft=_stage_timeout,
+                            hard=(
+                                _stage_timeout
+                                * ctx.settings.stage_deadline_hard_multiplier
+                            ),
+                            window=ctx.settings.stage_stall_window_seconds,
+                        )
                     else:
                         outcome = await coro
                 finally:
                     sandbox_abandon.reset(abandon_token)
                     if _heartbeat_task is not None:
                         _heartbeat_task.cancel()
+                    stage_progress.clear(ticket_id, stage_name)
                     if active_map is not None:
                         active_map.pop((ticket_id, stage_name), None)
                 # Attach the outcome to the root span — visible at the
@@ -924,7 +1007,7 @@ async def _process_ticket_inner(
                     root_io.set_attribute(
                         "outcome.next_state", outcome.next_state.value
                     )
-            except _StageDeadlineExceeded:
+            except _StageDeadlineExceeded as _deadline:
                 # Tell the still-running stage thread to unwind at its next
                 # tool call before anything else touches the ticket.
                 stage_abandon.set()
@@ -933,6 +1016,23 @@ async def _process_ticket_inner(
                     "stage thread (tools refuse from here on)",
                     stage_name,
                     ticket_id,
+                )
+                # Name the kill kind so the note/log distinguishes an idle
+                # stall (killed at the soft deadline for lack of progress)
+                # from a hard-ceiling kill (killed while still progressing).
+                _elapsed_s = int(_deadline.elapsed)
+                if _deadline.stalled:
+                    _age = _deadline.last_activity_age
+                    _activity = (
+                        f"no agent activity for {int(_age)}s"
+                        if _age is not None
+                        else "no agent activity recorded"
+                    )
+                    _kill_kind = f"stall: {_activity}"
+                else:
+                    _kill_kind = "hard ceiling"
+                _kill_desc = (
+                    f"stage {stage_name} timed out after {_elapsed_s}s ({_kill_kind})"
                 )
                 # --- implement stage: transient retry, not immediate block ---
                 # The stage_timeout_seconds wraps the full stage (scope-triage,
@@ -949,11 +1049,10 @@ async def _process_ticket_inner(
                 # the 31 stage timeouts this mill ever recorded were ci_fix.
                 if stage_name in ("implement", "ci_fix"):
                     log.error(
-                        "STALL: %s %s stage timed out after %ds — "
-                        "no progress (heartbeat stopped); retrying as transient",
+                        "STALL: %s %s %s; retrying as transient",
                         ticket_id,
                         stage_name,
-                        _stage_timeout,
+                        _kill_desc,
                     )
                     if root_io is not None:
                         root_io.set_attribute("error.classification", "transient")
@@ -962,20 +1061,21 @@ async def _process_ticket_inner(
                         )
                         root_io.set_output(
                             {
-                                "error": (
-                                    f"{stage_name} stage timed out after "
-                                    f"{_stage_timeout}s (stall)"
-                                ),
+                                "error": _kill_desc,
                                 "next_state": ticket.state.value,
                             }
                         )
+                    # set_retry_state (the transient path) does NOT create a
+                    # TicketEvent, so record an explicit history breadcrumb
+                    # naming the kill kind — every deadline kill must leave a
+                    # history event on the ticket.
+                    with contextlib.suppress(Exception):
+                        ctx.service.add_history_note(ticket_id, _kill_desc[:500])
                     await _handle_stage_error(
                         ticket_id,
                         ctx,
                         stage_name,
-                        TimeoutError(
-                            f"{stage_name} stage timed out after {_stage_timeout}s"
-                        ),
+                        TimeoutError(_kill_desc),
                         trace_id,
                     )
                     # Set stall subtype AFTER _handle_stage_error so it
@@ -996,15 +1096,15 @@ async def _process_ticket_inner(
                 # pointless, both of those timed out again on the re-run.
                 if stage_name == "retrospect":
                     log.error(
-                        "%s: retrospect timed out after %ds — closing "
+                        "%s: %s — closing "
                         "(the PR is already merged; skipping the pass)",
                         ticket_id,
-                        _stage_timeout,
+                        _kill_desc,
                     )
                     note = (
-                        f"retrospect timed out after {_stage_timeout}s — "
-                        "skipped. The PR is merged and the ticket is "
-                        "complete; only the follow-up-learning pass was lost."
+                        f"{_kill_desc} — skipped. The PR is merged and the "
+                        "ticket is complete; only the follow-up-learning "
+                        "pass was lost."
                     )
                     if root_io is not None:
                         root_io.set_attribute("error.classification", "timeout")
@@ -1013,37 +1113,35 @@ async def _process_ticket_inner(
                         )
                         root_io.set_output(
                             {
-                                "error": (
-                                    f"stage {stage_name} timed out after "
-                                    f"{_stage_timeout}s"
-                                ),
+                                "error": _kill_desc,
                                 "next_state": "CLOSED",
                             }
                         )
                     _post_trace_event(ctx, ticket_id, trace_id, stage_name)
+                    # transition() records a TicketEvent carrying this note —
+                    # the required history event for the retrospect kill path.
                     _transition_closing_stale_threads(
                         ctx, ticket_id, State.CLOSED, note[:200], stage_name=stage_name
                     )
                     return
                 # --- all other stages: hard block ---
                 log.error(
-                    "%s: %s timed out after %ds — escalating to BLOCKED",
+                    "%s: %s — escalating to BLOCKED",
                     stage_name,
-                    ticket_id,
-                    _stage_timeout,
+                    _kill_desc,
                 )
-                note = f"stage {stage_name} timed out after {_stage_timeout}s"[:200]
+                note = _kill_desc[:200]
                 if root_io is not None:
                     root_io.set_attribute("error.classification", "timeout")
                     root_io.set_attribute("error.timeout_seconds", str(_stage_timeout))
                     root_io.set_output(
                         {
-                            "error": (
-                                f"stage {stage_name} timed out after {_stage_timeout}s"
-                            ),
+                            "error": _kill_desc,
                             "next_state": "BLOCKED",
                         }
                     )
+                # _block_ticket_and_notify → transition(BLOCKED, note) records
+                # a TicketEvent carrying this note — the required history event.
                 await _block_ticket_and_notify(
                     ticket_id, ctx, stage_name, note, trace_id
                 )

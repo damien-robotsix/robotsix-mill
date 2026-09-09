@@ -2701,6 +2701,13 @@
           "title": "Spec Review Enabled",
           "type": "boolean"
         },
+        "stage_deadline_hard_multiplier": {
+          "default": 3,
+          "description": "Hard stage-deadline ceiling as a multiple of the soft timeout; a run is killed here even while progressing.",
+          "minimum": 1,
+          "title": "Stage Deadline Hard Multiplier",
+          "type": "integer"
+        },
         "stage_retry_base_delay": {
           "default": 2.0,
           "description": "Base delay (seconds) for exponential backoff between stage retries.",
@@ -2718,6 +2725,13 @@
           "description": "Maximum delay (seconds) for exponential backoff between stage retries.",
           "title": "Stage Retry Max Delay",
           "type": "number"
+        },
+        "stage_stall_window_seconds": {
+          "default": 900,
+          "description": "At the soft stage deadline, kill only if no model/tool progress occurred within this window (seconds). 0 disables progress-awareness (kill at the soft deadline).",
+          "minimum": 0,
+          "title": "Stage Stall Window Seconds",
+          "type": "integer"
         },
         "stage_timeout_overrides": {
           "additionalProperties": {

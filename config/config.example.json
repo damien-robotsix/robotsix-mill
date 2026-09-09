@@ -322,9 +322,11 @@
         "smoke_command": "",
         "spec_review_enabled": true,
         "standards_gate_enabled": true,
+        "stage_deadline_hard_multiplier": 3,
         "stage_retry_base_delay": 2.0,
         "stage_retry_max_attempts": 5,
         "stage_retry_max_delay": 60.0,
+        "stage_stall_window_seconds": 900,
         "stage_timeout_overrides": {
             "refine": 900
         },

@@ -14,6 +14,7 @@ everything and never converged.
 from __future__ import annotations
 
 import concurrent.futures
+import contextlib
 import contextvars
 import functools
 import inspect
@@ -247,13 +248,26 @@ def _compress_tool_outputs(
 def _wrap_tools_with_progress(
     tools: list[Any],
     progress_event: threading.Event,
+    on_progress: Callable[[], None] | None = None,
 ) -> list[Any]:
-    """Wrap each callable tool to set *progress_event* on every invocation.
+    """Wrap each callable tool to signal progress on every invocation.
 
-    The event is set BEFORE the original tool executes, so even a hung
-    or long-running tool doesn't prevent the watchdog from observing
-    forward motion. Non-callable entries pass through unchanged.
+    Before the original tool executes we ``progress_event.set()`` (for the
+    ``implement_pass_timeout`` watchdog) and, when supplied, invoke
+    *on_progress* (used to bridge progress to the stage-level deadline via
+    ``stage_progress.mark``). Both signals fire BEFORE the original tool
+    runs, so even a hung or long-running tool doesn't prevent an observer
+    from seeing forward motion. Exceptions from *on_progress* are
+    swallowed — a progress-tracking failure must never break a tool call.
+    Non-callable entries pass through unchanged.
     """
+
+    def _signal() -> None:
+        progress_event.set()
+        if on_progress is not None:
+            with contextlib.suppress(Exception):
+                on_progress()
+
     wrapped: list[Any] = []
     for t in tools:
         if callable(t):
@@ -268,7 +282,7 @@ def _wrap_tools_with_progress(
                 async def _async_progress_wrapper(
                     *args: Any, _original: Any = t, **kwargs: Any
                 ) -> Any:
-                    progress_event.set()
+                    _signal()
                     return await _original(*args, **kwargs)
 
                 wrapped.append(_async_progress_wrapper)
@@ -278,7 +292,7 @@ def _wrap_tools_with_progress(
                 def _progress_wrapper(
                     *args: Any, _original: Any = t, **kwargs: Any
                 ) -> Any:
-                    progress_event.set()
+                    _signal()
                     return _original(*args, **kwargs)
 
                 wrapped.append(_progress_wrapper)
@@ -500,6 +514,20 @@ def run_coordinator(
     if settings.implement_pass_timeout > 0:
         _progress_event = threading.Event()
 
+    # -- stage-level progress bridge -------------------------------------
+    # Mark progress in the cross-thread stage_progress registry on every
+    # tool call so the worker's progress-aware stage deadline can tell an
+    # idle stall from a slow-but-progressing run. This applies REGARDLESS
+    # of implement_pass_timeout (the watchdog above stays gated on it):
+    # even with the watchdog off, the stage deadline still needs marks.
+    from ..runtime.worker import stage_progress
+
+    _on_stage_progress: Callable[[], None] | None = None
+    if current_ticket_id:
+
+        def _on_stage_progress() -> None:
+            stage_progress.mark(current_ticket_id, stage_name)
+
     _all_tools: list[Any] = [
         make_explore_tool(
             settings,
@@ -520,8 +548,16 @@ def run_coordinator(
         make_verify_diff_tool(repo_dir),
         *fs_tools,
     ]
-    if _progress_event is not None:
-        _all_tools = _wrap_tools_with_progress(_all_tools, _progress_event)
+    # Wrap when either signal is needed: the watchdog event (gated on
+    # implement_pass_timeout) OR the stage-progress bridge (whenever a
+    # ticket id is known). When the watchdog is off a dummy Event carries
+    # the callback-only wrapping.
+    if _progress_event is not None or _on_stage_progress is not None:
+        _all_tools = _wrap_tools_with_progress(
+            _all_tools,
+            _progress_event if _progress_event is not None else threading.Event(),
+            on_progress=_on_stage_progress,
+        )
 
     _all_tools = _compress_tool_outputs(_all_tools)
 
