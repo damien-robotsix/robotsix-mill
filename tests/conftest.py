@@ -12,6 +12,42 @@ from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 
 
+@pytest.hookimpl(hookwrapper=True, trylast=True)
+def pytest_runtest_call(item):
+    """Join fire-and-forget daemon threads a test spawns, *before* the
+    call phase ends.
+
+    The epic re-process route (``name="epic-reprocess"``) and the generic
+    pass runner (``name=f"{pass_id}-pass"``) both launch a daemon thread
+    that logs (``log.info('%s pass done')`` / ``'epic %s: re-processed …'``)
+    after the request returns. A test that does not wait for the thread
+    leaks it: the trailing ``log.info`` then fires after pytest has torn
+    down that test's capture stream, producing hundreds of
+    ``--- Logging error --- ValueError: I/O operation on closed file.``
+    blocks that bury the real failure of a red CI run.
+
+    ``trylast=True`` makes this the *innermost* ``pytest_runtest_call``
+    wrapper, so our post-yield ``join`` runs *before* pytest's own
+    capture/log-capture wrappers tear down their streams. Joining any
+    later (an outer wrapper, or a fixture teardown) races: the thread's
+    trailing ``log.info`` would fire while we hold it open but after the
+    capture stream is already closed. Only the two well-known thread
+    names are joined (bounded timeout), so long-lived infrastructure
+    threads (e.g. the worker poll loop started by the ``client``
+    lifespan) are never touched.
+    """
+    import threading
+
+    before = {t.ident for t in threading.enumerate()}
+    yield
+    current = threading.current_thread()
+    for t in threading.enumerate():
+        if t.ident in before or t is current:
+            continue
+        if t.name == "epic-reprocess" or t.name.endswith("-pass"):
+            t.join(timeout=10)
+
+
 @pytest.fixture(autouse=True)
 def _reset_failover_tracker():
     """Isolate every test from llmio's process-wide failover singleton."""
@@ -82,6 +118,30 @@ def _no_real_http(monkeypatch):
 
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", _blocked)
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", _blocked)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_tracing(monkeypatch):
+    """Never construct a real OTLP exporter / TracerProvider in tests.
+
+    Fixtures such as ``repo_config`` carry ``pk-test`` Langfuse
+    credentials, so any code path that reaches ``_ensure_tracing`` (a
+    pass runner, an epic re-process, a ticket root span) would otherwise
+    delegate to llmio's ``setup_langfuse_tracing``, which builds a real
+    ``OTLPSpanExporter`` + ``BatchSpanProcessor`` worker aimed at
+    ``https://cloud.langfuse.com``. That worker outlives the test that
+    spawned it and POSTs real span batches (401 Unauthorized) at
+    interpreter exit — a live network call the suite promises never to
+    make. Stub the delegate to a no-op that reports "not configured" so
+    tracing stays a cheap no-op everywhere and no exporter thread is
+    ever started. Tests that assert the delegation itself monkeypatch
+    this attribute again in their own body, which wins over this stub.
+    """
+    from robotsix_llmio.core import tracing as _llmio_tracing
+
+    monkeypatch.setattr(
+        _llmio_tracing, "setup_langfuse_tracing", lambda **kwargs: False
+    )
 
 
 @pytest.fixture(autouse=True)
