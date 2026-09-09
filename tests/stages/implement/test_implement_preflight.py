@@ -2279,3 +2279,89 @@ def test_external_scope_gate_passes_when_only_footer_references_external_repo(
     # external-scope gate must not block.
     if out is not None:
         assert "external scope gate" not in (out.note or "")
+
+
+def test_external_scope_gate_passes_when_local_path_referenced_with_external_repo(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """An in-repo ticket that names an external repo (e.g. a shared-workflow
+    pin bump) but targets a local, non-package path must not be misrouted.
+
+    Live case: a mill ticket bumping the ``robotsix-github-workflows`` pin
+    edits ``.github/workflows/ci.yml`` — a repo-relative path outside
+    ``src/robotsix_mill/``.  The current repo is never named by id or
+    package path, so the id/package match misses it, but the local
+    file-path reference proves the work targets this workspace."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Bump shared-workflow pin",
+        body=(
+            "## Problem\n\n"
+            "The shared reusable workflow is behind.\n\n"
+            "## Scope\n\n"
+            "- Bump the `robotsix-github-workflows` pin in "
+            "`.github/workflows/ci.yml`.\n\n"
+            "## Acceptance criteria\n\n"
+            "- CI passes with the new pin.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix-github-workflows")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    # The actionable sections reference a local file path
+    # (``.github/workflows/ci.yml``) not owned by the external repo, so
+    # the external-scope gate must not block.
+    if out is not None:
+        assert "external scope gate" not in (out.note or "")
+
+
+def test_external_scope_gate_still_blocks_external_owned_path_with_local_dir_prefix(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A path prefixed by an external repo id (``<external>/.github/...``)
+    stays external-owned — the local-path escape hatch must not un-block
+    it when no genuinely-local path is referenced."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Fix external CI",
+        body=(
+            "## Problem\n\nExternal CI is broken.\n\n"
+            "## Scope\n\n"
+            "- Modify `robotsix-github-workflows/.github/workflows/ci.yml`.\n\n"
+            "## Acceptance criteria\n\n"
+            "- robotsix-github-workflows CI passes.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix-github-workflows")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "external scope gate" in out.note
+    assert "robotsix-github-workflows" in out.note
