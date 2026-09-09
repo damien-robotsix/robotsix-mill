@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.14.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.13.1...v0.14.0) (2026-09-09)
+
+
+### Features
+
+* Progress-aware stage deadline: stall window + hard ceiling (scope split from 20260907T144252Z) (20260908T071338Z-scope-split-from-20260907t144252z-implem-da2b) ([#3214](https://github.com/damien-robotsix/robotsix-mill/issues/3214)) ([8629d2b](https://github.com/damien-robotsix/robotsix-mill/commit/8629d2b72f017ed3442a3bdb2b85bcfb877788ab))
+* **refine:** default the refine agent to level 3 ([#3181](https://github.com/damien-robotsix/robotsix-mill/issues/3181)) ([32328b1](https://github.com/damien-robotsix/robotsix-mill/commit/32328b1d93a68fe22bb057b67a6a3c2e1c295daa))
+
+
+### Bug Fixes
+
+* **agents:** resolve docs/modules.yaml against the ticket workspace, not the process cwd ([#3206](https://github.com/damien-robotsix/robotsix-mill/issues/3206)) ([8494220](https://github.com/damien-robotsix/robotsix-mill/commit/8494220c6fe61ede815bccc22c8f5bf75e70f19b))
+* **alembic:** keep the once-per-process logging sentinel on the root logger — env.py is re-executed per upgrade, so every init_db added root handlers ([#3197](https://github.com/damien-robotsix/robotsix-mill/issues/3197)) ([8c0bfa8](https://github.com/damien-robotsix/robotsix-mill/commit/8c0bfa86fc5a05fa6ccebdc4a610e3ef28bd8fa5))
+* Auto-approve 'triage failed' fallback routes trivially-approvable docs-only tickets to human_issue_approval (20260907T143647Z-auto-approve-triage-failed-fallback-rout-8f97) ([#3186](https://github.com/damien-robotsix/robotsix-mill/issues/3186)) ([eee7a9c](https://github.com/damien-robotsix/robotsix-mill/commit/eee7a9cb205a5fbfcc1e324c5d3fdf49106cd487))
+* CI auto-close runner never self-moots a CI-failure ticket fixed by re-running the same failing run (20260907T145521Z-ci-auto-close-runner-never-self-moots-a-b78b) ([#3187](https://github.com/damien-robotsix/robotsix-mill/issues/3187)) ([1a34b32](https://github.com/damien-robotsix/robotsix-mill/commit/1a34b32c287a3b6e9f84c6ad13c66de6c5d88a95))
+* **ci_fix:** cap fetch_ci_logs output so a full_log fetch can never exceed the model context ([#3198](https://github.com/damien-robotsix/robotsix-mill/issues/3198)) ([3085f94](https://github.com/damien-robotsix/robotsix-mill/commit/3085f94c24a8c364dbc939028410e7c174438cdb))
+* **ci_fix:** classify an actions/upload-artifact FinalizeArtifact 403 as transient infrastructure ([#3207](https://github.com/damien-robotsix/robotsix-mill/issues/3207)) ([d3b7e4c](https://github.com/damien-robotsix/robotsix-mill/commit/d3b7e4c47cfffcfac42c2a0186c5f837f43d0d86))
+* **ci-auto-close:** anchor an aged-out failing run by its Created timestamp instead of skipping forever ([#3211](https://github.com/damien-robotsix/robotsix-mill/issues/3211)) ([c9b7e55](https://github.com/damien-robotsix/robotsix-mill/commit/c9b7e55979bb1abf28994b8d8668ffe4cc2f7cfb))
+* **ci-auto-close:** moot ci tickets that acquired a branch without a PR ([#3184](https://github.com/damien-robotsix/robotsix-mill/issues/3184)) ([9e1148f](https://github.com/damien-robotsix/robotsix-mill/commit/9e1148fbdf6dca71ac9a0aed6f0737c17939c381))
+* config_sync on robotsix-mill failing: request_limit of 50 exceeded (error, 1×) (20260907T215027Z-config-sync-on-robotsix-mill-failing-req-93cc) ([#3200](https://github.com/damien-robotsix/robotsix-mill/issues/3200)) ([f46f863](https://github.com/damien-robotsix/robotsix-mill/commit/f46f86387f1b58c034e08cf8d811d04f55475032))
+* **deps:** bump httpx2/httpcore2 to 2.12.0 for the four 2026-09-09 advisories ([#3208](https://github.com/damien-robotsix/robotsix-mill/issues/3208)) ([bc8d2c8](https://github.com/damien-robotsix/robotsix-mill/commit/bc8d2c886edf9714240a46b44a47c86d0661ef8d))
+* **explore:** size the scout timeout for the slot it actually runs on and stop retrying fallback timeouts ([#3212](https://github.com/damien-robotsix/robotsix-mill/issues/3212)) ([ac0ef22](https://github.com/damien-robotsix/robotsix-mill/commit/ac0ef226d1fb979b7e77b99e524acae4349a2196))
+* **implement:** keep millisecond precision in the phase-timings artifact total ([#3216](https://github.com/damien-robotsix/robotsix-mill/issues/3216)) ([ddbe451](https://github.com/damien-robotsix/robotsix-mill/commit/ddbe451c4b4a5e9cb1cf36313885b3195b454f4e))
+* **implement:** treat a sandbox OOM kill (exit 137) as an environment artifact in the baseline gate ([#3191](https://github.com/damien-robotsix/robotsix-mill/issues/3191)) ([f728d98](https://github.com/damien-robotsix/robotsix-mill/commit/f728d980e239b6a67aa70d34dfec2ad7ea32cbad))
+* **periodic:** repo_description_sync clones with the per-repo forge token ([#3174](https://github.com/damien-robotsix/robotsix-mill/issues/3174)) ([f9ed835](https://github.com/damien-robotsix/robotsix-mill/commit/f9ed835c6252f6786ce78e6b30254b53241fc5f4))
+* **refine:** auto-approve verdict parser tolerates Markdown emphasis around the token ([#3204](https://github.com/damien-robotsix/robotsix-mill/issues/3204)) ([6c7689b](https://github.com/damien-robotsix/robotsix-mill/commit/6c7689bd16655d28bb9f2ccec78d9accdc626f75))
+* **refine:** reject refine results that changed subject instead of persisting them ([#3178](https://github.com/damien-robotsix/robotsix-mill/issues/3178)) ([ff2b6dd](https://github.com/damien-robotsix/robotsix-mill/commit/ff2b6dd8b191a41a375e00b0f7acceefcbce7cf7))
+* **sandbox:** light slot lane + cooperative abandonment for explore's read-only commands ([#3192](https://github.com/damien-robotsix/robotsix-mill/issues/3192)) ([54cae4d](https://github.com/damien-robotsix/robotsix-mill/commit/54cae4d76b64ab48fd6220de125aee73fda61674))
+* **sandbox:** restore exec bit on the Dart SDK binaries after zipfile extraction ([#3189](https://github.com/damien-robotsix/robotsix-mill/issues/3189)) ([94d6bb0](https://github.com/damien-robotsix/robotsix-mill/commit/94d6bb085cb8c8fe2a8ce18b66d0ee207f8334dd))
+* scope-triage EXPAND cap splits legitimately-scoped multi-file changes into child tickets and blocks the parent (20260908T074320Z-scope-triage-expand-cap-splits-legitimat-9ca2) ([#3199](https://github.com/damien-robotsix/robotsix-mill/issues/3199)) ([7ad9ecb](https://github.com/damien-robotsix/robotsix-mill/commit/7ad9ecb39a390616e5121cee79682bc91d9b0e06))
+* scope-triage EXPAND cap strands the parent ticket in permanent BLOCKED after splitting overflow to a child (20260908T194021Z-scope-triage-expand-cap-strands-the-pare-29d1) ([#3201](https://github.com/damien-robotsix/robotsix-mill/issues/3201)) ([67c71e2](https://github.com/damien-robotsix/robotsix-mill/commit/67c71e24fc938492fa926510f4accfffaac102f1))
+* **tools:** accept the argument names models habitually send (file_path, timeout, comment, prompt, command, branch) ([#3190](https://github.com/damien-robotsix/robotsix-mill/issues/3190)) ([b4d65f2](https://github.com/damien-robotsix/robotsix-mill/commit/b4d65f2bc9abf0af0c9fc28392335df92d669bb8))
+* **tools:** accept the argument shapes models actually send to edit_file, read_file and parallel_commands ([#3210](https://github.com/damien-robotsix/robotsix-mill/issues/3210)) ([9a41b9a](https://github.com/damien-robotsix/robotsix-mill/commit/9a41b9ab20a8afd1a9656132b747e4aa1d8e05ac))
+* **tools:** read_file accepts limit=None at the schema level ([#3173](https://github.com/damien-robotsix/robotsix-mill/issues/3173)) ([e7014a8](https://github.com/damien-robotsix/robotsix-mill/commit/e7014a8e5457924711ec29d696119516e236bd59))
+* **trace_review:** run the trace inspector tool-less when its level routes to the Claude SDK ([#3205](https://github.com/damien-robotsix/robotsix-mill/issues/3205)) ([93470a9](https://github.com/damien-robotsix/robotsix-mill/commit/93470a905c56d34711b8655ec87ea0450f45e41d))
+* Worker: stop duplicate stage runs of one ticket (pop-time requeue drops _pending) and record, don't crash on, outcomes whose ticket state changed mid-run (20260907T072712Z-worker-stop-duplicate-stage-runs-of-one-0629) ([#3171](https://github.com/damien-robotsix/robotsix-mill/issues/3171)) ([8f1e9d9](https://github.com/damien-robotsix/robotsix-mill/commit/8f1e9d97268a793e494cb84c1f88fcb741cf4de9))
+* **worker:** make the stage deadline actually stop the agent — signal an abandon Event the tools honour ([#3213](https://github.com/damien-robotsix/robotsix-mill/issues/3213)) ([68c8e19](https://github.com/damien-robotsix/robotsix-mill/commit/68c8e19b9a5eb20cb31046d07c6ac5ca07f1a8e9))
+* **worker:** surface swallowed forge listings and close stale [ASK_USER] threads on the retrospect-timeout close path ([#3193](https://github.com/damien-robotsix/robotsix-mill/issues/3193)) ([ca303a2](https://github.com/damien-robotsix/robotsix-mill/commit/ca303a2ade07eaf977df45bdd700328af22bb14d))
+
 ## [0.13.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.13.0...v0.13.1) (2026-09-07)
 
 
