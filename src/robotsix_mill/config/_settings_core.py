@@ -467,19 +467,36 @@ class _CoreSettings(BaseModel):
         description="Maximum output tokens for the exploration sub-agent.",
     )
     explore_timeout_seconds: float = Field(
-        default=90.0,
+        default=150.0,
         ge=1.0,
-        description="Wall-clock timeout (seconds) for a single explore sub-agent call.",
+        description=(
+            "Wall-clock timeout (seconds) for a single explore sub-agent call "
+            "on the default (Claude) slot."
+        ),
     )
-    # Sized from live data, 2026-09-05..07: successful explore calls on the
-    # Claude SDK cheap level take p50 20 s / p90 27 s (CLI spawn + tool loop),
-    # so the previous 30 s default killed 10 of 12 first attempts and failed
-    # 6 of them outright after 3×30 s — each timeout is a full haiku run
-    # discarded. 90 s (≈3× p90) leaves headroom without unbounding a hang.
-    # The scout runs at the cheap level (haiku on the Claude subscription,
-    # ~6.6 s median): it spends quota, not cash.  Claude-backed levels run
-    # the scout through the SDK tool loop, so ``explore_request_limit``
-    # only bounds the OpenRouter fallback slot there.
+    explore_fallback_timeout_factor: float = Field(
+        default=3.0,
+        ge=1.0,
+        description=(
+            "Multiplier applied to explore_timeout_seconds while the scout's "
+            "level resolves to the OpenRouter fallback slot (provider "
+            "failover armed); a timed-out fallback attempt is not retried."
+        ),
+    )
+    # Sized from live data. 2026-09-05..07: successful scouts on the Claude
+    # SDK cheap level took p50 20 s / p90 27 s, so the 30 s default killed
+    # 10 of 12 first attempts → 90 s. 2026-09-09: successes now run 13–32
+    # tool turns (p50 42 s / p90 80 s / max 87 s), 23 of 50 spawned haiku
+    # scouts were killed at 90 s → 150 s (≈2× p90). Each timeout is a full
+    # haiku run discarded, so under-sizing costs more than the headroom.
+    # The scout runs at the cheap level (haiku on the Claude subscription):
+    # it spends quota, not cash.  While provider failover has the level on
+    # the OpenRouter slot the same scout runs on deepseek-flash, which
+    # needs several times longer per tool turn: 51 of 74 kills that day
+    # were fallback attempts that never finished in 90 s, each retried 3×
+    # with the same result — hence the factor and the no-retry rule.
+    # Claude-backed levels run the scout through the SDK tool loop, so
+    # ``explore_request_limit`` only bounds the OpenRouter fallback slot.
     explore_model_level: int = Field(
         default=1,
         ge=1,

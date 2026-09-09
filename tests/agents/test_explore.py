@@ -118,6 +118,81 @@ def test_run_explore_uses_light_lane_and_abandons_on_timeout(tmp_path, monkeypat
     assert sandbox_abandon.get() is None
 
 
+def test_fallback_slot_widens_timeout_and_does_not_retry_a_timeout(
+    tmp_path, monkeypatch
+):
+    """While the scout's level is on the OpenRouter fallback slot (the
+    ``_settings`` fixture arms failover), one attempt gets
+    ``explore_timeout_seconds * explore_fallback_timeout_factor`` and a
+    timeout is NOT retried (live 2026-09-09: 51 of 74 killed scouts were
+    fallback attempts, each retried 3× with the same result)."""
+    import time
+
+    s = _settings(
+        tmp_path,
+        OPENROUTER_API_KEY="k",
+        explore_timeout_seconds=1.0,
+        explore_fallback_timeout_factor=2.0,
+    )
+    attempts: list[float] = []
+
+    async def fake_attempt(*, agent, prompt, limits, settings):
+        attempts.append(time.monotonic())
+        await asyncio.sleep(10)
+        return "never"
+
+    monkeypatch.setattr(explore, "_run_single_explore_attempt", fake_attempt)
+    from robotsix_mill.agents import base as _base
+
+    monkeypatch.setattr(_base, "build_subagent", lambda *a, **k: (object(), None))
+    monkeypatch.setattr(explore, "_EXPLORE_MAX_ATTEMPTS", 3)
+
+    t0 = time.monotonic()
+    out = asyncio.run(
+        explore.run_explore(
+            settings=s, repo_dir=tmp_path, question="where is the slot pool?"
+        )
+    )
+    elapsed = time.monotonic() - t0
+    assert "timed out after 2s" in out or "explore failed" in out, out
+    assert len(attempts) == 1, "a fallback timeout must not be retried"
+    # widened budget: ~2 s, not the 1 s Claude-sized cap
+    assert 1.8 <= elapsed < 6, elapsed
+
+
+def test_claude_slot_keeps_base_timeout_and_retries(tmp_path, monkeypatch):
+    """On the Claude slot the base ``explore_timeout_seconds`` applies and a
+    timeout is retried (the pre-existing behaviour)."""
+    s = _settings(
+        tmp_path,
+        OPENROUTER_API_KEY="k",
+        explore_timeout_seconds=1.0,
+        explore_fallback_timeout_factor=10.0,
+    )
+    attempts: list[int] = []
+
+    async def fake_attempt(*, agent, prompt, limits, settings):
+        attempts.append(1)
+        await asyncio.sleep(5)
+        return "never"
+
+    monkeypatch.setattr(explore, "_run_single_explore_attempt", fake_attempt)
+    from robotsix_mill.agents import base as _base
+
+    monkeypatch.setattr(_base, "build_subagent", lambda *a, **k: (object(), None))
+    monkeypatch.setattr(_base, "level_uses_claude", lambda level: True)
+    monkeypatch.setattr(explore, "_EXPLORE_MAX_ATTEMPTS", 2)
+    monkeypatch.setattr(explore, "_EXPLORE_BACKOFF_CAP", 0.01)
+
+    out = asyncio.run(
+        explore.run_explore(
+            settings=s, repo_dir=tmp_path, question="where is the slot pool?"
+        )
+    )
+    assert "timed out" in out or "explore failed" in out
+    assert len(attempts) == 2
+
+
 def test_parallel_explore_fans_out_labeled(tmp_path, monkeypatch):
     """parallel_explore batches questions into a single run_explore
     call and returns every answer labeled by question."""
