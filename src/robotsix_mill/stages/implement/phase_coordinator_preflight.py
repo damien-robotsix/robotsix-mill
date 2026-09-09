@@ -147,6 +147,61 @@ def _repo_id_pattern(repo_id: str) -> str:
     return rf"(?<!\w){escaped}(?!\w)"
 
 
+# Match a repo-relative file path: one or more directory segments
+# followed by a filename with an extension (``.github/workflows/ci.yml``,
+# ``config/repos.yaml``, ``src/robotsix_mill/foo.py``).  The trailing
+# extension requirement keeps ordinary prose slashes ("read/write",
+# "and/or") from being mistaken for paths.
+_PATH_TOKEN_RE = re.compile(r"(?<![\w/])((?:[\w.-]+/)+[\w.-]+\.[A-Za-z0-9]{1,8})\b")
+
+# No real repo-relative path token comes anywhere near this long.  The
+# scan below runs on ticket-controlled spec text, and ``_PATH_TOKEN_RE``
+# exhibits O(n^2) backtracking on a long unbroken ``[\w.-]`` run (a
+# pasted log line, a base64 blob, etc.).  Applying the pattern per
+# whitespace-delimited token — a path never contains whitespace, so this
+# is match-equivalent to a whole-string ``findall`` — and skipping any
+# over-long token keeps the gate linear so a pathological spec can't hang
+# preflight (a hang there manifests as a suite-level SIGKILL timeout).
+_MAX_PATH_TOKEN_LEN = 512
+
+
+def _references_local_path(actionable: str, external_ids: set[str]) -> bool:
+    """True when *actionable* references a repo-relative file path that is
+    not owned by a known external repo.
+
+    The repo-id / package-name match only recognises the current repo
+    when its id (``robotsix-mill``) or ``src/<package>/`` path appears.
+    In-repo tickets routinely name the current repo ONLY through a
+    non-package local path — a CI workflow (``.github/workflows/ci.yml``),
+    an agent definition, docs, tests or config (``config/repos.yaml``) —
+    while also mentioning an external repo (e.g. a shared-workflow pin
+    bump referencing ``robotsix-github-workflows``).  Those tickets are
+    in-scope here, but the id/package match misses them, so the gate
+    misroutes them as external-only.
+
+    A path whose leading two segments name an external repo
+    (``robotsix-github-workflows/...`` or ``src/<external-package>/...``)
+    is external-owned and ignored; any other file-path reference targets
+    the current workspace.
+    """
+    external_pattern = (
+        re.compile("|".join(_repo_id_pattern(rid) for rid in external_ids))
+        if external_ids
+        else None
+    )
+    for token in actionable.split():
+        # A path reference contains a "/" and is never as long as a
+        # pasted log/blob line; both guards keep the regex scan linear.
+        if len(token) > _MAX_PATH_TOKEN_LEN or "/" not in token:
+            continue
+        for path in _PATH_TOKEN_RE.findall(token):
+            head = "/".join(path.split("/")[:2])
+            if external_pattern and external_pattern.search(head):
+                continue
+            return True
+    return False
+
+
 def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
     """Detect when a spec's actionable sections reference only external repos.
 
@@ -214,6 +269,15 @@ def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
     # actionable sections.  If it is, the spec has mixed scope —
     # the implement agent may have local work to do.
     if re.search(_repo_id_pattern(current_repo_id), actionable):
+        return None
+
+    # In-repo tickets often reference the current repo only through a
+    # non-package local path (a CI workflow, agent definition, docs,
+    # tests or config) while also naming an external repo — e.g. a
+    # shared-workflow pin bump referencing ``robotsix-github-workflows``.
+    # Such a local file-path reference proves the work targets this
+    # workspace; don't misroute it as external-only.
+    if _references_local_path(actionable, external_ids):
         return None
 
     # Every referenced repo is external — the implement agent cannot
