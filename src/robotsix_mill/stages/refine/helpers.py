@@ -103,6 +103,36 @@ def _is_doc_only_change(draft: str, title: str = "") -> bool:
     return True
 
 
+# -- ops-shaped retrospect follow-up detection --------------------------
+
+# Patterns that mark a draft as "ops-shaped": it asks to RUN something
+# against a deployed service or a high-memory host, rather than describing
+# a code change.  A retrospect follow-up matching one of these cannot be
+# satisfied by a mill implement run (no network, ~1 GiB sandbox) and must
+# be routed to a human/ops gate instead of auto-approved into implement.
+# Marker list is intentionally small and extensible — no NLP generalisation.
+_OPS_SHAPE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b(POST|GET|PUT|PATCH|DELETE)\s+/api/", re.IGNORECASE),
+    re.compile(r"\bdeployed service\b", re.IGNORECASE),
+    re.compile(r"environment with adequate memory", re.IGNORECASE),
+    re.compile(r"\bhigh-memory host\b", re.IGNORECASE),
+)
+
+
+def ops_shape_marker(text: str) -> str | None:
+    """Return the matched substring of the first ops-shape pattern hit.
+
+    Returns ``None`` when *text* contains no ops-shape marker.  Pure
+    function — used by the refine triage gate to route ops-shaped
+    retrospect follow-ups to a human gate instead of auto-implement.
+    """
+    for pattern in _OPS_SHAPE_PATTERNS:
+        m = pattern.search(text)
+        if m is not None:
+            return m.group(0)
+    return None
+
+
 def _load_refine_memory(s: Settings, memory_board_id: str) -> str:
     """Load the refine memory ledger from the DB-backed store.
 
