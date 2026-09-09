@@ -72,3 +72,59 @@ def test_read_file_limit_string_none_reads_whole_file(tmp_path, settings) -> Non
     two = read_file(None, path="small.txt", limit="2")
     assert "l2" in two and "l3" not in two
     assert read_file(None, path="small.txt", limit="lots").startswith("error:")
+
+
+# --- offset as a [start, end] range (live 2026-09-09: two haiku scout calls
+# --- `offset: [750, 790]` rejected with "is not of type 'integer'") ---
+
+
+def test_read_file_schema_accepts_offset_range(tmp_path, settings) -> None:
+    schema = Tool(_read_file_tool(tmp_path, settings)).tool_def.parameters_json_schema
+    offset = schema["properties"]["offset"]
+    types = {opt.get("type") for opt in offset.get("anyOf", [])}
+    assert {"integer", "array", "string"} <= types, offset
+
+
+def test_read_file_offset_range_bounds_limit(tmp_path, settings) -> None:
+    (tmp_path / "r.txt").write_text("\n".join(f"line {i}" for i in range(1, 51)) + "\n")
+    read_file = _read_file_tool(tmp_path, settings)
+    out = read_file(None, path="r.txt", offset=[10, 12], limit=100)
+    assert "line 10" in out and "line 12" in out
+    assert "line 9\n" not in out and "line 13" not in out
+    # numeric string offsets are parsed too
+    out = read_file(None, path="r.txt", offset="48", limit=5)
+    assert "line 48" in out and "line 50" in out and "line 47" not in out
+    bad = read_file(None, path="r.txt", offset=[12, 10])
+    assert bad.startswith("error: read_file `offset` range")
+
+
+# --- edit_file aliases (live 2026-09-09: three ci_fix `edit_file(file_path=…)`
+# --- calls rejected with "Additional properties are not allowed") ---
+
+
+def _edit_file_tool(root, settings):
+    tools = build_fs_tools(root, settings)
+    return next(t for t in tools if getattr(t, "__name__", "") == "edit_file")
+
+
+def test_edit_file_schema_accepts_claude_code_aliases(tmp_path, settings) -> None:
+    schema = Tool(_edit_file_tool(tmp_path, settings)).tool_def.parameters_json_schema
+    assert {"path", "file_path", "target_file", "old_string", "new_string"} <= set(
+        schema["properties"]
+    )
+    assert "path" not in (schema.get("required") or [])
+
+
+def test_edit_file_file_path_alias_edits(tmp_path, settings) -> None:
+    target = tmp_path / "e.txt"
+    target.write_text("alpha\nbeta\n")
+    edit_file = _edit_file_tool(tmp_path, settings)
+    out = edit_file(file_path="e.txt", old_string="beta", new_string="gamma")
+    assert out.startswith("edit_file: replaced 1")
+    assert target.read_text() == "alpha\ngamma\n"
+    assert edit_file(old_string="a", new_string="b").startswith(
+        "error: edit_file requires `path`"
+    )
+    assert edit_file(target_file="e.txt", old_string="gamma").startswith(
+        "error: edit_file requires both"
+    )

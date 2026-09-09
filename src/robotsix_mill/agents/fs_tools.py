@@ -514,6 +514,48 @@ def _coerce_read_limit(limit: int | str | None) -> int | str | None:
         return f"error: read_file `limit` must be an integer or None, got {limit!r}"
 
 
+def _coerce_read_offset(
+    offset: int | list[int] | str, limit: int | None
+) -> tuple[int, int | None] | str:
+    """Normalise ``read_file``'s ``offset``: ints pass through, numeric
+    strings are parsed, and a ``[start, end]`` pair (the line range a model
+    habitually sends) becomes ``offset=start`` with ``limit`` capped at
+    ``end - start + 1``. Returns an ``error:`` string for anything else.
+    """
+    if isinstance(offset, bool):
+        return int(offset), limit
+    if isinstance(offset, int):
+        return offset, limit
+    if isinstance(offset, str):
+        text = offset.strip()
+        if text.lower() in ("", "none", "null"):
+            return 1, limit
+        try:
+            return int(text), limit
+        except ValueError:
+            return f"error: read_file `offset` must be an integer, got {offset!r}"
+    if (
+        isinstance(offset, list)
+        and offset
+        and all(isinstance(v, int) and not isinstance(v, bool) for v in offset)
+    ):
+        start = offset[0]
+        if len(offset) == 1:
+            return start, limit
+        end = offset[-1]
+        span = end - start + 1
+        if span < 1:
+            return (
+                f"error: read_file `offset` range {offset!r} is empty — "
+                "pass [start, end] with end >= start"
+            )
+        return start, span if limit is None else min(limit, span)
+    return (
+        f"error: read_file `offset` must be an integer or a [start, end] "
+        f"line range, got {offset!r}"
+    )
+
+
 def _coerce_command_list(command: list[str] | str) -> list[str] | str:
     """Turn ``parallel_commands``' ``command`` alias into a list of shell
     strings; a JSON-encoded list string is decoded. Returns an error string
@@ -919,7 +961,7 @@ def build_fs_tools(
         ctx: RunContext[None] = None,
         *,
         path: str | None = None,
-        offset: int = 1,
+        offset: int | list[int] | str = 1,
         limit: int | str | None = _DEFAULT_READ_LIMIT,
         file_path: str | None = None,
         target_file: str | None = None,
@@ -974,6 +1016,9 @@ def build_fs_tools(
         rejected with "Additional properties are not allowed
         ('file_path' was unexpected)"), and ``limit`` also accepts the
         literal string ``"None"`` (four rejections the same day).
+        ``offset`` also accepts a ``[start, end]`` line range (haiku scouts
+        send one by habit — two ``[750, 790] is not of type 'integer'``
+        rejections on 2026-09-09): ``end`` then bounds ``limit``.
         """
         cap_error = _check_read_file_cap()
         if cap_error is not None:
@@ -986,6 +1031,10 @@ def build_fs_tools(
         if isinstance(coerced_limit, str):
             return coerced_limit
         limit = coerced_limit
+        coerced_offset = _coerce_read_offset(offset, limit)
+        if isinstance(coerced_offset, str):
+            return coerced_offset
+        offset, limit = coerced_offset
 
         resolved_note = ""
         try:
@@ -1271,13 +1320,32 @@ def build_fs_tools(
             return f"error: {e}"
         return f"wrote {len(content)} bytes to {path}"
 
-    def edit_file(path: str, old_string: str, new_string: str, count: int = 1) -> str:
+    def edit_file(
+        path: str | None = None,
+        old_string: str | None = None,
+        new_string: str | None = None,
+        count: int = 1,
+        *,
+        file_path: str | None = None,
+        target_file: str | None = None,
+    ) -> str:
         """Replace a unique string in a file. Reads the file, locates
         ``old_string``, and if it appears at least ``count`` times
         replaces the first ``count`` occurrences with ``new_string``.
         Returns a short result string — prefer this for surgical edits
         over ``write_file``.
+
+        ``file_path`` / ``target_file`` are accepted as aliases of ``path``
+        (Claude Code's own Edit tool spells it ``file_path``, and the SDK
+        path validates the schema before the body runs — three ci_fix
+        edits were rejected with "Additional properties are not allowed
+        ('file_path' was unexpected)" on 2026-09-09).
         """
+        path = path or file_path or target_file
+        if not path:
+            return "error: edit_file requires `path` (the repo-relative file to edit)"
+        if old_string is None or new_string is None:
+            return "error: edit_file requires both `old_string` and `new_string`"
         blocked = _check_write_allowed(path)
         if blocked is not None:
             return blocked
@@ -1587,7 +1655,7 @@ def build_fs_tools(
     _PARALLEL_COMMANDS_BATCH_CAP = 20
 
     async def parallel_commands(
-        commands: list[str] | None = None,
+        commands: list[str] | str | None = None,
         command: list[str] | str | None = None,
     ) -> str:
         """Run several independent shell commands concurrently and return
@@ -1602,10 +1670,14 @@ def build_fs_tools(
 
         ``command`` is accepted as an alias of ``commands`` — either a
         list or a JSON-encoded list string (models habitually send the
-        singular; three calls were schema-rejected on 2026-09-08).
+        singular; three calls were schema-rejected on 2026-09-08). The
+        plural ``commands`` also accepts a JSON-encoded list string (a
+        haiku scout sent one on 2026-09-09 and was schema-rejected).
         """
         if commands is None and command is not None:
-            coerced = _coerce_command_list(command)
+            commands = command
+        if isinstance(commands, str):
+            coerced = _coerce_command_list(commands)
             if isinstance(coerced, str):
                 return coerced
             commands = coerced

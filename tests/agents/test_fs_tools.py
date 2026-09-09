@@ -1512,6 +1512,31 @@ class TestParallelCommands:
         bad = asyncio.run(tools["parallel_commands"](command="[not json"))
         assert bad.startswith("parallel_commands: `command` looked like a JSON list")
 
+    def test_commands_plural_accepts_json_string(self, tmp_path, settings, monkeypatch):
+        """The plural ``commands`` may also arrive as a JSON-encoded list
+        string (live 2026-09-09: a haiku scout sent ``commands="\n[\n
+        \"grep …\", …]"`` and the SDK schema rejected it before the body
+        ran). The annotation must admit ``string`` and the body decode it."""
+        from pydantic_ai import Tool
+
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        schema = Tool(tools["parallel_commands"]).tool_def.parameters_json_schema
+        types = {
+            opt.get("type") for opt in schema["properties"]["commands"].get("anyOf", [])
+        }
+        assert {"array", "string", "null"} <= types, schema["properties"]["commands"]
+
+        def _fake_run(cmd, **kw):
+            return (0, f"out: {cmd}")
+
+        monkeypatch.setattr(sandbox, "run", _fake_run)
+        result = asyncio.run(
+            tools["parallel_commands"](commands='\n[\n "grep -n foo a.py",\n "ls"\n]')
+        )
+        assert "grep -n foo a.py" in result and "ls" in result
+
     def test_multiple_independent_commands(self, tmp_path, settings, monkeypatch):
         root = tmp_path / "repo"
         root.mkdir()
