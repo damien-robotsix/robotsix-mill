@@ -689,6 +689,27 @@ class _PeriodicSettings(BaseModel):
         default=False,
         description="When true, also file tracking tickets for foreign (non-mill) open PRs.",
     )
+    # Foreign PRs whose head branch starts with one of these prefixes are
+    # owned by OTHER automation (dependabot / renovate bumps, release-please
+    # release PRs, the pin-bump runners) and are handled by the repo-hygiene
+    # and release periodics — the mill never files a tracking ticket for
+    # them.  Ignored PRs do not consume the per-pass action caps.  Set to
+    # ``[]`` to track every foreign PR.
+    orphaned_pr_foreign_ignore_branch_prefixes: list[str] = Field(
+        default_factory=lambda: [
+            "dependabot/",
+            "renovate/",
+            "release-please--",
+            "pin-bump/",
+            "bump/",
+            "deps/",
+        ],
+        description=(
+            "Foreign PR head-branch prefixes the orphaned-PR pass never files a "
+            "tracking ticket for (dependency / release / pin-bump automation owned "
+            "by other periodics). Empty list = track every foreign PR."
+        ),
+    )
 
     # --- repo-description-sync (keeps forge description in sync with README) ---
     # (7 days). Enforced minimum 3600s (1 hour) in the worker.
