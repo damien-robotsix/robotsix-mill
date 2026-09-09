@@ -939,12 +939,14 @@ class ValidationMixin(_ImplementStageBase):
                     feedback=None,
                 )
 
-            # --- EXPAND cap: force a split proposal after N expansions ---
+            # --- EXPAND cap: split the overflow and let the parent proceed ---
             # Repeated EXPAND verdicts widen the scope and trigger another
-            # implement pass, which is the costliest churn pattern.  Cap
-            # the number of EXPAND events per ticket; on hitting the cap,
-            # emit child tickets for the would-be-expanded files and park
-            # the parent instead of re-queuing.
+            # implement pass, which is the costliest churn pattern.  Cap the
+            # number of EXPAND events per ticket; on hitting the cap, hive the
+            # would-be-expanded files off into a child ticket, REVERT them from
+            # the working tree, and let the parent's in-scope work fall through
+            # to the test gate (mirroring the REJECT path) instead of leaving
+            # it permanently BLOCKED with its finished work undelivered.
             _MAX_SCOPE_TRIAGE_EXPANDS = 2
             prior_expands: list[TicketEvent] = [
                 ev
@@ -952,34 +954,90 @@ class ValidationMixin(_ImplementStageBase):
                 if ev.note and ev.note.startswith("scope-triage EXPAND")
             ]
             if len(prior_expands) >= _MAX_SCOPE_TRIAGE_EXPANDS:
+                # --- duplicate-split dedup guard ---
+                # Mirror the REJECT dedup: scan prior SPLIT events and collect
+                # the files they already carved off (backticked). If every
+                # overflow file was already split to a child, do NOT spawn
+                # another — restore the tree and proceed.  This makes
+                # resume-blocked productive: a resume that re-creates the same
+                # overflow files restores and proceeds instead of re-blocking
+                # and spawning a duplicate child.
+                prior_splits = [
+                    ev
+                    for ev in ctx.service.history(ticket.id)  # type: ignore[attr-defined]
+                    if ev.note and ev.note.startswith("scope-triage SPLIT")
+                ]
+                already_split: set[str] = set()
+                for ev in prior_splits:
+                    for m in _BACKTICK_RE.findall(ev.note or ""):
+                        already_split.add(m)
+                if already_split and all(f in already_split for f in new_files):
+                    log.info(
+                        "%s: scope-triage SPLIT dedup — all %d overflow file(s) "
+                        "already split to a prior child; restoring and proceeding",
+                        ticket.id,
+                        len(new_files),
+                    )
+                    git_ops.restore_paths(repo_dir, target, out_of_scope)
+                    return _ScopeGuardrailResult(
+                        action="skip_iteration",
+                        file_map=file_map,
+                        feedback=None,
+                    )
+
                 child_ids = _spawn_scope_split_tickets(
                     ctx, ticket, new_files, verdict.justification
                 )
-                child_list = ", ".join(f"`{c}`" for c in child_ids)
-                if child_ids:
-                    split_note = f" — split into child ticket(s): {child_list}"
-                else:
-                    split_note = (
-                        " — no scope-split child was spawned (create failed; see logs)"
+                if not child_ids:
+                    # Rare infra failure (child creation failed): keep the
+                    # graceful-BLOCKED behavior with a clear note.
+                    reason = (
+                        f"scope-triage EXPAND cap reached "
+                        f"({len(prior_expands)} prior EXPAND events) — no "
+                        "scope-split child was spawned (create failed; see logs)"
                     )
-                reason = (
-                    f"scope-triage EXPAND cap reached "
-                    f"({len(prior_expands)} prior EXPAND events){split_note}"
+                    log.warning("%s: %s", ticket.id, reason)
+                    cls._finalize(
+                        ctx,
+                        ticket,
+                        repo_dir,
+                        branch,
+                        reason,
+                        ok=False,
+                        reference_files=ref_files,
+                        extra_roots=None,
+                    )
+                    return _ScopeGuardrailResult(
+                        action="return",
+                        outcome=Outcome(State.BLOCKED, reason),
+                    )
+
+                # Success: record a machine-parsable SPLIT event (files and
+                # child id backticked so _BACKTICK_RE can recover them on a
+                # later resume), restore the FULL out-of-scope set so only
+                # in-scope changes remain, and fall through to the test gate.
+                child_list = ", ".join(f"`{c}`" for c in child_ids)
+                file_list = ", ".join(f"`{f}`" for f in new_files)
+                ctx.service.add_step_event(
+                    ticket.id,
+                    f"scope-triage SPLIT: {file_list} → child {child_list} — "
+                    "overflow removed from tree; parent proceeds with "
+                    "in-scope work",
                 )
-                log.warning("%s: %s", ticket.id, reason)
-                cls._finalize(
-                    ctx,
-                    ticket,
-                    repo_dir,
-                    branch,
-                    reason,
-                    ok=False,
-                    reference_files=ref_files,
-                    extra_roots=None,
+                log.warning(
+                    "%s: scope-triage EXPAND cap reached (%d prior EXPAND "
+                    "events) — split %s into child %s; restoring overflow "
+                    "and proceeding with in-scope work",
+                    ticket.id,
+                    len(prior_expands),
+                    file_list,
+                    child_list,
                 )
+                git_ops.restore_paths(repo_dir, target, out_of_scope)
                 return _ScopeGuardrailResult(
-                    action="return",
-                    outcome=Outcome(State.BLOCKED, reason),
+                    action="skip_iteration",
+                    file_map=file_map,
+                    feedback=None,
                 )
 
             for f in new_files:
