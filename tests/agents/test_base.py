@@ -408,7 +408,12 @@ def test_build_agent_composes_prompt(monkeypatch, settings, fallback_slot_active
     captured_compose: list[dict] = []
 
     def fake_compose_prompt(
-        settings, system_prompt, skills=None, modules=False, workflows=False
+        settings,
+        system_prompt,
+        skills=None,
+        modules=False,
+        workflows=False,
+        repo_dir=None,
     ):
         captured_compose.append(
             {
@@ -416,6 +421,7 @@ def test_build_agent_composes_prompt(monkeypatch, settings, fallback_slot_active
                 "skills": skills,
                 "modules": modules,
                 "workflows": workflows,
+                "repo_dir": repo_dir,
             }
         )
         return system_prompt
@@ -1018,6 +1024,41 @@ def test_compose_prompt_modules_true_appends_map(tmp_path, monkeypatch):
     assert "### test-mod" in result
     assert "A test module." in result
     assert "- `src/test.py`" in result
+
+
+def test_compose_prompt_modules_resolves_against_repo_dir(tmp_path):
+    """``repo_dir`` points the taxonomy lookup at the TARGET repo's
+    ``docs/modules.yaml`` — not the mill process cwd, which is never a
+    checkout (refine logged "Cannot load module taxonomy" on every run,
+    2026-09-08, and the module map silently never reached the prompt)."""
+    from robotsix_mill.agents.base import compose_prompt
+
+    repo = tmp_path / "repo"
+    (repo / "docs").mkdir(parents=True)
+    (repo / "docs" / "modules.yaml").write_text(
+        """modules:
+- id: ws-mod
+  description: Lives in the workspace checkout.
+  paths:
+    - src/ws.py
+  dependencies: []
+""",
+        encoding="utf-8",
+    )
+
+    result = compose_prompt(Settings(), "Hello.", modules=True, repo_dir=repo)
+
+    assert "## Module Map" in result
+    assert "### ws-mod" in result
+    assert "- `src/ws.py`" in result
+
+
+def test_compose_prompt_modules_repo_dir_without_taxonomy_no_crash(tmp_path):
+    """A workspace without docs/modules.yaml degrades to the bare prompt."""
+    from robotsix_mill.agents.base import compose_prompt
+
+    result = compose_prompt(Settings(), "Hello.", modules=True, repo_dir=tmp_path)
+    assert result == "Hello."
 
 
 def test_compose_prompt_missing_modules_yaml_no_crash(monkeypatch):
