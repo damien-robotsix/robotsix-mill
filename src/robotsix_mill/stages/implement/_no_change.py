@@ -27,6 +27,85 @@ from ...core.text_noop import spec_demands_code_change
 from ..base import Outcome, StageContext
 from ._shared import _ImplementContext, _SinglePassResult, log
 
+# Marker prefix for the machine-readable history event emitted whenever an
+# implement pass finishes with an empty diff (no PR).  The fingerprint-guard
+# block note in ``phase_coordinator_preflight`` points readers at this tag.
+_NO_DIFF_DIAGNOSTIC_TAG = "no-diff-diagnostic"
+
+
+def _classify_no_diff_reason(
+    short_circuit_verify: Any,
+    new_msgs: bytes | None,
+    no_change_needed: bool,
+    no_change_rationale: str,
+) -> str:
+    """Best-effort classification of why a pass produced an empty diff.
+
+    Returns one of ``no-tool-calls`` (the agent never called a tool),
+    ``no-file-changes`` (it called tools — including file-mutating ones —
+    yet the diff is empty), or ``spec-already-satisfied`` (it explicitly
+    concluded ``no_change_needed`` without touching files).  ``error`` is
+    reserved for the callers that already diagnose a hard failure.
+    """
+    total_calls = -1
+    try:
+        progress = short_circuit_verify.analyze_pass_progress(new_msgs)
+        if isinstance(progress, dict):
+            total_calls = int(progress.get("total", 0))
+    except Exception:  # best-effort classification — never raise
+        total_calls = -1
+    try:
+        edit_tools = short_circuit_verify.detect_edit_claim_contradiction(
+            has_changes=False, new_messages=new_msgs
+        )
+    except Exception:  # best-effort classification — never raise
+        edit_tools = []
+    if total_calls == 0:
+        return "no-tool-calls"
+    if edit_tools:
+        return "no-file-changes"
+    if no_change_needed and no_change_rationale.strip():
+        return "spec-already-satisfied"
+    return "no-file-changes"
+
+
+def _emit_no_diff_diagnostic(
+    ctx: StageContext,
+    ticket: Ticket,
+    reason: str,
+) -> None:
+    """Record a machine-readable history event explaining why an implement
+    pass produced an empty diff (no file changes, no PR).
+
+    Carries the reason classification and the Langfuse trace link so a
+    human or agent can tell *why* the pass was a no-op instead of only
+    seeing the opaque fingerprint-guard block note on the next attempt.
+
+    Best-effort: any failure here is swallowed and never changes the
+    stage outcome.
+    """
+    try:
+        from ...runtime.tracing import get_current_trace_id, langfuse_trace_url
+
+        trace_id = get_current_trace_id()
+        trace_url = (
+            langfuse_trace_url(trace_id, repo_config=ctx.repo_config)
+            if trace_id
+            else None
+        )
+        trace_line = f"trace: {trace_url}" if trace_url else "trace: unavailable"
+        note = (
+            f"[{_NO_DIFF_DIAGNOSTIC_TAG}] implement pass produced an empty diff "
+            f"(no file changes, no PR).\nreason: {reason}\n{trace_line}"
+        )
+        ctx.service.add_history_note(ticket.id, note)
+    except Exception:  # best-effort diagnostic — never changes the outcome
+        log.warning(
+            "%s: failed to record no-diff diagnostic",
+            getattr(ticket, "id", "?"),
+            exc_info=True,
+        )
+
 
 def _run_no_change_contradiction_check(
     cls: Any,
@@ -66,6 +145,19 @@ def _run_no_change_contradiction_check(
     """
     _ = settings  # unused in this helper
     if not cls._any_repo_has_changes(repo_dir, extra_roots, target, settings=settings):
+        # Empty diff (no PR): record a diagnostic naming why, with the
+        # Langfuse trace link, so the ticket is not stranded in BLOCKED with
+        # only the opaque fingerprint-guard note on the next attempt.
+        _emit_no_diff_diagnostic(
+            ctx,
+            ticket,
+            _classify_no_diff_reason(
+                short_circuit_verify,
+                new_msgs,
+                no_change_needed,
+                no_change_rationale,
+            ),
+        )
         if no_change_needed and no_change_rationale.strip():
             # Agent explicitly signalled no_change_needed.
             edit_tools = short_circuit_verify.detect_edit_claim_contradiction(

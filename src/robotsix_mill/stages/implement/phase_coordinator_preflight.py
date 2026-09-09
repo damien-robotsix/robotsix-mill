@@ -680,7 +680,11 @@ def run_preflight_checks(
                         "the fingerprint, or force a retry via "
                         "resume-blocked with a justification note, or "
                         "use the reset-fingerprint endpoint to clear "
-                        "the guard.",
+                        "the guard.  See the most recent "
+                        "`[no-diff-diagnostic]` event in this ticket's "
+                        "history for why the prior implement pass produced "
+                        "no diff (reason classification + Langfuse trace "
+                        "link).",
                     )
 
     # 4.5. Cross-spawn stall guard: if a prior implement cycle

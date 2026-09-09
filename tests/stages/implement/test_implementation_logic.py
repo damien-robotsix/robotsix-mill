@@ -702,6 +702,7 @@ class TestEvaluateTestResults:
                 detect_edit_claim_contradiction=lambda **kw: [],
                 detect_missing_claimed_files=lambda **kw: [],
                 cited_fix_unverified=lambda *a, **kw: None,
+                analyze_pass_progress=lambda *a, **kw: {"total": 1},
             ),
         )
         monkeypatch.setattr(
@@ -745,6 +746,7 @@ class TestEvaluateTestResults:
                 service=_simple_namespace(
                     add_step_event=lambda *a: None,
                     set_implement_cycles=lambda *a: None,
+                    add_history_note=lambda *a, **kw: None,
                 ),
             ),
             "ticket": FakeTicket(),
@@ -1044,6 +1046,62 @@ class TestEvaluateTestResults:
         assert result.next_action == "return"
         assert result.outcome.next_state is State.DONE
         assert result.outcome.note.startswith("no change needed")
+
+    def test_no_diff_records_diagnostic_event(self, monkeypatch):
+        """An empty-diff pass records a machine-readable no-diff diagnostic
+        naming the reason classification + the Langfuse trace link."""
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+        # Agent made zero tool calls → 'no-tool-calls' classification.
+        monkeypatch.setattr(
+            "robotsix_mill.stages.implement.implementation_logic.short_circuit_verify",
+            _simple_namespace(
+                detect_edit_claim_contradiction=lambda **kw: [],
+                detect_missing_claimed_files=lambda **kw: [],
+                cited_fix_unverified=lambda *a, **kw: None,
+                analyze_pass_progress=lambda *a, **kw: {"total": 0},
+            ),
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.tracing.get_current_trace_id",
+            lambda: "trace-abc",
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.tracing.langfuse_trace_url",
+            lambda tid, repo_config=None: f"https://lf/traces/{tid}",
+        )
+
+        notes: list[tuple[str, str]] = []
+        ctx = _simple_namespace(
+            repo_config=None,
+            service=_simple_namespace(
+                add_step_event=lambda *a: None,
+                set_implement_cycles=lambda *a: None,
+                add_history_note=lambda tid, note: notes.append((tid, note)),
+            ),
+        )
+
+        result = self._call(
+            monkeypatch,
+            ctx=ctx,
+            no_change_needed=False,
+            no_change_rationale="",
+            resuming=False,
+        )
+        # Fresh run, empty diff, no lost work → DONE (already satisfied).
+        assert result.next_action == "return"
+        assert result.outcome.next_state is State.DONE
+        # Exactly one diagnostic history event was recorded.
+        assert len(notes) == 1
+        tid, note = notes[0]
+        assert tid == FakeTicket.id
+        assert "[no-diff-diagnostic]" in note
+        assert "reason: no-tool-calls" in note
+        assert "https://lf/traces/trace-abc" in note
 
     def test_multi_repo_introduced_files_resolves_per_repo_target(
         self, monkeypatch, tmp_path
