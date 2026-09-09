@@ -26,21 +26,6 @@ class _CoreSettings(BaseModel):
     # for current mapping). There is no
     # global backend toggle.
     #
-    # Deprecated, inert. Used to size a process-wide semaphore around every
-    # Claude SDK ``run_sync`` (``agents.claude_concurrency``, removed): a
-    # 30-minute implement run held a slot for its whole duration and every
-    # short Claude call (gates, classifiers, ingest) queued behind it. The real
-    # limits are the subscription rate cap (park logic) and host resources
-    # (``max_global_concurrency`` + sandbox caps). Kept only so configs that
-    # pin it still load and ``PUT /config`` still accepts it.
-    claude_max_concurrency: int = Field(
-        default=4,
-        ge=1,
-        description=(
-            "Deprecated, inert since the Claude run semaphore was removed: "
-            "no longer bounds anything. Kept so existing pinned configs load."
-        ),
-    )
     # Host-level cap on total concurrently-running stages across ALL boards,
     # applied on top of each board's own ``max_concurrency``.  Default 12 sits
     # modestly below the ~18 slots a typical multi-board setup would open with

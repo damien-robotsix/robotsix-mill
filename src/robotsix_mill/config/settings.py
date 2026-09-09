@@ -322,6 +322,10 @@ class Settings(
             # The changelog.d fragment layer (towncrier) was removed;
             # release-please builds CHANGELOG.md from conventional commits.
             "changelog_autofill_interval_seconds",
+            # The Claude run semaphore (``agents.claude_concurrency``) was
+            # removed long ago; the setting bounded nothing and production
+            # still pinned it (6) — dropped 2026-09-09 on operator request.
+            "claude_max_concurrency",
         }
         present = sorted(set(data) & removed)
         if not present:
