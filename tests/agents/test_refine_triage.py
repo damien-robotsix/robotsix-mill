@@ -1141,3 +1141,30 @@ def test_auto_approve_triage_retry_succeeds_second_attempt(
     assert len(calls) == 2
     assert out.next_state is State.READY
     assert "auto-approve: APPROVE — single-file docs change" in out.note
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        # Observed 2026-09-08 20:54Z (ticket 29d1): the level-1 model bolded the
+        # verdict — parked a routine ticket at a human gate on a formatting quirk.
+        (
+            (
+                "**NEEDS_APPROVAL** — Cross-repo runtime dependency upgrade with "
+                "breaking API changes to a shared component.\n\n- `pyproject.toml`"
+            ),
+            "NEEDS_APPROVAL",
+        ),
+        ("### APPROVE\nSingle-file docs change.", "APPROVE"),
+        ("`APPROVE`: trivial rename", "APPROVE"),
+    ],
+)
+def test_auto_approve_parse_strips_markdown_emphasis(answer, expected):
+    """A verdict token wrapped in Markdown emphasis or heading marks is still
+    the verdict — the parser must not raise on ``**NEEDS_APPROVAL**``."""
+    from robotsix_mill.agents.refine_triage import _parse_auto_approve_answer
+
+    result = _parse_auto_approve_answer(answer)
+    assert result.decision == expected
+    assert result.reason
+    assert not result.reason.startswith(("*", "`", "#"))

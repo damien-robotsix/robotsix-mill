@@ -306,8 +306,13 @@ _AUTO_APPROVE_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?\s*```\s*$", re
 
 # Matches a leading verdict token (``APPROVE`` / ``NEEDS_APPROVAL``) that the
 # level-1 model sometimes emits in prose before a ``—``/``:`` separator.
+# Leading Markdown emphasis/heading marks (``**NEEDS_APPROVAL** — …``,
+# ``### APPROVE``) are stripped before the token: the level-1 model bolds the
+# verdict about as often as it emits it bare (2026-09-08, ticket 29d1 parked at
+# a human gate on ``'**NEEDS_APPROVAL** — Cross-repo runtime dependency …'``).
 _AUTO_APPROVE_TOKEN_RE = re.compile(
-    r"^\s*(APPROVE|NEEDS_APPROVAL)\b[:\s—-]*(.*)$", re.IGNORECASE | re.DOTALL
+    r"^[\s*_`#]*(APPROVE|NEEDS_APPROVAL)\b[*_`]*[:\s—-]*(.*)$",
+    re.IGNORECASE | re.DOTALL,
 )
 
 
