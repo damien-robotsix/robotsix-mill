@@ -25,6 +25,20 @@ def _set_secrets(**kw):
     _cfg._secrets = Secrets(**kw)
 
 
+@pytest.fixture(autouse=True)
+def _openrouter_tier(monkeypatch):
+    """Pin the inspector's level to the OpenRouter path by default.
+
+    ``run_trace_inspector`` drops function tools when the active provider slot
+    for its level is the Claude SDK (the SDK model rejects pydantic-ai tools);
+    the tools-on assertions below describe the OpenRouter path, so make that
+    the baseline regardless of the test host's tier defaults.
+    """
+    import robotsix_mill.agents.base as base_mod
+
+    monkeypatch.setattr(base_mod, "level_uses_claude", lambda level: False)
+
+
 def _settings_with_api_key(api_key="sk-test", **kw):
     """Return a Settings and set the matching secret."""
     _set_secrets(openrouter_api_key=api_key)
@@ -1068,3 +1082,51 @@ class TestShrinkTraceData:
         assert parsed["observations"][0]["id"] == "obs-1"
         assert parsed["observations"][1] == "bare-string-obs"
         assert parsed["observations"][2]["id"] == "obs-2"
+
+
+class TestClaudeTierRunsToolLess:
+    """On the Claude SDK slot the inspector must not build function tools."""
+
+    def test_claude_tier_drops_tools_even_with_repo_dir(self, monkeypatch):
+        """2026-09-08: every tools-on inspection on the default slot failed with
+        ``ClaudeSDKModel does not support function/tool calling`` — the pass
+        scanned 100 traces, flagged 43 and filed nothing."""
+        import robotsix_mill.agents.base as base_mod
+
+        monkeypatch.setattr(base_mod, "level_uses_claude", lambda level: True)
+        captured_limits: list = []
+        built_with: list = []
+
+        def fake_build_repo_tools(repo_dir, settings, **kw):
+            built_with.append(repo_dir)
+            return []
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents._repo_tools._build_repo_tools",
+            fake_build_repo_tools,
+        )
+
+        class _Handle:
+            def run_sync(self, prompt, **kw):
+                captured_limits.append(kw.get("usage_limits"))
+                return type("_R", (), {"output": TraceInspectResult()})()
+
+        def fake_run_agent(agent, make_run, **kw):
+            return make_run(_Handle())
+
+        monkeypatch.setattr("robotsix_mill.agents.retry.run_agent", fake_run_agent)
+
+        from pathlib import Path
+
+        settings = _settings_with_api_key()
+        result = trace_inspector_mod.run_trace_inspector(
+            settings=settings,
+            trace_data=_fake_trace_clean(),
+            repo_dir=Path("/tmp"),
+        )
+        assert not result.error
+        # Tool-less path: no repo tools built, no tool_calls_limit, cheap budget.
+        assert built_with == [None]
+        limits = captured_limits[0]
+        assert limits.tool_calls_limit is None
+        assert limits.request_limit == settings.trace_review_inspector_toolless_requests
