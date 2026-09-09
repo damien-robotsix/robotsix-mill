@@ -450,8 +450,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- pipeline limits ---
     ("max_events_per_ticket", "MILL_MAX_EVENTS_PER_TICKET", "100", 100),
     ("max_comments_per_ticket", "MILL_MAX_COMMENTS_PER_TICKET", "300", 300),
-    # --- claude sdk ---
-    ("claude_max_concurrency", "MILL_CLAUDE_MAX_CONCURRENCY", "8", 8),
     # --- shutdown ---
     ("shutdown_grace_seconds", "MILL_SHUTDOWN_GRACE_SECONDS", "300", 300),
     # --- requeue ---
@@ -1116,3 +1114,15 @@ def test_load_settings_block_silent_for_populated_file(tmp_path, monkeypatch, ca
 
     assert block["max_global_concurrency"] == 3
     assert not [r for r in caplog.records if "code defaults" in r.getMessage()]
+
+
+def test_removed_claude_max_concurrency_pin_is_dropped_not_fatal(caplog):
+    """Production pinned the inert ``claude_max_concurrency`` (6) for months;
+    the field is gone (2026-09-09) and ``extra="forbid"`` must not crash-loop
+    the boot — the removed-keys validator drops it with a warning."""
+    from robotsix_mill.config import Settings
+
+    with caplog.at_level("WARNING"):
+        s = Settings(claude_max_concurrency=6)
+    assert not hasattr(s, "claude_max_concurrency")
+    assert "claude_max_concurrency" in caplog.text
