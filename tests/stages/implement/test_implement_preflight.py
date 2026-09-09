@@ -1554,6 +1554,9 @@ def test_stale_respawn_guard_blocks_on_matching_fingerprint(
     assert out is not None, "must block when fingerprint matches"
     assert out.next_state is State.BLOCKED
     assert "spec unchanged" in out.note.lower()
+    # The block note must point at the no-diff diagnostic so a reader can
+    # tell WHY the prior implement pass produced no diff.
+    assert "no-diff-diagnostic" in out.note
 
 
 def test_stale_respawn_guard_allows_on_different_fingerprint(
