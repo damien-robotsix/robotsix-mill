@@ -94,11 +94,20 @@ def _clone_token(settings, repo_config) -> str | None:
 
 
 def _forge_token(settings, repo_config) -> str | None:
-    """Resolve the forge token via ``get_secrets().forge_token``.
-    Raises if the secret is missing — used by health, test_gap,
-    config_sync, and completeness_check runners.
+    """Resolve a clone token, preferring the static ``forge_token`` secret.
+
+    Used by health, test_gap, config_sync, and completeness_check runners.
+    In GitHub App mode the ``forge_token`` secret is unset, and returning
+    ``None`` here made ``git clone`` run without credentials — a private
+    repo then fails with ``could not read Username`` and the pass silently
+    degrades to web/context-only every run (hexarchy completeness_check,
+    2026-09-10). Fall back to the per-forge clone token (App installation
+    token or GitLab PAT) exactly like the other runners.
     """
-    return get_secrets().forge_token
+    token = get_secrets().forge_token
+    if token:
+        return token
+    return _clone_token(settings, repo_config)
 
 
 # ---------------------------------------------------------------------------
