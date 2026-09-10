@@ -47,6 +47,13 @@ _CI_LOG_FETCH_ATTEMPTS = 3
 _CI_LOG_FETCH_BACKOFF_SECONDS = 2.0
 _CI_LOG_FETCH_BACKOFF_CAP_SECONDS = 30.0
 _CI_LOG_FETCH_MAX_DEFERRALS = 3
+
+# Workflow-run conclusions the target-branch CI monitor files a ticket for.
+# ``startup_failure`` is what GitHub records for a run it could not start
+# (no jobs, no logs); before 2026-09-10 the monitor skipped it, so a caller
+# whose ``permissions:`` starved its reusable workflow stayed red for 11 days
+# with nothing filed (robotsix-mill-ros2 Release Please, 2026-08-30 → 09-10).
+_CI_FAILING_CONCLUSIONS = frozenset({"failure", "startup_failure"})
 # Agents read ticket descriptions through tool calls whose results are
 # hard-capped well below 100K chars — an embedded log tail beyond that
 # makes the whole description unreadable to them (the full logs stay one
@@ -954,8 +961,15 @@ class PollLoopsMixin(_WorkerBase):
         existing = service.list()
 
         for wf, run in latest_by_wf.items():
-            if run.get("conclusion") != "failure":
+            conclusion = run.get("conclusion")
+            if conclusion not in _CI_FAILING_CONCLUSIONS:
                 continue
+            # ``startup_failure`` = GitHub could not START the run (workflow
+            # parse error, invalid ``uses:`` pin, or a ``uses:`` job whose
+            # caller-level ``permissions`` cannot grant what the reusable
+            # workflow declares). It has no jobs and no logs, so fetching
+            # them only burns the deferral budget; describe it instead.
+            startup_failure = conclusion == "startup_failure"
 
             wf_name = run.get("name", "unknown")
             wf_path = run.get("path", "")
@@ -1013,20 +1027,22 @@ class PollLoopsMixin(_WorkerBase):
             )
 
             # 4. Fetch job logs with retry/backoff + deferral.
-            (
-                logs,
-                fetch_error,
-                deferred_flag,
-                network_down,
-            ) = await self._fetch_run_logs_with_deferral(
-                forge,
-                run_id_val,
-                key,
-                deferred,
-                now,
-                repo_label,
-                wf_name,
-            )
+            logs, fetch_error, deferred_flag, network_down = "", "", False, False
+            if not startup_failure:
+                (
+                    logs,
+                    fetch_error,
+                    deferred_flag,
+                    network_down,
+                ) = await self._fetch_run_logs_with_deferral(
+                    forge,
+                    run_id_val,
+                    key,
+                    deferred,
+                    now,
+                    repo_label,
+                    wf_name,
+                )
             if network_down:
                 # Transient / network-down — do NOT consume deferral budget
                 # and do NOT mark seen: next poll retries this commit.
@@ -1045,7 +1061,20 @@ class PollLoopsMixin(_WorkerBase):
                 f"**Created:** {run.get('created_at', '')}",
                 "",
             ]
-            if logs:
+            if startup_failure:
+                body_parts.append(
+                    "⚠️ **Conclusion: `startup_failure`** — GitHub could not "
+                    "start this run, so it has no jobs and no logs. Do NOT "
+                    "look for a failing step. The cause is in the workflow "
+                    "file at the commit above (or in a reusable workflow it "
+                    "calls): a YAML/parse error, an invalid `uses:` ref, an "
+                    "input the called workflow does not declare, or a "
+                    "`uses:` job whose caller-level `permissions:` cannot "
+                    "grant what the reusable workflow declares (fix: "
+                    "`permissions: {}` at the top and the required scopes on "
+                    "the job). Diff the caller against a green sibling repo."
+                )
+            elif logs:
                 body_parts.extend(_ci_log_body_parts(logs, ansi_re))
             elif fetch_error:
                 body_parts.append(

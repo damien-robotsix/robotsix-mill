@@ -179,6 +179,68 @@ def test_detects_new_failure_and_creates_draft(tmp_path, monkeypatch):
     assert "200:abc" in state["seen"]
 
 
+def test_startup_failure_is_filed_without_fetching_logs(tmp_path, monkeypatch):
+    """conclusion == 'startup_failure' → draft filed, no log fetch attempted.
+
+    Regression for robotsix-mill-ros2 Release Please (2026-08-30 → 09-10):
+    a caller whose ``permissions:`` starved its reusable workflow was
+    ``startup_failure`` on every push and the monitor skipped it for 11 days.
+    """
+    ctx = _ctx(
+        tmp_path,
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    forge = _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 7,
+                "name": "Release Please",
+                "path": ".github/workflows/release-please.yml",
+                "workflow_id": 300,
+                "head_sha": "91f67e46",
+                "conclusion": "startup_failure",
+                "html_url": "http://run/7",
+                "created_at": "2026-09-07T15:13:37Z",
+            },
+        ],
+        raise_on_logs=True,  # a real startup_failure has no jobs to fetch
+    )
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    loop = asyncio.new_event_loop()
+
+    async def _run_one_cycle():
+        async def _fast_sleep(s):
+            if s >= 1:
+                raise asyncio.CancelledError()
+
+        monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker._ci_monitor_poll_loop()
+
+    loop.run_until_complete(_run_one_cycle())
+    loop.close()
+
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 1
+    body = ctx.service.workspace(ci_tickets[0]).read_description() or ""
+    assert "startup_failure" in body
+    assert "permissions" in body
+    assert "Could not fetch the run logs" not in body
+    assert forge.logs_call_count == 0
+    state = json.loads(state_path.read_text("utf-8"))
+    assert "300:91f67e46" in state["seen"]
+
+
 def test_dedup_skips_already_seen_failure(tmp_path, monkeypatch):
     """State file already has (workflow_id, head_sha) → no draft created."""
     ctx = _ctx(
