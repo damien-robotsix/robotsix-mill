@@ -19,6 +19,7 @@ import random
 import re
 import subprocess
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -553,6 +554,8 @@ async def run_explore(
         # Re-resolve per attempt: failover can arm or clear between them.
         on_claude_now = level_uses_claude(level)
         attempt_timeout = _attempt_timeout(settings, on_claude=on_claude_now)
+        slot_label = "claude" if on_claude_now else "fallback"
+        started = time.monotonic()
         try:
             result = await _run_attempt_in_light_lane(
                 agent=agent,
@@ -560,6 +563,20 @@ async def run_explore(
                 limits=limits,
                 settings=settings,
                 timeout=attempt_timeout,
+            )
+            # One outcome line per attempt, on BOTH slots. The Claude SDK
+            # logs its own ``explore result: subtype=success``; the
+            # OpenRouter fallback path logged nothing on success, so a
+            # failover window read as "19 timeouts, 0 successes" from the
+            # logs alone (2026-09-10) while Langfuse showed ~50 scouts with
+            # 9 killed. The kill ratio must be readable per slot from logs.
+            log.info(
+                "explore attempt %d/%d succeeded in %.0fs (slot=%s, budget=%.0fs)",
+                attempt,
+                _EXPLORE_MAX_ATTEMPTS,
+                time.monotonic() - started,
+                slot_label,
+                attempt_timeout,
             )
             return result
         except TimeoutError:
@@ -569,7 +586,7 @@ async def run_explore(
                 attempt,
                 _EXPLORE_MAX_ATTEMPTS,
                 attempt_timeout,
-                "claude" if on_claude_now else "fallback",
+                slot_label,
             )
             if not on_claude_now:
                 # A fallback scout that could not finish in the widened budget
