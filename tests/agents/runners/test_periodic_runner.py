@@ -233,6 +233,32 @@ def test_forge_token_returns_secret(monkeypatch):
     assert result == "forge-tok-123"
 
 
+def test_forge_token_falls_back_to_clone_token_in_app_mode(monkeypatch):
+    """No static forge_token (GitHub App mode) → mint via _clone_token.
+
+    Regression for 2026-09-10: completeness_check cloned hexarchy with no
+    credentials (``could not read Username``) and ran web/context-only.
+    """
+    monkeypatch.setattr(
+        "robotsix_mill.agents.runners.periodic_runner.get_secrets",
+        lambda: Secrets(forge_token=None),
+    )
+    seen: dict[str, object] = {}
+
+    def _fake_github_token(settings, repo_config=None):
+        seen["repo_config"] = repo_config
+        return "ghs_minted"
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.runners.periodic_runner.github_token",
+        _fake_github_token,
+    )
+    rc = _test_repo_config()
+
+    assert _forge_token(Settings(), rc) == "ghs_minted"
+    assert seen["repo_config"] is rc
+
+
 # ------------------------------------------------------------------ run_periodic_pass
 
 
