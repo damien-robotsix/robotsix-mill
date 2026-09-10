@@ -160,6 +160,46 @@ def test_fallback_slot_widens_timeout_and_does_not_retry_a_timeout(
     assert 1.8 <= elapsed < 6, elapsed
 
 
+def test_successful_attempt_logs_outcome_with_slot(tmp_path, monkeypatch, caplog):
+    """A successful scout logs one outcome line naming the slot and budget.
+
+    The fallback path used to log nothing on success, so a failover window
+    read as "N timeouts, 0 successes" from the mill logs (2026-09-10) while
+    Langfuse showed most scouts finishing. Mirrors the live shape: the
+    ``_settings`` fixture arms failover, so the level resolves to the
+    fallback slot.
+    """
+    s = _settings(
+        tmp_path,
+        OPENROUTER_API_KEY="k",
+        explore_timeout_seconds=1.0,
+        explore_fallback_timeout_factor=3.0,
+    )
+
+    async def fake_attempt(*, agent, prompt, limits, settings):
+        return "the pool lives in sandbox/_slots.py"
+
+    monkeypatch.setattr(explore, "_run_single_explore_attempt", fake_attempt)
+    from robotsix_mill.agents import base as _base
+
+    monkeypatch.setattr(_base, "build_subagent", lambda *a, **k: (object(), None))
+
+    with caplog.at_level("INFO", logger="robotsix_mill.agents.explore"):
+        out = asyncio.run(
+            explore.run_explore(
+                settings=s, repo_dir=tmp_path, question="where is the slot pool?"
+            )
+        )
+    assert "sandbox/_slots.py" in out
+    lines = [
+        r.getMessage() for r in caplog.records if "explore attempt" in r.getMessage()
+    ]
+    assert len(lines) == 1, lines
+    assert "succeeded" in lines[0] and "(slot=fallback, budget=3s)" in lines[0], lines[
+        0
+    ]
+
+
 def test_claude_slot_keeps_base_timeout_and_retries(tmp_path, monkeypatch):
     """On the Claude slot the base ``explore_timeout_seconds`` applies and a
     timeout is retried (the pre-existing behaviour)."""
