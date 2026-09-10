@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.15.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.14.0...v0.15.0) (2026-09-09)
+
+
+### Features
+
+* Retrospect chain guard: stop re-filing the same unmet operational follow-up; escalate the root to human_issue_approval (20260909T082541Z-retrospect-chain-guard-stop-re-filing-th-2fff) ([#3223](https://github.com/damien-robotsix/robotsix-mill/issues/3223)) ([6309697](https://github.com/damien-robotsix/robotsix-mill/commit/63096973186b6eb25dc150ffcb7d2dba957c32bd))
+
+
+### Bug Fixes
+
+* **orphaned-pr-check:** never track dependabot / release-please / pin-bump foreign PRs ([#3218](https://github.com/damien-robotsix/robotsix-mill/issues/3218)) ([9382a9a](https://github.com/damien-robotsix/robotsix-mill/commit/9382a9a7ad2a06b361c3947c8b6286ffcf592ec4))
+
 ## [0.14.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.13.1...v0.14.0) (2026-09-09)
 
 
