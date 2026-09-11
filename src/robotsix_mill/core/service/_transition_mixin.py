@@ -579,11 +579,18 @@ class _TransitionMixin(_ServiceBase):
         that state so only the failed stage is re-run.
 
         When *note* is non-empty it is recorded as a comment on the
-        ticket and, if resuming back into READY, clears the implement
-        stage's stale-spec guard (``artifacts/implement.md``) — an
-        explicit operator justification is treated as sufficient reason
-        to retry even though the spec itself is unchanged, instead of
-        requiring manual workspace surgery to reset the guard.
+        ticket.  Resuming into READY always clears the implement
+        stage's stale-spec guard (``artifacts/implement.md``): the
+        resume itself is the operator's explicit authorization to
+        re-run the failed stage, so a fingerprint-guard block must not
+        silently re-block the ticket on the next preflight (the
+        "resume → spec-unchanged re-block" loop observed when a bulk
+        gate-drain resumed fingerprint-blocked tickets without notes).
+        A justification note is therefore NOT required to force a
+        retry on an unchanged spec; only a fresh spec change re-arms
+        the guard, and the spawn-limit / recurring-exhaustion budget
+        (below) still bounds how many times a resumed ticket can burn
+        an implement attempt.
 
         When the ticket was blocked from READY due to the implement
         spawn limit (``artifacts/implement_spawn_count`` ≥
