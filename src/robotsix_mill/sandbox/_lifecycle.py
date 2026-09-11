@@ -6,6 +6,7 @@ import contextlib
 import os
 import subprocess
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ..config import Settings
@@ -273,6 +274,11 @@ def _run_impl(
     # and the extra-package probe above touch no containers.
     with _sandbox_slot(settings):
         for attempt in range(1, max_attempts + 1):
+            # Recorded just before the spawn so the rc-137 diagnosis can tail
+            # `docker events --since <spawn>` for this exact container.
+            # RFC3339 with a Z suffix — the form the daemon itself emits in
+            # events (Python's isoformat() would append +00:00 instead).
+            spawn_ts = datetime.now(UTC).isoformat().replace("+00:00", "Z")
             try:
                 r = subprocess.run(
                     argv,
@@ -327,8 +333,110 @@ def _run_impl(
                     )
                     continue
                 raise SandboxError(f"docker run failed: {eof_msg[:300]}")
+            if r.returncode == 137:
+                # 137 == 128 + SIGKILL: the command was killed, not a normal
+                # non-zero exit. With `--rm` the container is already gone, so
+                # the daemon's event buffer (docker events --since <spawn>) is
+                # the only surviving evidence of WHY it died. Distinguish the
+                # memory cgroup OOM kill (a legit tool bug — the sandbox hit
+                # its `--memory` cap) from an external SIGKILL (a reaper or
+                # GC racing the spawn — infra, not the command).
+                killed = _diagnose_killed(name, spawn_ts, settings.sandbox_memory)
+                log.warning("sandbox container %s: %s", name, killed)
+                out = _truncate(stdout + stderr)
+                if out.strip():
+                    return r.returncode, out + "\n" + killed
+                return r.returncode, killed
             return r.returncode, _truncate(stdout + stderr)
     # Should not be reachable — the last attempt either returns or raises
     # above (non-125 → return; 125 non-retryable → raise; 125 retryable
     # signature on last attempt → raise).  Included as a safety net.
     raise SandboxError("docker run failed: transient daemon error after all retries")
+
+
+# ── rc 137 diagnosis ──────────────────────────────────────────────────
+#
+# 137 == 128 + SIGKILL. `docker run --rm` auto-removes the container the
+# moment its main process exits, so by the time the client returns there is
+# nothing left to `docker inspect`. The daemon, however, keeps a bounded
+# event buffer (last 256 events) that the removal itself shows up in — and
+# for an OOM kill it carries an `oom` event followed by `kill (signal=9)`.
+# Tailing `docker events --since <spawn-ts> --filter container=<name>` for
+# ~1 s therefore tells us whether the kernel's memory cgroup killed it
+# (a real tool bug — the sandbox hit its `--memory` cap) or something
+# external SIGKILLed it (the fleet monitor's "second remover" racing `--rm`,
+# the container GC — infra, not the command). The stream never ends on its
+# own, so we read for a fixed window and kill it via the subprocess timeout.
+
+#: How long we watch the daemon event stream after an rc-137 exit. Bounded:
+#: the diagnosis must never materially extend the run's latency — the events
+#: of interest (oom/kill/die) are emitted immediately around the exit.
+_KILL_DIAGNOSIS_TIMEOUT = 1.0
+
+
+def _classify_killed(events: str, memory_limit: str) -> str:
+    """Classify an rc-137 kill from the ``docker events`` tail.
+
+    *events* is the raw stdout of ``docker events --since … --filter
+    container=…`` (daemon emits ``<rfc3339> <type> <action> <id> (k=v)``
+    lines). Returns one of:
+
+    - ``killed: cgroup OOM (memory.max <memory_limit>)`` — the container
+      emitted an ``oom`` event (kernel memory-cgroup OOM killer fired).
+    - ``killed: external SIGKILL (no OOM event)`` — no ``oom`` event, so
+      something outside the kernel's memory cgroup sent SIGKILL (a reaper
+      or GC racing the ``--rm`` auto-remove).
+    """
+    oom_event = any(
+        line.strip().split()[1:3] == ["container", "oom"]
+        for line in events.splitlines()
+    )
+    if oom_event:
+        return f"killed: cgroup OOM (memory.max {memory_limit})"
+    return "killed: external SIGKILL (no OOM event)"
+
+
+def _diagnose_killed(name: str, since: str, memory_limit: str) -> str:
+    """Best-effort rc-137 diagnosis for a killed sandbox.
+
+    Returns the one-line classification (see :func:`_classify_killed`).
+    Every failure here degrades to ``external SIGKILL`` — never raises and
+    never blocks the run, so the happy path's latency is untouched (this is
+    only ever called on rc 137).
+    """
+    try:
+        events = subprocess.run(
+            [
+                "docker",
+                "events",
+                "--since",
+                since,
+                "--filter",
+                f"container={name}",
+            ],
+            capture_output=True,
+            text=False,
+            timeout=_KILL_DIAGNOSIS_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired as exc:
+        # `docker events` streams forever, so this is the NORMAL path: the
+        # 1 s window elapses before the daemon ever exits. The buffered tail
+        # (including any `oom`/`kill` event for this container) is already in
+        # `exc.output` — classify from it rather than dropping it as external.
+        tail = exc.output or b""
+        if tail:
+            return _classify_killed(
+                tail.decode("utf-8", errors="replace"), memory_limit
+            )
+        return "killed: external SIGKILL (no OOM event)"
+    except OSError, subprocess.SubprocessError:
+        return "killed: external SIGKILL (no OOM event)"
+    if events.stdout:
+        return _classify_killed(
+            events.stdout.decode("utf-8", errors="replace"), memory_limit
+        )
+    # Empty stream: the daemon already dropped the events (its buffer is
+    # only 256 events, saturated in a storm) or the container never
+    # started. Most likely external — no OOM event to point at the
+    # memory cgroup.
+    return "killed: external SIGKILL (no OOM event)"
