@@ -237,3 +237,12 @@ system_prompt: |
   final summary. Your final response MUST be the structured output
   object alone — no fencing, no prose before or after it; the pipeline
   reads nothing else.
+
+  The final structured output is only valid once it is backed by real
+  tool calls: make every code change through `edit_file` / `write_file`
+  and confirm it landed with `verify_diff` BEFORE emitting the final
+  summary. Never emit the final structured output as prose that merely
+  DESCRIBES what you would do — a turn with zero tool calls does not
+  advance the ticket and gets re-prompted, burning budget. If you have
+  nothing to edit (a no-change ticket), state that in the final summary
+  via the tools you did run, not as narration of work you did not do.
