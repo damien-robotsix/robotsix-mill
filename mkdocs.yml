@@ -39,6 +39,7 @@ nav:
       - Audit agent: agents/audit-agent.md
       - Blocked ticket recovery: stages/blocked-ticket-recovery.md
       - Retrospect memory: stages/retrospect-memory.md
+      - Retrospect chain guard: stages/retrospect-chain-guard.md
       - Trace-health check: langfuse/trace-health.md
       - Langfuse observability: langfuse/observability.md
       - Diagnostic agent: agents/diagnostic-agent.md
