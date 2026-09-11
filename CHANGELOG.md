@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.15.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.0...v0.15.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **ci-monitor:** file startup_failure runs instead of skipping them ([#3227](https://github.com/damien-robotsix/robotsix-mill/issues/3227)) ([79e11d3](https://github.com/damien-robotsix/robotsix-mill/commit/79e11d3fb0730f3615431118222b9c96de2edc2d))
+* **explore:** log a per-attempt outcome line naming the slot and budget ([#3228](https://github.com/damien-robotsix/robotsix-mill/issues/3228)) ([1cdfd2a](https://github.com/damien-robotsix/robotsix-mill/commit/1cdfd2a61205d3cdf84264d42b0f0eb3edafc455))
+* **periodic:** mint an App clone token when the static forge_token secret is unset ([#3226](https://github.com/damien-robotsix/robotsix-mill/issues/3226)) ([746c658](https://github.com/damien-robotsix/robotsix-mill/commit/746c658730fd9f9f965b789ef7a223a56b5ba1d7))
+
 ## [0.15.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.14.0...v0.15.0) (2026-09-09)
 
 
