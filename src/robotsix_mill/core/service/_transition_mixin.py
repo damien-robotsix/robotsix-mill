@@ -497,15 +497,17 @@ class _TransitionMixin(_ServiceBase):
                 ticket.blocked_from = None
                 ticket.block_reason = None
                 # When an operator forces a blocked ticket back into
-                # READY with an explicit justification note, clear the
-                # implement stage's stale-spec guard so the fingerprint-
-                # collision refusal (phase_coordinator.preflight guard
-                # #4) doesn't silently re-block the ticket.  This
-                # mirrors resume_blocked's note-gated clearing and
-                # ensures ANY operator-forced transition into READY
-                # (not just the resume-blocked endpoint) satisfies the
-                # "operator-authorized retry" requirement.
-                if dst is State.READY and note and note.strip():
+                # READY, clear the implement stage's stale-spec guard so
+                # the fingerprint-collision refusal
+                # (phase_coordinator.preflight guard #4) doesn't silently
+                # re-block the ticket.  The resume itself is the
+                # operator's explicit authorization to retry, so no
+                # justification note is required — this mirrors
+                # resume_blocked's clearing and ensures ANY operator-forced
+                # transition into READY (not just the resume-blocked
+                # endpoint) satisfies the "operator-authorized retry"
+                # requirement.
+                if dst is State.READY:
                     _clear_stale_implement_guard(self.workspace(ticket))
             # Record originating state when pausing mid-stage; clear when
             # leaving AWAITING_USER_REPLY (resume path), except when
@@ -741,7 +743,7 @@ class _TransitionMixin(_ServiceBase):
             s.add(_make_event(s, ticket_id=ticket_id, state=dst, note=event_note))
             s.commit()
             s.refresh(ticket)
-            if note and dst is State.READY:
+            if dst is State.READY:
                 _clear_stale_implement_guard(self.workspace(ticket))
             # Clear any stale implement conversation state so that a
             # blocked→READY resume starts a fresh agent conversation
