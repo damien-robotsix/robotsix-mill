@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.2](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.1...v0.15.2) (2026-09-12)
+
+
+### Bug Fixes
+
+* Merge/ci_fix: approve `action_required` workflow runs on the ticket's own PR instead of blocking on 'zero check runs' (20260910T105824Z-merge-ci-fix-approve-action-required-wor-d1e2) ([#3234](https://github.com/damien-robotsix/robotsix-mill/issues/3234)) ([38d4393](https://github.com/damien-robotsix/robotsix-mill/commit/38d4393264e08a01280df727061f9270891d44ca))
+
 ## [0.15.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.0...v0.15.1) (2026-09-11)
 
 
