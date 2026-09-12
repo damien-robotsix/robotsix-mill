@@ -201,7 +201,7 @@
         "max_traces_per_ticket": 0,
         "member_sync_interval_seconds": 86400,
         "merge_poll_seconds": 120,
-        "meta_interval_seconds": 0,
+        "meta_interval_seconds": 604800,
         "module_curator_interval_seconds": 604800,
         "module_curator_request_limit": 120,
         "module_size_interval_seconds": 604800,
