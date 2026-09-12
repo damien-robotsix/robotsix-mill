@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.15.3](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.2...v0.15.3) (2026-09-12)
+
+
+### Bug Fixes
+
+* forge parity: GitLab missing required_status_contexts override (single-adapter override) (20260911T203334Z-forge-parity-gitlab-missing-required-sta-e09a) ([#3239](https://github.com/damien-robotsix/robotsix-mill/issues/3239)) ([b321c34](https://github.com/damien-robotsix/robotsix-mill/commit/b321c34bba87c9d0d1fd7eafbdff77822e0b9e14))
+* post_comment has no idempotency guard for rapid same-body calls in one run (20260912T162315Z-post-comment-has-no-idempotency-guard-fo-3d41) ([#3246](https://github.com/damien-robotsix/robotsix-mill/issues/3246)) ([6c47c21](https://github.com/damien-robotsix/robotsix-mill/commit/6c47c21120a14120e8f425e28f3e6b9a7060fb7c))
+* Review agent: compile()/ast.parse files against the target Python before flagging comma-form `except A, B:` as a blocking Python-2 SyntaxError (20260911T061722Z-review-agent-compile-ast-parse-files-aga-1bab) ([#3237](https://github.com/damien-robotsix/robotsix-mill/issues/3237)) ([3fe8711](https://github.com/damien-robotsix/robotsix-mill/commit/3fe871156002d4d4d4713cb0feda494dd20925de))
+
 ## [0.15.2](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.1...v0.15.2) (2026-09-12)
 
 
