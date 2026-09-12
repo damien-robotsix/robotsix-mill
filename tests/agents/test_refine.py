@@ -2972,44 +2972,6 @@ def test_split_child_fast_path_sets_simple_complexity(ctx, service, monkeypatch)
     assert _read_triage_complexity(ws) == "simple"
 
 
-def test_triage_skip_writes_complexity_artifact(ctx, service, monkeypatch):
-    """When triage returns REFINE with complexity='simple', the complexity
-    artifact is written before falling through to full refine."""
-
-    refine_called = False
-
-    from robotsix_mill.agents import pre_refine_classifier
-    from robotsix_mill.agents.pre_refine_classifier import PreRefineClassifierResult
-
-    monkeypatch.setattr(
-        pre_refine_classifier,
-        "run_pre_refine_classifier",
-        lambda **kw: PreRefineClassifierResult(
-            triage_decision="REFINE",
-            triage_reason="trivial change",
-            complexity="simple",
-        ),
-    )
-
-    def spy_refine(**kwargs):
-        nonlocal refine_called
-        refine_called = True
-        return _single("## Problem\nrefined\n")
-
-    monkeypatch.setattr(refining, "run_refine_agent", spy_refine)
-
-    t = service.create("Simple change", "trivial draft")
-    RefineStage().run(t, ctx)
-
-    assert refine_called
-
-    # Check the artifact was written.
-    from robotsix_mill.stages.refine.orchestration import _read_triage_complexity
-
-    ws = service.workspace(t)
-    assert _read_triage_complexity(ws) == "simple"
-
-
 # ---------------------------------------------------------------------------
 # Auto-approve input reduction tests
 # ---------------------------------------------------------------------------

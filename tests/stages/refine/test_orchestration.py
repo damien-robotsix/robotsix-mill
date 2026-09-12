@@ -559,32 +559,6 @@ def test_agent_runtime_error_blocks(ctx_factory, monkeypatch, tmp_path):
     assert out.note == "OPENROUTER_API_KEY not set"
 
 
-def test_triage_skip_does_not_run_agent(ctx_factory, monkeypatch, tmp_path):
-    # refine_triage_enabled defaults to True.
-    ctx = ctx_factory()
-    assert ctx.settings.refine_triage_enabled is True
-    t = _ticket(ctx)
-
-    called: list[int] = []
-
-    def _record(**kw):
-        called.append(1)
-        return RefineResult(spec_markdown=_REAL_SPEC)
-
-    _apply_default_mocks(
-        monkeypatch,
-        run_refine_agent=_record,
-        triage_refine=_mock_triage(decision="SKIP", reason="already a precise spec"),
-    )
-
-    out = _run_agent(ctx, t, tmp_path, draft="A precise draft with no file paths.")
-
-    assert out.note.startswith("triage SKIP")
-    assert called == []  # full refine agent never invoked
-    ws = ctx.service.workspace(t)
-    assert (ws.artifacts_dir / "file_map.json").exists()
-
-
 def test_gitignored_file_map_blocks(ctx_factory, monkeypatch, tmp_path):
     ctx = ctx_factory()
     t = _ticket(ctx)
@@ -948,29 +922,6 @@ def test_triage_no_change_verdict_returns_done(ctx_factory, monkeypatch, tmp_pat
     assert (ws.artifacts_dir / "draft-original.md").exists()
 
 
-def test_triage_skip_always_routes_to_implement(ctx_factory, monkeypatch, tmp_path):
-    """SKIP must ALWAYS route to implement, never to State.DONE, even for
-    reasons that previously matched _triage_reason_rejects."""
-    ctx = ctx_factory()
-    t = _ticket(ctx)
-    calls = _spy_refine(
-        monkeypatch,
-        triage_refine=_mock_triage(
-            decision="SKIP",
-            reason="the entire gap assertion is factually wrong — no change is needed",
-        ),
-    )
-
-    out = _run_agent(ctx, t, tmp_path, draft="Some draft.")
-
-    # SKIP now routes to implement (not DONE) — the old reject-gate is removed.
-    assert out.next_state is not State.DONE
-    assert out.note.startswith("triage SKIP")
-    assert calls == []  # full refine agent never invoked
-    ws = ctx.service.workspace(t)
-    assert (ws.artifacts_dir / "draft-original.md").exists()
-
-
 def test_triage_presence_file_regression(ctx_factory, monkeypatch, tmp_path):
     """Regression: a config-only `.robotsix-mill/periodic/<agent>.yaml`
     presence-file draft whose file is absent does NOT close to State.DONE.
@@ -996,32 +947,8 @@ def test_triage_presence_file_regression(ctx_factory, monkeypatch, tmp_path):
     assert calls == []  # full refine agent never invoked
 
 
-def test_triage_skip_extracts_backtick_paths(ctx_factory, monkeypatch, tmp_path):
-    ctx = ctx_factory()
-    t = _ticket(ctx)
-    calls = _spy_refine(
-        monkeypatch,
-        triage_refine=_mock_triage(decision="SKIP", reason="already precise"),
-    )
-
-    out = _run_agent(
-        ctx,
-        t,
-        tmp_path,
-        draft="Raise a clear error in `src/foo/bar.py` when the file is absent.",
-    )
-
-    assert out.note.startswith("triage SKIP")
-    assert calls == []
-    ws = ctx.service.workspace(t)
-    file_map = json.loads(
-        (ws.artifacts_dir / "file_map.json").read_text(encoding="utf-8")
-    )
-    assert {"file": "src/foo/bar.py", "note": "from draft"} in file_map
-
-
 # ===========================================================================
-# _triage_skip — mechanical draft fast-path
+# mechanical draft fast-path
 # ===========================================================================
 
 
@@ -3494,9 +3421,10 @@ def test_delta_reuse_triage_refine_not_called(ctx_factory, monkeypatch, tmp_path
 
     out = _run_agent(ctx, t, tmp_path)
 
-    # triage_refine is called from _triage_skip. On sendback, _triage_skip
-    # returns None immediately (reviewer_comments blocks it). The fallback
-    # call from _run_refine_agent is also skipped due to delta-reuse guard.
+    # On a delta-reuse sendback the triage path is gated off by the
+    # reviewer sendback (human-flagged changes always refine), and the
+    # fallback call from _run_refine_agent is also skipped due to the
+    # delta-reuse guard.
     assert triage_refine_called == []
     assert out.note.startswith("refined")
 
