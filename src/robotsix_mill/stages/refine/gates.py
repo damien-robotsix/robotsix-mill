@@ -468,7 +468,9 @@ class RefineGatesMixin:
         to short-circuit, or ``None`` to fall through to the refine agent.
 
         The classifier returns:
-        - standards_violation: if True, short-circuit to DONE
+        - standards_violation: if True, short-circuit to HUMAN_ISSUE_APPROVAL
+          (a human gate — never DONE, which is terminal and silently
+          discards the ticket on an over-strict verdict)
         - triage_decision: SKIP/NO_CHANGE/REFINE/MIGRATE
         - duplicate_of/already_done: if set, short-circuit to DONE
         - complexity/trivial_scope: persisted for the refine agent
@@ -693,8 +695,15 @@ class RefineGatesMixin:
                 standard,
                 reason,
             )
+            # Park in a human gate, not DONE: DONE is terminal and nothing
+            # reopens it, so an over-strict verdict would silently discard
+            # the ticket (2026-08/09 incident: a fix ticket rejected for not
+            # restating a standard verbatim kept a board red for 11 days).
+            # The board-gates-drain session approves, rewrites, or closes it
+            # with a reason.  The STANDARDS_GATE_PREFIX note is unchanged so
+            # existing dedup / external-fix phrase handling still matches.
             return Outcome(
-                State.DONE,
+                State.HUMAN_ISSUE_APPROVAL,
                 f"{STANDARDS_GATE_PREFIX} draft conflicts with {standard} — {reason}",
             )
 
