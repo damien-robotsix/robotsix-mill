@@ -904,6 +904,17 @@ pattern control its tool-call and web-fetch budgets:
 | `MILL_SURVEY_WEB_FETCH_MAX_TOTAL_BYTES` | `500000` | Cumulative ceiling on returned fetch bytes per survey run |
 | `MILL_SURVEY_WEB_SEARCH_MAX_CALLS` | `5` | Max web_search invocations per survey run |
 
+#### agent_check
+
+The `agent_check` periodic agent inspects agent definitions for internal
+coherence (tool–prompt mismatches, skill drift, metadata correctness,
+registration completeness, prompt self-consistency). One extra field
+beyond the generic periodic pattern controls its request budget:
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `MILL_AGENT_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the agent-check agent. Previously ran on pydantic-ai's implicit limit of 50; this makes the budget configurable. |
+
 #### audit
 
 The `audit` periodic agent performs broad repository audits (license
