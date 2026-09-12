@@ -21,3 +21,4 @@ Configure via `MILL_RETROSPECT_MEMORY_PATH` (defaults to
 - [index.md](index.md) — documentation home
 - [docs/config/configuration.md](../config/configuration.md) — full env-var reference
 - [docs/agents/index.md](agents/index.md) — agent catalog
+- [retrospect-chain-guard.md](retrospect-chain-guard.md) — operator runbook for when a retrospect re-filing loop is escalated to a human
