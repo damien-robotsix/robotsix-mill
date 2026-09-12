@@ -993,6 +993,7 @@ and as environment variables:
 | `MILL_DIAGNOSTIC_EVENTS_MAX_AGE_DAYS` | `90` | Days after which diagnostic events are considered stale and excluded from recurring-failure counts and from the `ci_prevention_rules` digest. Set to `0` to disable aging (keep events indefinitely) |
 | `MILL_DIAGNOSTIC_CI_FAILURE_THRESHOLD` | `3` | Legacy, inert. The recurring-CI diagnostic check no longer files report tickets (recurring failures feed the `ci_prevention_rules` pass instead); the field is kept only so configs that pin it still load. |
 | `MILL_FRONTEND_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between frontend-sync passes. Set to `0` to disable. |
+| `MILL_HEALTH_REQUEST_LIMIT` | `80` | Per-call request cap for the health agent's tool loop |
 | `MILL_MEMBER_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between member-sync passes. Set to `0` to disable. |
 | `MILL_PIN_BUMP_INTERVAL_SECONDS` | `86400` | Seconds between pin-bump passes. Set to `0` to disable. |
 | `MILL_ROADMAP_SYNC_INTERVAL_SECONDS` | `604800` | Seconds between roadmap-sync passes. Set to `0` to disable. |

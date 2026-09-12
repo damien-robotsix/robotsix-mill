@@ -139,6 +139,33 @@ def test_health_result_field_types():
     assert all(isinstance(g, str) for g in result.gap_ids)
 
 
+# --- _health_dynamic_kwargs ---
+
+
+def test_health_dynamic_kwargs_defaults(tmp_path):
+    """Default Settings produce the expected usage_limits request cap."""
+    settings = _make_settings(tmp_path)
+    kwargs = health_agent._health_dynamic_kwargs(settings)
+    limits = kwargs["usage_limits"]
+    assert limits.request_limit == 80
+
+
+def test_health_dynamic_kwargs_non_default(tmp_path):
+    """Non-default health_request_limit propagates into usage_limits.
+
+    Regression: the health agent previously passed no usage_limits, so it
+    hit pydantic-ai's implicit default of 50 ("The next request would
+    exceed the request_limit of 50"). The cap must now be settings-driven.
+    """
+    from pydantic_ai.usage import UsageLimits
+
+    settings = _make_settings(tmp_path, health_request_limit=77)
+    kwargs = health_agent._health_dynamic_kwargs(settings)
+    limits = kwargs["usage_limits"]
+    assert isinstance(limits, UsageLimits)
+    assert limits.request_limit == 77
+
+
 # --- Runner tests ---
 
 

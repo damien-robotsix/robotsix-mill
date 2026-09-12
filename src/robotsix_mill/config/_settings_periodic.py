@@ -157,6 +157,18 @@ class _PeriodicSettings(BaseModel):
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic health passes. 0 = disabled.",
     )
+    # Per-call request cap for the health agent's tool loop. The agent
+    # inspects the repo across six dimensions with explore/read_file/
+    # list_dir — a broad scan that can saturate the old implicit
+    # pydantic-ai default of 50 (observed: "The next request would
+    # exceed the request_limit of 50"). 80 gives headroom matching the
+    # audit/test-gap agents' budgets for a similar broad-scan workload;
+    # per-run cost stays negligible.
+    health_request_limit: int = Field(
+        default=80,
+        ge=1,
+        description="Per-call request cap for the health agent's tool loop.",
+    )
 
     # --- survey agent (OSS project discovery) ---
     # Survey is a discovery + structured-output agent: read README,

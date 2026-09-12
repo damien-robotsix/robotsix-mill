@@ -1586,6 +1586,13 @@
           "title": "Health Interval Seconds",
           "type": "integer"
         },
+        "health_request_limit": {
+          "default": 80,
+          "description": "Per-call request cap for the health agent's tool loop.",
+          "minimum": 1,
+          "title": "Health Request Limit",
+          "type": "integer"
+        },
         "implement_history_max_turns": {
           "default": 8,
           "description": "Last-N tool-call turns kept when compacting a resumed implement message_history. 0 disables compaction.",

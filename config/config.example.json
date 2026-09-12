@@ -170,6 +170,7 @@
         "github_api_url": "https://api.github.com",
         "gitlab_api_url": "https://gitlab.com/api/v4",
         "health_interval_seconds": 604800,
+        "health_request_limit": 80,
         "implement_history_max_turns": 8,
         "implement_history_summary_max_chars": 3000,
         "implement_max_spawns_per_ticket": 3,
