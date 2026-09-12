@@ -24,7 +24,7 @@ from __future__ import annotations
 import re
 
 from ..config import Settings
-from ..core.models import SourceKind
+from ..core.models import SourceKind, Ticket
 from ..core.service import TicketService
 from ..core.states import DONE_OR_CLOSED
 from ..core.text_noop import (
@@ -80,7 +80,7 @@ def _extract_pr_numbers(*texts: str) -> frozenset[int]:
     return frozenset(numbers)
 
 
-def _dup_notice(t, *, by_pr: bool = False) -> str:
+def _dup_notice(t: Ticket, *, by_pr: bool = False) -> str:
     reason = (
         "same external PR/issue # reference already tracked"
         if by_pr
