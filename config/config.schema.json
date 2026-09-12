@@ -603,6 +603,13 @@
           "title": "Agent Check Interval Seconds",
           "type": "integer"
         },
+        "agent_check_request_limit": {
+          "default": 80,
+          "description": "Request budget for the agent-check agent.",
+          "minimum": 1,
+          "title": "Agent Check Request Limit",
+          "type": "integer"
+        },
         "agent_levels": {
           "additionalProperties": {
             "type": "integer"

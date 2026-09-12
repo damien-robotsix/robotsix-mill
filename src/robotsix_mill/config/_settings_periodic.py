@@ -145,6 +145,11 @@ class _PeriodicSettings(BaseModel):
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic agent-check passes. 0 = disabled.",
     )
+    agent_check_request_limit: int = Field(
+        default=80,
+        ge=1,
+        description="Request budget for the agent-check agent.",
+    )
 
     # --- health agent (codebase-health inspection) ---
     # MILL_HEALTH_PERIODIC=true.

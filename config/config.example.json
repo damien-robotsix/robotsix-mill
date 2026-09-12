@@ -30,6 +30,7 @@
         "forge_remote_url": null,
         "forge_target_branch": "main",
         "agent_check_interval_seconds": 604800,
+        "agent_check_request_limit": 80,
         "allow_runtime_repo_registration": false,
         "api_host": "0.0.0.0",
         "api_port": 8077,

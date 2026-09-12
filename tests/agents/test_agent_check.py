@@ -569,7 +569,7 @@ def test_run_agent_check_agent_passes_extra_roots(monkeypatch):
         )
 
     class FakeAgent:
-        def run_sync(self, prompt):
+        def run_sync(self, prompt, *, usage_limits=None):
             return FakeRunResult()
 
     def fake_build_agent(*args, **kwargs):
@@ -590,6 +590,32 @@ def test_run_agent_check_agent_passes_extra_roots(monkeypatch):
     )
 
     assert captured_extra_roots == [Path("/fake/data")]
+
+
+def test_run_agent_check_agent_passes_settings_request_limit(monkeypatch):
+    """Regression: agent_check previously passed no usage_limits, so it hit
+    pydantic-ai's implicit request_limit of 50 ("The next request would
+    exceed the request_limit of 50"). It must now pass an explicit,
+    configurable request limit derived from settings.agent_check_request_limit.
+    """
+    from robotsix_mill.config import Settings
+
+    captured = {}
+
+    def fake_run_periodic_agent(**kwargs):
+        captured["usage_limits"] = kwargs.get("usage_limits")
+        return _empty_result()
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.periodic_base.run_periodic_agent",
+        fake_run_periodic_agent,
+    )
+
+    settings = Settings(agent_check_request_limit=77)
+    agent_check.run_agent_check_agent(settings=settings, memory="")
+
+    assert captured["usage_limits"] is not None
+    assert captured["usage_limits"].request_limit == 77
 
 
 def test_run_agent_check_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):

@@ -411,6 +411,12 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
         "43200",
         43200,
     ),
+    (
+        "agent_check_request_limit",
+        "MILL_AGENT_CHECK_REQUEST_LIMIT",
+        "50",
+        50,
+    ),
     ("diagnostic_interval_seconds", "MILL_DIAGNOSTIC_INTERVAL_SECONDS", "43200", 43200),
     ("ci_log_max_bytes", "MILL_CI_LOG_MAX_BYTES", "32768", 32768),
     (

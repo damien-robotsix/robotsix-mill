@@ -9,6 +9,7 @@ the runner has a clear result to work with.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from ..config import Settings
 from .periodic_base import PeriodicAgentResult, load_periodic_system_prompt
@@ -17,6 +18,14 @@ from .periodic_base import PeriodicAgentResult, load_periodic_system_prompt
 SYSTEM_PROMPT: str = load_periodic_system_prompt("agent_check")
 
 MAX_GAPS = 10
+
+
+def _agent_check_dynamic_kwargs(settings: Settings) -> dict[str, Any]:
+    from pydantic_ai.usage import UsageLimits
+
+    return {
+        "usage_limits": UsageLimits(request_limit=settings.agent_check_request_limit)
+    }
 
 
 class AgentCheckResult(PeriodicAgentResult):
@@ -83,4 +92,5 @@ def run_agent_check_agent(
         verified_proposals=verified_proposals,
         prompt_tail="Inspect all agent definitions and return your coherence findings.",
         extra_roots=extra_roots,
+        **_agent_check_dynamic_kwargs(settings),
     )
