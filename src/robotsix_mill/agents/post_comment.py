@@ -10,10 +10,12 @@ Without this tool the only comment-shaped surfaces are
 That mismatch produced ticket d129's bogus
 "what's the thread_id?" ASK_USER question.
 
-The tool is idempotent on (ticket, body) so a retrying agent doesn't
-spam duplicates. The author is stamped with the agent name (e.g.
-``"implement"``) so the comment is traceable to the originating
-agent's run.
+The tool is idempotent on (ticket, author, body) so a retrying agent
+doesn't spam duplicates — the guard checks against every comment this
+agent has already posted on the ticket (surviving tool-closure rebuilds
+within a run), not just the most recent one. The author is stamped with
+the agent name (e.g. ``"implement"``) so the comment is traceable to the
+originating agent's run.
 """
 
 from __future__ import annotations
@@ -33,11 +35,13 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
         agent_name: Stamped as the comment author so the originating
             agent is identifiable (e.g. ``"implement"``).
     """
-    # Track posted (body) hashes within this tool's lifetime so an
-    # accidental double-call from a retried agent step doesn't pile up
-    # duplicate comments. Per-call dedupe is sufficient — a genuinely
-    # NEW comment on the same ticket from a later run gets a fresh tool
-    # closure with an empty seen-set.
+    # Track posted (body) hashes within this tool's lifetime as a cheap
+    # fast-path so a retried tool call short-circuits without a DB query.
+    # The authoritative guard is the persisted-comment check in
+    # ``post_comment`` below: it dedupes against EVERY comment this agent
+    # has already posted on the ticket, so a duplicate is caught even when
+    # a fresh tool closure (a rebuilt agent / retried pass) loses this
+    # in-memory set — not just when the body matches the last one posted.
     _seen: set[int] = set()
 
     def post_comment(
@@ -70,8 +74,8 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
         if not body:
             return "post_comment: empty body — refusing to post"
 
-        # Dedupe within this tool's lifetime — a retried tool call
-        # with the exact same body returns the prior status instead
+        # Dedupe fast-path within this tool's lifetime — a retried tool
+        # call with the exact same body returns the prior status instead
         # of double-posting.
         h = hash(body)
         if h in _seen:
@@ -86,6 +90,26 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
                 "determine current ticket."
             )
         svc, ticket_id = result
+
+        # Idempotency beyond the in-memory set: an identical comment this
+        # agent already posted on this ticket is a duplicate even if a
+        # fresh tool closure (rebuilt agent / retried pass) lost the
+        # seen-set. Checking the persisted comments makes the guard
+        # survive closure rebuilds, so a double-post can't slip through.
+        try:
+            for existing in svc.list_comments(ticket_id):
+                if existing.author == agent_name and existing.body == body:
+                    return "post_comment: duplicate body in this run — skipped"
+        except Exception as exc:
+            # If listing comments fails, fall through — the in-memory set
+            # still guards same-closure retries and add_comment reports
+            # its own error if posting is impossible.
+            log.debug(
+                "post_comment: dedup check failed for %s (%r); proceeding",
+                ticket_id,
+                exc,
+            )
+
         try:
             created = svc.add_comment(
                 ticket_id,
