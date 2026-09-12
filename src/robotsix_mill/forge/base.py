@@ -454,6 +454,17 @@ class Forge(ABC):
         """
         return {"rerun": False, "reason": "not supported"}
 
+    def approve_workflow(self, *, run_id: int) -> dict[str, Any]:
+        """Approve a single workflow run awaiting approval (``action_required``).
+
+        Returns ``{"approved": True}`` on success, ``{"approved": False,
+        "reason": ...}`` when the forge does not support run approval or the
+        operation fails. When the approval is refused, the result carries
+        ``"forbidden": True`` so callers can distinguish a permission denial
+        from a transient failure.  Must NEVER raise.
+        """
+        return {"approved": False, "reason": "not supported"}
+
     def delete_branch(self, *, branch: str) -> bool:
         """Delete the remote head branch *branch* after merge.
 

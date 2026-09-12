@@ -450,6 +450,28 @@ class GitHubForgeCIMixin:
         except Exception as e:
             return {"rerun": False, "reason": str(e)}
 
+    def approve_workflow(self, *, run_id: int) -> dict[str, Any]:
+        """Approve a GitHub Actions workflow run awaiting approval.
+
+        Returns ``{"approved": True}`` on success, ``{"approved": False,
+        "reason": ...}`` on any failure.  When the approval is refused
+        (HTTP 403), the result additionally carries ``"forbidden": True``
+        so callers can distinguish a permission denial from a transient
+        error.  Must NEVER raise.
+        """
+        try:
+            owner, repo = self._owner_repo  # type: ignore[attr-defined]
+            return self._approve_workflow(owner=owner, repo=repo, run_id=run_id)
+        except httpx.HTTPStatusError as e:
+            forbidden = e.response is not None and e.response.status_code == 403
+            return {
+                "approved": False,
+                **({"forbidden": True} if forbidden else {}),
+                "reason": str(e),
+            }
+        except Exception as e:
+            return {"approved": False, "reason": str(e)}
+
     # --- HTTP seams (monkeypatched in tests) ---
 
     def _check_status(
@@ -755,3 +777,22 @@ class GitHubForgeCIMixin:
             r.raise_for_status()
             return {"rerun": True}
         return {"rerun": False, "reason": "max retries exhausted (401 loop)"}
+
+    def _approve_workflow(
+        self, *, owner: str, repo: str, run_id: int
+    ) -> dict[str, Any]:
+        """POST /repos/{owner}/{repo}/actions/runs/{run_id}/approve.
+
+        A 403 (approval refused) raises through ``raise_for_status`` so the
+        public wrapper can flag it as ``forbidden``.
+        """
+        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
+            r = c.post(
+                f"{api}/repos/{owner}/{repo}/actions/runs/{run_id}/approve",
+                headers=headers,
+            )
+            if r.status_code == 401:
+                continue
+            r.raise_for_status()
+            return {"approved": True}
+        return {"approved": False, "reason": "max retries exhausted (401 loop)"}
