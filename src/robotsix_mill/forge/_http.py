@@ -11,10 +11,20 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
 import httpx
+from robotsix_http import RetryConfig, call_with_retry
 
 from ..config import RepoConfig, Settings
 
 logger = logging.getLogger(__name__)
+
+# Shared transient-retry configuration for forge HTTP calls.  Retry/backoff/
+# Retry-After handling is delegated to robotsix-http (the same library
+# github-auth, llmio, browser, … already adopt) instead of hand-rolling a
+# backoff here.  The GitHub-App 401 token-refresh path below is deliberately
+# NOT part of this config: 401 is non-transient to robotsix-http, and the
+# invalidate-then-regenerate-and-retry-once loop is an auth concern layered
+# on top of the shared transport retry.
+_FORGE_RETRY_CONFIG = RetryConfig(max_retries=2)
 
 
 class _ApiClient:
@@ -60,24 +70,39 @@ class _ApiClient:
         that test mocks which override only ``Client.get`` / ``Client.post``
         / … continue to intercept.
 
+        The request is wrapped in :func:`robotsix_http.call_with_retry`, so
+        transient transport failures (timeouts, connect/network errors, …)
+        are retried with the fleet-shared robotsix-http backoff rather than
+        propagating immediately.
+
         On the first 401 response, when an ``_on_401`` callback is
-        configured, the cached token is invalidated, a 2-second backoff
-        is applied, and the request is retried exactly once with fresh
-        headers.  A second 401 (or any other status) is returned as-is.
+        configured, the cached token is invalidated, a 2-second token-refresh
+        settle is applied, and the request is retried exactly once with fresh
+        headers (header regeneration is layered on top of the shared
+        transport retry — 401 is non-transient to robotsix-http).  A second
+        401 (or any other status) is returned as-is for the caller to branch
+        on.
         """
         api_base = getattr(self._settings, self._api_url_attr).rstrip("/")
-        headers = self._headers_factory(self._settings, self._repo_config)
         url = f"{api_base}{path}"
 
-        with httpx.Client(timeout=30) as c:
-            fn = getattr(c, method)
-            r: httpx.Response = fn(url, headers=headers, **kwargs)
-            # Buffer the body while the client is still open so the
-            # caller can safely invoke .json() / .text after return.
-            # Real httpx.Response has .read(); fake test responses
-            # carry their payload pre-populated and don't need it.
-            if hasattr(r, "read"):
-                r.read()
+        def attempt() -> httpx.Response:
+            # Headers are regenerated per attempt (including the 401 retry)
+            # so the 50-min GitHub-App token cache and the GitLab secrets
+            # lookup stay fresh after invalidation.
+            headers = self._headers_factory(self._settings, self._repo_config)
+            with httpx.Client(timeout=30) as c:
+                fn = getattr(c, method)
+                r: httpx.Response = fn(url, headers=headers, **kwargs)
+                # Buffer the body while the client is still open so the
+                # caller can safely invoke .json() / .text after return.
+                # Real httpx.Response has .read(); fake test responses
+                # carry their payload pre-populated and don't need it.
+                if hasattr(r, "read"):
+                    r.read()
+            return r
+
+        r = call_with_retry(attempt, config=_FORGE_RETRY_CONFIG, what="forge-http")
 
         if r.status_code == 401 and self._on_401 is not None:
             logger.debug(
@@ -87,12 +112,7 @@ class _ApiClient:
             )
             self._on_401()
             time.sleep(2)
-            headers = self._headers_factory(self._settings, self._repo_config)
-            with httpx.Client(timeout=30) as c:
-                fn = getattr(c, method)
-                r = fn(url, headers=headers, **kwargs)
-                if hasattr(r, "read"):
-                    r.read()
+            r = call_with_retry(attempt, config=_FORGE_RETRY_CONFIG, what="forge-http")
 
         return r
 
