@@ -2425,3 +2425,25 @@ def test_capture_failure_window_gitlab_tailcaps_without_marker():
         "x" * 100_000, max_bytes=65536, failure_re=_LOG_FAILURE_RE
     )
     assert out == "x" * 65536
+
+
+# ---------------------------------------------------------------------------
+# required_status_contexts — explicit no-op mirroring GitHub's return contract
+# ---------------------------------------------------------------------------
+
+
+def test_required_status_contexts_returns_empty_list_matching_github_contract(
+    tmp_path,
+):
+    """GitLab has no per-context branch protection, so the override returns
+    [] (the ABC's "unknown" contract) — the same shape GitHub's adapter
+    returns for a 403/404 (unprotected/unreadable) branch.  Must NEVER
+    raise, and must return only str elements.
+    """
+    forge = _forge(tmp_path)
+    result = forge.required_status_contexts(target_branch="main")
+    assert isinstance(result, list)
+    assert result == []
+    assert all(isinstance(c, str) for c in result)
+    # No API reachable / no protection configured → still [] for any target.
+    assert forge.required_status_contexts(target_branch="release/1.0") == []

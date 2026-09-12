@@ -482,6 +482,26 @@ class GitLabForge(
         project_path = _parse_gitlab_project_path(self._remote_url)
         return self._list_open_prs(project_path)
 
+    def required_status_contexts(self, *, target_branch: str) -> list[str]:
+        """Status-check contexts *target_branch* protection requires.
+
+        Explicit no-op override (deliberate, not accidental ABC
+        inheritance): GitLab has no GitHub-style per-context branch
+        protection — ``GET /projects/:id/protected_branches`` entries
+        carry merge/push access levels but never name required CI jobs.
+        GitLab gates merges on boolean project settings
+        (``only_allow_merge_if_pipeline_succeeds``, required approvals)
+        rather than per-context requirements, so there is no canonical
+        list of context names to enumerate.  Fabricating one (e.g.
+        external status-check names) would make the ``ci_poll``
+        missing-context diagnostic cite a check that can never appear
+        among the MR's pipeline jobs.
+
+        Returns ``[]`` per the ABC contract — callers must read it as
+        "unknown", never as "nothing is required".  Never raises.
+        """
+        return []
+
     # ------------------------------------------------------------------
     # HTTP seams (monkeypatched in tests)
     # ------------------------------------------------------------------
