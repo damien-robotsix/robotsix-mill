@@ -1623,7 +1623,11 @@ def test_standards_gate_user_authored_returns_none(ctx_factory, monkeypatch):
     assert _run_classifier_gate(ctx, t) is None
 
 
-def test_standards_gate_violation_routes_to_done(ctx_factory, monkeypatch):
+def test_standards_gate_violation_routes_to_human_approval(ctx_factory, monkeypatch):
+    """A standards violation parks the ticket in human_issue_approval, not
+    DONE — DONE is terminal and would silently discard an over-strict
+    verdict (2026-08/09 incident: a fix ticket rejected for not restating
+    a standard verbatim kept a board red for 11 days)."""
     ctx = ctx_factory(refine_triage_enabled="false")
     ctx.repo_config = _fleet_repo_config()
     t = _ticket(ctx, source="agent_check")
@@ -1632,7 +1636,8 @@ def test_standards_gate_violation_routes_to_done(ctx_factory, monkeypatch):
     out = _run_classifier_gate(ctx, t)
 
     assert out is not None
-    assert out.next_state is State.DONE
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert out.next_state is not State.DONE
     assert out.note.startswith(STANDARDS_GATE_PREFIX)
     assert "distribution-packaging.md" in out.note
 
