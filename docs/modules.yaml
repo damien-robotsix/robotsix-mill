@@ -172,6 +172,7 @@ modules:
       - tests/forge/test_github_merge_classification.py
       - tests/forge/test_github_pagination.py
       - tests/forge/test_github_pr_lifecycle.py
+      - tests/forge/test_github_pr_review.py
       - tests/forge/test_github_security.py
       - tests/forge/test_gitlab.py
       - tests/forge/test_gitlab_pagination.py
@@ -325,6 +326,8 @@ modules:
       - tests/stages/test_review.py
       - tests/stages/refine/conftest.py
       - tests/stages/refine/test_stage.py
+      - tests/stages/refine/test_stage_dedup.py
+      - tests/stages/refine/test_stage_triage.py
       - tests/stages/refine/test_helpers.py
       - tests/stages/refine/test_orchestration.py
       - tests/stages/refine/test_checkpoint.py
@@ -344,6 +347,7 @@ modules:
       - tests/stages/merge/conftest.py
       - tests/stages/test_ci_failure_buckets.py
       - tests/stages/test_ci_fix.py
+      - tests/stages/test_ci_fix_out_of_scope.py
       - tests/stages/test_ci_fix_helpers.py
       - tests/stages/test_ci_transient.py
       - tests/stages/test_stage_cache.py
