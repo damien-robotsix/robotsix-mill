@@ -1540,3 +1540,157 @@ class TestProgressWatchdog:
         obj = object()
         wrapped = _wrap_tools_with_progress([obj], ev)
         assert wrapped[0] is obj
+
+
+# ------------------------------------------------------------------
+
+
+class TestWrapToolsWithCheckpoint:
+    """Unit tests for ``_wrap_tools_with_checkpoint`` — the budget-cap
+    step recorder + boundary raiser applied to the coordinator's tools."""
+
+    @staticmethod
+    def _checkpoint(tmp_path):
+        from robotsix_mill.core.workspace import Workspace
+        from robotsix_mill.stages.implement._checkpoint import ImplementCheckpoint
+
+        ws = Workspace(tmp_path, "T-1")
+        return ImplementCheckpoint(
+            ws=ws,
+            ticket_id="T-1",
+            goal="do X",
+            max_tool_calls=10,  # boundary = 5
+        )
+
+    def test_records_steps_and_raises_at_boundary(self, tmp_path):
+        """Each successful tool call is recorded; at the boundary the
+        checkpoint is finalized and UsageLimitExceeded raised."""
+        import json
+
+        from pydantic_ai.exceptions import UsageLimitExceeded
+
+        from robotsix_mill.agents.coordinating import (
+            _wrap_tools_with_checkpoint,
+        )
+
+        ckpt = self._checkpoint(tmp_path)
+        calls = {"n": 0}
+
+        def tool(x):
+            calls["n"] += 1
+            return f"result-{x}"
+
+        wrapped = _wrap_tools_with_checkpoint([tool], ckpt, tmp_path)
+
+        assert wrapped[0]("a") == "result-a"
+        assert wrapped[0]("b") == "result-b"
+        assert calls["n"] == 2
+        # Not yet at boundary (5) — no raise, checkpoint still scratch.
+        assert ckpt.finalized is False
+
+        # Drive to the boundary: 3 more calls → the 5th raises.
+        wrapped[0]("c")
+        wrapped[0]("d")
+        with pytest.raises(UsageLimitExceeded):
+            wrapped[0]("e")
+
+        assert len(ckpt.steps) == 5
+        assert ckpt.steps[-1]["tool"] == "tool"
+        assert "result-e" in ckpt.steps[-1]["output"]
+        assert ckpt.finalized is True
+        assert ckpt.path.is_file()
+        data = json.loads(ckpt.path.read_text(encoding="utf-8"))
+        assert data["finalized"] is True
+        assert len(data["steps"]) == 5
+
+    def test_boundary_none_disables_raise(self, tmp_path):
+        """When the checkpoint has no boundary (tiny cap), steps are still
+        recorded but no UsageLimitExceeded is raised — the pydantic-ai hard
+        limit owns termination."""
+        from robotsix_mill.agents.coordinating import (
+            _wrap_tools_with_checkpoint,
+        )
+        from robotsix_mill.core.workspace import Workspace
+        from robotsix_mill.stages.implement._checkpoint import ImplementCheckpoint
+
+        ws = Workspace(tmp_path, "T-1")
+        ckpt = ImplementCheckpoint(
+            ws=ws, ticket_id="T-1", goal="do X", max_tool_calls=3
+        )
+        assert ckpt.boundary is None
+
+        def tool():
+            return "ok"
+
+        wrapped = _wrap_tools_with_checkpoint([tool], ckpt, tmp_path)
+        for _ in range(4):
+            assert wrapped[0]() == "ok"
+        assert len(ckpt.steps) == 4
+        assert ckpt.finalized is False
+
+    def test_async_tools_record_and_raise(self, tmp_path):
+        """Async tools are wrapped without losing their coroutine nature,
+        and the boundary raise still fires."""
+        import asyncio
+        import inspect
+
+        from pydantic_ai.exceptions import UsageLimitExceeded
+
+        from robotsix_mill.agents.coordinating import (
+            _wrap_tools_with_checkpoint,
+        )
+
+        ckpt = self._checkpoint(tmp_path)
+
+        async def atool(x):
+            return f"a-{x}"
+
+        wrapped = _wrap_tools_with_checkpoint([atool], ckpt, tmp_path)
+        assert inspect.iscoroutinefunction(wrapped[0])
+
+        async def drive():
+            for _ in range(5):
+                await wrapped[0]("x")
+
+        with pytest.raises(UsageLimitExceeded):
+            asyncio.run(drive())
+
+        assert len(ckpt.steps) == 5
+        assert ckpt.finalized is True
+
+    def test_checkpoint_failures_swallowed(self, tmp_path, monkeypatch):
+        """A record_step / finalize failure must never break a tool call."""
+        from pydantic_ai.exceptions import UsageLimitExceeded
+
+        from robotsix_mill.agents.coordinating import (
+            _wrap_tools_with_checkpoint,
+        )
+
+        ckpt = self._checkpoint(tmp_path)
+
+        # Make the checkpoint write always fail.
+        def boom(*a, **k):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(ckpt, "record_step", boom)
+        monkeypatch.setattr(ckpt, "finalize", boom)
+
+        def tool():
+            return "ok"
+
+        # boundary is 5 — reaching it raises UsageLimitExceeded (the only
+        # thing that can break the tool call), but the write failures don't.
+        wrapped = _wrap_tools_with_checkpoint([tool], ckpt, tmp_path)
+        with pytest.raises(UsageLimitExceeded):
+            for _ in range(5):
+                assert wrapped[0]() == "ok"
+
+    def test_non_callables_pass_through(self, tmp_path):
+        from robotsix_mill.agents.coordinating import (
+            _wrap_tools_with_checkpoint,
+        )
+
+        ckpt = self._checkpoint(tmp_path)
+        obj = object()
+        wrapped = _wrap_tools_with_checkpoint([obj], ckpt, tmp_path)
+        assert wrapped[0] is obj

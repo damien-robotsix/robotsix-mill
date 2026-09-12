@@ -260,6 +260,7 @@ modules:
       - src/robotsix_mill/stages/implement/__init__.py
       - src/robotsix_mill/stages/implement/_shared.py
       - src/robotsix_mill/stages/implement/_base.py
+      - src/robotsix_mill/stages/implement/_checkpoint.py
       - src/robotsix_mill/stages/implement/core.py
       - src/robotsix_mill/stages/implement/phase_coordinator.py
       - src/robotsix_mill/stages/implement/phase_coordinator_preflight.py
@@ -316,6 +317,7 @@ modules:
       - tests/stages/test_dependency_fix.py
       - tests/stages/test_registry.py
       - tests/stages/test_classify.py
+      - tests/stages/implement/test_checkpoint.py
       - tests/stages/implement/test_implement.py
       - tests/stages/implement/test_implement_scope_guardrail.py
       - tests/stages/implement/test_implement_preflight.py

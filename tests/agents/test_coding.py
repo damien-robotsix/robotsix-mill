@@ -547,6 +547,68 @@ def test_default_parameters_passthrough(settings, tmp_path, monkeypatch):
     assert kw["language_instructions"] == ""
 
 
+def test_checkpoint_forwards_to_run_coordinator(settings, tmp_path, monkeypatch):
+    """The budget-cap ``checkpoint`` is forwarded to the inner
+    ``run_coordinator`` calls (both the primary path and the
+    deepseek-fallback path)."""
+    calls: list[dict] = []
+    result = _make_result()
+
+    def _fake_run_coordinator(**kw):
+        calls.append(kw)
+        return result
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.coordinating.run_coordinator",
+        _fake_run_coordinator,
+    )
+
+    marker = object()
+    run_implement_agent(
+        settings=settings,
+        repo_dir=tmp_path,
+        spec="do X",
+        checkpoint=marker,
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["checkpoint"] is marker
+
+
+def test_checkpoint_forwards_on_fallback(settings, tmp_path, monkeypatch):
+    """The fallback ``run_coordinator`` call also receives the checkpoint."""
+    from pydantic_ai.exceptions import UnexpectedModelBehavior
+
+    calls: list[dict] = []
+    result = _make_result()
+    call_count = 0
+
+    def _fake_run_coordinator(**kw):
+        nonlocal call_count
+        call_count += 1
+        calls.append(kw)
+        if call_count == 1:
+            raise UnexpectedModelBehavior("primary exploded")
+        return result
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.coordinating.run_coordinator",
+        _fake_run_coordinator,
+    )
+
+    marker = object()
+    run_implement_agent(
+        settings=settings,
+        repo_dir=tmp_path,
+        spec="do X",
+        checkpoint=marker,
+    )
+
+    assert len(calls) == 2
+    assert calls[0]["checkpoint"] is marker
+    assert calls[1]["checkpoint"] is marker
+
+
 def test_extra_roots_forwards_to_run_coordinator(settings, tmp_path, monkeypatch):
     """``extra_roots`` is forwarded to the inner ``run_coordinator``
     calls (both the primary path and the deepseek-fallback path)."""

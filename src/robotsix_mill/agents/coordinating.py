@@ -301,6 +301,94 @@ def _wrap_tools_with_progress(
     return wrapped
 
 
+def _wrap_tools_with_checkpoint(
+    tools: list[Any],
+    checkpoint: Any,
+    repo_dir: Path,
+) -> list[Any]:
+    """Wrap each tool to checkpoint completed tool calls.
+
+    Every successful tool call is appended to the shared
+    :class:`robotsix_mill.stages.implement._checkpoint.ImplementCheckpoint`
+    (persisted incrementally).  When the count reaches the checkpoint's
+    *boundary* (``coordinator_max_tool_calls`` minus the reserve), the
+    checkpoint is finalized (working-tree diff captured) and the run is
+    terminated by raising ``UsageLimitExceeded`` — pydantic-ai's own
+    ``tool_calls_limit`` would raise too, but it discards the partial
+    state and leaves no chance to finalize the checkpoint first.
+
+    *checkpoint* is duck-typed (``record_step``, ``finalize``, ``boundary``)
+    so this module stays decoupled from the implement stage.  Failures in
+    the checkpoint machinery are swallowed — they must never break a tool
+    call.  Non-callable entries pass through unchanged.
+    """
+    from pydantic_ai.exceptions import UsageLimitExceeded
+
+    boundary = checkpoint.boundary
+    state: dict[str, int] = {"count": 0}
+
+    def _record(
+        fn: Any, args: tuple[Any, ...], kwargs: dict[str, Any], result: Any
+    ) -> None:
+        state["count"] += 1
+        input_parts: list[str] = []
+        if args:
+            input_parts.append(f"args={_shorten(str(args))}")
+        if kwargs:
+            input_parts.append(f"kwargs={_shorten(str(kwargs))}")
+        step_input = "; ".join(input_parts) or "(no args)"
+        with contextlib.suppress(Exception):
+            checkpoint.record_step(
+                tool=getattr(fn, "__name__", str(fn)),
+                input_summary=step_input,
+                output_summary=_shorten(str(result)),
+            )
+        if boundary is not None and state["count"] >= boundary:
+            with contextlib.suppress(Exception):
+                checkpoint.finalize(repo_dir)
+            raise UsageLimitExceeded(
+                f"implement tool-call budget checkpoint reached "
+                f"({state['count']} tool calls) — resumable (move to READY)"
+            )
+
+    wrapped: list[Any] = []
+    for t in tools:
+        if callable(t):
+            if inspect.iscoroutinefunction(t):
+
+                @functools.wraps(t)
+                async def _async_checkpoint_wrapper(
+                    *args: Any, _original: Any = t, **kwargs: Any
+                ) -> Any:
+                    result = await _original(*args, **kwargs)
+                    _record(_original, args, kwargs, result)
+                    return result
+
+                wrapped.append(_async_checkpoint_wrapper)
+            else:
+
+                @functools.wraps(t)
+                def _checkpoint_wrapper(
+                    *args: Any, _original: Any = t, **kwargs: Any
+                ) -> Any:
+                    result = _original(*args, **kwargs)
+                    _record(_original, args, kwargs, result)
+                    return result
+
+                wrapped.append(_checkpoint_wrapper)
+        else:
+            wrapped.append(t)
+    return wrapped
+
+
+def _shorten(text: str, max_chars: int = 200) -> str:
+    """Truncate a tool-call arg/output for the checkpoint step log."""
+    text = (text or "").strip()
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + f"…[{len(text) - max_chars} chars elided]"
+
+
 def _call_with_progress_watchdog[T](
     fn: Callable[[], T],
     timeout_seconds: int,
@@ -404,6 +492,7 @@ def run_coordinator(
     stage_name: str = "implement",
     target_branch: str = "main",
     ci_log_fetch_fn: Callable[[int, bool], str] | None = None,
+    checkpoint: Any | None = None,
 ) -> ImplementResult:
     """Run ONE explore→read→edit pass for the ticket and return the
     structured result.
@@ -568,6 +657,13 @@ def run_coordinator(
         )
 
     _all_tools = _compress_tool_outputs(_all_tools)
+
+    # Budget-cap checkpointing: wrap every tool so completed steps are
+    # persisted and the pass is stopped (checkpoint finalized) a few tool
+    # calls before ``coordinator_max_tool_calls`` instead of letting
+    # pydantic-ai raise ``UsageLimitExceeded`` with no partial state.
+    if checkpoint is not None and getattr(checkpoint, "enabled", False):
+        _all_tools = _wrap_tools_with_checkpoint(_all_tools, checkpoint, repo_dir)
 
     agent = build_agent_from_definition(
         settings,

@@ -89,6 +89,7 @@ def run_implement_agent(
     stage_name: str = "implement",
     target_branch: str = "main",
     ci_log_fetch_fn: Callable[[int, bool], str] | None = None,
+    checkpoint: Any | None = None,
 ) -> tuple[str, list[str], str, bytes | None, bytes | None, bool, str]:
     """Run ONE coordinator pass for this ticket. Returns
     ``(summary, reference_files, updated_memory, conversation_state,
@@ -151,6 +152,7 @@ def run_implement_agent(
             stage_name=stage_name,
             target_branch=target_branch,
             ci_log_fetch_fn=ci_log_fetch_fn,
+            checkpoint=checkpoint,
         )
 
     try:
@@ -218,6 +220,7 @@ def run_implement_agent(
                 stage_name=stage_name,
                 target_branch=target_branch,
                 ci_log_fetch_fn=ci_log_fetch_fn,
+                checkpoint=checkpoint,
             )
         except Exception as fallback_e:
             # Keep BOTH failures typed: ``cause`` carries the fallback's

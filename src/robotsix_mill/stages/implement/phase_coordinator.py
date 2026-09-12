@@ -31,6 +31,7 @@ from ..pause import (
     save_conversation_state,
 )
 from ._base import _ImplementStageBase
+from ._checkpoint import build_checkpoint_resume_history, load_implement_checkpoint
 from ._shared import (
     _ImplementContext,
     _SinglePassResult,
@@ -685,6 +686,22 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                             "— loaded %d-byte conversation state",
                             ticket.id,
                             len(saved_state),
+                        )
+                else:
+                    # Tool-call budget-cap resume: pydantic-ai discards the
+                    # partial transcript when ``tool_calls_limit`` is hit, so
+                    # there is no conversation_state to replay — only the step
+                    # checkpoint the prior pass persisted at its cap boundary.
+                    # Rebuild a compact resume history from it so the agent
+                    # skips already-completed steps instead of re-running them.
+                    checkpoint = load_implement_checkpoint(ws)
+                    if checkpoint is not None:
+                        resume_history = build_checkpoint_resume_history(checkpoint)
+                        log.info(
+                            "%s: resuming implement from budget-cap checkpoint "
+                            "— %d completed step(s)",
+                            ticket.id,
+                            len(checkpoint.steps),
                         )
             elif verify_resume_history is not None:
                 # Summary-verification retry: feed the next pass the compact
