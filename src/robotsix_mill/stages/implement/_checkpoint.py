@@ -225,6 +225,14 @@ class ImplementCheckpoint:
             return None
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
+        # NOTE: comma-form `except A, B:` is INTENTIONAL. The repo pins
+        # requires-python >=3.14 and ruff target-version py314, where
+        # PEP 758 gives the comma form TUPLE semantics — equivalent to
+        # `except (json.JSONDecodeError, OSError):` (both caught; a
+        # TypeError is not). It is not the Python 2 binding form. It is
+        # also ruff-format canonical here: ruff 0.16.0 + py314 rewrites
+        # the parenthesized form back to this comma form, so the
+        # parenthesized form is not `ruff format --check`-clean.
         except json.JSONDecodeError, OSError:
             log.warning("implement checkpoint corrupt — ignoring")
             return None
