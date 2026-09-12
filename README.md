@@ -186,6 +186,7 @@ reference are covered in [docs/config/configuration.md](docs/config/configuratio
 - [docs/agents/audit-agent.md](docs/agents/audit-agent.md) — Meta-audit agent for quality/security coverage gaps
 - [docs/stages/blocked-ticket-recovery.md](docs/stages/blocked-ticket-recovery.md) — Recovering from BLOCKED tickets
 - [docs/stages/retrospect-memory.md](docs/stages/retrospect-memory.md) — Retrospect agent's Markdown memory ledger
+- [docs/stages/retrospect-chain-guard.md](docs/stages/retrospect-chain-guard.md) — Operator runbook for retrospect chain-guard escalations
 - [docs/langfuse/trace-health.md](docs/langfuse/trace-health.md) — Deterministic check for unsessioned Langfuse traces
 - [docs/cost-and-resilience.md](docs/cost-and-resilience.md) — Per-ticket cost tracking & cost controls
 - [docs/notify/notifications.md](docs/notify/notifications.md) — ntfy.sh push notifications for human-attention states
