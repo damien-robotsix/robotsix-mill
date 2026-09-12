@@ -51,6 +51,58 @@ def test_reallowed_after_resolved(settings):
     assert len(svc.list()) == 2
 
 
+def test_dedups_same_pr_number_with_different_title(settings):
+    """A differently-worded ticket about the same external PR is suppressed.
+
+    Regression for three PR robotsix-mill#3150 review-disposition tickets
+    filed ~2 minutes apart (2026-09-11) that bypassed the exact-title dedup
+    because each used distinct wording.
+    """
+    tool = make_report_issue_tool(settings, board_id="test-board")
+    a = tool("Track external PR robotsix-mill#3150 needs review", "see #3150")
+    b = tool(
+        "Implement agent flagged: PR robotsix-mill#3150 still has open comments",
+        "review #3150",
+    )
+    assert a.startswith("report_issue: filed draft ")
+    assert "already filed as" in b
+    assert len(TicketService(settings, board_id="test-board").list()) == 1
+
+
+def test_pr_dedup_scoped_to_non_terminal(settings):
+    """Once the PR ticket is terminal, a new differently-worded ticket about
+    the same PR is allowed again."""
+    tool = make_report_issue_tool(settings, board_id="test-board")
+    tool("Track external PR robotsix-mill#3150", "x")
+    svc = TicketService(settings, board_id="test-board")
+    svc.transition(svc.list()[0].id, State.CLOSED)
+    out = tool("PR robotsix-mill#3150 still failing", "x")
+    assert out.startswith("report_issue: filed draft ")
+    assert len(svc.list()) == 2
+
+
+def test_pr_dedup_allows_different_pr_number(settings):
+    """A ticket about a *different* PR is not suppressed by an unrelated
+    non-terminal PR ticket."""
+    tool = make_report_issue_tool(settings, board_id="test-board")
+    tool("Track external PR robotsix-mill#3150", "x")
+    out = tool("PR robotsix-mill#4200 needs review", "x")
+    assert out.startswith("report_issue: filed draft ")
+    assert len(TicketService(settings, board_id="test-board").list()) == 2
+
+
+def test_pr_dedup_matches_body_not_just_title(settings):
+    """The PR identity check reads the body too, so the PR reference may
+    live in either the candidate's or the existing ticket's body."""
+    tool = make_report_issue_tool(settings, board_id="test-board")
+    # Existing ticket carries the PR number only in its body.
+    tool("Track external PR", "discussion at robotsix-mill#3150")
+    # Candidate carries the PR number in its title → suppressed by body match.
+    b = tool("PR robotsix-mill#3150 open comments", "x")
+    assert "already filed as" in b
+    assert len(TicketService(settings, board_id="test-board").list()) == 1
+
+
 def test_empty_title_rejected(settings):
     tool = make_report_issue_tool(settings, board_id="test-board")
     assert "non-empty title" in tool("  ", "body")
