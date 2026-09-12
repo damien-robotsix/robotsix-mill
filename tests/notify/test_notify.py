@@ -200,7 +200,7 @@ def test_fleet_posts_json_to_url(settings, service, monkeypatch, secrets_set):
     payload = c["json"]
     assert payload["source"] == "mill"
     assert payload["severity"] == "info"
-    assert payload["category"] == "human_approval"
+    assert payload["category"] == "human_issue_approval"
     assert payload["ticket_id"] == t.id
     assert payload["ticket_title"] == "Add feature"
     assert payload["state"] == "human_issue_approval"
