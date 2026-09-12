@@ -1314,3 +1314,145 @@ def test_preseed_uses_provided_ranges_when_diff_is_truncated(tmp_path, monkeypat
     assert "line43" in content
     assert "line37" not in content
     assert "line44" not in content
+
+
+# --- Deterministic compile-check gate (PEP-758 comma-form false positive) ---
+
+
+def _py_modified_diff(path: str, body: str) -> str:
+    """A minimal modified-file diff for *path* carrying *body* as the
+    new-side content."""
+    return (
+        f"diff --git a/{path} b/{path}\n"
+        f"--- a/{path}\n"
+        f"+++ b/{path}\n"
+        f"@@ -1,1 +1,{body.count(chr(10)) + 1} @@\n"
+        f"{body}\n"
+    )
+
+
+def test_compile_check_note_clean_file_marks_false_positive(tmp_path):
+    """A modified .py file that compiles clean on the target interpreter is
+    marked COMPILE-CLEAN: a syntax/grammar complaint against it — e.g. the
+    'Python 2 SyntaxError' flag on the PEP-758 comma-form except — is a
+    FALSE POSITIVE and MUST NOT be raised."""
+    from robotsix_mill.agents.reviewing import _compile_check_note
+
+    body = (
+        "import subprocess\n"
+        "try:\n"
+        "    pass\n"
+        "except OSError, subprocess.SubprocessError:\n"
+        "    pass\n"
+    )
+    (tmp_path / "mod.py").write_text(body, encoding="utf-8")
+
+    note = _compile_check_note(_py_modified_diff("mod.py", body), tmp_path)
+    assert note is not None
+    assert "mod.py" in note
+    assert "COMPILE-CLEAN" in note
+    assert "FALSE POSITIVE" in note
+    assert "MUST NOT be raised" in note
+    assert "Python 2" in note
+    # The clean file must NOT be in the VERIFIED list.
+    assert "VERIFIED" not in note
+
+
+def test_compile_check_note_broken_file_carries_syntaxerror(tmp_path):
+    """A modified .py file that genuinely fails to parse carries the
+    verified SyntaxError (with line number) so the reviewer raises ground
+    truth instead of a guess."""
+    from robotsix_mill.agents.reviewing import _compile_check_note
+
+    body = "def broken(:\n    pass\n"
+    (tmp_path / "broken.py").write_text(body, encoding="utf-8")
+
+    note = _compile_check_note(_py_modified_diff("broken.py", body), tmp_path)
+    assert note is not None
+    assert "broken.py" in note
+    assert "VERIFIED" in note
+    assert "COMPILE-CLEAN" not in note
+    # Line 1 (the broken def header) is named.
+    assert "broken.py:1" in note
+
+
+def test_compile_check_note_none_without_repo_dir():
+    """No repo dir → no compile check possible → None (prompt unchanged)."""
+    from robotsix_mill.agents.reviewing import _compile_check_note
+
+    assert _compile_check_note("diff --git a/x.py b/x.py", None) is None
+
+
+def test_compile_check_note_skips_non_python_and_absent_files(tmp_path):
+    """Non-.py files and .py files not on disk are skipped; a diff with
+    only those produces None rather than a spurious note."""
+    from robotsix_mill.agents.reviewing import _compile_check_note
+
+    md_diff = (
+        "diff --git a/readme.md b/readme.md\n"
+        "--- a/readme.md\n"
+        "+++ b/readme.md\n"
+        "@@ -1 +1 @@\n"
+        "-a\n"
+        "+b\n"
+    )
+    assert _compile_check_note(md_diff, tmp_path) is None
+
+    # A .py file in the diff that does not exist on disk.
+    assert (
+        _compile_check_note(_py_modified_diff("ghost.py", "x = 1\n"), tmp_path) is None
+    )
+
+
+def test_compile_check_note_names_target_interpreter_version(tmp_path):
+    """The note names the actual interpreter version (the repo's target
+    Python) so the reviewer verifies the target before weaponising the
+    comma-form except."""
+    import platform
+
+    from robotsix_mill.agents.reviewing import _compile_check_note
+
+    body = "x = 1\n"
+    (tmp_path / "mod.py").write_text(body, encoding="utf-8")
+
+    note = _compile_check_note(_py_modified_diff("mod.py", body), tmp_path)
+    assert note is not None
+    assert platform.python_version() in note
+
+
+def test_compile_check_note_injected_into_review_prompt(tmp_path, monkeypatch):
+    """End-to-end: run_review_agent prepends the compile-clean note to the
+    review prompt for a modified .py file, so the reviewer is told the
+    PEP-758 comma-form except is a false positive before it can flag it as
+    a Python-2 SyntaxError."""
+    agent = _FakeAgent()
+    _patch_agent(monkeypatch, agent)
+
+    s = _settings(tmp_path, OPENROUTER_API_KEY="k")
+
+    body = (
+        "import subprocess\n"
+        "try:\n"
+        "    pass\n"
+        "except OSError, subprocess.SubprocessError:\n"
+        "    pass\n"
+    )
+    (tmp_path / "mod.py").write_text(body, encoding="utf-8")
+
+    diff = _py_modified_diff("mod.py", body)
+
+    verdict = run_review_agent(
+        settings=s,
+        diff=diff,
+        spec="Fix it",
+        repo_dir=tmp_path,
+    )
+
+    assert isinstance(verdict, ReviewVerdict)
+    assert len(agent.calls) == 1
+    prompt = agent.calls[0][0]
+    assert isinstance(prompt, str)
+    assert "COMPILE-CLEAN" in prompt
+    assert "mod.py" in prompt
+    assert "FALSE POSITIVE" in prompt
+    assert "MUST NOT be raised" in prompt

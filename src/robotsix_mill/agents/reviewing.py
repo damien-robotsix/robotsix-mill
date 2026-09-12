@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import platform
 import re
 from pathlib import Path
 from typing import Any, Literal
@@ -223,6 +224,97 @@ def _provider_failure_verdict_or_raise(exc: BaseException) -> ReviewVerdict:
     raise exc
 
 
+def _compile_check_note(diff_text: str, repo_dir: Path | None) -> str | None:
+    """Compile every modified ``.py`` file against the repo's target
+    interpreter and return a dispositive note for the review prompt.
+
+    The review agent historically flagged valid version-specific syntax
+    from memory — live case: the PEP-758 unparenthesized comma-form
+    ``except OSError, subprocess.SubprocessError:`` (valid on the repo's
+    target Python ≥3.14) was twice raised as a hard 'Python 2
+    SyntaxError'. Before any syntax complaint can become a blocker, this
+    deterministically ``compile()``s each modified Python file with the
+    sandbox's OWN interpreter (the repo's target), making 'compiles
+    clean' dispositive over a from-memory grammar assertion.
+
+    The returned note names the actual interpreter version (so the
+    reviewer verifies the Python target before weaponising comma-form
+    ``except``), marks every file that compiles clean as off-limits for
+    syntax/grammar complaints, and carries the verified ``SyntaxError``
+    (with line number) for files that genuinely fail to parse.
+
+    Returns ``None`` when there is nothing to verify (no repo dir, or no
+    ``.py`` files in the diff) so the review prompt is unchanged.
+    """
+    if repo_dir is None:
+        return None
+    modified = [p for p, _ in _split_diff_by_file(diff_text) if p.endswith(".py")]
+    if not modified:
+        return None
+
+    clean: list[str] = []
+    broken: list[str] = []
+    for path in sorted(set(modified)):
+        result = _compile_check_path(repo_dir / path, path)
+        if result is None:
+            continue
+        kind, label = result
+        if kind == "clean":
+            clean.append(label)
+        else:
+            broken.append(label)
+
+    if not clean and not broken:
+        return None
+
+    parts = [
+        (
+            "Deterministic compile check (run in-sandbox against this repo's "
+            f"target interpreter, Python {platform.python_version()}): the "
+            "modified Python files below were compiled with compile() before "
+            "this review."
+        )
+    ]
+    if clean:
+        parts.append(
+            "COMPILE-CLEAN — a syntax or grammar complaint against them is a "
+            "FALSE POSITIVE and MUST NOT be raised (e.g. flagging the "
+            "PEP-758 unparenthesized comma-form ``except A, B:`` as a "
+            "'Python 2 SyntaxError'): " + ", ".join(clean)
+        )
+    if broken:
+        parts.append(
+            "VERIFIED SYNTAX ERROR — these files genuinely do not parse on "
+            "the target interpreter and MAY be raised as blockers: " + "; ".join(broken)
+        )
+    return "\n".join(parts)
+
+
+def _compile_check_path(source_path: Path, path: str) -> tuple[str, str] | None:
+    """Compile one file and return ``(kind, label)``.
+
+    ``kind`` is ``"clean"`` (the file compiles cleanly on the target
+    interpreter — ground truth over a from-memory grammar assertion) or
+    ``"broken"`` (a verified ``SyntaxError``, whose *label* carries the
+    file, line, and message). Returns ``None`` when the file is absent,
+    unreadable, or fails to compile for a non-syntax reason — those are
+    left to the reviewer's own judgement rather than guessed at.
+    """
+    if not source_path.is_file():
+        return None
+    try:
+        source = source_path.read_text(encoding="utf-8")
+        compile(source, path, "exec")
+    except SyntaxError as exc:
+        where = f":{exc.lineno}" if exc.lineno else ""
+        return "broken", f"{path}{where} — {exc.msg}"
+    except OSError, UnicodeDecodeError:
+        return None
+    except Exception:
+        return None
+    return "clean", path
+
+
 def _review_attempt(
     *,
     diff_text: str,
@@ -241,12 +333,22 @@ def _review_attempt(
     """Build the prompt and run one review pass, returning the
     agent's (possibly re-prompted) output. Raises on token-limit
     overflow so the caller can decide whether to degrade.
+
+    Every pass prepends the deterministic compile-check note (see
+    :func:`_compile_check_note`) ahead of the tier note and spec, so a
+    from-memory 'Python 2 SyntaxError' flag against a file that compiles
+    clean on the target interpreter is a false positive the reviewer is
+    told not to raise — in every tier (full pass, output-exhaustion
+    retry, chunked per-file, degraded).
     """
     from .prompt_blocks import section
     from .retry import run_agent
     from .structured_output_guard import reprompt_if_unstructured
 
     user_prompt = ""
+    compile_note = _compile_check_note(diff_text, repo_dir)
+    if compile_note:
+        user_prompt += f"{compile_note}\n\n"
     if note:
         user_prompt += f"{note}\n\n"
     if prior_context is not None:
