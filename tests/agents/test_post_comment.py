@@ -149,6 +149,31 @@ class TestPostComment:
         svc = TicketService(settings, board_id="test-board")
         assert len(svc.list_comments(ticket.id)) == 2
 
+    def test_dedupes_against_previously_posted_comment_across_closure(
+        self,
+        settings,
+        ticket,
+        monkeypatch,
+    ):
+        """A duplicate is caught even when a FRESH tool closure (a
+        rebuilt agent / retried pass) loses the in-memory seen-set. The
+        guard consults the persisted comments, so posting the same body
+        again via a new closure still skips instead of double-posting."""
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.tracing.current_session",
+            lambda: ticket.id,
+        )
+
+        # Two separate closures (simulating a rebuilt agent mid-run) post
+        # the SAME body — only the first should create a comment.
+        first = _pc.make_post_comment_tool(settings, agent_name="implement")
+        second = _pc.make_post_comment_tool(settings, agent_name="implement")
+        assert first("Same body.").startswith("posted comment ")
+        assert "duplicate" in second("Same body.")
+
+        svc = TicketService(settings, board_id="test-board")
+        assert len(svc.list_comments(ticket.id)) == 1
+
     def test_no_active_session_returns_error_string(
         self,
         settings,
