@@ -22,6 +22,10 @@ dependencies = [
     # caching, scope validation) — forge/auth.py consumes this instead of
     # carrying its own ~190-line JWT/installation-token implementation.
     "robotsix-github-auth",
+    # Shared fleet-wide HTTP retry/backoff/Retry-After handling. forge/_http.py
+    # delegates its transport retry to robotsix-http.call_with_retry instead of
+    # hand-rolling a backoff (the GitHub-App 401 token-refresh layer stays local).
+    "robotsix-http",
     "prometheus-fastapi-instrumentator>=8",
     "pydantic-settings>=2",
     "pyyaml>=6",
@@ -91,6 +95,10 @@ robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git"
 robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d916d1c14198dd00bb136605224177289c73352c" }
 robotsix-config = { git = "https://github.com/damien-robotsix/robotsix-config", rev = "8b9fa37f53b179986ca8b8f603d8786b9aa06018" }
 robotsix-github-auth = { git = "https://github.com/damien-robotsix/robotsix-github-auth.git", rev = "22c61e5e0e090b56d4af990c871711aae18ab2be" }
+# Direct dependency pin — must stay in lockstep with the transitive
+# override-dependencies rev above (robotsix-github-auth / robotsix-llmio pin
+# robotsix-http to ancestor revs; the override unifies them on cdfd4d1c).
+robotsix-http = { git = "https://github.com/damien-robotsix/robotsix-http.git", rev = "cdfd4d1c42679fef73081439562872792e202dc4" }
 
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"

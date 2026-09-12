@@ -232,3 +232,36 @@ def test_second_401_returned_after_single_retry(monkeypatch):
 
     assert resp.status_code == 401
     assert len(calls) == 2  # retried exactly once, no third attempt
+
+
+def test_transient_transport_error_is_retried(monkeypatch):
+    """``_do`` routes the request through robotsix-http's shared
+    ``call_with_retry``, so a transient transport failure (here a connect
+    error) is retried with the fleet-wide backoff instead of propagating
+    immediately.  The raw-response contract (caller branches on status) is
+    unchanged.
+    """
+    seq = iter([real_httpx.ConnectError("boom"), _FakeResponse(200)])
+
+    class MockClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def get(self, url, headers=None, **kwargs):
+            item = next(seq)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+    monkeypatch.setattr(real_httpx, "Client", MockClient)
+    client = _client()
+
+    resp = client.get("/x")
+
+    assert resp.status_code == 200  # second attempt succeeded
