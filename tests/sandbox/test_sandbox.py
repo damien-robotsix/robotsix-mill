@@ -1803,6 +1803,63 @@ def test_run_happy_path_never_touches_docker_events(tmp_path, monkeypatch):
     assert all(a[:2] != ["docker", "events"] for a in call_log)
 
 
+def test_run_rc137_docker_events_timeout_with_oom_tail(tmp_path, monkeypatch):
+    """`docker events` streams forever, so the diagnosis subprocess times out
+    on every rc-137 run — the TimeoutExpired branch is the NORMAL path, not
+    an error path. The buffered tail (including the `container oom` event)
+    must still classify as a cgroup OOM, not degrade to external SIGKILL."""
+    s = _rc137_settings(tmp_path)
+    events_out = (
+        f"{datetime.now(UTC).isoformat()} container create abc123 "
+        f"(image=python:3.14-slim, name=mill-sbx-deadbeef)\n"
+        f"{datetime.now(UTC).isoformat()} container oom abc123 "
+        f"(image=python:3.14-slim, name=mill-sbx-deadbeef)\n"
+    )
+
+    def fake_run(argv, **kw):
+        if argv[:2] == ["docker", "run"]:
+            return subprocess.CompletedProcess(argv, 137, stdout=b"", stderr=b"")
+        # docker events never exits on its own: the 1 s window elapses and
+        # subprocess raises TimeoutExpired with the buffered tail attached.
+        raise subprocess.TimeoutExpired(
+            cmd=argv, timeout=1.0, output=events_out.encode()
+        )
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"],
+    )
+    rc, out = sandbox.run("pytest -q", repo_dir=tmp_path, settings=s)
+
+    assert rc == 137
+    assert "killed: cgroup OOM (memory.max 2g)" in out
+
+
+def test_run_rc137_docker_events_timeout_no_tail_is_external(tmp_path, monkeypatch):
+    """A timed-out `docker events` with empty/None buffered output (the
+    daemon already dropped the events from its 256-entry buffer) has nothing
+    to classify — degrade to external SIGKILL rather than guessing."""
+    s = _rc137_settings(tmp_path)
+
+    def fake_run(argv, **kw):
+        if argv[:2] == ["docker", "run"]:
+            return subprocess.CompletedProcess(argv, 137, stdout=b"", stderr=b"")
+        raise subprocess.TimeoutExpired(cmd=argv, timeout=1.0, output=None)
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sandbox,
+        "_repo_mount",
+        lambda repo_dir, settings: ["-v", f"{repo_dir}:{repo_dir}"],
+    )
+    rc, out = sandbox.run("pytest -q", repo_dir=tmp_path, settings=s)
+
+    assert rc == 137
+    assert "killed: external SIGKILL (no OOM event)" in out
+
+
 def test_classify_killed_oom_event():
     from robotsix_mill.sandbox._lifecycle import _classify_killed
 
