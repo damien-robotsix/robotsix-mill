@@ -771,6 +771,41 @@ class CIPollMixin(_MergeStageBase):
         # was triggered at the PR level.  Attempt a close/reopen self-heal.
         jobs = ci_status.get("jobs", []) if ci_status else []
         if not jobs and mergeable_state == "blocked" and s.empty_rollup_max_polls > 0:
+            # --- action_required approval gate ---
+            # Before assuming the pull_request event never fired (or paying
+            # the close/reopen self-heal), check whether the head's workflow
+            # runs are simply parked awaiting approval.  A head authored by
+            # github-actions[bot] pushing with GITHUB_TOKEN (e.g. the
+            # Auto-format workflow) needs workflow approval; approving the
+            # runs unblocks CI with no human close/reopen needed.
+            head_sha = (ci_status or {}).get("_sha") or (pr or {}).get("sha") or ""
+            if head_sha:
+                approved, blocked_runs = self._approve_action_required_runs(
+                    ticket, ctx, head_sha
+                )
+                if approved:
+                    return Outcome(
+                        State.IMPLEMENT_COMPLETE,
+                        f"Approved action_required workflow run(s) on "
+                        f"{head_sha}; re-polling.",
+                    )
+                if blocked_runs:
+                    urls = ", ".join(
+                        r.get("html_url") or f"run {r.get('id')}" for r in blocked_runs
+                    )
+                    return Outcome(
+                        State.BLOCKED,
+                        f"CI is green but {pr.get('url') or branch} cannot "
+                        f"be merged: {len(blocked_runs)} workflow run(s) on "
+                        f"{head_sha} are parked with conclusion='action_required' "
+                        f"(workflow approval required) and the approval was "
+                        f"refused (403). Run URL(s): {urls}. Approve the "
+                        f"workflow run(s) (or have auto-format push with the "
+                        f"App token), then resume.",
+                    )
+            # No action_required runs (or none resolvable) — fall through to
+            # the empty-rollup counter / close-reopen self-heal below.
+
             er_path = artifacts_dir / _EMPTY_ROLLUP_COUNT
             heal_path = artifacts_dir / _EMPTY_ROLLUP_SELF_HEAL_DONE
             er_polls = _read_counter(er_path) + 1
@@ -924,6 +959,72 @@ class CIPollMixin(_MergeStageBase):
             f"CI is green but {pr.get('url') or branch} cannot be merged: "
             f"{detail} Resume-blocked to retry from implement_complete.",
         )
+
+    def _approve_action_required_runs(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        head_sha: str,
+    ) -> tuple[bool | None, list[dict[str, Any]]]:
+        """Approve workflow runs on *head_sha* parked as ``action_required``.
+
+        In the empty-rollup / ``mergeable_state="blocked"`` path, zero check
+        runs can mean the head's workflows are merely waiting for approval
+        rather than that the ``pull_request`` event never fired.  Lists the
+        head SHA's workflow runs and approves any with
+        ``conclusion == "action_required"``.
+
+        Returns:
+            ``(True, [])`` after approving at least one run;
+            ``(False, [runs])`` when an approval was refused (403) — the
+            runs are returned so the caller can name their URLs; and
+            ``(None, [])`` when there is nothing to approve.
+        """
+        s = ctx.settings
+        forge = get_forge(s, repo_config=ctx.repo_config)
+        try:
+            runs = forge.list_workflow_runs(head_sha=head_sha)
+        except Exception as e:
+            log.warning(
+                "%s: list_workflow_runs failed for %s (retry): %s",
+                ticket.id,
+                head_sha,
+                e,
+            )
+            return None, []
+
+        pending = [r for r in runs if r.get("conclusion") == "action_required"]
+        if not pending:
+            return None, []
+
+        approved = 0
+        blocked_runs: list[dict[str, Any]] = []
+        for run in pending:
+            result = forge.approve_workflow(run_id=run["id"])
+            if result.get("approved"):
+                approved += 1
+            elif result.get("forbidden"):
+                blocked_runs.append(run)
+            else:
+                # Non-forbidden failure (transport / not supported) — leave
+                # for a later poll rather than blocking on a true statement.
+                log.warning(
+                    "%s: approve workflow run %s failed (retry): %s",
+                    ticket.id,
+                    run["id"],
+                    result.get("reason"),
+                )
+        if approved:
+            log.info(
+                "%s: approved %d action_required run(s) on %s",
+                ticket.id,
+                approved,
+                head_sha,
+            )
+            return True, []
+        if blocked_runs:
+            return False, blocked_runs
+        return None, []
 
     def _unsatisfiable_required_contexts(
         self, ctx: StageContext, branch: str, target: str

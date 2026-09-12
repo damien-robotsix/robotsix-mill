@@ -3366,3 +3366,121 @@ def test_empty_rollup_polls_do_not_consume_green_unpromotable_budget(
     assert (
         "close/reopen" in out.note.lower() or "closed and reopened" in out.note.lower()
     )
+
+
+# ============================================================
+# Empty rollup: action_required workflow-run approval
+# ============================================================
+
+
+def _action_required_ctx(tmp_path, monkeypatch, *, runs, approve=None, **extra):
+    """Empty-rollup blocked ctx whose head carries action_required workflow runs.
+
+    ``check_status`` reports a resolvable ``_sha`` (empty rollup, zero jobs)
+    and ``list_workflow_runs`` returns *runs* — some or all parked with
+    ``conclusion='action_required'``.  *approve* stubs
+    ``forge.approve_workflow`` when given.
+    """
+    ctx = _empty_rollup_ctx(tmp_path, monkeypatch, **extra)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "success",
+            "failing": [],
+            "pending": [],
+            "jobs": [],  # empty rollup — no check runs registered
+            "_sha": "abcdef1234567890",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, branch=None, head_sha=None: runs,
+    )
+    if approve is not None:
+        monkeypatch.setattr(github.GitHubForge, "approve_workflow", approve)
+    return ctx
+
+
+def test_empty_rollup_action_required_runs_get_approved(tmp_path, monkeypatch):
+    """Empty rollup + mergeable_state=blocked whose head runs carry
+    conclusion='action_required' → approve each and re-poll, instead of
+    concluding the pull_request event never fired / closing the PR."""
+    runs = [
+        {
+            "id": 11,
+            "name": "ci / tests",
+            "conclusion": "action_required",
+            "html_url": "https://github.com/o/r/actions/runs/11",
+        },
+        {
+            "id": 12,
+            "name": "ci / lint",
+            "conclusion": "action_required",
+            "html_url": "https://github.com/o/r/actions/runs/12",
+        },
+    ]
+    approved: list[int] = []
+    ctx = _action_required_ctx(
+        tmp_path,
+        monkeypatch,
+        runs=runs,
+        approve=lambda self, *, run_id: approved.append(run_id) or {"approved": True},
+    )
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+
+    closed_branches: list[str] = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "close_pr",
+        lambda self, *, source_branch: closed_branches.append(source_branch) or True,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "reopen_pr",
+        lambda self, *, source_branch: True,
+    )
+
+    # Approve on the FIRST poll — no need to wait for the self-heal threshold.
+    out = stage.run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert sorted(approved) == [11, 12], "every action_required run is approved"
+    assert closed_branches == [], (
+        "action_required approval must precede any close/reopen self-heal"
+    )
+    assert "action_required" in out.note.lower()
+
+
+def test_empty_rollup_action_required_approval_refused_403_blocks(
+    tmp_path, monkeypatch
+):
+    """A refused (403) approval parks BLOCKED naming action_required and the URLs."""
+    runs = [
+        {
+            "id": 11,
+            "name": "ci / tests",
+            "conclusion": "action_required",
+            "html_url": "https://github.com/o/r/actions/runs/11",
+        },
+    ]
+    ctx = _action_required_ctx(
+        tmp_path,
+        monkeypatch,
+        runs=runs,
+        approve=lambda self, *, run_id: {
+            "approved": False,
+            "forbidden": True,
+            "reason": "Client error '403 Forbidden' for url "
+            "'.../actions/runs/11/approve'",
+        },
+    )
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+
+    out = stage.run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "action_required" in out.note
+    assert "https://github.com/o/r/actions/runs/11" in out.note
+    assert "403" in out.note

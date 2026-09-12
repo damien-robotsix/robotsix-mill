@@ -274,6 +274,25 @@ def test_list_workflow_runs_missing_event_and_head_branch(tmp_path, monkeypatch)
     assert result[0]["run_attempt"] is None
 
 
+def test_approve_workflow_success(tmp_path, monkeypatch):
+    """POST .../actions/runs/11/approve → {"approved": True}."""
+    captured = _mock_httpx(monkeypatch, post_response=_make_response(204, {}))
+    forge = _forge(tmp_path)
+    result = forge.approve_workflow(run_id=11)
+    assert result == {"approved": True}
+    assert "actions/runs/11/approve" in captured["post_url"]
+
+
+def test_approve_workflow_403_flags_forbidden(tmp_path, monkeypatch):
+    """A 403 approval refusal surfaces {"approved": False, "forbidden": True}."""
+    _mock_httpx(monkeypatch, post_response=_make_response(403, {}, "forbidden"))
+    forge = _forge(tmp_path)
+    result = forge.approve_workflow(run_id=11)
+    assert result["approved"] is False
+    assert result["forbidden"] is True
+    assert "403" in result["reason"]
+
+
 # ---------------------------------------------------------------------------
 # fetch_workflow_job_logs
 # ---------------------------------------------------------------------------
