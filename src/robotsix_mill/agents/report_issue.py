@@ -11,13 +11,20 @@ Hard requirement: this must never spam. An agent stuck in a loop (the
 rebase ping-pong we just bounded is the cautionary tale) would
 otherwise file the same ticket hundreds of times. So the tool refuses
 to create a second ticket while a non-terminal one with the same title
-already exists — it reports back that the issue is already filed.
+already exists — it reports back that the issue is already filed. It
+also suppresses a second ticket that references the same ``#<n>``
+external PR/issue as a non-terminal ticket, so several isolated agent
+runs cannot each file a differently-worded review-disposition ticket
+about the same PR (see the three PR robotsix-mill#3150 tickets filed in
+~2 minutes on 2026-09-11).
 """
 
 from __future__ import annotations
 
+import re
+
 from ..config import Settings
-from ..core.models import SourceKind
+from ..core.models import SourceKind, Ticket
 from ..core.service import TicketService
 from ..core.states import DONE_OR_CLOSED
 from ..core.text_noop import (
@@ -54,15 +61,62 @@ def _validate_title(title: str) -> str | None:
     return None
 
 
-def _check_duplicate(title: str, service: TicketService) -> str | None:
-    """Return a duplicate notice if *title* matches a non-terminal ticket."""
+_PR_NUMBER_RE = re.compile(r"#(\d+)\b")
+
+
+def _extract_pr_numbers(*texts: str) -> frozenset[int]:
+    """Return the ``#<n>`` PR/issue numbers referenced across *texts*.
+
+    e.g. ``"Track external PR robotsix-mill#3150"`` -> ``frozenset({3150})``.
+    Used to catch differently-worded review-disposition tickets about the
+    same external PR that the exact-title check cannot.
+    """
+    numbers: set[int] = set()
+    for text in texts:
+        if not text:
+            continue
+        for match in _PR_NUMBER_RE.finditer(text):
+            numbers.add(int(match.group(1)))
+    return frozenset(numbers)
+
+
+def _dup_notice(t: Ticket, *, by_pr: bool = False) -> str:
+    reason = (
+        "same external PR/issue # reference already tracked"
+        if by_pr
+        else "not duplicating"
+    )
+    return f"report_issue: already filed as {t.id} (state={t.state.value}) — {reason}"
+
+
+def _check_duplicate(title: str, body: str, service: TicketService) -> str | None:
+    """Return a duplicate notice if *title*/*body* match a non-terminal ticket.
+
+    Two independent suppression checks guard against loop spam:
+
+    1. Exact-title (casefolded) match — the original guard.
+    2. Shared ``#<n>`` PR/issue reference in the title or body — a fresh
+       isolated agent run must not file a second review-disposition ticket
+       about the same external PR just because it worded the title
+       differently.
+    """
     norm = title.casefold()
+    cand_prs = _extract_pr_numbers(title, body)
     for t in service.list():
-        if t.title.strip().casefold() == norm and t.state not in DONE_OR_CLOSED:
-            return (
-                f"report_issue: already filed as {t.id} "
-                f"(state={t.state.value}) — not duplicating"
-            )
+        if t.state in DONE_OR_CLOSED:
+            continue
+        if t.title.strip().casefold() == norm:
+            return _dup_notice(t)
+        if not cand_prs:
+            continue
+        if _extract_pr_numbers(t.title) & cand_prs:
+            return _dup_notice(t, by_pr=True)
+        try:
+            t_body = service.workspace(t).read_description()
+        except Exception:
+            t_body = ""
+        if _extract_pr_numbers(t_body) & cand_prs:
+            return _dup_notice(t, by_pr=True)
     return None
 
 
@@ -164,7 +218,7 @@ def make_report_issue_tool(
 
             # Step 3: dedup
             service = TicketService(settings, board_id=board_id)
-            dup = _check_duplicate(title, service)
+            dup = _check_duplicate(title, body, service)
             if dup:
                 return dup
 
