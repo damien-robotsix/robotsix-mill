@@ -26,8 +26,8 @@ Every notification POST sends a JSON body with these fields:
 | Field | Type | Description |
 |---|---|---|
 | `source` | `string` | Always `"mill"`. |
-| `severity` | `string` | `"critical"` (BLOCKED), `"warning"` (ERRORED), or `"info"` (human_approval). |
-| `category` | `string` | `"blocked"`, `"errored"`, `"human_approval"`. |
+| `severity` | `string` | `"critical"` (BLOCKED), `"warning"` (ERRORED), or `"info"` (human_issue_approval). |
+| `category` | `string` | `"blocked"`, `"errored"`, `"human_issue_approval"`. |
 | `ticket_id` | `string` | Mill ticket ID. |
 | `ticket_title` | `string` | Ticket title. |
 | `state` | `string` | Mill state value (e.g. `"blocked"`). |
