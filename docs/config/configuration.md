@@ -691,6 +691,7 @@ Each periodic agent shares this pattern:
 | YAML path | Env var | Default | Description |
 |-----------|---------|---------|-------------|
 | `periodic.<name>.interval_seconds` | `MILL_<NAME>_INTERVAL_SECONDS` | `1209600`¹ | Seconds between automatic passes (`0` = disabled) |
+| `periodic.meta.interval_seconds` | `MILL_META_INTERVAL_SECONDS` | `604800` | Seconds between meta-agent cross-repo survey passes (604800 = 7 days). Code default is 604800; config.example.json aligns to this value to enable the weekly meta pass. Set to `0` to disable. |
 
 Periodic agents: `audit`, `trace_health`, `trace_review`, `health`, `test_gap`,
 `agent_check`, `survey`, `ci_debt_recheck`, `ci_monitor`, `config_sync`, `member_sync`, `meta`, `bc_check`,
