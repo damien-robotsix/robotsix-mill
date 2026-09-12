@@ -21,8 +21,12 @@ originating agent's run.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from ..config import Settings
+
+if TYPE_CHECKING:
+    from ..core.models import Comment
 
 log = logging.getLogger(__name__)
 
@@ -97,7 +101,8 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
         # seen-set. Checking the persisted comments makes the guard
         # survive closure rebuilds, so a double-post can't slip through.
         try:
-            for existing in svc.list_comments(ticket_id):
+            existing_comments: list[Comment] = svc.list_comments(ticket_id)
+            for existing in existing_comments:
                 if existing.author == agent_name and existing.body == body:
                     return "post_comment: duplicate body in this run — skipped"
         except Exception as exc:
