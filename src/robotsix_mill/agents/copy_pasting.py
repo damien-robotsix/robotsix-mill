@@ -11,6 +11,9 @@ the runner has a clear result to work with.
 
 from __future__ import annotations
 
+from typing import Any
+
+from ..config import Settings
 from .periodic_base import (
     PeriodicAgentResult,
     load_periodic_system_prompt,
@@ -24,9 +27,19 @@ MAX_GAPS = 8
 
 CopyPasteResult = PeriodicAgentResult
 
+
+def _copy_paste_dynamic_kwargs(settings: Settings) -> dict[str, Any]:
+    from pydantic_ai.usage import UsageLimits
+
+    return {
+        "usage_limits": UsageLimits(request_limit=settings.copy_paste_request_limit)
+    }
+
+
 run_copy_paste_agent = make_agent_runner(
     definition_name="copy_paste",
     prompt_tail="Run detect_duplication, triage the clone pairs, and return your findings.",
     max_gaps=MAX_GAPS,
     include_jscpd=True,
+    dynamic_kwargs_fn=_copy_paste_dynamic_kwargs,
 )

@@ -723,6 +723,13 @@
           "title": "Bc Check Interval Seconds",
           "type": "integer"
         },
+        "bc_check_request_limit": {
+          "default": 80,
+          "description": "Request budget for the bc-check agent.",
+          "minimum": 1,
+          "title": "Bc Check Request Limit",
+          "type": "integer"
+        },
         "bespoke_discovery_interval_seconds": {
           "default": 600,
           "description": "Seconds between bespoke supervisor clone-refresh and YAML reconciliation cycles. 0 = disabled.",
@@ -1083,6 +1090,13 @@
           "default": 604800,
           "description": "Seconds between periodic copy-paste passes. 0 = disabled.",
           "title": "Copy Paste Interval Seconds",
+          "type": "integer"
+        },
+        "copy_paste_request_limit": {
+          "default": 80,
+          "description": "Request budget for the copy-paste agent.",
+          "minimum": 1,
+          "title": "Copy Paste Request Limit",
           "type": "integer"
         },
         "data_dir": {
@@ -1916,6 +1930,13 @@
           "default": 604800,
           "description": "Seconds between periodic mypy-baseline passes. 0 = disabled.",
           "title": "Mypy Baseline Interval Seconds",
+          "type": "integer"
+        },
+        "mypy_baseline_request_limit": {
+          "default": 80,
+          "description": "Request budget for the mypy-baseline agent.",
+          "minimum": 1,
+          "title": "Mypy Baseline Request Limit",
           "type": "integer"
         },
         "network_outage_retry_seconds": {
