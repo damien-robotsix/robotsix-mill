@@ -174,6 +174,32 @@ Validation lives in `tests/agents/test_yaml_loader.py` — there is no
 Pydantic validator on the production `AgentDefinition` model. See
 `docs/agents/agent-yaml-schema.md` for the full field reference.
 
+## Periodic agent request limits
+
+**Every periodic agent must wire an explicit `usage_limits` via
+`dynamic_kwargs_fn` in `make_agent_runner`.** Never rely on
+pydantic-ai's implicit default of `request_limit=50` — broad scans
+(health, config_sync, bespoke) exhausted it mid-run in production.
+The canonical pattern:
+
+1. Add a `<agent>_request_limit: int = Field(default=80, ge=1)` field to
+   `src/robotsix_mill/config/_settings_periodic.py`.
+2. Add a `_<agent>_dynamic_kwargs(settings)` helper that returns
+   `{"usage_limits": UsageLimits(request_limit=settings.<agent>_request_limit)}`
+   and pass it as `dynamic_kwargs_fn=` to `make_agent_runner`.
+3. Register the `MILL_<AGENT>_REQUEST_LIMIT` env var, mirror the key
+   (alphabetically) into both `config/config.example.json` and
+   `config/config.schema.json`, then run
+   `uv run python scripts/emit_config_schema.py --check` (the schema is
+   CI-gated).
+4. Document the env var in `docs/config/configuration.md` — the
+   config-docs-sync test
+   (`tests/dev-tooling/test_check_config_docs_sync.py`) enforces
+   model↔example↔docs parity.
+5. Add a regression test asserting the runner wires the configured
+   `request_limit` (see the existing periodic-agent runner tests under
+   `tests/agents/`).
+
 ## Meta-agent
 
 The **meta-agent** is a cross-repo survey agent that runs **weekly**
