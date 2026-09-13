@@ -63,6 +63,26 @@ def test_bc_check_system_prompt_covers_all_six_patterns():
     assert "list_dir" in p
 
 
+def test_bc_check_dynamic_kwargs_default_request_limit():
+    """Default Settings produce an explicit request_limit of 80, replacing
+    the implicit pydantic-ai default of 50 that a broad LLM repo scan could
+    saturate on a large board."""
+    from pydantic_ai.usage import UsageLimits
+
+    kwargs = bc_check_agent._bc_check_dynamic_kwargs(Settings())
+    limits = kwargs["usage_limits"]
+    assert isinstance(limits, UsageLimits)
+    assert limits.request_limit == 80
+
+
+def test_bc_check_dynamic_kwargs_non_default_request_limit():
+    """A non-default bc_check_request_limit propagates into usage_limits."""
+    kwargs = bc_check_agent._bc_check_dynamic_kwargs(
+        Settings(bc_check_request_limit=123)
+    )
+    assert kwargs["usage_limits"].request_limit == 123
+
+
 def test_bc_check_result_model():
     """BcCheckResult has the expected fields and defaults."""
     result = bc_check_agent.BcCheckResult(

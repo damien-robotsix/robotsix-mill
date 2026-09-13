@@ -860,12 +860,13 @@ these agent-specific settings are available:
 #### mypy_baseline
 
 The `mypy_baseline` periodic agent manages the mypy type-check
-baseline, tracking and ratcheting type errors over time.  It uses
-only the standard two periodic-agent fields:
+baseline, tracking and ratcheting type errors over time.  One extra
+field beyond the generic periodic pattern controls its request budget:
 
 | Env var | Default | Description |
 |---------|---------|-------------|
 | `MILL_MYPY_BASELINE_INTERVAL_SECONDS` | `604800` | Seconds between mypy-baseline passes. Set to `0` to disable. |
+| `MILL_MYPY_BASELINE_REQUEST_LIMIT` | `80` | Per-call request cap for the mypy-baseline agent |
 
 #### module_size
 
@@ -984,11 +985,13 @@ and as environment variables:
 | Env var | Default | Description |
 |---------|---------|-------------|
 | `MILL_BC_CHECK_INTERVAL_SECONDS` | `604800` | Seconds between bc-check passes. Set to `0` to disable. |
+| `MILL_BC_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the bc-check agent |
 | `MILL_CI_DEBT_RECHECK_INTERVAL_SECONDS` | `3600` | Seconds between CI-debt recheck passes (1 hour). Set to `0` to disable. |
 | `MILL_COMPLETENESS_CHECK_INTERVAL_SECONDS` | `1209600` | Seconds between completeness-check passes. Set to `0` to disable. |
 | `MILL_COMPLETENESS_CHECK_REQUEST_LIMIT` | `80` | Per-call request cap for the completeness-check agent |
 | `MILL_CONFIG_SYNC_INTERVAL_SECONDS` | `86400` | Seconds between config-sync passes (1 day). Set to `0` to disable. |
 | `MILL_CONFIG_SYNC_REQUEST_LIMIT` | `80` | Per-call request cap for the config-sync agent's tool loop |
+| `MILL_COPY_PASTE_REQUEST_LIMIT` | `80` | Per-call request cap for the copy-paste agent |
 | `MILL_DIAGNOSTIC_EVENTS_PATH` | `None` | Explicit file path for the diagnostic event store JSONL file |
 | `MILL_DIAGNOSTIC_EVENTS_MAX_AGE_DAYS` | `90` | Days after which diagnostic events are considered stale and excluded from recurring-failure counts and from the `ci_prevention_rules` digest. Set to `0` to disable aging (keep events indefinitely) |
 | `MILL_DIAGNOSTIC_CI_FAILURE_THRESHOLD` | `3` | Legacy, inert. The recurring-CI diagnostic check no longer files report tickets (recurring failures feed the `ci_prevention_rules` pass instead); the field is kept only so configs that pin it still load. |

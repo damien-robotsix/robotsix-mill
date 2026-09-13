@@ -235,6 +235,16 @@ class _PeriodicSettings(BaseModel):
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic bc-check passes. 0 = disabled.",
     )
+    # Per-call request cap for the bc-check agent's tool loop. The agent
+    # performs a broad LLM repo scan — the same failure profile as the
+    # health agent — so the old implicit pydantic-ai default of 50 can
+    # saturate on a large board ("The next request would exceed the
+    # request_limit of 50"). 80 gives headroom; per-run cost stays low.
+    bc_check_request_limit: int = Field(
+        default=80,
+        ge=1,
+        description="Request budget for the bc-check agent.",
+    )
 
     # --- module_curator agent (module-taxonomy drift detection) ---
     # MILL_MODULE_CURATOR_PERIODIC=true. Minimum enforced at 60s in
@@ -259,6 +269,11 @@ class _PeriodicSettings(BaseModel):
     mypy_baseline_interval_seconds: int = Field(
         default=604800,  # 7d — weekly default; per-repo override via YAML
         description="Seconds between periodic mypy-baseline passes. 0 = disabled.",
+    )
+    mypy_baseline_request_limit: int = Field(
+        default=80,
+        ge=1,
+        description="Request budget for the mypy-baseline agent.",
     )
 
     # --- data-dir GC — deterministic periodic disk reclamation ---
@@ -438,6 +453,11 @@ class _PeriodicSettings(BaseModel):
     copy_paste_interval_seconds: int = Field(
         default=604800,
         description="Seconds between periodic copy-paste passes. 0 = disabled.",
+    )
+    copy_paste_request_limit: int = Field(
+        default=80,
+        ge=1,
+        description="Request budget for the copy-paste agent.",
     )
 
     # --- state-sync agent (cross-surface State enum consistency) ---

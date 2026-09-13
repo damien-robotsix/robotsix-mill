@@ -127,6 +127,24 @@ def test_run_copy_paste_agent_forwards_max_gaps_and_include_jscpd(
     assert kw["include_jscpd"] is True
 
 
+def test_copy_paste_dynamic_kwargs_default_request_limit(settings, fake_periodic):
+    """Default Settings produce an explicit request_limit of 80, replacing
+    the implicit pydantic-ai default of 50 the wrapper previously inherited."""
+    from pydantic_ai.usage import UsageLimits
+
+    run_copy_paste_agent(settings=settings)
+    limits = fake_periodic["kwargs"]["usage_limits"]
+    assert isinstance(limits, UsageLimits)
+    assert limits.request_limit == 80
+
+
+def test_copy_paste_dynamic_kwargs_non_default_request_limit(tmp_path, fake_periodic):
+    """A non-default copy_paste_request_limit flows into usage_limits."""
+    settings = Settings(data_dir=str(tmp_path), copy_paste_request_limit=123)
+    run_copy_paste_agent(settings=settings)
+    assert fake_periodic["kwargs"]["usage_limits"].request_limit == 123
+
+
 def test_run_copy_paste_agent_uses_definition_name_copy_paste(settings, fake_periodic):
     """The default path resolves the built-in YAML by name —
     ``definition_name="copy_paste"`` selects

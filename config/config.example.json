@@ -54,6 +54,7 @@
             ".env*"
         ],
         "bc_check_interval_seconds": 604800,
+        "bc_check_request_limit": 80,
         "bespoke_discovery_interval_seconds": 600,
         "bespoke_request_limit": 80,
         "board_hygiene_draft_ttl_days": 7,
@@ -96,6 +97,7 @@
         "coordinator_timeout_overrides": {},
         "coordinator_timeout_seconds": 600,
         "copy_paste_interval_seconds": 604800,
+        "copy_paste_request_limit": 80,
         "data_dir": "/data",
         "data_dir_gc_interval_seconds": 86400,
         "data_dir_gc_prune_closed": false,
@@ -210,6 +212,7 @@
         "module_size_max_tool_calls": 80,
         "module_size_request_limit": 60,
         "mypy_baseline_interval_seconds": 604800,
+        "mypy_baseline_request_limit": 80,
         "network_outage_retry_seconds": 120,
         "network_probe_host": "github.com",
         "obsolescence_gate_enabled": false,
