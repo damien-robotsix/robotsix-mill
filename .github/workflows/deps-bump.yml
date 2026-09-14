@@ -7,6 +7,14 @@
 # The reusable workflow mints an installation token from the shared
 # GitHub App (RELEASE_APP_PRIVATE_KEY) per run; no expiry/rotation,
 # bot identity.
+#
+# This caller targets the shared implementation workflow bump.yml
+# directly (with bump-mode: deps) instead of the self-documenting
+# deps-bump.yml wrapper: the upstream wrapper uses GitHub's
+# self-repository syntax for its nested reusable-workflow call, which
+# does NOT resolve for cross-repo callers and fails the caller run at
+# workflow-graph assembly (startup_failure, no jobs). bump.yml carries
+# no such self-repository references and is safe to call cross-repo.
 
 name: Dependency Bump
 
@@ -23,8 +31,9 @@ jobs:
     permissions:
       contents: write       # push bump branch
       pull-requests: write  # create/update PR
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/deps-bump.yml@a0acaefb921fd35792df8345a7150b0140b05ebc  # main
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/bump.yml@d2a2353830cf211a9f18f3585085016766294dff  # main 2026-09-11
     with:
+      bump-mode: "deps"
       packages: "robotsix-llmio robotsix-board robotsix-yaml-config robotsix-modules"
       app-id: ${{ vars.RELEASE_APP_ID }}
       bump-branch: "deps/bump-uv-lock"
