@@ -35,10 +35,14 @@ class _ServiceBase:
     if TYPE_CHECKING:
 
         def workspace(self, ticket: Ticket) -> Workspace:
-            pass
+            """Return the :class:`Workspace` for *ticket* (impl:
+            ``TicketService.workspace``).
+            """
 
         def get(self, ticket_id: str) -> Ticket | None:
-            pass
+            """Look up a :class:`Ticket` by id, or ``None`` (impl:
+            ``_QueryMixin.get``).
+            """
 
         def _board_for(self, ticket_id: str) -> str:
             pass
@@ -53,7 +57,10 @@ class _ServiceBase:
             note: str | None = ...,
             block_reason: str | None = ...,
         ) -> Ticket:
-            pass
+            """Move a ticket to *dst* state, recording history and (for
+            BLOCKED) ``blocked_from`` / ``block_reason`` (impl:
+            ``_TransitionMixin.transition``).
+            """
 
         def add_comment(
             self,
@@ -62,13 +69,19 @@ class _ServiceBase:
             author: str = ...,
             parent_id: int | None = ...,
         ) -> Comment:
-            pass
+            """Add a reviewer/reply comment to a ticket (impl:
+            ``_CommentMixin.add_comment``).
+            """
 
         def add_history_note(self, ticket_id: str, note: str) -> TicketEvent:
-            pass
+            """Append a non-transition informational history entry (impl:
+            ``_CreateMixin.add_history_note``).
+            """
 
         def set_labels(self, ticket_id: str, labels: list[str]) -> Ticket:
-            pass
+            """Replace the free-form label list on *ticket_id* (impl:
+            ``_MetadataMixin.set_labels``).
+            """
 
         # Cross-mixin calls introduced by the lifecycle split.
         def _has_open_ask_user_threads(
@@ -83,26 +96,36 @@ class _ServiceBase:
             pass
 
         def delete(self, ticket_id: str) -> bool:
-            pass
+            """Hard-delete a ticket, its history and workspace; ``False``
+            if unknown (impl: ``_DeleteMixin.delete``).
+            """
 
         def get_epic_context(self, ticket: Ticket) -> str:
-            pass
+            """Return the parent epic's description as an ``epic-context``
+            block, or ``""`` (impl: ``_QueryMixin.get_epic_context``).
+            """
 
         def _compute_spec_fingerprint(self, ticket: Ticket) -> str:
             pass
 
         def close_tracker(self, ticket_id: str, note: str = ...) -> Ticket:
-            pass
+            """Close a tracker ticket from any non-terminal state, skipping
+            merge/branch checks (impl: ``_TransitionMixin.close_tracker``).
+            """
 
         # Cross-mixin calls introduced by the dependency-edit endpoint.
         def _parse_depends_on(self, ticket: Ticket) -> list[str]:
             pass
 
         def unmet_dependencies(self, ticket: Ticket) -> list[str]:
-            pass
+            """Return *ticket*'s ``depends_on`` IDs not yet in a terminal
+            state (impl: ``_QueryMixin.unmet_dependencies``).
+            """
 
         def resume_blocked(self, ticket_id: str, note: str = ...) -> Ticket:
-            pass
+            """Resume a blocked ticket to its ``blocked_from`` state (impl:
+            ``_TransitionMixin.resume_blocked``).
+            """
 
     # --- board discovery ---
 

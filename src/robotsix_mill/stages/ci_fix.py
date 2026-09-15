@@ -624,6 +624,9 @@ class CIFixStage(Stage):
         branch: str,
         target: str,
     ) -> Outcome | None:
+        """Instance wrapper delegating to the module-level
+        :func:`_check_merge_conflict`.
+        """
         return _check_merge_conflict(
             ticket,
             ctx,
@@ -641,6 +644,9 @@ class CIFixStage(Stage):
         failing: list[dict[str, Any]],
         compact: bool = False,
     ) -> tuple[str, list[dict[str, Any]], set[str], bool, str, list[int], list[str]]:
+        """Instance wrapper delegating to the module-level
+        :func:`_build_failure_detail`.
+        """
         return _build_failure_detail(ticket, ctx, branch, failing, compact=compact)
 
     def _write_failing_summary_artifact(
@@ -650,6 +656,9 @@ class CIFixStage(Stage):
         failing_summary: str,
         failing: list[dict[str, Any]],
     ) -> None:
+        """Instance wrapper delegating to the module-level
+        :func:`_write_failing_summary_artifact`.
+        """
         _write_failing_summary_artifact(ctx, ticket, failing_summary, failing)
 
     def _check_consecutive_identical_failure(
@@ -1242,12 +1251,15 @@ class CIFixStage(Stage):
                 target = target_branch_for(s, ctx.repo_config)
 
                 def _token_provider() -> str | None:
+                    """Return a fresh GitHub push token for the agent session."""
                     return github_push_token(s, repo_config=ctx.repo_config)
 
                 def _token_cache_clear() -> None:
+                    """Invalidate the cached GitHub token so the next call refreshes."""
                     invalidate_github_token(s, repo_config=ctx.repo_config)
 
                 def _run() -> CiFixResult:
+                    """Invoke the CI-fix agent for this branch and return its result."""
                     return run_ci_fix_agent(
                         settings=s,
                         repo_dir=repo_dir,
@@ -1336,6 +1348,12 @@ class CIFixStage(Stage):
         _grace_s = 120.0
 
         def status_fn(attempt: int = 1) -> tuple[str, str]:
+            """Poll the forge and return ``(verdict, detail)``.
+
+            *verdict* is one of ``"success"``, ``"failure"``, ``"pending"``
+            or ``"gone"``; ``"success"`` is downgraded to ``"pending"``
+            during the post-push grace window to avoid trusting stale runs.
+            """
             in_grace = (time.monotonic() - _created_at) < _grace_s
 
             try:
@@ -1404,6 +1422,7 @@ class CIFixStage(Stage):
         s = ctx.settings
 
         def fetch_fn(run_id: int, full_log: bool) -> str:
+            """Return the workflow-job logs for *run_id* via the forge."""
             forge = get_forge(s, repo_config=ctx.repo_config)
             return forge.fetch_workflow_job_logs(run_id=run_id, full_log=full_log)
 
