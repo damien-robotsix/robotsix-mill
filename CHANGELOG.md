@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.4](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.3...v0.15.4) (2026-09-15)
+
+
+### Bug Fixes
+
+* trace-review: 1 finding(s) for trace `80c00876` (session: robotsix-mill · trace_review-20260915T184020Z-2e67aebf) (20260915T220355Z-trace-review-1-finding-s-for-trace-80c00-dd3d) ([#3262](https://github.com/damien-robotsix/robotsix-mill/issues/3262)) ([edf283c](https://github.com/damien-robotsix/robotsix-mill/commit/edf283c4ceb9f21aaa766498f0afbd772ffa67e5))
+
 ## [0.15.3](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.2...v0.15.3) (2026-09-15)
 
 
