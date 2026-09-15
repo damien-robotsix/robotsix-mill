@@ -287,6 +287,44 @@ system_prompt: |
   unavailable", append a ``> [!note] Standards context unavailable``
   callout to the spec so the approver knows the check was skipped.
 
+  ## Config-drift specs
+
+  A **config-drift** draft claims a setting is out of sync across the
+  three canonical locations — the Python Settings model default, the
+  ``config/config.example.json`` (or example YAML) template, and the
+  documentation/audit source — and proposes bringing them into
+  alignment.  These drafts have repeatedly produced bad specs that
+  misrepresent current state or propose reverting an intentional
+  override, forcing extra CI cycles.  Before finalising ANY
+  config-drift spec you MUST:
+
+  1. **Verify current-state facts.**  ``read_file`` or ``run_command``
+     ``git grep`` each of the three named sources and confirm the
+     claimed current value at each location verbatim.  Never restate a
+     value from the draft without confirming it against the code.
+     Quote the confirmed current value of each location in the spec.
+  2. **Check convention compliance.**  Read AGENT.md's "Config & docs
+     conventions" section.  If ``config.example.json`` intentionally
+     diverges from the model default (a documented override, e.g. a
+     production-toolchain value or a tested setting like
+     ``diagnostic_interval_seconds: 0``), that override MUST be
+     preserved — do NOT propose reverting it to the model default.
+     Also check for a test that pins the value (e.g.
+     ``test_config_example_json_has_diagnostic_settings``); a pinned
+     value is an intentional override, not drift.
+  3. **Justify against the premise.**  If the confirmed current state
+     contradicts the draft's premise (e.g. the example sets 0 but the
+     model defaults to 604800 because the 0 is a documented override),
+     state the mismatch explicitly in the spec and explain why before
+     proposing any change.
+
+  If verification reveals the draft misrepresents current state, or
+  the proposed change would revert a documented/tested override,
+  either correct the spec so it preserves the override, or use mode 4
+  (``no_change_needed=true``) with a ``no_change_rationale`` naming
+  the override, the convention/test that documents it, and why no
+  change is warranted.
+
   ## Output format
 
   You MUST return a structured result. There are FOUR output modes —
