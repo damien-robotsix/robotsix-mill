@@ -593,7 +593,7 @@ def _parse_file_read_cmd(command: str) -> tuple[str, int, int | None] | None:
 
     # sed -n '<start>,<end>p' <path>  /  sed -n '<start>p' <path>
     m = re.match(
-        r"sed\s+(?:-[a-zA-Z]*n[a-zA-Z]*\s+)*"
+        r"sed\s+(?:-[a-zA-Z]+\s+)*"
         r"['\"](\d+)(?:,(\d+|\$))?p['\"]\s+(.+)",
         stripped,
     )
