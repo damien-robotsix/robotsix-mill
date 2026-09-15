@@ -25,6 +25,11 @@ Invariants (each contributes drift lines; the run fails if any fire):
     3. The keys of the ``secrets:`` block in ``config/config.example.json``
        equal the user-configurable ``Secrets`` fields, modulo
        ``_SECRETS_NOT_IN_EXAMPLE``.
+    5. Every ``Settings`` field with a numeric (int/float, non-bool)
+       ``Field(default=...)`` whose key appears in
+       ``config/config.example.json`` ``settings`` has a JSON value equal
+       to that default, unless listed in
+       ``_SETTINGS_VALUE_PARITY_EXCEPTIONS``.
 
 This script is meant to be invoked from the repo root (which CI and the
 ``validate-config-sync`` pre-commit hook both guarantee).
@@ -68,6 +73,9 @@ from robotsix_mill.config._sync_allowlists import (
 )
 from robotsix_mill.config._sync_allowlists import (
     SETTINGS_KEYS_NOT_IN_MODEL as _SETTINGS_KEYS_NOT_IN_MODEL,
+)
+from robotsix_mill.config._sync_allowlists import (
+    SETTINGS_VALUE_PARITY_EXCEPTIONS as _SETTINGS_VALUE_PARITY_EXCEPTIONS,
 )
 
 # Source files scanned for code-comment "Default N" annotations (invariant 4).
@@ -171,6 +179,40 @@ def check_secrets_example(
         drift.append(
             f"Secrets field missing from config.example.json secrets block: {field}"
         )
+    return drift
+
+
+def check_settings_value_parity(
+    model: type,
+    settings_example: dict,
+    exceptions: frozenset[str],
+) -> list[str]:
+    """Invariant 5: numeric JSON values must equal the model Field default.
+
+    For every model field whose ``Field(default=...)`` is a numeric
+    (``int``/``float``, excluding ``bool``) and whose name or alias is a
+    key in the ``settings`` block, assert the committed JSON value equals
+    the model default.  Fields in ``exceptions`` are intentional
+    divergences and skipped.
+    """
+    drift: list[str] = []
+    for name, field in model.model_fields.items():
+        if name in exceptions:
+            continue
+        default = field.default
+        if isinstance(default, bool) or not isinstance(default, (int, float)):
+            continue
+        key = name if name in settings_example else field.alias
+        if key is None or key not in settings_example:
+            continue
+        value = settings_example[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        if value != default:
+            drift.append(
+                f"config.example.json settings value for {key!r} is "
+                f"{value!r} but the Settings model Field default is {default!r}"
+            )
     return drift
 
 
@@ -279,6 +321,9 @@ def collect_drift() -> list[str]:
     )
     drift += check_secrets_example(
         example_secrets_keys, secrets_fields, _SECRETS_NOT_IN_EXAMPLE
+    )
+    drift += check_settings_value_parity(
+        Settings, settings_example, _SETTINGS_VALUE_PARITY_EXCEPTIONS
     )
     drift += check_comment_defaults(Settings)
     return drift
