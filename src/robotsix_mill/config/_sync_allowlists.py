@@ -79,3 +79,29 @@ MODEL_FIELDS_NOT_IN_JSON_RATIONALES: dict[str, str] = {
 # the config file, so they never appear in the ``secrets:`` block of
 # ``config/config.example.json``.
 SECRETS_NOT_IN_EXAMPLE: frozenset[str] = frozenset()
+
+# Settings fields whose numeric value in ``config/config.example.json``
+# ``settings`` intentionally DIFFERS from the model ``Field(default=...)``.
+# Invariant 5 (value parity) tolerates these documented divergences instead
+# of flagging them as drift.  Each entry is an opt-in feature whose code
+# default is the real cadence but which the committed template ships
+# DISABLED (interval ``0``) so a fresh deployment does not silently start
+# running the state-mutating job until an operator opts in.  Each entry
+# documents WHY.
+SETTINGS_VALUE_PARITY_EXCEPTIONS: frozenset[str] = frozenset(
+    {
+        # diagnostic scan — code default 604800 (weekly); template ships 0
+        #   (disabled) pending per-deployment opt-in.
+        "diagnostic_interval_seconds",
+        # CI-failure auto-close — code default 900; template ships 0
+        #   (disabled) so it does not close tickets on a fresh deployment
+        #   before the operator reviews the behaviour.
+        "ci_auto_close_interval_seconds",
+        # orphaned-PR cleanup — code default 86400; template ships 0
+        #   (disabled): a state-mutating remote-PR sweep is opt-in.
+        "orphaned_pr_check_interval_seconds",
+        # stale-branch cleanup — code default 86400; template ships 0
+        #   (disabled): deletes remote branches, so it is opt-in.
+        "stale_branch_cleanup_interval_seconds",
+    }
+)
