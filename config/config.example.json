@@ -127,7 +127,7 @@
         "diagnostic_ci_failure_threshold": 3,
         "diagnostic_events_max_age_days": 90,
         "diagnostic_events_path": null,
-        "diagnostic_interval_seconds": 604800,
+        "diagnostic_interval_seconds": 0,
         "diagnostic_monitored_repo_ids": [],
         "diagnostic_target_repo_id": "robotsix-mill",
         "ci_auto_close_interval_seconds": 0,
