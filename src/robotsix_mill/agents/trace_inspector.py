@@ -227,6 +227,30 @@ When you exhaust the budget, the run terminates with an unhandled
 
 ## Output discipline
 
+- **Emit ONLY the raw JSON object — no markdown, no prose, no code
+  fences, no leading analysis.** Your entire response must be a single
+  JSON value matching this shape (an empty ``findings`` list is fine):
+
+  ```json
+  {
+    "findings": [
+      {
+        "category": "agent_limitation",
+        "symptom": "...",
+        "root_cause": "...",
+        "proposed_solution": "...",
+        "target_files": ["path/to/file.py"],
+        "confidence": "medium"
+      }
+    ],
+    "updated_memory": "...",
+    "error": ""
+  }
+  ```
+
+  Do NOT write the analysis as markdown first — the first character of
+  your final output must be ``{``. Prose output fails schema validation
+  and forces a wasteful retry.
 - One finding per ROOT issue. Don't split one bug across three
   findings ("token usage high", "many tool calls", "stage is slow"
   describing the same underlying loop = one finding).
