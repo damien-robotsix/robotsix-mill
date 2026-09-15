@@ -24,6 +24,7 @@ build_valid_settings_names = _checker.build_valid_settings_names
 check_settings_keys_in_model = _checker.check_settings_keys_in_model
 check_model_fields_in_json = _checker.check_model_fields_in_json
 check_secrets_example = _checker.check_secrets_example
+check_settings_value_parity = _checker.check_settings_value_parity
 collect_drift = _checker.collect_drift
 
 
@@ -147,6 +148,78 @@ def test_invariant3_respects_exceptions() -> None:
     drift = check_secrets_example(
         example_keys, secrets_fields, exceptions=frozenset({"langfuse_public_key"})
     )
+    assert drift == []
+
+
+# ---------------------------------------------------------------------------
+#  Invariant 5 — numeric JSON value must equal the model Field default
+# ---------------------------------------------------------------------------
+
+
+def test_invariant5_detects_numeric_value_mismatch() -> None:
+    """A numeric field whose JSON value differs from its default fires."""
+    from pydantic import BaseModel, Field
+
+    class M(BaseModel):
+        interval: int = Field(default=604800)
+
+    settings_example = {"interval": 0}
+    drift = check_settings_value_parity(M, settings_example, exceptions=frozenset())
+    assert len(drift) == 1
+    assert "interval" in drift[0]
+    assert "604800" in drift[0]
+
+
+def test_invariant5_passes_when_values_match() -> None:
+    """No drift when the JSON value equals the model default."""
+    from pydantic import BaseModel, Field
+
+    class M(BaseModel):
+        interval: int = Field(default=604800)
+        ratio: float = Field(default=3.0)
+
+    settings_example = {"interval": 604800, "ratio": 3.0}
+    drift = check_settings_value_parity(M, settings_example, exceptions=frozenset())
+    assert drift == []
+
+
+def test_invariant5_respects_exceptions() -> None:
+    """An intentional divergence in the exception set is skipped."""
+    from pydantic import BaseModel, Field
+
+    class M(BaseModel):
+        interval: int = Field(default=604800)
+
+    settings_example = {"interval": 0}
+    drift = check_settings_value_parity(
+        M, settings_example, exceptions=frozenset({"interval"})
+    )
+    assert drift == []
+
+
+def test_invariant5_ignores_non_numeric_and_bool_fields() -> None:
+    """Bool and non-numeric defaults are not value-parity checked."""
+    from pydantic import BaseModel, Field
+
+    class M(BaseModel):
+        enabled: bool = Field(default=True)
+        name: str = Field(default="mill")
+
+    # A JSON that disagrees on a bool/str must NOT fire invariant 5
+    # (bool is a subclass of int; guard against false positives).
+    settings_example = {"enabled": False, "name": "other"}
+    drift = check_settings_value_parity(M, settings_example, exceptions=frozenset())
+    assert drift == []
+
+
+def test_invariant5_ignores_fields_absent_from_example() -> None:
+    """A field with no JSON key is invariant 2's concern, not invariant 5's."""
+    from pydantic import BaseModel, Field
+
+    class M(BaseModel):
+        interval: int = Field(default=604800)
+
+    drift = check_settings_value_parity(M, {}, exceptions=frozenset())
     assert drift == []
 
 
