@@ -450,6 +450,11 @@ def install_signal_handlers() -> None:
     import signal
 
     def _handler(_signum: int, _frame: object) -> None:
+        """Flush pending traces once, then ``raise SystemExit(0)``.
+
+        Guards against re-entrant signals via ``_shutdown_requested`` so a
+        repeated SIGTERM/SIGINT can't deadlock on a slow flush.
+        """
         global _shutdown_requested
         if _shutdown_requested:
             return  # already flushing; avoid re-entrant calls
@@ -499,6 +504,9 @@ class _RootIO:
         return format_trace_id(trace_id_int)
 
     def _serialize(self, value) -> str:
+        """JSON-stringify *value* (``str`` passed through), truncated to
+        :data:`_MAX_LEN` to stay within the OTel attribute size budget.
+        """
         if isinstance(value, str):
             s = value
         else:
@@ -513,11 +521,19 @@ class _RootIO:
         return s
 
     def set_input(self, value) -> None:
+        """Attach *value* as the trace-level input payload on the root span.
+
+        No-op when tracing is disabled or the span is not recording.
+        """
         if self._span is None or not self._span.is_recording():
             return
         self._span.set_attribute("langfuse.observation.input", self._serialize(value))
 
     def set_output(self, value) -> None:
+        """Attach *value* as the trace-level output payload on the root span.
+
+        No-op when tracing is disabled or the span is not recording.
+        """
         if self._span is None or not self._span.is_recording():
             return
         self._span.set_attribute("langfuse.observation.output", self._serialize(value))
@@ -542,16 +558,17 @@ class _NoopRootIO:
 
     @property
     def trace_id(self) -> None:
+        """Always ``None`` — tracing is disabled for this handle."""
         return None
 
     def set_input(self, value: object) -> None:
-        pass
+        """No-op counterpart to :meth:`_RootIO.set_input`."""
 
     def set_output(self, value: object) -> None:
-        pass
+        """No-op counterpart to :meth:`_RootIO.set_output`."""
 
     def set_attribute(self, key: str, value: object) -> None:
-        pass
+        """No-op counterpart to :meth:`_RootIO.set_attribute`."""
 
 
 @contextmanager
