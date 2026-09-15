@@ -25,10 +25,12 @@ Invariants (each contributes drift lines; the run fails if any fire):
     3. The keys of the ``secrets:`` block in ``config/config.example.json``
        equal the user-configurable ``Secrets`` fields, modulo
        ``_SECRETS_NOT_IN_EXAMPLE``.
-    5. Every ``Settings`` field with a numeric (int/float, non-bool)
-       ``Field(default=...)`` whose key appears in
-       ``config/config.example.json`` ``settings`` has a JSON value equal
-       to that default, unless listed in
+    4. Code-comment ``# Default N`` annotations match the actual
+       ``Field(default=N)`` of the corresponding model field.
+    5. For every ``Settings`` field whose ``Field.default`` is numeric
+       (int/float, excluding bool) and whose key appears in
+       ``config/config.example.json`` ``settings``, the committed JSON
+       value equals the model default, unless the field is listed in
        ``_SETTINGS_VALUE_PARITY_EXCEPTIONS``.
 
 This script is meant to be invoked from the repo root (which CI and the
@@ -184,34 +186,45 @@ def check_secrets_example(
 
 def check_settings_value_parity(
     model: type,
-    settings_example: dict,
+    settings_example: dict[str, object],
     exceptions: frozenset[str],
 ) -> list[str]:
-    """Invariant 5: numeric JSON values must equal the model Field default.
+    """Invariant 5: numeric ``Field(default=…)`` values must equal the
+    corresponding ``config.example.json`` ``settings`` value.
 
-    For every model field whose ``Field(default=...)`` is a numeric
-    (``int``/``float``, excluding ``bool``) and whose name or alias is a
-    key in the ``settings`` block, assert the committed JSON value equals
-    the model default.  Fields in ``exceptions`` are intentional
-    divergences and skipped.
+    Only fields whose model default is a real number (``int`` or
+    ``float``, excluding ``bool`` — a feature toggle is not an interval)
+    and whose key is present in the template are compared.  Absence from
+    the template is invariant 2's concern; a non-numeric template value
+    is not comparable and is skipped.  Fields in ``exceptions`` document
+    an intentional divergence and are ignored.
     """
+
     drift: list[str] = []
     for name, field in model.model_fields.items():
         if name in exceptions:
             continue
         default = field.default
+        # bool subclasses int — exclude it so feature toggles are not
+        # compared as numbers.
         if isinstance(default, bool) or not isinstance(default, (int, float)):
             continue
-        key = name if name in settings_example else field.alias
-        if key is None or key not in settings_example:
-            continue
-        value = settings_example[key]
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            continue
-        if value != default:
+
+        if name in settings_example:
+            key = name
+        elif field.alias and field.alias in settings_example:
+            key = field.alias
+        else:
+            continue  # not in template — invariant 2 owns absence
+
+        json_value = settings_example[key]
+        if isinstance(json_value, bool) or not isinstance(json_value, (int, float)):
+            continue  # non-numeric template value — not comparable
+
+        if json_value != default:
             drift.append(
-                f"config.example.json settings value for {key!r} is "
-                f"{value!r} but the Settings model Field default is {default!r}"
+                f"config.example.json settings {key!r} = {json_value} "
+                f"but Settings.{name} Field(default={default})"
             )
     return drift
 
@@ -322,10 +335,10 @@ def collect_drift() -> list[str]:
     drift += check_secrets_example(
         example_secrets_keys, secrets_fields, _SECRETS_NOT_IN_EXAMPLE
     )
+    drift += check_comment_defaults(Settings)
     drift += check_settings_value_parity(
         Settings, settings_example, _SETTINGS_VALUE_PARITY_EXCEPTIONS
     )
-    drift += check_comment_defaults(Settings)
     return drift
 
 

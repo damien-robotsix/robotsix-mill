@@ -80,28 +80,28 @@ MODEL_FIELDS_NOT_IN_JSON_RATIONALES: dict[str, str] = {
 # ``config/config.example.json``.
 SECRETS_NOT_IN_EXAMPLE: frozenset[str] = frozenset()
 
-# Settings fields whose numeric value in ``config/config.example.json``
-# ``settings`` intentionally DIFFERS from the model ``Field(default=...)``.
-# Invariant 5 (value parity) tolerates these documented divergences instead
-# of flagging them as drift.  Each entry is an opt-in feature whose code
-# default is the real cadence but which the committed template ships
-# DISABLED (interval ``0``) so a fresh deployment does not silently start
-# running the state-mutating job until an operator opts in.  Each entry
-# documents WHY.
+# Settings fields whose numeric ``Field(default=...)`` intentionally
+# differs from the value committed in ``config/config.example.json``
+# ``settings`` (invariant 5).  Each entry documents WHY the template
+# value diverges from the model default — e.g. a feature intentionally
+# disabled-in-template (set to 0) while the code default enables it.
+# Without an entry here, a value mismatch is treated as drift and fails
+# the check.
 SETTINGS_VALUE_PARITY_EXCEPTIONS: frozenset[str] = frozenset(
     {
-        # diagnostic scan — code default 604800 (weekly); template ships 0
-        #   (disabled) pending per-deployment opt-in.
-        "diagnostic_interval_seconds",
-        # CI-failure auto-close — code default 900; template ships 0
-        #   (disabled) so it does not close tickets on a fresh deployment
-        #   before the operator reviews the behaviour.
-        "ci_auto_close_interval_seconds",
-        # orphaned-PR cleanup — code default 86400; template ships 0
-        #   (disabled): a state-mutating remote-PR sweep is opt-in.
-        "orphaned_pr_check_interval_seconds",
-        # stale-branch cleanup — code default 86400; template ships 0
-        #   (disabled): deletes remote branches, so it is opt-in.
-        "stale_branch_cleanup_interval_seconds",
+        # -- State-mutating periodic jobs shipped DISABLED (0) in the
+        #    template while the code default enables them.  A fresh
+        #    deployment must not auto-delete branches, force-close
+        #    tickets, or act on orphaned PRs until the operator opts in;
+        #    the docs document the enabled code default. --
+        "stale_branch_cleanup_interval_seconds",  # code default 86400
+        "ci_auto_close_interval_seconds",  # code default 900
+        "orphaned_pr_check_interval_seconds",  # code default 86400
+        # -- Diagnostic periodic scan shipped DISABLED (0) in the
+        #    template while the code default enables it (604800).  A
+        #    fresh deployment must opt in before the diagnostic pass
+        #    starts polling monitored boards; the enabled code default
+        #    is what a configured operator gets. --
+        "diagnostic_interval_seconds",  # code default 604800
     }
 )

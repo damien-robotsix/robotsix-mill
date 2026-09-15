@@ -152,12 +152,11 @@ def test_invariant3_respects_exceptions() -> None:
 
 
 # ---------------------------------------------------------------------------
-#  Invariant 5 — numeric JSON value must equal the model Field default
+#  Invariant 5 — numeric model default must equal example JSON value
 # ---------------------------------------------------------------------------
 
 
 def test_invariant5_detects_numeric_value_mismatch() -> None:
-    """A numeric field whose JSON value differs from its default fires."""
     from pydantic import BaseModel, Field
 
     class M(BaseModel):
@@ -168,27 +167,25 @@ def test_invariant5_detects_numeric_value_mismatch() -> None:
     assert len(drift) == 1
     assert "interval" in drift[0]
     assert "604800" in drift[0]
+    assert "0" in drift[0]
 
 
 def test_invariant5_passes_when_values_match() -> None:
-    """No drift when the JSON value equals the model default."""
     from pydantic import BaseModel, Field
 
     class M(BaseModel):
-        interval: int = Field(default=604800)
-        ratio: float = Field(default=3.0)
+        interval: int = Field(default=900)
 
-    settings_example = {"interval": 604800, "ratio": 3.0}
+    settings_example = {"interval": 900}
     drift = check_settings_value_parity(M, settings_example, exceptions=frozenset())
     assert drift == []
 
 
 def test_invariant5_respects_exceptions() -> None:
-    """An intentional divergence in the exception set is skipped."""
     from pydantic import BaseModel, Field
 
     class M(BaseModel):
-        interval: int = Field(default=604800)
+        interval: int = Field(default=86400)
 
     settings_example = {"interval": 0}
     drift = check_settings_value_parity(
@@ -197,29 +194,49 @@ def test_invariant5_respects_exceptions() -> None:
     assert drift == []
 
 
-def test_invariant5_ignores_non_numeric_and_bool_fields() -> None:
-    """Bool and non-numeric defaults are not value-parity checked."""
+def test_invariant5_ignores_bool_defaults() -> None:
+    """bool subclasses int but is a feature toggle, not a number."""
     from pydantic import BaseModel, Field
 
     class M(BaseModel):
-        enabled: bool = Field(default=True)
-        name: str = Field(default="mill")
+        toggle: bool = Field(default=True)
 
-    # A JSON that disagrees on a bool/str must NOT fire invariant 5
-    # (bool is a subclass of int; guard against false positives).
-    settings_example = {"enabled": False, "name": "other"}
+    settings_example = {"toggle": False}
     drift = check_settings_value_parity(M, settings_example, exceptions=frozenset())
     assert drift == []
 
 
-def test_invariant5_ignores_fields_absent_from_example() -> None:
-    """A field with no JSON key is invariant 2's concern, not invariant 5's."""
+def test_invariant5_skips_field_absent_from_template() -> None:
+    """Absence from the template is invariant 2's concern, not this one."""
     from pydantic import BaseModel, Field
 
     class M(BaseModel):
-        interval: int = Field(default=604800)
+        interval: int = Field(default=900)
 
     drift = check_settings_value_parity(M, {}, exceptions=frozenset())
+    assert drift == []
+
+
+def test_invariant5_matches_via_alias() -> None:
+    from pydantic import BaseModel, Field
+
+    class M(BaseModel):
+        interval: int = Field(default=900, alias="INTERVAL")
+
+    settings_example = {"INTERVAL": 0}
+    drift = check_settings_value_parity(M, settings_example, exceptions=frozenset())
+    assert len(drift) == 1
+    assert "INTERVAL" in drift[0]
+
+
+def test_invariant5_skips_non_numeric_template_value() -> None:
+    from pydantic import BaseModel, Field
+
+    class M(BaseModel):
+        interval: int = Field(default=900)
+
+    settings_example = {"interval": "nope"}
+    drift = check_settings_value_parity(M, settings_example, exceptions=frozenset())
     assert drift == []
 
 
