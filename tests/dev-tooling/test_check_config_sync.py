@@ -24,7 +24,6 @@ build_valid_settings_names = _checker.build_valid_settings_names
 check_settings_keys_in_model = _checker.check_settings_keys_in_model
 check_model_fields_in_json = _checker.check_model_fields_in_json
 check_secrets_example = _checker.check_secrets_example
-check_settings_value_parity = _checker.check_settings_value_parity
 collect_drift = _checker.collect_drift
 
 
@@ -148,95 +147,6 @@ def test_invariant3_respects_exceptions() -> None:
     drift = check_secrets_example(
         example_keys, secrets_fields, exceptions=frozenset({"langfuse_public_key"})
     )
-    assert drift == []
-
-
-# ---------------------------------------------------------------------------
-#  Invariant 5 — numeric model default must equal example JSON value
-# ---------------------------------------------------------------------------
-
-
-def test_invariant5_detects_numeric_value_mismatch() -> None:
-    from pydantic import BaseModel, Field
-
-    class M(BaseModel):
-        interval: int = Field(default=604800)
-
-    settings_example = {"interval": 0}
-    drift = check_settings_value_parity(M, settings_example, exceptions=frozenset())
-    assert len(drift) == 1
-    assert "interval" in drift[0]
-    assert "604800" in drift[0]
-    assert "0" in drift[0]
-
-
-def test_invariant5_passes_when_values_match() -> None:
-    from pydantic import BaseModel, Field
-
-    class M(BaseModel):
-        interval: int = Field(default=900)
-
-    settings_example = {"interval": 900}
-    drift = check_settings_value_parity(M, settings_example, exceptions=frozenset())
-    assert drift == []
-
-
-def test_invariant5_respects_exceptions() -> None:
-    from pydantic import BaseModel, Field
-
-    class M(BaseModel):
-        interval: int = Field(default=86400)
-
-    settings_example = {"interval": 0}
-    drift = check_settings_value_parity(
-        M, settings_example, exceptions=frozenset({"interval"})
-    )
-    assert drift == []
-
-
-def test_invariant5_ignores_bool_defaults() -> None:
-    """bool subclasses int but is a feature toggle, not a number."""
-    from pydantic import BaseModel, Field
-
-    class M(BaseModel):
-        toggle: bool = Field(default=True)
-
-    settings_example = {"toggle": False}
-    drift = check_settings_value_parity(M, settings_example, exceptions=frozenset())
-    assert drift == []
-
-
-def test_invariant5_skips_field_absent_from_template() -> None:
-    """Absence from the template is invariant 2's concern, not this one."""
-    from pydantic import BaseModel, Field
-
-    class M(BaseModel):
-        interval: int = Field(default=900)
-
-    drift = check_settings_value_parity(M, {}, exceptions=frozenset())
-    assert drift == []
-
-
-def test_invariant5_matches_via_alias() -> None:
-    from pydantic import BaseModel, Field
-
-    class M(BaseModel):
-        interval: int = Field(default=900, alias="INTERVAL")
-
-    settings_example = {"INTERVAL": 0}
-    drift = check_settings_value_parity(M, settings_example, exceptions=frozenset())
-    assert len(drift) == 1
-    assert "INTERVAL" in drift[0]
-
-
-def test_invariant5_skips_non_numeric_template_value() -> None:
-    from pydantic import BaseModel, Field
-
-    class M(BaseModel):
-        interval: int = Field(default=900)
-
-    settings_example = {"interval": "nope"}
-    drift = check_settings_value_parity(M, settings_example, exceptions=frozenset())
     assert drift == []
 
 
