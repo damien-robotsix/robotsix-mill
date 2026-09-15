@@ -129,6 +129,10 @@ MODEL_FIELDS_NOT_IN_JSON
 MODEL_FIELDS_NOT_IN_JSON_RATIONALES
 SETTINGS_KEYS_NOT_IN_MODEL
 SECRETS_NOT_IN_EXAMPLE
+# SETTINGS_VALUE_PARITY_EXCEPTIONS — consumed only by
+# scripts/check_config_sync.py (Invariant 5 value-parity tolerance);
+# vulture scans src/ only, so it cannot see the cross-tree usage.
+SETTINGS_VALUE_PARITY_EXCEPTIONS
 # Settings field consumed only dynamically via _ApiClient's api_attr string;
 # vulture (60% confidence) cannot trace getattr-based reads on BaseModel fields.
 github_api_url
