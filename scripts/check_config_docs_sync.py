@@ -117,7 +117,6 @@ _MODEL_FIELDS_NOT_IN_DOCS: frozenset[str] = frozenset(
         "dependabot_ingest_periodic",
         "dependabot_ingest_interval_seconds",
         "diagnostic_periodic",
-        "diagnostic_interval_seconds",
         "langfuse_cleanup_periodic",
         "langfuse_cleanup_interval_seconds",
         "stale_branch_cleanup_periodic",
