@@ -582,6 +582,177 @@ def _coerce_command_list(command: list[str] | str) -> list[str] | str:
     return [text] if text else []
 
 
+def _parse_file_read_cmd(command: str) -> tuple[str, int, int | None] | None:
+    """Parse shell commands that re-read file content.
+
+    Returns ``(path, offset, limit)`` for recognized file-read
+    commands, or ``None`` for anything else.  ``path`` is the
+    raw (unresolved) path string from the command line.
+    """
+    stripped = command.strip()
+
+    # sed -n '<start>,<end>p' <path>  /  sed -n '<start>p' <path>
+    m = re.match(
+        r"sed\s+(?:-[a-zA-Z]*n[a-zA-Z]*\s+)*"
+        r"['\"](\d+)(?:,(\d+|\$))?p['\"]\s+(.+)",
+        stripped,
+    )
+    if m:
+        start = int(m.group(1))
+        end_str = m.group(2)
+        path = m.group(3).strip().strip("'\"")
+        if end_str is None:
+            return (path, start, 1)
+        if end_str == "$":
+            return (path, start, None)
+        end = int(end_str)
+        if end < start:
+            return None
+        return (path, start, end - start + 1)
+
+    # cat <path>
+    m = re.match(r"cat\s+(.+)", stripped)
+    if m:
+        path = m.group(1).strip().strip("'\"")
+        return (path, 1, None)
+
+    # awk 'NR>=<start>&&NR<=<end>' <path>
+    m = re.match(
+        r"awk\s+['\"]NR>=(\d+)\s*&&\s*NR<=(\d+)['\"]\s+(.+)",
+        stripped,
+    )
+    if m:
+        start = int(m.group(1))
+        end = int(m.group(2))
+        path = m.group(3).strip().strip("'\"")
+        if end < start:
+            return None
+        return (path, start, end - start + 1)
+
+    # awk 'NR>=<start>' <path>  (from line to end)
+    m = re.match(
+        r"awk\s+['\"]NR>=(\d+)['\"]\s+(.+)",
+        stripped,
+    )
+    if m:
+        start = int(m.group(1))
+        path = m.group(2).strip().strip("'\"")
+        return (path, start, None)
+
+    # head -n <N> <path>  /  head -<N> <path>  (first N lines)
+    m = re.match(r"head\s+(?:-n\s+)?(\d+)\s+(.+)", stripped)
+    if m:
+        n = int(m.group(1))
+        path = m.group(2).strip().strip("'\"")
+        if n < 1:
+            return None
+        return (path, 1, n)
+
+    # tail -n +<N> <path>  (from line N to end)
+    m = re.match(r"tail\s+-n\s+\+(\d+)\s+(.+)", stripped)
+    if m:
+        start = int(m.group(1))
+        path = m.group(2).strip().strip("'\"")
+        return (path, start, None)
+
+    return None
+
+
+class _FsToolState:
+    """Shared, per-invocation state for the fs/shell tool closures.
+
+    One instance is created per ``build_fs_tools`` call and captured by
+    every closure the sub-builders return, so they share a single
+    file-content cache, per-path lock table, read counter, served-reads
+    accumulator and command history — the mutable state the former
+    single ``build_fs_tools`` closure held as local variables.
+    """
+
+    def __init__(
+        self,
+        root: Path,
+        settings: Settings,
+        *,
+        extra_roots: list[Path] | None,
+        sandbox_image: str | None,
+        read_file_max_calls: int | None,
+        write_blocked_prefixes: list[str] | None,
+        explore_served_files: set[str] | None,
+    ) -> None:
+        self.root = root
+        self.settings = settings
+        self.extra_roots = extra_roots
+        self.sandbox_image = sandbox_image
+        self.read_file_max_calls = read_file_max_calls
+        self.write_blocked_prefixes = write_blocked_prefixes
+        self.explore_served_files = explore_served_files
+
+        # In-memory file-content cache shared by all closures in this
+        # build_fs_tools call.  Lifetime = one agent invocation.
+        self.file_cache: dict[Path, str] = {}
+
+        # Per-path locks serialising same-file mutations.  pydantic-ai
+        # executes the tool calls of one model response concurrently, so
+        # several edit_file calls on the SAME path can read the same
+        # pre-edit baseline and the last write silently clobbers the
+        # earlier ones — even though every call reported success.  Holding
+        # a per-path lock across each read-modify-write makes a concurrent
+        # batch of same-file edits transactional: every replacement
+        # survives, applied in call order.
+        self.file_locks: dict[Path, threading.Lock] = {}
+        self.file_locks_guard = threading.Lock()
+
+        # Per-invocation counter for read_file hard-cap enforcement.
+        # When read_file_max_calls is set, each read_file call increments
+        # this counter; calls beyond the cap return an error string.
+        self.read_file_call_count: list[int] = [0]
+
+        # Per-build accumulator of served read ranges for the closure-scoped
+        # dedup guard on the Claude-SDK (ctx=None) path.  Keyed by resolved
+        # path string (str(p.resolve())).  Each entry is a list of
+        # (offset, limit) tuples recording every successfully-served range
+        # for that path during this agent run.
+        self.served_reads: dict[str, list[tuple[int, int | None]]] = {}
+
+        # Per-build command history for run_command loop detection.
+        # Tracks every command string executed so we can refuse exact
+        # duplicates and detect when the agent is spinning on grep
+        # commands against the same file.
+        self.command_history: list[str] = []
+
+
+def _build_file_cache_and_locks(
+    root: Path,
+    settings: Settings,
+    *,
+    pre_seeded: dict[Path, str] | None = None,
+    extra_roots: list[Path] | None = None,
+    sandbox_image: str | None = None,
+    read_file_max_calls: int | None = None,
+    write_blocked_prefixes: list[str] | None = None,
+    explore_served_files: set[str] | None = None,
+) -> _FsToolState:
+    """Initialise the shared file cache, per-path locks and read counter.
+
+    Returns a :class:`_FsToolState` — the single mutable context every
+    tool closure built for this ``build_fs_tools`` invocation captures.
+    *pre_seeded* content warms the read cache (e.g. the coordinator's
+    reference files).
+    """
+    state = _FsToolState(
+        Path(root).resolve(),
+        settings,
+        extra_roots=extra_roots,
+        sandbox_image=sandbox_image,
+        read_file_max_calls=read_file_max_calls,
+        write_blocked_prefixes=write_blocked_prefixes,
+        explore_served_files=explore_served_files,
+    )
+    if pre_seeded:
+        state.file_cache.update(pre_seeded)
+    return state
+
+
 def build_fs_tools(
     root: Path,
     settings: Settings,
@@ -645,48 +816,57 @@ def build_fs_tools(
         ``write_file``, ``edit_file``, ``delete_file``, ``list_dir``,
         ``run_command``, ``parallel_commands``.
     """
-    root = Path(root).resolve()
+    state = _build_file_cache_and_locks(
+        root,
+        settings,
+        pre_seeded=pre_seeded,
+        extra_roots=extra_roots,
+        sandbox_image=sandbox_image,
+        read_file_max_calls=read_file_max_calls,
+        write_blocked_prefixes=write_blocked_prefixes,
+        explore_served_files=explore_served_files,
+    )
+    read_file, write_file, edit_file, delete_file, list_dir = (
+        _build_file_operations_tools(state)
+    )
+    run_command, parallel_commands = _build_shell_tools(state)
+    _register_fs_tools()
+    return [
+        read_file,
+        write_file,
+        edit_file,
+        delete_file,
+        list_dir,
+        run_command,
+        parallel_commands,
+    ]
 
-    # In-memory file-content cache shared by all closures in this
-    # build_fs_tools call.  Lifetime = one agent invocation.
-    _file_cache: dict[Path, str] = {}
 
-    if pre_seeded:
-        _file_cache.update(pre_seeded)
+def _build_file_operations_tools(state: _FsToolState) -> list[Any]:
+    """Build the read/write/edit/delete/list_dir tool closures.
 
-    # Per-path locks serialising same-file mutations.  pydantic-ai
-    # executes the tool calls of one model response concurrently, so
-    # several edit_file calls on the SAME path can read the same
-    # pre-edit baseline and the last write silently clobbers the
-    # earlier ones — even though every call reported success.  Holding
-    # a per-path lock across each read-modify-write makes a concurrent
-    # batch of same-file edits transactional: every replacement
-    # survives, applied in call order.
-    _file_locks: dict[Path, threading.Lock] = {}
-    _file_locks_guard = threading.Lock()
+    Every closure captures the shared *state* (file cache, per-path
+    locks, read counter, served-reads accumulator) so a batch of
+    concurrent tool calls sees one consistent view — the semantics the
+    former single ``build_fs_tools`` closure provided.  Returns the five
+    closures in registry order.
+    """
+    root = state.root
+    settings = state.settings
+    extra_roots = state.extra_roots
+    read_file_max_calls = state.read_file_max_calls
+    write_blocked_prefixes = state.write_blocked_prefixes
+    explore_served_files = state.explore_served_files
+    _file_cache = state.file_cache
+    _file_locks = state.file_locks
+    _file_locks_guard = state.file_locks_guard
+    _read_file_call_count = state.read_file_call_count
+    _served_reads = state.served_reads
 
     def _lock_for(p: Path) -> threading.Lock:
         """Return the per-path mutex guarding mutations of *p*."""
         with _file_locks_guard:
             return _file_locks.setdefault(p.resolve(), threading.Lock())
-
-    # Per-invocation counter for read_file hard-cap enforcement.
-    # When read_file_max_calls is set, each read_file call increments
-    # this counter; calls beyond the cap return an error string.
-    _read_file_call_count: list[int] = [0]
-
-    # Per-build accumulator of served read ranges for the closure-scoped
-    # dedup guard on the Claude-SDK (ctx=None) path.  Keyed by resolved
-    # path string (str(p.resolve())).  Each entry is a list of
-    # (offset, limit) tuples recording every successfully-served range
-    # for that path during this agent run.
-    _served_reads: dict[str, list[tuple[int, int | None]]] = {}
-
-    # Per-build command history for run_command loop detection.
-    # Tracks every command string executed so we can refuse exact
-    # duplicates and detect when the agent is spinning on grep
-    # commands against the same file.
-    _command_history: list[str] = []
 
     def _check_write_allowed(path: str) -> str | None:
         """Return an error string if *path* is blocked by
@@ -882,81 +1062,6 @@ def build_fs_tools(
                 exc_info=True,
             )
             return None
-
-    def _parse_file_read_cmd(command: str) -> tuple[str, int, int | None] | None:
-        """Parse shell commands that re-read file content.
-
-        Returns ``(path, offset, limit)`` for recognized file-read
-        commands, or ``None`` for anything else.  ``path`` is the
-        raw (unresolved) path string from the command line.
-        """
-        stripped = command.strip()
-
-        # sed -n '<start>,<end>p' <path>  /  sed -n '<start>p' <path>
-        m = re.match(
-            r"sed\s+(?:-[a-zA-Z]*n[a-zA-Z]*\s+)*"
-            r"['\"](\d+)(?:,(\d+|\$))?p['\"]\s+(.+)",
-            stripped,
-        )
-        if m:
-            start = int(m.group(1))
-            end_str = m.group(2)
-            path = m.group(3).strip().strip("'\"")
-            if end_str is None:
-                return (path, start, 1)
-            if end_str == "$":
-                return (path, start, None)
-            end = int(end_str)
-            if end < start:
-                return None
-            return (path, start, end - start + 1)
-
-        # cat <path>
-        m = re.match(r"cat\s+(.+)", stripped)
-        if m:
-            path = m.group(1).strip().strip("'\"")
-            return (path, 1, None)
-
-        # awk 'NR>=<start>&&NR<=<end>' <path>
-        m = re.match(
-            r"awk\s+['\"]NR>=(\d+)\s*&&\s*NR<=(\d+)['\"]\s+(.+)",
-            stripped,
-        )
-        if m:
-            start = int(m.group(1))
-            end = int(m.group(2))
-            path = m.group(3).strip().strip("'\"")
-            if end < start:
-                return None
-            return (path, start, end - start + 1)
-
-        # awk 'NR>=<start>' <path>  (from line to end)
-        m = re.match(
-            r"awk\s+['\"]NR>=(\d+)['\"]\s+(.+)",
-            stripped,
-        )
-        if m:
-            start = int(m.group(1))
-            path = m.group(2).strip().strip("'\"")
-            return (path, start, None)
-
-        # head -n <N> <path>  /  head -<N> <path>  (first N lines)
-        m = re.match(r"head\s+(?:-n\s+)?(\d+)\s+(.+)", stripped)
-        if m:
-            n = int(m.group(1))
-            path = m.group(2).strip().strip("'\"")
-            if n < 1:
-                return None
-            return (path, 1, n)
-
-        # tail -n +<N> <path>  (from line N to end)
-        m = re.match(r"tail\s+-n\s+\+(\d+)\s+(.+)", stripped)
-        if m:
-            start = int(m.group(1))
-            path = m.group(2).strip().strip("'\"")
-            return (path, start, None)
-
-        return None
 
     # Tools return errors as strings so the model can self-correct
     # (try another path, list the dir, ...) instead of the whole agent
@@ -1479,6 +1584,23 @@ def build_fs_tools(
         except (ValueError, OSError) as e:
             return f"error: {e}"
 
+    return [read_file, write_file, edit_file, delete_file, list_dir]
+
+
+def _build_shell_tools(state: _FsToolState) -> list[Any]:
+    """Build the ``run_command`` and ``parallel_commands`` closures.
+
+    Both capture the shared *state*'s served-reads accumulator and
+    command history so the loop/dedup guards see the same view the file
+    operations tools populate.  Returns the two closures in registry
+    order.
+    """
+    root = state.root
+    settings = state.settings
+    sandbox_image = state.sandbox_image
+    _served_reads = state.served_reads
+    _command_history = state.command_history
+
     def run_command(
         command: str,
         description: str | None = None,
@@ -1730,7 +1852,11 @@ def build_fs_tools(
                 parts.append(f"{header}\nexit={rc}\n{out}")
         return "\n\n".join(parts)
 
-    # Register every fs/shell tool in the system-wide capability catalog.
+    return [run_command, parallel_commands]
+
+
+def _register_fs_tools() -> None:
+    """Register every fs/shell tool in the system-wide capability catalog."""
     from .tool_registry import ToolInfo, ToolRegistry
 
     ToolRegistry.register(
@@ -1798,13 +1924,3 @@ def build_fs_tools(
             parameters={"commands": "list[str]"},
         )
     )
-
-    return [
-        read_file,
-        write_file,
-        edit_file,
-        delete_file,
-        list_dir,
-        run_command,
-        parallel_commands,
-    ]
