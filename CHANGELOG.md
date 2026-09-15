@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.15.3](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.2...v0.15.3) (2026-09-15)
+
+
+### Bug Fixes
+
+* config drift: pin_bump_interval_seconds default mismatch (model=86400, json=0) (20260912T233329Z-config-drift-pin-bump-interval-seconds-d-90b7) ([#3249](https://github.com/damien-robotsix/robotsix-mill/issues/3249)) ([031e620](https://github.com/damien-robotsix/robotsix-mill/commit/031e620a9ec42800ed5e1910a8395be97bddc0ec))
+* forge parity: GitLab missing required_status_contexts override (single-adapter override) (20260911T203334Z-forge-parity-gitlab-missing-required-sta-e09a) ([#3239](https://github.com/damien-robotsix/robotsix-mill/issues/3239)) ([b321c34](https://github.com/damien-robotsix/robotsix-mill/commit/b321c34bba87c9d0d1fd7eafbdff77822e0b9e14))
+* post_comment has no idempotency guard for rapid same-body calls in one run (20260912T162315Z-post-comment-has-no-idempotency-guard-fo-3d41) ([#3246](https://github.com/damien-robotsix/robotsix-mill/issues/3246)) ([6c47c21](https://github.com/damien-robotsix/robotsix-mill/commit/6c47c21120a14120e8f425e28f3e6b9a7060fb7c))
+* Review agent: compile()/ast.parse files against the target Python before flagging comma-form `except A, B:` as a blocking Python-2 SyntaxError (20260911T061722Z-review-agent-compile-ast-parse-files-aga-1bab) ([#3237](https://github.com/damien-robotsix/robotsix-mill/issues/3237)) ([3fe8711](https://github.com/damien-robotsix/robotsix-mill/commit/3fe871156002d4d4d4713cb0feda494dd20925de))
+
+
+### Documentation
+
+* AGENT.md: Agent implementation — Periodic agents must wire explicit `usage_limits` via `dynamic_kwargs_fn` in `m… (20260913T081640Z-agent-md-agent-implementation-periodic-a-1c56) ([#3252](https://github.com/damien-robotsix/robotsix-mill/issues/3252)) ([f0aa0a6](https://github.com/damien-robotsix/robotsix-mill/commit/f0aa0a6ad9b48770da90464037ff00d6187b604c))
+
 ## [0.15.2](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.1...v0.15.2) (2026-09-12)
 
 
