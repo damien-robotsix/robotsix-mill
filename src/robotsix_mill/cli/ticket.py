@@ -119,8 +119,8 @@ def _ticket_show(args: argparse.Namespace, settings: Settings) -> int:
             print(f"Connection error: {e}", file=sys.stderr)
             return 1
         print("--- history ---")
-        for e in h.json():
-            print(f"{e['at']}\t{e['state']}\t{e.get('note')}")
+        for ev in h.json():
+            print(f"{ev['at']}\t{ev['state']}\t{ev.get('note')}")
     return 0
 
 
