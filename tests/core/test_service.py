@@ -373,10 +373,11 @@ def test_resume_blocked_without_note_clears_spawn_counter_and_conversation_state
     service,
 ):
     """resume_blocked with no note clears artifacts/implement_spawn_count
-    when the counter is at/above the spawn limit and clears
+    when the counter is at/above the spawn limit, clears
     implement_conversation_state.json (any READY resume starts a fresh
-    conversation) but leaves the stale-spec guard (artifacts/implement.md)
-    untouched — that guard still requires an explicit note."""
+    conversation) AND clears the stale-spec guard (artifacts/implement.md)
+    — the resume itself is the operator's authorization to re-run the
+    stage, so a justification note is NOT required to re-arm implement."""
     t = service.create("resume without note test")
     service.transition(t.id, State.READY)
     service.transition(t.id, State.BLOCKED, note="stuck in implement")
@@ -391,7 +392,7 @@ def test_resume_blocked_without_note_clears_spawn_counter_and_conversation_state
 
     resumed = service.resume_blocked(t.id)
     assert resumed.state is State.READY
-    assert stale.exists()
+    assert not stale.exists()
     assert not spawn_counter.exists()
     assert not conv_state.exists()
     assert service.list_comments(t.id) == []

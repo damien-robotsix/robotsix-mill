@@ -144,30 +144,34 @@ def _reset_tripped_ci_fix_guards(ws: Workspace, settings: Settings) -> list[str]
     return reset
 
 
-def _clear_stale_implement_guard(ws: Workspace) -> None:
+def _clear_stale_implement_guard(ws: Workspace, *, reset_stall: bool = True) -> None:
     """Delete a stale ``implement.md`` so the stage's stale-respawn
     guard (see ``phase_coordinator.preflight``) doesn't immediately
     re-block a resumed ticket on its own unchanged-spec fingerprint.
 
-    Best-effort and silent when absent — an operator override note is
-    the explicit signal that a retry is wanted despite the guard.
+    Best-effort and silent when absent.  Clearing this stale-spec
+    fingerprint guard is unconditional on any operator-forced resume
+    into READY — the resume itself authorizes the retry.
 
     Before deleting, the stall-detection state (summary-fingerprint)
     is extracted from ``implement.md`` and persisted to
     ``implement_stall_state.json`` so the cross-spawn stall guard keeps
     its comparison baseline across operator-initiated resume/reset
-    cycles.  The counter itself is reset to zero: the note IS the
-    override, and a stall count that survives it made the guard
-    terminal — nothing but a progressing implement pass clears the
-    counter, and the guard blocks before that pass can run.  The
-    fingerprint is retained so an attempt that once again returns a
-    byte-identical summary re-trips the guard on its very next cycle.
+    cycles.  With *reset_stall* (the operator supplied a justification
+    note) the stall counter is reset to zero: the note IS the override,
+    and a stall count that survives it made the guard terminal —
+    nothing but a progressing implement pass clears the counter, and
+    the guard blocks before that pass can run.  Without a note the
+    stall counter is a SEPARATE budget the bare resume must not launder
+    away, so it is preserved.  The fingerprint is retained either way so
+    an attempt that once again returns a byte-identical summary re-trips
+    the stall guard on its very next cycle.
 
     The spec-fingerprint is persisted to ``implement_spec_override`` so
     the stale-spec guard stays suppressed for this exact spec — re-arming
     as soon as it moves.
     """
-    _persist_stall_state_from_implement_md(ws, reset_count=True)
+    _persist_stall_state_from_implement_md(ws, reset_count=reset_stall)
     _persist_spec_fingerprint_override(ws)
     with contextlib.suppress(FileNotFoundError):
         (ws.artifacts_dir / "implement.md").unlink()
@@ -497,16 +501,21 @@ class _TransitionMixin(_ServiceBase):
                 ticket.blocked_from = None
                 ticket.block_reason = None
                 # When an operator forces a blocked ticket back into
-                # READY with an explicit justification note, clear the
-                # implement stage's stale-spec guard so the fingerprint-
-                # collision refusal (phase_coordinator.preflight guard
-                # #4) doesn't silently re-block the ticket.  This
-                # mirrors resume_blocked's note-gated clearing and
-                # ensures ANY operator-forced transition into READY
-                # (not just the resume-blocked endpoint) satisfies the
-                # "operator-authorized retry" requirement.
-                if dst is State.READY and note and note.strip():
-                    _clear_stale_implement_guard(self.workspace(ticket))
+                # READY, clear the implement stage's stale-spec guard so
+                # the fingerprint-collision refusal
+                # (phase_coordinator.preflight guard #4) doesn't silently
+                # re-block the ticket.  The resume itself is the
+                # operator's explicit authorization to retry, so no
+                # justification note is required — this mirrors
+                # resume_blocked's clearing and ensures ANY operator-forced
+                # transition into READY (not just the resume-blocked
+                # endpoint) satisfies the "operator-authorized retry"
+                # requirement.
+                if dst is State.READY:
+                    _clear_stale_implement_guard(
+                        self.workspace(ticket),
+                        reset_stall=bool(note and note.strip()),
+                    )
             # Record originating state when pausing mid-stage; clear when
             # leaving AWAITING_USER_REPLY (resume path), except when
             # escalating to BLOCKED — paused_from must survive so the
@@ -579,11 +588,18 @@ class _TransitionMixin(_ServiceBase):
         that state so only the failed stage is re-run.
 
         When *note* is non-empty it is recorded as a comment on the
-        ticket and, if resuming back into READY, clears the implement
-        stage's stale-spec guard (``artifacts/implement.md``) — an
-        explicit operator justification is treated as sufficient reason
-        to retry even though the spec itself is unchanged, instead of
-        requiring manual workspace surgery to reset the guard.
+        ticket.  Resuming into READY always clears the implement
+        stage's stale-spec guard (``artifacts/implement.md``): the
+        resume itself is the operator's explicit authorization to
+        re-run the failed stage, so a fingerprint-guard block must not
+        silently re-block the ticket on the next preflight (the
+        "resume → spec-unchanged re-block" loop observed when a bulk
+        gate-drain resumed fingerprint-blocked tickets without notes).
+        A justification note is therefore NOT required to force a
+        retry on an unchanged spec; only a fresh spec change re-arms
+        the guard, and the spawn-limit / recurring-exhaustion budget
+        (below) still bounds how many times a resumed ticket can burn
+        an implement attempt.
 
         When the ticket was blocked from READY due to the implement
         spawn limit (``artifacts/implement_spawn_count`` ≥
@@ -734,8 +750,11 @@ class _TransitionMixin(_ServiceBase):
             s.add(_make_event(s, ticket_id=ticket_id, state=dst, note=event_note))
             s.commit()
             s.refresh(ticket)
-            if note and dst is State.READY:
-                _clear_stale_implement_guard(self.workspace(ticket))
+            if dst is State.READY:
+                _clear_stale_implement_guard(
+                    self.workspace(ticket),
+                    reset_stall=bool(note and note.strip()),
+                )
             # Clear any stale implement conversation state so that a
             # blocked→READY resume starts a fresh agent conversation
             # instead of replaying the prior transcript (which would

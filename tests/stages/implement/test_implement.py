@@ -3227,11 +3227,12 @@ def test_resume_blocked_with_note_allows_implement_after_fingerprint_match(
     )
 
 
-def test_resume_blocked_without_note_does_not_clear_fingerprint_guard(
+def test_resume_blocked_without_note_clears_fingerprint_guard(
     ctx_factory, tmp_path, monkeypatch
 ):
-    """resume_blocked without a note leaves the fingerprint guard intact —
-    the next preflight must still block on an unchanged spec."""
+    """resume_blocked without a note clears the fingerprint guard — the
+    resume itself is the operator's authorization to re-run the stage, so
+    the next preflight must NOT block on an unchanged spec."""
     remote = make_bare_repo(tmp_path)
 
     ctx = ctx_factory(
@@ -3263,18 +3264,17 @@ def test_resume_blocked_without_note_does_not_clear_fingerprint_guard(
     t = ctx.service.get(t.id)
     assert t.state is State.BLOCKED
 
-    # Resume WITHOUT a note — the guard should NOT be cleared.
+    # Resume WITHOUT a note — the guard SHOULD be cleared.
     resumed = ctx.service.resume_blocked(t.id)
     assert resumed.state is State.READY
-    assert (ws.artifacts_dir / "implement.md").exists(), (
-        "resume_blocked without note must NOT clear the implement guard"
+    assert not (ws.artifacts_dir / "implement.md").exists(), (
+        "resume_blocked without note must clear the implement guard"
     )
 
-    # Preflight should still block.
+    # Preflight should NOT block on the unchanged spec — it proceeds.
     t = ctx.service.get(t.id)
     out = ImplementStage().preflight(t, ctx)
-    assert out is not None
-    assert out.next_state is State.BLOCKED
+    assert out is None
 
 
 def test_transition_blocked_to_ready_with_note_clears_fingerprint_guard(
