@@ -52,9 +52,7 @@ def _render_children(service, parent_id: str, children, current_ticket_id: str) 
     return rendered
 
 
-def make_list_epic_children_tool(
-    settings: Settings, current_ticket_id: str, board_id: str = ""
-):
+def make_list_epic_children_tool(settings: Settings, current_ticket_id: str):
     """Return the ``list_epic_children`` closure bound to *settings* and
     *current_ticket_id*.
 
@@ -65,10 +63,6 @@ def make_list_epic_children_tool(
         settings: The application settings instance.
         current_ticket_id: The id of the ticket the agent is working on;
             its parent epic's children are the siblings to enumerate.
-        board_id: The board to bind the ``TicketService`` to (threaded
-            through ``build_agent``) so sibling enumeration resolves the
-            right per-board DB instead of the board-less default
-            (``db._db_path: board_id is required`` in multi-repo setups).
     """
 
     def list_epic_children() -> str:
@@ -83,7 +77,7 @@ def make_list_epic_children_tool(
         try:
             from ..core.service import TicketService
 
-            service = TicketService(settings, board_id=board_id)
+            service = TicketService(settings)
             ticket = service.get(current_ticket_id)
             if ticket is None:
                 return (

@@ -10,16 +10,13 @@ from __future__ import annotations
 from ..config import Settings
 
 
-def make_reply_to_thread_tool(settings: Settings, agent_name: str, board_id: str = ""):
+def make_reply_to_thread_tool(settings: Settings, agent_name: str):
     """Return the ``reply_to_thread`` closure bound to *settings*.
 
     Args:
         settings: The application settings instance.
         agent_name: Stamped as the comment author so the originating
             agent is identifiable (e.g. ``"implement"``).
-        board_id: The board to bind the ``TicketService`` to (threaded
-            through ``build_agent``) so the reply resolves the current
-            ticket's per-board DB instead of the board-less default.
     """
 
     def reply_to_thread(thread_id: int, body: str) -> str:
