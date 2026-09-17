@@ -551,8 +551,18 @@ def _read_body_from_args(args: argparse.Namespace) -> str:
     if args.description_file == "-":
         return sys.stdin.read()
     if args.description_file:
-        with open(args.description_file, encoding="utf-8") as f:
-            return f.read()
+        try:
+            with open(args.description_file, encoding="utf-8") as f:
+                return f.read()
+        except FileNotFoundError:
+            print(f"Error: file not found: {args.description_file}", file=sys.stderr)
+            raise SystemExit(2) from None
+        except OSError as e:
+            print(
+                f"Error reading file {args.description_file}: {e}",
+                file=sys.stderr,
+            )
+            raise SystemExit(2) from None
     return ""
 
 

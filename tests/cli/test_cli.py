@@ -367,3 +367,167 @@ def test_serve_does_not_exit_on_zero_repos(monkeypatch):
 
     assert result == 0
     mock_uvicorn.run.assert_called_once()
+
+
+# --- ticket command error-handling tests ---
+
+
+class _ErrResponse:
+    """Minimal httpx.Response stand-in for error-path tests."""
+
+    def __init__(self, status_code, json_data=None):
+        self.status_code = status_code
+        self._json = json_data or {}
+        self.text = ""
+
+    def json(self):
+        return self._json
+
+    @property
+    def is_success(self):
+        return 200 <= self.status_code < 300
+
+    def raise_for_status(self):
+        import httpx
+
+        if not self.is_success:
+            raise httpx.HTTPStatusError("", request=None, response=self)
+
+
+def _patch_client(monkeypatch, fake_client):
+    import robotsix_mill.cli as cli_mod
+
+    monkeypatch.setattr(cli_mod.httpx, "Client", fake_client)
+
+
+def test_ticket_new_api_error_exits_one(monkeypatch):
+    """`ticket new` returns exit code 1 when the API responds non-2xx."""
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def post(self, url, **kwargs):
+            return _ErrResponse(500)
+
+    _patch_client(monkeypatch, FakeClient)
+    rc = main(["ticket", "new", "--title", "T", "--repo-id", "test-repo"])
+    assert rc == 1
+
+
+def test_ticket_new_connection_error_exits_one(monkeypatch):
+    """`ticket new` returns exit code 1 on a network error."""
+    import httpx
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def post(self, url, **kwargs):
+            raise httpx.ConnectError("connection refused")
+
+    _patch_client(monkeypatch, FakeClient)
+    rc = main(["ticket", "new", "--title", "T", "--repo-id", "test-repo"])
+    assert rc == 1
+
+
+def test_ticket_list_api_error_exits_one(monkeypatch):
+    """`ticket list` returns exit code 1 when the API responds non-2xx."""
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, **kwargs):
+            return _ErrResponse(503)
+
+    _patch_client(monkeypatch, FakeClient)
+    rc = main(["ticket", "list"])
+    assert rc == 1
+
+
+def test_ticket_show_api_error_exits_one(monkeypatch):
+    """`ticket show` returns exit code 1 when the first GET fails."""
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, **kwargs):
+            return _ErrResponse(404)
+
+    _patch_client(monkeypatch, FakeClient)
+    rc = main(["ticket", "show", "bad-id"])
+    assert rc == 1
+
+
+def test_ticket_show_history_error_exits_one(monkeypatch):
+    """`ticket show` returns exit code 1 when the history GET fails."""
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def get(self, url, **kwargs):
+            if url.endswith("/history"):
+                return _ErrResponse(500)
+            return _ErrResponse(200, {"id": "test-id", "state": "ready"})
+
+    _patch_client(monkeypatch, FakeClient)
+    rc = main(["ticket", "show", "test-id"])
+    assert rc == 1
+
+
+def test_read_body_from_args_missing_file_exits_two():
+    """`_read_body_from_args` raises SystemExit(2) for a missing file."""
+    import argparse
+
+    from robotsix_mill.cli import _read_body_from_args
+
+    args = argparse.Namespace(description_file="/no/such/file.md")
+    with pytest.raises(SystemExit) as excinfo:
+        _read_body_from_args(args)
+    assert excinfo.value.code == 2
+
+
+def test_read_body_from_args_os_error_exits_two(tmp_path):
+    """`_read_body_from_args` raises SystemExit(2) when open() raises OSError."""
+    import argparse
+
+    from robotsix_mill.cli import _read_body_from_args
+
+    # A directory path triggers IsADirectoryError (an OSError subclass) on open().
+    args = argparse.Namespace(description_file=str(tmp_path))
+    with pytest.raises(SystemExit) as excinfo:
+        _read_body_from_args(args)
+    assert excinfo.value.code == 2

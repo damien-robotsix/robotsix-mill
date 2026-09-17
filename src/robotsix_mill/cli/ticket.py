@@ -47,11 +47,21 @@ def _ticket_new(args: argparse.Namespace, settings: Settings) -> int:
     if repo_id is None:
         return 2
     with _client(settings) as c:
-        r = c.post(
-            "/tickets",
-            json={"title": args.title, "description": body, "repo_id": repo_id},
-        )
-        r.raise_for_status()
+        try:
+            r = c.post(
+                "/tickets",
+                json={"title": args.title, "description": body, "repo_id": repo_id},
+            )
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            print(
+                f"API error: {e.response.status_code} {e.response.text}",
+                file=sys.stderr,
+            )
+            return 1
+        except httpx.RequestError as e:
+            print(f"Connection error: {e}", file=sys.stderr)
+            return 1
         ticket_id = r.json()["id"]
         for path_ in getattr(args, "screenshot", None) or []:
             _upload_screenshot(c, ticket_id, path_)
@@ -64,8 +74,18 @@ def _ticket_list(args: argparse.Namespace, settings: Settings) -> int:
     if args.repo_id:
         params["repo_id"] = args.repo_id
     with _client(settings) as c:
-        r = c.get("/tickets", params=params)
-        r.raise_for_status()
+        try:
+            r = c.get("/tickets", params=params)
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            print(
+                f"API error: {e.response.status_code} {e.response.text}",
+                file=sys.stderr,
+            )
+            return 1
+        except httpx.RequestError as e:
+            print(f"Connection error: {e}", file=sys.stderr)
+            return 1
         for t in r.json():
             print(f"{t['id']}\t{t['state']}\t{t['title']}")
     return 0
@@ -73,10 +93,31 @@ def _ticket_list(args: argparse.Namespace, settings: Settings) -> int:
 
 def _ticket_show(args: argparse.Namespace, settings: Settings) -> int:
     with _client(settings) as c:
-        r = c.get(f"/tickets/{args.id}")
-        r.raise_for_status()
+        try:
+            r = c.get(f"/tickets/{args.id}")
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            print(
+                f"API error: {e.response.status_code} {e.response.text}",
+                file=sys.stderr,
+            )
+            return 1
+        except httpx.RequestError as e:
+            print(f"Connection error: {e}", file=sys.stderr)
+            return 1
         print(r.json())
-        h = c.get(f"/tickets/{args.id}/history")
+        try:
+            h = c.get(f"/tickets/{args.id}/history")
+            h.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            print(
+                f"API error: {e.response.status_code} {e.response.text}",
+                file=sys.stderr,
+            )
+            return 1
+        except httpx.RequestError as e:
+            print(f"Connection error: {e}", file=sys.stderr)
+            return 1
         print("--- history ---")
         for e in h.json():
             print(f"{e['at']}\t{e['state']}\t{e.get('note')}")
