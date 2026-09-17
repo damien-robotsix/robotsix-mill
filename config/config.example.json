@@ -247,7 +247,8 @@
             "CHANGELOG.md",
             "docs/modules.yaml",
             "site/modules.yaml",
-            ".secrets.baseline"
+            ".secrets.baseline",
+            "uv.lock"
         ],
         "rebase_max_attempts": 3,
         "parked_rebase_cooldown_hours": 4,
