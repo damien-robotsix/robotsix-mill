@@ -27,6 +27,13 @@ skills:
 output_type: CiFixResult
 retries: 2
 module: ci_fixing
+# Inject the repo's language conventions (agent_definitions/language_instructions/
+# <lang>.md) so the ci_fix agent knows repo-specific Python operational facts —
+# in particular that the sandbox egress allowlist lets it regenerate uv.lock
+# in-sandbox for an audit/CVE dependency bump (uv lock --upgrade-package <pkg>)
+# instead of handing off to a human (gate-drain blocker). Wired like the
+# review/audit agents via load_and_run_agent.
+inject_language_conventions: true
 
 system_prompt: |
   You are a CI-fix specialist. Your ONLY job is to fix
