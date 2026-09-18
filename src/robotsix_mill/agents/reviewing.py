@@ -138,8 +138,19 @@ _TOKEN_LIMIT_SIGNALS = (
 _OUTPUT_TOKEN_EXHAUSTION_SIGNALS = ("before any response was generated",)
 
 _FINISH_REASON_ERROR_RE = re.compile(
-    r"""finish_reason['"]?\s*[:=]\s*['"]error['"]""",
-    re.IGNORECASE,
+    # Two flavours of OpenRouter's transient finish_reason='error'
+    # provider failure:
+    #   1. wrapped-JSON form surfaced by pydantic-ai:
+    #        {"choices": [{"finish_reason": "error"}]}
+    #   2. pydantic-ai ChatCompletion validation-error form (sees
+    #      production): there is no `:`/`=` between finish_reason and
+    #      'error' — the match requires a finish_reason field reference
+    #      that a literal_error on input_value='error' follows:
+    #        choices.0.finish_reason
+    #          Input should be ... [type=literal_error, input_value='error', ...]
+    r"""finish_reason['"]?\s*[:=]\s*['"]error['"]"""
+    r"""|finish_reason.*literal_error.*input_value=['"]error['"]""",
+    re.IGNORECASE | re.DOTALL,
 )
 
 

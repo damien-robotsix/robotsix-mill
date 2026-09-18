@@ -485,6 +485,30 @@ def test_is_finish_reason_error_false_for_other_finish_reasons():
     assert _is_finish_reason_error(RuntimeError("some unrelated boom")) is False
 
 
+# The pydantic-ai ChatCompletion validation-error flavor that surfaces in
+# production for OpenRouter's transient finish_reason='error' provider
+# failure: no `:`/`=` between finish_reason and 'error' (it's a pydantic
+# literal_error on input_value='error').
+_PYDANTIC_LITERAL_ERROR_TRACE = """\
+Invalid response from openrouter chat completions endpoint: 1 validation error for ChatCompletion
+choices.0.finish_reason
+  Input should be 'stop', 'length', 'tool_calls', 'content_filter' or 'function_call' [type=literal_error, input_value='error', input_type=str]\
+"""
+
+
+def test_is_finish_reason_error_true_for_pydantic_literal_error_flavor():
+    """The pydantic literal_error form of finish_reason='error' is a
+    provider failure: it must classify as finish-reason error (and NOT as
+    token-limit / output-token exhaustion)."""
+    exc = UnexpectedModelBehavior(
+        _PYDANTIC_LITERAL_ERROR_TRACE,
+        body=_PYDANTIC_LITERAL_ERROR_TRACE,
+    )
+    assert _is_finish_reason_error(exc) is True
+    assert _is_token_limit_error(exc) is False
+    assert _is_output_token_exhaustion(exc) is False
+
+
 def test_finish_reason_error_not_classified_as_token_limit_or_exhaustion():
     """A provider finish_reason='error' is NOT a token-limit /
     output-exhaustion signal — even when the wrapped body echoes
