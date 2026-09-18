@@ -1174,3 +1174,51 @@ def test_build_openrouter_model_online_appends_suffix(
 
     bmod.build_openrouter_model(1, online=True)
     assert captured["model_name"] == f"{level1_model}:online"
+
+
+def test_build_agent_claude_sdk_binds_explicit_slot_model(
+    monkeypatch, fallback_slot_active
+):
+    """The Claude SDK path must bind the model of the slot it was ASKED for.
+
+    Regression for the 2026-09-17 16:18:50Z incident (correlation
+    9ade981ee1b29277f39754c55ecc011d): during an armed failover window the
+    failover loop retries the call on the ``default`` slot, but build_agent
+    passed ``model=None`` to llmio, whose ``_resolve_model_name`` re-reads the
+    tracker's ACTIVE slot — still ``fallback``. The Claude CLI was therefore
+    launched with the OpenRouter model name and answered "There's an issue
+    with the selected model (deepseek/...)", so no call could ever escape a
+    failover window.
+    """
+    from robotsix_llmio.claude_sdk.provider import (
+        ClaudeSDKProvider as RealClaudeSDKProvider,
+    )
+    from robotsix_llmio.core.factory import default_tier_config
+
+    from robotsix_mill.agents import base as bmod
+
+    s = Settings()
+    monkeypatch.setattr(bmod, "compose_prompt", lambda *a, **kw: "test prompt")
+
+    fake_provider = MagicMock(spec=RealClaudeSDKProvider)
+    fake_provider.build_agent.return_value = MagicMock()
+    monkeypatch.setattr(
+        "robotsix_llmio.core.factory.get_provider_for_identifier",
+        lambda identifier, **kwargs: fake_provider,
+    )
+
+    # The failover window is armed (fallback is the ACTIVE slot), yet the
+    # caller explicitly asks for the default slot — as the cross-slot retry does.
+    bmod.build_agent(
+        s,
+        system_prompt="Test prompt.",
+        level=2,
+        slot="default",
+        name="claude-agent",
+        tools=[],
+    )
+
+    passed = fake_provider.build_agent.call_args.kwargs["model"]
+    assert passed == default_tier_config().for_level(2, slot="default").model_name
+    assert passed == "opus"
+    assert "deepseek" not in passed
