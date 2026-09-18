@@ -2,11 +2,17 @@
     "repos": {
         "robotsix-chat-mobile": {
             "board_id": "robotsix-chat-mobile",
-            "forge_remote_url": "https://github.com/damien-robotsix/robotsix-chat-mobile"
+            "forge_remote_url": "https://github.com/damien-robotsix/robotsix-chat-mobile",
+            "langfuse_project_name": "SECRET",
+            "langfuse_public_key": "SECRET",
+            "langfuse_secret_key": "SECRET"
         },
         "robotsix-standards": {
             "board_id": "robotsix-standards",
-            "forge_remote_url": "https://github.com/damien-robotsix/robotsix-standards"
+            "forge_remote_url": "https://github.com/damien-robotsix/robotsix-standards",
+            "langfuse_project_name": "SECRET",
+            "langfuse_public_key": "SECRET",
+            "langfuse_secret_key": "SECRET"
         }
     },
     "secrets": {

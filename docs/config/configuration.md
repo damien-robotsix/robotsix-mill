@@ -1146,7 +1146,10 @@ Langfuse configuration.
 ### Set up
 
 Add a `"repos"` block to `config/config.json` — one entry per repository
-(example entries under the `"repos"` key in `config/config.example.json`):
+(example entries under the `"repos"` key in `config/config.example.json`).
+The `RepoConfig` schema marks `repo_id` (mirrored by the dict key),
+`board_id`, and the three `langfuse_*` fields as required; see the
+`config/config.example.json` `"repos"` entries for a complete example:
 
 ```yaml
 # config/repos.yaml (or the "repos" key of config/config.json)
