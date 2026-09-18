@@ -58,6 +58,17 @@ can never land silently on `main`.
 
 > **Never hand-edit `uv.lock`.** Regenerate it with `uv lock` (or
 > `uv lock --upgrade` to advance the git refs) and commit the result.
+>
+> For a **targeted advisory/CVE bump** (a locked package flagged by
+> `uv audit` / `pip-audit`, e.g. `anyio`), the implement/ci_fix
+> sandbox can regenerate the lock end-to-end without operator help:
+> `uv lock --upgrade-package <pkg>` re-resolves only that package
+> against PyPI through the egress allowlist (`pypi.org` /
+> `pythonhosted.org` / `github.com` are permitted, everything else
+> denied) and reuses the existing `git+https` pins, so no credentials
+> are needed for public git deps. Only a full re-resolution that must
+> advance a git rev still requires the temp-remove-git-deps workaround
+> (or a human `uv lock` with credentials).
 
 ## Trade-offs
 

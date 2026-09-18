@@ -459,6 +459,7 @@ modules:
     paths:
       - src/robotsix_mill/sandbox/**/*.py
       - tests/sandbox/conftest.py
+      - tests/sandbox/test_proxy_allowlist.py
       - tests/sandbox/test_sandbox.py
       - tests/sandbox/test_slots.py
       - sandbox/**/*

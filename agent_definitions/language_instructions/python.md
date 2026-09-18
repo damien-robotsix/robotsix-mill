@@ -17,20 +17,36 @@ the internet (and only to PyPI/GitHub). Note: `npm install` is
 separately allowlisted for Node.js repos (see the javascript language
 instructions), but is not available for general Python-repo use.
 
-### `uv lock` fails with git credential errors
+### Regenerating `uv.lock` in the sandbox
 
-The sandbox has no GitHub credentials, so `uv lock` **will fail**
-when `pyproject.toml` contains a git dependency (e.g. under
-`[tool.uv.sources]`). The `GIT_TERMINAL_PROMPT=0` env var in the
-sandbox container prevents hangs, but `uv lock` will still exit
-non-zero with a credential error.
+The sandbox egress proxy allowlists exactly the hosts `uv lock`
+needs: PyPI (`pypi.org`, `pythonhosted.org`) and GitHub
+(`github.com`, `githubusercontent.com`). Everything else is refused
+(FilterDefaultDeny). **Never hand-edit `uv.lock`** — regenerate it
+with `uv lock` and commit the result.
 
-**Workaround:** temporarily remove the git dependency from
-`pyproject.toml` and its `[tool.uv.sources]` entry, run `uv lock`,
-then restore both. The lockfile will be generated without the git
-dependency, which is acceptable when the git dependency is not
-needed for the current change. If the dependency *is* needed, note
-in your summary that a human must run `uv lock` with credentials
+**Targeted dependency bump (audit/CVE fixes) — works in-sandbox.**
+To bump a locked dependency (e.g. a transitive package flagged by
+`uv audit` / `pip-audit`), run:
+
+    uv lock --upgrade-package <pkg>
+
+This re-resolves only `<pkg>` against PyPI through the proxy and
+**reuses the existing pins for `git+https` deps**, so no GitHub
+credentials are needed for public repos. Use this for advisory/CVE
+bumps (e.g. `anyio`); do NOT remove git deps from `pyproject.toml`
+for a targeted transitive bump. `uv audit` itself is not runnable in
+the sandbox — its advisory-DB host `api.osv.dev` is not allowlisted —
+it runs in CI; here you only regenerate the lock.
+
+**Full re-resolution — may still fail on git deps.** A bare `uv lock`
+(or `uv lock --upgrade`) that must advance or re-resolve a `git+https`
+dependency still fails with a credential error (the sandbox has no
+GitHub credentials; `GIT_TERMINAL_PROMPT=0` prevents hangs but the
+command exits non-zero). Workaround: temporarily remove the git
+dependency from `pyproject.toml` and its `[tool.uv.sources]` entry,
+run `uv lock`, then restore both. If the git dependency *is* needed,
+note in your summary that a human must run `uv lock` with credentials
 and commit the updated lockfile.
 
 When non-`uv` package-manager commands would fail due to lack of
