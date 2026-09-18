@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.5](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.4...v0.15.5) (2026-09-18)
+
+
+### Bug Fixes
+
+* Add error handling to CLI commands for HTTP API and file I/O failures (20260917T040536Z-add-error-handling-to-cli-commands-for-h-6fcb) ([#3265](https://github.com/damien-robotsix/robotsix-mill/issues/3265)) ([7469662](https://github.com/damien-robotsix/robotsix-mill/commit/746966200f8e2545dfbdabf24d866a54c6684dc8))
+* **agents:** bind the Claude SDK model to the explicitly resolved slot ([#3272](https://github.com/damien-robotsix/robotsix-mill/issues/3272)) ([c06b4b7](https://github.com/damien-robotsix/robotsix-mill/commit/c06b4b730c5d6bee5262167663222c74fc3e413f))
+
 ## [0.15.4](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.3...v0.15.4) (2026-09-15)
 
 
