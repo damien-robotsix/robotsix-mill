@@ -759,7 +759,14 @@ def build_agent(
         try:
             handle = provider.build_agent(
                 level=level,
-                model=model,
+                # Bind the model to the slot this call already resolved. Passing
+                # ``model=None`` makes llmio fall back to _resolve_model_name(),
+                # which re-reads the failover tracker's ACTIVE slot — during an
+                # armed window that is ``fallback``, so the cross-slot retry
+                # handed the Claude CLI the OpenRouter model name and every
+                # escape from a failover window failed (live incident
+                # 2026-09-17 16:18:50Z, correlation 9ade981ee1b29277f39754c55ecc011d).
+                model=model or tlc.model_name,
                 system_prompt=composed_system,
                 tools=all_tools,
                 output_type=output_type,
@@ -780,7 +787,7 @@ def build_agent(
             logger.warning("max_tokens not supported by %s", type(provider).__name__)
             handle = provider.build_agent(
                 level=level,
-                model=model,
+                model=model or tlc.model_name,
                 system_prompt=composed_system,
                 tools=all_tools,
                 output_type=output_type,
