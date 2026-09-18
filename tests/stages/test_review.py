@@ -1931,6 +1931,83 @@ def test_action_ref_no_violations_no_effect_on_verdict(ctx_factory, monkeypatch)
     assert any("fix feature.txt" in c for c in comments)
 
 
+# --- _verify_action_sha: fetch-by-object existence check --------------
+
+_VALID_SHA = "d2a2353830cf211a9f18f3585085016766294dff"
+
+
+def _fake_git(monkeypatch, *, fetch_rc, fetch_stderr="", init_rc=0):
+    """Patch subprocess.run in _review_helpers to simulate git init/fetch."""
+    from robotsix_mill.stages import _review_helpers
+
+    calls: list[list[str]] = []
+
+    def _run(cmd, **_kw):
+        calls.append(cmd)
+        if "init" in cmd:
+            return subprocess.CompletedProcess(cmd, init_rc, "", "")
+        if "fetch" in cmd:
+            return subprocess.CompletedProcess(cmd, fetch_rc, "", fetch_stderr)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(_review_helpers.subprocess, "run", _run)
+    return calls
+
+
+def test_verify_action_sha_present_when_fetch_succeeds(monkeypatch):
+    """A reachable older-main SHA (fetch succeeds) is confirmed present —
+    the ls-remote false-positive no longer occurs."""
+    from robotsix_mill.stages._review_helpers import _verify_action_sha
+
+    calls = _fake_git(monkeypatch, fetch_rc=0)
+    assert _verify_action_sha("actions/checkout", _VALID_SHA) is True
+    # A specific object fetch was attempted (not a bare ls-remote).
+    assert any("fetch" in c and _VALID_SHA in c for c in calls)
+
+
+def test_verify_action_sha_absent_when_remote_rejects_object(monkeypatch):
+    """A genuinely-missing SHA — remote answers 'not our ref' — is False."""
+    from robotsix_mill.stages._review_helpers import _verify_action_sha
+
+    _fake_git(
+        monkeypatch,
+        fetch_rc=128,
+        fetch_stderr="fatal: remote error: upload-pack: not our ref " + _VALID_SHA,
+    )
+    assert _verify_action_sha("actions/checkout", _VALID_SHA) is False
+
+
+def test_verify_action_sha_none_on_network_error(monkeypatch):
+    """A transport/network failure degrades gracefully to None (not False)."""
+    from robotsix_mill.stages._review_helpers import _verify_action_sha
+
+    _fake_git(
+        monkeypatch,
+        fetch_rc=128,
+        fetch_stderr="fatal: unable to access 'https://github.com/...': "
+        "Could not resolve host: github.com",
+    )
+    assert _verify_action_sha("actions/checkout", _VALID_SHA) is None
+
+
+def test_verify_action_sha_none_on_init_failure(monkeypatch):
+    """A failed scratch-repo init cannot verify anything → None."""
+    from robotsix_mill.stages._review_helpers import _verify_action_sha
+
+    _fake_git(monkeypatch, fetch_rc=0, init_rc=1)
+    assert _verify_action_sha("actions/checkout", _VALID_SHA) is None
+
+
+def test_verify_action_sha_none_on_malformed_input(monkeypatch):
+    """Malformed owner/repo or SHA bail out before touching subprocess."""
+    from robotsix_mill.stages._review_helpers import _verify_action_sha
+
+    calls = _fake_git(monkeypatch, fetch_rc=0)
+    assert _verify_action_sha("not-a-repo", _VALID_SHA) is None
+    assert _verify_action_sha("actions/checkout", "nothex") is None
+    assert calls == []  # no subprocess invoked for malformed input
+
+
 # --- stage cache: unchanged input short-circuits re-review ------------
 
 

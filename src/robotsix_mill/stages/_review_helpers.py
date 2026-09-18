@@ -13,6 +13,7 @@ import logging
 import re
 import shlex
 import subprocess
+import tempfile
 from pathlib import Path
 
 from ..agents.reviewing import ReviewAsk, ReviewVerdict
@@ -260,29 +261,37 @@ def _reusable_workflow_sha_refs_from_diff(
 def _verify_action_sha(
     owner_repo: str, sha: str, token: str | None = None
 ) -> bool | None:
-    """Best-effort verify *sha* exists in *owner_repo* via ``git ls-remote``.
+    """Best-effort verify commit *sha* exists in *owner_repo*.
+
+    Uses ``git fetch --depth 1 <url> <sha>`` against a throwaway
+    repository rather than ``git ls-remote``.  ``ls-remote`` only lists
+    *ref heads* (branches/tags), so a legitimately-pinned SHA that is an
+    older commit on ``main`` — not the current head of any ref — would
+    be reported absent, a false positive.  Fetching the specific object
+    confirms existence for any commit reachable from an advertised ref
+    (GitHub enables ``uploadpack.allowReachableSHA1InWant``).
 
     When *token* is provided, the URL is constructed via
-    :func:`git_ops._authed_url` so ``git ls-remote`` can access private
-    repos.  When *token* is ``None`` (e.g. test environment or no token
-    configured), the public URL is used and private repos will return
-    ``None`` (could not check) rather than a false-positive ``False``.
+    :func:`git_ops._authed_url` so the fetch can access private repos.
+    When *token* is ``None`` (e.g. test environment or no token
+    configured), the public URL is used and private/unreachable repos
+    degrade to ``None`` (could not check) rather than a false-positive
+    ``False``.
 
-    Returns True when confirmed, False when the SHA is absent from
-    ``ls-remote`` output, None when the check could not be performed
-    (network error, timeout, non-zero exit, empty output, etc.).
-
-    Note: ``git ls-remote`` patterns filter by *ref name*, not object
-    SHA — so we call it without a pattern and grep the full output for
-    the SHA.  Passing the SHA as a positional argument would filter
-    refs by that hex string (always producing empty output).
+    Returns True when the object is confirmed present, False when the
+    remote is reachable but reports the object unavailable
+    (genuinely-missing / unreachable SHA), None when the check could not
+    be performed (malformed input, network error, timeout, non-zero
+    ``git init``, etc.).
     """
-    # Defence-in-depth: owner_repo must match the expected format before
-    # we construct a URL or pass anything to a subprocess.  A mismatch
-    # means the caller extracted something unexpected from the diff;
-    # bail out gracefully rather than proceeding.
+    # Defence-in-depth: both owner_repo and sha are derived from the
+    # diff — validate their shape before constructing a URL or passing
+    # anything to a subprocess.  A mismatch means the caller extracted
+    # something unexpected; bail out gracefully rather than proceeding.
     if not _OWNER_REPO_RE.match(owner_repo):
         return None  # Malformed owner/repo — cannot verify
+    if not _SHA_RE.match(sha):
+        return None  # Malformed SHA — cannot verify
 
     try:
         # Split and shlex-quote each component so CodeQL recognises the
@@ -296,19 +305,39 @@ def _verify_action_sha(
         url = f"https://github.com/{safe_owner}/{safe_repo}.git"
         if token:
             url = git_ops._authed_url(url, token)
-        result = subprocess.run(
-            ["git", "ls-remote", url],
-            capture_output=True,
-            text=True,
-            timeout=15,
+        with tempfile.TemporaryDirectory() as tmp:
+            init = subprocess.run(
+                ["git", "init", "-q", tmp],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            if init.returncode != 0:
+                return None  # Could not create scratch repo — cannot verify
+            result = subprocess.run(
+                ["git", "-C", tmp, "fetch", "--depth", "1", url, sha],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        if result.returncode == 0:
+            return True  # Object fetched — SHA confirmed present
+        # Fetch failed: distinguish "remote reachable but object
+        # unavailable" (a real missing/unreachable SHA) from transient
+        # network/transport failures, which must NOT be flagged.  Only
+        # the former — where the server actively answered that the
+        # object is not fetchable — yields a False.
+        stderr = (result.stderr or "").lower()
+        absent_markers = (
+            "not our ref",
+            "unadvertised object",
+            "could not find remote ref",
+            "couldn't find remote ref",
+            "did not send all necessary objects",
         )
-        if result.returncode != 0:
-            return None  # Could not check
-        if not result.stdout.strip():
-            return None  # No output — could not verify (network filtered?)
-        if sha not in result.stdout:
-            return False  # SHA confirmed absent (ls-remote had other output)
-        return True  # SHA confirmed
+        if any(marker in stderr for marker in absent_markers):
+            return False  # Remote answered: object not available
+        return None  # Ambiguous (network/transport) — do not flag
     except Exception:
         return None  # Any failure → skip existence check
 

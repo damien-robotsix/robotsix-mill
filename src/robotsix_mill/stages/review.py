@@ -448,7 +448,7 @@ class ReviewStage(Stage):
         verdict: ReviewVerdict,
     ) -> ReviewVerdict:
         """Validate 40-char hex SHA refs in *action_refs* and
-        *reusable_workflow_refs* via ``git ls-remote``, injecting any
+        *reusable_workflow_refs* via ``git fetch``, injecting any
         missing-SHA violations as synthetic REQUEST_CHANGES.
 
         Returns *verdict* (mutated in-place when violations are found).
@@ -457,8 +457,9 @@ class ReviewStage(Stage):
 
         # Optional best-effort existence check for SHA refs:
         # for each ref that IS a 40-char hex SHA, confirm it exists via
-        # ``git ls-remote``.  Any failure (network error, timeout,
-        # non-zero exit) degrades gracefully — the SHA is not flagged.
+        # ``git fetch`` of the specific object.  Any failure (network
+        # error, timeout, non-zero exit) degrades gracefully — the SHA
+        # is not flagged.
         # Tag references (e.g. @v4) are skipped here.
         for file_path, slug, ref, comment in action_refs:
             if _SHA_RE.match(ref):
