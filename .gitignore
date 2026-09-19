@@ -57,3 +57,6 @@ src/robotsix_mill/runtime/static/robotsix-ui.css
 
 # uv project environment when CI sets UV_PROJECT_ENVIRONMENT=system
 /system/
+# Stray workflow-runner scratch directory accidentally committed as a
+# gitlink (see review 1704). Ephemeral; never track.
+.tmp_wf/
