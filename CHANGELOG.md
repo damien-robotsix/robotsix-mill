@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.6](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.5...v0.15.6) (2026-09-19)
+
+
+### Documentation
+
+* CI failure: Docs on main (20260919T074447Z-ci-failure-docs-on-main-04a2) ([#3292](https://github.com/damien-robotsix/robotsix-mill/issues/3292)) ([348565b](https://github.com/damien-robotsix/robotsix-mill/commit/348565bb76ec62929d0729a4682b85da5f523c48))
+
 ## [0.15.5](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.4...v0.15.5) (2026-09-18)
 
 
