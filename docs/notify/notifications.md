@@ -70,4 +70,4 @@ The four trigger states are defined in `notify.py:_TRIGGER_STATES`:
 ## See also
 
 - [docs/config/configuration.md](../config/configuration.md) — full config reference
-- [src/robotsix_mill/notify/fleet.py](../../src/robotsix_mill/notify/fleet.py) — fleet notifier implementation
+- [src/robotsix_mill/notify/fleet.py](https://github.com/damien-robotsix/robotsix-mill/blob/main/src/robotsix_mill/notify/fleet.py) — fleet notifier implementation

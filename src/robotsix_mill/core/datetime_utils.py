@@ -66,7 +66,7 @@ class TZDateTime(TypeDecorator[datetime]):
             value = value.astimezone(UTC).replace(tzinfo=None)
         return value
 
-    def process_result_value(self, value: datetime | None, dialect):
+    def process_result_value(self, value: datetime | None, dialect) -> datetime | None:
         """Re-attach ``timezone.utc`` to *value* on read-back from SQLite.
 
         Returns:

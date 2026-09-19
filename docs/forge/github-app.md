@@ -150,7 +150,7 @@ if the operator registers separate credentials.
 **To use different GitHub App installations per repo:**
 
 1. Create and install the App(s) on each target repo as described in
-   [Option B](#option-b--github-app-bot-recommended) above.
+   [Option B](#option-b-github-app-bot-recommended) above.
 2. Set `forge_remote_url` on each repo entry in `config/repos.yaml`.
 3. The mill automatically mints installation tokens for the correct
    repo at delivery time, caching them independently per
@@ -178,7 +178,7 @@ compatibility with single-repo deployments.
 - The API-call installation token (from `github_token()`) lives only in
   the **mill** process, cached ~50 min, used for the PR API call. The
   implement agent runs in the separate `--network none` sandbox and
-  cannot read it (see [docker-architecture.md](docker-architecture.md)).
+  cannot read it (see [docker-architecture.md](../docker-architecture.md)).
 - `GITHUB_APP_PRIVATE_KEY*` and `FORGE_TOKEN` are secrets — keep them in
   the gitignored `config/config.yaml` `secrets:` block (or a mounted file); never commit them.
 - GitHub Enterprise: set `MILL_GITHUB_API_URL=https://<host>/api/v3`.

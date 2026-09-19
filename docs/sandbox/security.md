@@ -2,7 +2,7 @@
 
 > Full container topology (mill vs. sibling sandbox, the three code
 > copies, the docker.sock trust boundary):
-> [docs/docker-architecture.md](docker-architecture.md).
+> [docs/docker-architecture.md](../docker-architecture.md).
 
 The `implement` agent runs LLM-chosen shell commands, and ticket text /
 cloned repo content can steer that LLM (prompt injection). So command
@@ -27,6 +27,6 @@ execution is isolated from the mill process:
 
 ## See also
 
-- [index.md](index.md) — documentation home
-- [docs/docker-architecture.md](docker-architecture.md) — container topology
+- [index.md](../index.md) — documentation home
+- [docs/docker-architecture.md](../docker-architecture.md) — container topology
 - [docs/forge/github-app.md](../forge/github-app.md) — delivery identity setup

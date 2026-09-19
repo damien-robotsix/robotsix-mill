@@ -26,4 +26,4 @@ Stored in the `ticket` table as `source TEXT NOT NULL DEFAULT 'user'`.
 
 ## See also
 
-- [index.md](index.md) — documentation home
+- [index.md](../index.md) — documentation home

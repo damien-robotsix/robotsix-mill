@@ -15,6 +15,9 @@ to work with; draft lists are clipped to ``MAX_DRAFTS`` (20).
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 from robotsix_mill._resources import agent_definitions_dir
 
 from ..config import Settings
@@ -37,8 +40,8 @@ def run_module_curator_agent(
     memory: str = "",
     recent_proposals: str = "",
     verified_proposals: str = "",
-    repo_dir=None,
-    definition_override=None,
+    repo_dir: Path | None = None,
+    definition_override: Any = None,
 ) -> ModuleCuratorResult:
     """Run the module-curator pass.
 

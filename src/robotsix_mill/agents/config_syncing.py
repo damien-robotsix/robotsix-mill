@@ -17,6 +17,8 @@ the runner has a clear result to work with.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import BaseModel, Field
 
 from ..config import Settings
@@ -248,7 +250,7 @@ def run_config_sync_agent(
     memory: str = "",
     recent_proposals: str = "",
     verified_proposals: str = "",
-    repo_dir=None,
+    repo_dir: Path | None = None,
 ) -> ConfigSyncResult:
     """Run the config-sync configuration drift inspection pass.
 

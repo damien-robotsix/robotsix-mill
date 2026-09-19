@@ -174,5 +174,5 @@ immediately at `https://<owner>.github.io/<repo>/`.
 
 ## See also
 
-- [index.md](index.md) — documentation home
-- [docs/docker-architecture.md](docker-architecture.md) — container topology
+- [index.md](../index.md) — documentation home
+- [docs/docker-architecture.md](../docker-architecture.md) — container topology
