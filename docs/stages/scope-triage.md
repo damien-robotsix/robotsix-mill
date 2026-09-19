@@ -56,6 +56,6 @@ When `scope_triage_enabled` is **false**, any out-of-scope files immediately blo
 
 ## See also
 
-- [agents/index.md](agents/index.md) — Agent catalog and definitions
+- [agents/index.md](../agents/index.md) — Agent catalog and definitions
 - [docs/config/configuration.md](../config/configuration.md) — Full config reference
-- [AGENT.md](../AGENT.md) — Conventions and guidelines for agents
+- [AGENT.md](https://github.com/damien-robotsix/robotsix-mill/blob/main/AGENT.md) — Conventions and guidelines for agents

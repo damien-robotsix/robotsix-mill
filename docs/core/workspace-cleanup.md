@@ -72,5 +72,5 @@ handled by the dedicated orphan pruning step.
 
 ## See also
 
-- [index.md](index.md) — documentation home
+- [index.md](../index.md) — documentation home
 - [docs/config/configuration.md](../config/configuration.md) — full env-var reference

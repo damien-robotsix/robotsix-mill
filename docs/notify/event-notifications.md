@@ -82,6 +82,6 @@ Typical reconciliation flow:
 
 - [notifications.md](notifications.md) — human-attention push
   notifications (ntfy.sh).
-- [index.md](index.md) — documentation home.
+- [index.md](../index.md) — documentation home.
 - [docs/config/configuration.md](../config/configuration.md) — full
   config reference.

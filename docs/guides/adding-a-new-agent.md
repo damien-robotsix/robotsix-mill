@@ -20,7 +20,7 @@ YAML definition through to the test suite.
 
 - **Module taxonomy.**  If your agent introduces a new Python module,
   add it to `docs/modules.yaml` in the same commit (see
-  [AGENT.md](../../AGENT.md#adding-a-tracked-file)).
+  [AGENT.md](https://github.com/damien-robotsix/robotsix-mill/blob/main/AGENT.md#adding-a-tracked-file)).
 
 ---
 

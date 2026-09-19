@@ -1338,4 +1338,4 @@ files use the legacy flat path (`<data_dir>/audit_memory.md`).
 - [observability.md](../langfuse/observability.md) — per-repo Langfuse + deployed-log config the refine agent consults
 - [deployment.md](../dev-tooling/deployment.md) — continuous deployment guide
 - [config-audit.md](config-audit.md) — complete inventory of every config value and its source
-- [`config/config.example.json`](../../config/config.example.json) — committed single-file config template (defaults + `"secrets"` block)
+- [`config/config.example.json`](https://github.com/damien-robotsix/robotsix-mill/blob/main/config/config.example.json) — committed single-file config template (defaults + `"secrets"` block)

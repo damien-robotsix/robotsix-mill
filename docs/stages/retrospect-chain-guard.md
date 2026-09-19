@@ -129,7 +129,7 @@ full `mark-done` / `resume-blocked` recovery workflow and
 
 ## See also
 
-- [index.md](index.md) — documentation home
+- [index.md](../index.md) — documentation home
 - [retrospect-memory.md](retrospect-memory.md) — the retrospect agent's
   memory ledger
 - [blocked-ticket-recovery.md](blocked-ticket-recovery.md) — recovering

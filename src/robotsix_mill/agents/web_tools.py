@@ -26,6 +26,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+from collections.abc import Callable
 from urllib.parse import urlsplit, urlunsplit
 
 from robotsix_llmio.core import html_to_text
@@ -237,7 +238,7 @@ def make_web_fetch(
     *,
     max_calls: int | None = None,
     max_bytes: int | None = None,
-):
+) -> Callable[[str], str]:
     """Build the ``web_fetch`` tool exposed to web-knowledge agents.
 
     The returned callable performs an http(s) GET via the dedicated

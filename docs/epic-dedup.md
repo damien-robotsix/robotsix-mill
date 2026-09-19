@@ -7,7 +7,7 @@ cheaply during the child's own refine cycle instead of consuming a full
 implement pass.
 
 This is **not** the same as the pre-refine
-[dedup guard](dedup-guard.md). That guard runs a cheap LLM call before
+[dedup guard](core/dedup-guard.md). That guard runs a cheap LLM call before
 the refine agent and can short-circuit a draft straight to `CLOSED`.
 The epic-decomposition check is purely mechanical (no LLM call), only
 **annotates** a child's body with a warning, and **never drops** a
@@ -75,5 +75,5 @@ The primitives live in `src/robotsix_mill/dedup.py`
 ## See also
 
 - [index.md](index.md) — documentation home
-- [dedup-guard.md](dedup-guard.md) — pre-refine duplicate / already-done check
+- [dedup-guard.md](core/dedup-guard.md) — pre-refine duplicate / already-done check
 - [docs/config/configuration.md](config/configuration.md) — full env-var reference

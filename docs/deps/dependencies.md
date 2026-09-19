@@ -1,7 +1,7 @@
 # Dependency management: pinned lockfile + automated bump
 
 mill depends on four sibling **shared libraries**, consumed as git
-dependencies in [`pyproject.toml`](../pyproject.toml):
+dependencies in [`pyproject.toml`](https://github.com/damien-robotsix/robotsix-mill/blob/main/pyproject.toml):
 
 | Library | Where declared | Notes |
 |---------|----------------|-------|
@@ -25,15 +25,15 @@ library repos):
    always builds reproducibly off those pinned commits — never off a
    moving `@main` HEAD.
 
-2. **Frozen gate.** CI ([`ci.yml`](../.github/workflows/ci.yml)) and the
+2. **Frozen gate.** CI ([`ci.yml`](https://github.com/damien-robotsix/robotsix-mill/blob/main/.github/workflows/ci.yml)) and the
    `Makefile` `install` target run `uv sync --frozen` **without** a
    preceding `uv lock`. `--frozen` installs strictly from the committed
    lock and **fails the build if the lock is stale** relative to
    `pyproject.toml`. This is a hard CI **gate**, not advisory (see
-   [ci-policy.md](../ci-policy.md)).
+   [ci-policy.md](../dev-tooling/ci-policy.md)).
 
 3. **Bump.** A scheduled workflow
-   ([`deps-bump.yml`](../.github/workflows/deps-bump.yml)) runs weekly
+   ([`deps-bump.yml`](https://github.com/damien-robotsix/robotsix-mill/blob/main/.github/workflows/deps-bump.yml)) runs weekly
    (cron) and on `workflow_dispatch`. It delegates to the fleet reusable
    `damien-robotsix/robotsix-github-workflows/.github/workflows/deps-bump.yml`,
    which runs `uv lock --upgrade-package` for each of the four first-party

@@ -272,6 +272,6 @@ READY
 
 ## See also
 
-- [index.md](index.md) — documentation home
+- [index.md](../index.md) — documentation home
 - [docs/config/configuration.md](../config/configuration.md) — full env-var reference
-- [docs/agents/index.md](agents/index.md) — agent catalog
+- [docs/agents/index.md](../agents/index.md) — agent catalog

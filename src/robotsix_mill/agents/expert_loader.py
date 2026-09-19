@@ -88,10 +88,10 @@ def load_expert_definition(path: Path) -> ExpertDefinition:
     Returns a validated ``ExpertDefinition`` instance.
 
     Raises:
-        ``FileNotFoundError`` — *path* does not exist (from
+        FileNotFoundError: *path* does not exist (from
             ``Path.read_text()``).
-        ``yaml.YAMLError`` — the file is not valid YAML.
-        ``pydantic.ValidationError`` — a required field is missing,
+        yaml.YAMLError: the file is not valid YAML.
+        pydantic.ValidationError: a required field is missing,
             a value has the wrong type, or an unknown key is present.
     """
     import yaml

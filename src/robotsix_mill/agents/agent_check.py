@@ -43,8 +43,8 @@ class AgentCheckResult(PeriodicAgentResult):
 def run_agent_check_agent(
     *,
     settings: Settings,
-    repo_dir=None,
-    definition_override=None,
+    repo_dir: Path | None = None,
+    definition_override: Any = None,
     memory_dir: Path | None = None,
     memory: str = "",
     recent_proposals: str = "",
