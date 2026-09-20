@@ -515,7 +515,7 @@ def test_marker_round_trip(tmp_path):
     mapping = _verify_prior_proposals(service, settings, "health")
     assert "fix_z" in mapping
     assert mapping["fix_z"]["ticket_id"] == tid
-    assert mapping["fix_z"]["state"] == "DRAFT"
+    assert mapping["fix_z"]["state"] == "draft"
     assert mapping["fix_z"]["resolution"] == "in-flight"
 
     db.reset_engine()
@@ -1304,7 +1304,7 @@ def test_render_verified_summary_branch_ignored():
     verified = {
         "gap_1": {
             "ticket_id": "T-999",
-            "state": "DRAFT",
+            "state": "draft",
             "resolution": "in-flight",
             "branch": "feature/xyz",
         },
