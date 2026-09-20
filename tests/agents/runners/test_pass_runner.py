@@ -1267,13 +1267,13 @@ def test_render_verified_summary_counts():
     verified = {
         "gap_1": {
             "ticket_id": "T-123",
-            "state": "CLOSED",
+            "state": "closed",
             "resolution": "merged",
             "branch": None,
         },
         "gap_2": {
             "ticket_id": "T-456",
-            "state": "HUMAN_MR_APPROVAL",
+            "state": "human_mr_approval",
             "resolution": "in-flight",
             "branch": None,
         },
@@ -1289,7 +1289,7 @@ def test_render_verified_summary_declined_not_open():
     verified = {
         "gap_1": {
             "ticket_id": "T-789",
-            "state": "CLOSED",
+            "state": "closed",
             "resolution": "declined",
             "branch": None,
         },
