@@ -3834,3 +3834,96 @@ def test_non_formatter_failure_does_not_run_formatter(tmp_path, monkeypatch):
     out = CIFixStage().run(t, ctx)
     assert out.next_state is State.IMPLEMENT_COMPLETE
     assert agent_calls["n"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Non-code-fixable scanner gate + hard total-attempt cap
+# ---------------------------------------------------------------------------
+
+
+def _secret_scan_status(monkeypatch):
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "secret-scan-on-main",
+                    "summary": "gitleaks found a secret",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+
+
+def test_secret_scan_failure_blocks_without_running_agent(tmp_path, monkeypatch):
+    """A non-code-fixable scanner failure blocks for human remediation and
+    never dispatches the (opus) ci-fix agent."""
+    ctx = _gh(tmp_path)
+    _secret_scan_status(monkeypatch)
+
+    def _agent(**k):
+        raise AssertionError("ci-fix agent must not run for a non-code-fixable failure")
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.run_ci_fix_agent", _agent)
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "non-code-fixable" in out.note
+    assert "secret-scan-on-main" in out.note
+
+
+def test_handle_non_code_fixable_returns_none_for_code_check(tmp_path):
+    ctx = _gh(tmp_path)
+    t = _fixing_ci(ctx)
+    failing = [{"name": "ci / tests"}]
+    summary = "## ❌ FAILED: ci / tests\n"
+    assert (
+        CIFixStage()._handle_non_code_fixable_failure(t, ctx, failing, summary) is None
+    )
+
+
+def test_total_attempt_cap_blocks_after_cap(tmp_path):
+    ctx = _gh(tmp_path, ci_fix_max_total_attempts=2)
+    t = _fixing_ci(ctx)
+    stage = CIFixStage()
+    summary = "## ❌ FAILED: ci / tests\n"
+    assert stage._check_total_attempt_cap(t, ctx, summary) is None  # attempt 1
+    assert stage._check_total_attempt_cap(t, ctx, summary) is None  # attempt 2
+    out = stage._check_total_attempt_cap(t, ctx, summary)  # attempt 3 → block
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "hard attempt cap" in out.note
+
+
+def test_total_attempt_cap_resets_when_checkset_changes(tmp_path):
+    ctx = _gh(tmp_path, ci_fix_max_total_attempts=1)
+    t = _fixing_ci(ctx)
+    stage = CIFixStage()
+    s1 = "## ❌ FAILED: check-a\n"
+    s2 = "## ❌ FAILED: check-b\n"
+    assert stage._check_total_attempt_cap(t, ctx, s1) is None  # a: attempt 1
+    out = stage._check_total_attempt_cap(t, ctx, s1)  # a: attempt 2 > cap
+    assert out is not None and out.next_state is State.BLOCKED
+    # A different failing check-set is genuine progress → budget resets.
+    assert stage._check_total_attempt_cap(t, ctx, s2) is None  # b: attempt 1
+
+
+def test_total_attempt_cap_disabled(tmp_path):
+    ctx = _gh(tmp_path, ci_fix_max_total_attempts=0)
+    t = _fixing_ci(ctx)
+    stage = CIFixStage()
+    summary = "## ❌ FAILED: ci / tests\n"
+    for _ in range(5):
+        assert stage._check_total_attempt_cap(t, ctx, summary) is None

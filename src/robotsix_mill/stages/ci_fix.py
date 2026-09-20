@@ -38,7 +38,11 @@ from ..runtime import tracing
 from ..vcs import git_ops
 from . import dependency_fix
 from .base import Outcome, Stage, StageContext
-from .ci_failure_buckets import classify_ci_failure, is_formatter_only_failure
+from .ci_failure_buckets import (
+    classify_ci_failure,
+    is_formatter_only_failure,
+    is_non_code_fixable_failure,
+)
 from .ci_fix_analysis import (
     _build_failure_detail,
     _check_merge_conflict,
@@ -51,9 +55,11 @@ from .ci_fix_codeql import (
     _try_codeql_fp_triage,
 )
 from .ci_fix_helpers import (
+    _CI_ATTEMPT_CHECKSET,
     _CI_FAILURE_FINGERPRINT,
     _CI_IDENTICAL_FAILURE_COUNT,
     _CI_REFRESH_COUNTER,
+    _CI_TOTAL_ATTEMPT_COUNT,
     _CODQL_CHECK_NAMES,
     _check_upstream_ci_breakage,
     _ci_failure_fingerprint,
@@ -371,6 +377,20 @@ class CIFixStage(Stage):
         )
         if identical_outcome is not None:
             return identical_outcome
+
+        # --- Non-code-fixable scanner gate (before spending any opus attempt) ---
+        # Secret-scan / gitleaks / license-scan findings require human
+        # remediation (remove the secret from history and rotate it, resolve
+        # the license violation) — no code edit the ci-fix agent can make will
+        # turn the check green.  Skip the multi-attempt LLM fix loop entirely:
+        # emit a single cheap deterministic diagnostic and BLOCK for a human,
+        # rather than looping opus attempts that cannot converge (~$10/session
+        # observed on a secret-scan failure).
+        non_fixable_outcome = self._handle_non_code_fixable_failure(
+            ticket, ctx, failing, failing_summary
+        )
+        if non_fixable_outcome is not None:
+            return non_fixable_outcome
 
         # --- Conflicting-PR backstop (before LLM agent) ---
         # A PR that conflicts with its target gets ZERO check runs from the
@@ -753,6 +773,100 @@ class CIFixStage(Stage):
         fp_path.write_text(current_fp, encoding="utf-8")
         return None
 
+    def _handle_non_code_fixable_failure(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        failing: list[dict[str, Any]],
+        failing_summary: str,
+    ) -> Outcome | None:
+        """Block non-code-fixable scanner failures without an opus fix loop.
+
+        When EVERY failing check is a scanner/policy check requiring human
+        remediation (secret-scan / gitleaks / license-scan), the ci-fix LLM
+        loop cannot converge — no diff turns the check green.  Run a single
+        cheap *deterministic* diagnostic (classify the finding and name the
+        required human action) and return ``Outcome(State.BLOCKED, ...)``.
+
+        Returns ``None`` when the failure is (at least partly) code-fixable,
+        so the normal agent path runs.
+        """
+        if not is_non_code_fixable_failure(failing, failing_summary):
+            return None
+        klass = classify_ci_failure(failing, failing_summary)
+        check_names = _extract_check_names(failing_summary)
+        log.info(
+            "%s: non-code-fixable CI failure (%s) — blocking for human "
+            "remediation without running the ci-fix agent",
+            ticket.id,
+            check_names,
+        )
+        return Outcome(
+            State.BLOCKED,
+            f"CI failing on non-code-fixable check(s): {check_names}. "
+            f"Root cause: {klass.root_cause}. "
+            "This is a scanner/policy finding (secret-scan / gitleaks / "
+            "license-scan) that requires HUMAN remediation — remove the "
+            "offending secret from git history and rotate it (or resolve the "
+            "license violation) — not a code edit the ci-fix agent can make. "
+            "Skipping the automated fix loop to avoid burning LLM attempts on "
+            "a structurally unfixable failure; resume once the finding is "
+            "remediated.",
+        )
+
+    def _check_total_attempt_cap(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        failing_summary: str,
+    ) -> Outcome | None:
+        """Enforce a hard per-ticket cap on total ci-fix agent invocations.
+
+        Unlike :meth:`_check_consecutive_identical_failure` — whose
+        fingerprint includes the branch HEAD sha and therefore RESETS every
+        time the agent pushes a new commit — this counter increments on every
+        agent invocation for the SAME set of failing checks, so a runaway loop
+        that keeps producing fresh-but-still-failing pushes can no longer
+        silently consume 6+ opus generations.  The counter resets when the
+        failing check-name set changes (genuine forward progress).  Returns
+        ``Outcome(State.BLOCKED, ...)`` once the cap is exceeded, else
+        ``None``.  ``ci_fix_max_total_attempts == 0`` disables the gate.
+        """
+        s = ctx.settings
+        if s.ci_fix_max_total_attempts == 0:
+            return None
+
+        artifacts = ctx.service.workspace(ticket).artifacts_dir
+        counter_path = artifacts / _CI_TOTAL_ATTEMPT_COUNT
+        checkset_path = artifacts / _CI_ATTEMPT_CHECKSET
+        current_checkset = _extract_check_names(failing_summary)
+
+        try:
+            stored_checkset = checkset_path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            stored_checkset = ""
+
+        if current_checkset != stored_checkset:
+            # Failing check-set changed — genuine progress; reset the budget.
+            _write_counter(counter_path, 0)
+            checkset_path.parent.mkdir(parents=True, exist_ok=True)
+            checkset_path.write_text(current_checkset, encoding="utf-8")
+
+        count = _read_counter(counter_path) + 1
+        _write_counter(counter_path, count)
+
+        if count > s.ci_fix_max_total_attempts:
+            return Outcome(
+                State.BLOCKED,
+                f"ci-fix reached its hard attempt cap "
+                f"({s.ci_fix_max_total_attempts}) on: {current_checkset}. "
+                f"The automated fix loop made {count - 1} attempt(s) without "
+                "turning CI green; blocking to prevent unbounded LLM spend on "
+                "a failure it cannot resolve. Fix the underlying CI issue and "
+                "resume.",
+            )
+        return None
+
     def _rerun_failing_workflows(
         self, ticket: Ticket, ctx: StageContext, head_sha: str
     ) -> int:
@@ -847,6 +961,15 @@ class CIFixStage(Stage):
         )
         if formatter_outcome is not None:
             return formatter_outcome
+
+        # Hard per-ticket cap on total agent invocations for the same failing
+        # check-set.  Checked here — after the deterministic formatter pass, so
+        # a cheap non-LLM fix does not consume the budget — and immediately
+        # before the (opus) agent runs, so no single CI failure can silently
+        # loop the model past the cap.
+        cap_outcome = self._check_total_attempt_cap(ticket, ctx, failing_summary)
+        if cap_outcome is not None:
+            return cap_outcome
 
         result = self._invoke_agent(ticket, ctx, repo_dir, branch, failing_summary)
 

@@ -30,6 +30,13 @@ _log = logging.getLogger("robotsix_mill.stages.ci_fix_helpers")
 _CI_REFRESH_COUNTER = "ci_fix_refresh_attempts.txt"
 _CI_FAILURE_FINGERPRINT = "ci_failure_fingerprint.txt"
 _CI_IDENTICAL_FAILURE_COUNT = "ci_identical_failure_count.txt"
+# Hard per-ticket cap counter (total agent invocations for the same failing
+# check-set) and the check-set snapshot it resets against. Unlike
+# _CI_FAILURE_FINGERPRINT this key does NOT include the branch HEAD sha, so a
+# runaway loop that keeps pushing fresh-but-still-failing commits cannot reset
+# it every cycle.
+_CI_TOTAL_ATTEMPT_COUNT = "ci_fix_total_attempts.txt"
+_CI_ATTEMPT_CHECKSET = "ci_fix_attempt_checkset.txt"
 
 # Check-run names that are CodeQL-related (case-insensitive contains).
 _CODQL_CHECK_NAMES = frozenset({"codeql", "code-scanning", "code scanning"})

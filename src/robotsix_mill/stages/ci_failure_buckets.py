@@ -319,3 +319,47 @@ def is_formatter_only_failure(
         if name in _NON_FORMATTER_BUCKETS and any(p.search(hay) for p in patterns):
             return False
     return True
+
+
+# Scanner / policy checks whose findings require HUMAN remediation — removing
+# a leaked secret from git history and rotating it, or resolving a license
+# violation — rather than a code edit an agent can make. Sending one of these
+# through the ci-fix LLM loop cannot converge: every opus attempt is wasted
+# because no diff turns the check green. Matched against failing check NAMES
+# only (see ``is_non_code_fixable_failure``).
+_NON_CODE_FIXABLE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"gitleaks"),
+    re.compile(r"trufflehog"),
+    re.compile(r"detect[- ]secrets"),
+    re.compile(r"secret[- ]scan"),
+    re.compile(r"secret scanning"),
+    re.compile(r"license[- ]scan"),
+    re.compile(r"license[- ]check"),
+    re.compile(r"license[- ]?finder"),
+)
+
+
+def is_non_code_fixable_failure(
+    failing: list[dict[str, Any]], failing_summary: str = ""
+) -> bool:
+    """Return ``True`` when EVERY failing check is a scanner/policy check
+    whose finding requires human remediation (secret-scan / gitleaks /
+    license-scan) rather than a code edit the ci-fix agent can make.
+
+    Matched on failing check *names* only — never the job-log excerpt — so a
+    code check whose log merely mentions ``gitleaks`` is not misclassified as
+    unfixable. When there are no named failing checks (``failing`` empty or
+    all names blank), returns ``False``: the stage cannot prove the failure is
+    non-code-fixable, so it falls through to the normal agent path.
+
+    ``failing_summary`` is accepted for signature parity with
+    :func:`is_formatter_only_failure` but is intentionally unused — the
+    check-name signal is the reliable one for scanner families.
+    """
+    names = [n for n in _check_names(failing) if n]
+    if not names:
+        return False
+    return all(
+        any(p.search(name.lower()) for p in _NON_CODE_FIXABLE_PATTERNS)
+        for name in names
+    )
