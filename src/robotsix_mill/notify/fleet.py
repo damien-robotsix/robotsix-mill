@@ -37,7 +37,7 @@ _CATEGORY_MAP: dict[State, str] = {
     State.BLOCKED: "blocked",
     State.ERRORED: "errored",
     State.HUMAN_ISSUE_APPROVAL: "human_issue_approval",
-    State.HUMAN_MR_APPROVAL: "human_issue_approval",
+    State.HUMAN_MR_APPROVAL: "human_mr_approval",
     State.AWAITING_USER_REPLY: "awaiting_user_reply",
 }
 

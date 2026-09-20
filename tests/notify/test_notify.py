@@ -227,6 +227,18 @@ def test_fleet_severity_mapping(settings, service, monkeypatch, secrets_set):
     assert rec.calls[1]["json"]["category"] == "errored"
 
 
+def test_fleet_human_mr_approval_category(settings, service, monkeypatch, secrets_set):
+    """Regression: HUMAN_MR_APPROVAL maps to its own 'human_mr_approval'
+    category, not 'human_issue_approval'."""
+    secrets_set(fleet_notify_url="https://fleet.example.com/notify")
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    t = service.create("PR ready")
+    send_notification(t, State.HUMAN_MR_APPROVAL, "PR opened", settings)
+    assert rec.calls[0]["json"]["category"] == "human_mr_approval"
+
+
 def test_fleet_token_sent_as_bearer(settings, service, monkeypatch, secrets_set):
     """fleet_notify_token is sent as Authorization: Bearer."""
     secrets_set(
