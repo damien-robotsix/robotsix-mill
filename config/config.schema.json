@@ -894,6 +894,13 @@
           "title": "Ci Fix Max Iterations",
           "type": "integer"
         },
+        "ci_fix_max_total_attempts": {
+          "default": 2,
+          "description": "Hard per-ticket cap on total ci-fix agent invocations for the same failing check-set before BLOCK. 0 disables.",
+          "minimum": 0,
+          "title": "Ci Fix Max Total Attempts",
+          "type": "integer"
+        },
         "ci_fix_memory_path": {
           "anyOf": [
             {

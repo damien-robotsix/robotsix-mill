@@ -14,6 +14,7 @@ from robotsix_mill.stages.ci_failure_buckets import (
     DEFAULT_PREVENTION_RULES,
     classify_ci_failure,
     is_formatter_only_failure,
+    is_non_code_fixable_failure,
 )
 
 _TESTS_CHECK = [{"name": "ci / tests", "conclusion": "failure"}]
@@ -213,6 +214,52 @@ def test_formatter_only_false_when_signature_absent_from_check_name_only():
     # No log excerpt: the bare check name is not enough to prove it is a
     # formatter failure, so fall through conservatively.
     assert is_formatter_only_failure(_TESTS_CHECK, "") is False
+
+
+# ---------------------------------------------------------------------------
+# non-code-fixable scanner detection (secret-scan / gitleaks / license-scan)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "secret-scan-on-main",
+        "Secret Scanning",
+        "gitleaks",
+        "TruffleHog",
+        "detect-secrets",
+        "license-scan",
+        "license-check",
+        "licensefinder",
+    ],
+)
+def test_non_code_fixable_true_for_scanner_checks(name):
+    assert is_non_code_fixable_failure([{"name": name}]) is True
+
+
+def test_non_code_fixable_false_for_code_check():
+    assert is_non_code_fixable_failure(_TESTS_CHECK) is False
+
+
+def test_non_code_fixable_false_when_mixed_with_code_check():
+    # A scanner AND a code check both fail — the agent can still make
+    # progress on the code check, so do NOT short-circuit the fix loop.
+    failing = [{"name": "gitleaks"}, {"name": "ci / tests"}]
+    assert is_non_code_fixable_failure(failing) is False
+
+
+def test_non_code_fixable_false_when_no_named_checks():
+    # No named failing checks — cannot prove the failure is unfixable.
+    assert is_non_code_fixable_failure([]) is False
+    assert is_non_code_fixable_failure([{"name": ""}]) is False
+
+
+def test_non_code_fixable_ignores_job_log_mention():
+    # A code check whose log merely mentions "gitleaks" must NOT be
+    # classified as non-code-fixable — matching is on check names only.
+    summary = _summary("some test asserted on gitleaks output\n1 failed")
+    assert is_non_code_fixable_failure(_TESTS_CHECK, summary) is False
 
 
 # ---------------------------------------------------------------------------

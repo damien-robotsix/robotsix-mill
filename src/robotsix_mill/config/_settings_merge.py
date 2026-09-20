@@ -124,6 +124,22 @@ class _MergeSettings(BaseModel):
         ge=0,
     )
 
+    # Hard per-ticket ceiling on the TOTAL number of ci-fix agent invocations
+    # for the same set of failing checks.  The consecutive-identical-failure
+    # gate above resets every time the agent pushes — its fingerprint includes
+    # the branch HEAD sha (deliberately, for rebase immunity) — so a loop that
+    # keeps producing fresh-but-still-failing pushes escapes it and can burn
+    # 6+ opus generations on one unfixable failure (observed on a secret-scan
+    # session, ~$10).  This counter increments on every agent invocation and
+    # only resets when the failing check-name set changes (genuine forward
+    # progress), hard-capping the tail regardless of head churn.  Set to 0 to
+    # disable.  Default 2 (initial attempt + one retry).
+    ci_fix_max_total_attempts: int = Field(
+        description="Hard per-ticket cap on total ci-fix agent invocations for the same failing check-set before BLOCK. 0 disables.",
+        default=2,
+        ge=0,
+    )
+
     # Number of consecutive identical merge-guard blocks before escalating
     # to a stronger BLOCKED that requires human intervention.  When the
     # deliver stage's meta-triage-fallback guard blocks with the same
