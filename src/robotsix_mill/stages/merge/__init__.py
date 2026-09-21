@@ -42,7 +42,10 @@ This module is a thin façade (Pattern A) over the ``merge`` package:
 - ``core`` — :class:`MergeStage` (run dispatch + shared class-level helpers)
 - ``ci_fix_mixin`` — :class:`MultiRepoCiFixMixin` (inline CI-fix recovery)
 - ``multi_repo`` — :class:`MultiRepoMixin`
-- ``ci_poll`` — :class:`CIPollMixin`
+- ``ci_poll`` — :class:`CIPollMixin` (IMPLEMENT_COMPLETE poll path)
+- ``human_approval`` — :class:`HumanApprovalMixin` (HUMAN_MR_APPROVAL poll path)
+- ``pr_baseline`` — :class:`PrBaselineMixin` (shared PR preamble + eligibility)
+- ``auto_merge_gate`` — :class:`AutoMergeGateMixin` (WAITING_AUTO_MERGE poll path)
 - ``rebase`` — :class:`RebaseMixin`
 - ``review_revision`` — :class:`ReviewRevisionMixin`
 
