@@ -18,10 +18,61 @@
 
 name: Dependency Bump
 
+name: Dependency Bump
 on:
   schedule:
     - cron: "0 8 * * 1"
   workflow_dispatch:
+permissions: {}
+jobs:
+  bump:
+    name: Bump uv.lock
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write       # push bump branch
+      pull-requests: write  # create/update PR
+    steps:
+      - name: Mint GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349  # v2.2.2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # owner/repositories omitted → token scoped to this repository only
+      - name: Check out with bump credential
+        # persist-credentials intentionally default-true: the push step needs
+        # the minted credential in git's credential store.
+        # zizmor: ignore[artipacked]
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
+        with:
+          version: "0.12.5"
+      - name: Set git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Upgrade first-party pins
+        run: >
+          uv lock
+          --upgrade-package robotsix-llmio
+          --upgrade-package robotsix-board
+          --upgrade-package robotsix-yaml-config
+          --upgrade-package robotsix-modules
+      - uses: damien-robotsix/robotsix-github-workflows/.github/actions/bump-commit-pr@0584b087d3ae384050ef06723d3f4e6e06d523da
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          bump-branch: "deps/bump-uv-lock"
+          default-branch: "main"
+          diff-files: uv.lock
+          add-files: uv.lock
+          commit-message: "chore: bump first-party pins"
+          pr-title: "chore: bump first-party pins"
+          pr-body: "Automated first-party pin bump via `uv lock --upgrade-package`."
 
 permissions: {}  # no workflow-level default; the job grants its own
 
