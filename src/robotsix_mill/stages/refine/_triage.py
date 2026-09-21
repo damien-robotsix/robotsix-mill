@@ -25,14 +25,13 @@ from .helpers import (
     _AUTO_APPROVE_SOURCES,
     _NOT_DOC_ONLY_TERMS_RE,
     OPERATOR_SENDBACK_PREFIX,
-    _draft_has_complete_spec,
-    _fast_path_scope_checks,
     _summarize_spec_for_auto_approve,
     _triage_note_signals_wrong_repo,
     _verify_branch_merged,
     log,
     ops_shape_marker,
 )
+from .spec_validation import _draft_has_complete_spec, _fast_path_scope_checks
 
 # ---------------------------------------------------------------------------
 # module-level triage helpers

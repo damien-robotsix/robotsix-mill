@@ -22,6 +22,7 @@ from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.states import State
 from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.implement import validation as validation_mod
+from robotsix_mill.stages.implement import validation_cleanup as validation_cleanup_mod
 from robotsix_mill.stages.implement._shared import (
     _ScopeGuardrailResult,
 )
@@ -281,7 +282,7 @@ def test_scope_guardrail_blocks_out_of_scope_when_triage_disabled(monkeypatch):
         validation_mod.git_ops, "introduced_files", lambda *a: ["a.py", "b.py"]
     )
     # Treat the stray file as text so it isn't auto-cleaned as an artifact.
-    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(validation_cleanup_mod, "_is_binary_artifact", lambda *a: False)
     finalized = {}
     monkeypatch.setattr(
         ValidationMixin,
@@ -302,7 +303,7 @@ def test_scope_guardrail_flood_guard_blocks_without_llm(monkeypatch):
     monkeypatch.setattr(validation_mod, "target_branch_for", lambda *a: "main")
     flood = [f"gen/file_{i}.py" for i in range(5)]
     monkeypatch.setattr(validation_mod.git_ops, "introduced_files", lambda *a: flood)
-    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(validation_cleanup_mod, "_is_binary_artifact", lambda *a: False)
     monkeypatch.setattr(
         ValidationMixin,
         "_finalize",
@@ -334,7 +335,7 @@ def _flood_case(monkeypatch, *, changed, pre_existing, **settings_kw):
     monkeypatch.setattr(
         validation_mod.git_ops, "tracked_paths_at", lambda *a: set(pre_existing)
     )
-    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(validation_cleanup_mod, "_is_binary_artifact", lambda *a: False)
     monkeypatch.setattr(
         ValidationMixin,
         "_finalize",
@@ -439,27 +440,27 @@ def test_is_binary_artifact_extension_match(tmp_path):
     # Known binary extension → True regardless of content.
     f = tmp_path / "lib.o"
     f.write_text("// C source pretending to be object file")
-    assert validation_mod._is_binary_artifact(tmp_path, str(f), "main") is True
+    assert validation_cleanup_mod._is_binary_artifact(tmp_path, str(f), "main") is True
 
 
 def test_is_binary_artifact_null_byte_in_untracked_file(tmp_path):
     # Untracked file (no prior git history) with a null byte → binary.
     f = tmp_path / "uv"
     f.write_bytes(b"\x7fELF\x00\x01\x02\x03")
-    assert validation_mod._is_binary_artifact(tmp_path, str(f), "main") is True
+    assert validation_cleanup_mod._is_binary_artifact(tmp_path, str(f), "main") is True
 
 
 def test_is_binary_artifact_no_null_byte_text_file(tmp_path):
     # Regular text file → not binary.
     f = tmp_path / "README.md"
     f.write_text("# Hello\n")
-    assert validation_mod._is_binary_artifact(tmp_path, str(f), "main") is False
+    assert validation_cleanup_mod._is_binary_artifact(tmp_path, str(f), "main") is False
 
 
 def test_is_binary_artifact_nonexistent_file(tmp_path):
     # File that doesn't exist on disk → not binary.
     assert (
-        validation_mod._is_binary_artifact(
+        validation_cleanup_mod._is_binary_artifact(
             tmp_path, str(tmp_path / "nonexistent"), "main"
         )
         is False
@@ -480,7 +481,7 @@ def test_is_binary_artifact_osi_error_is_silent(tmp_path, monkeypatch):
 
     monkeypatch.setattr(builtins, "open", _raising_open)
     # Extension check passes first, so use a path with no binary extension.
-    assert validation_mod._is_binary_artifact(tmp_path, str(f), "main") is False
+    assert validation_cleanup_mod._is_binary_artifact(tmp_path, str(f), "main") is False
 
 
 # ---------------------------------------------------------------------------
@@ -805,7 +806,7 @@ def test_vendored_dep_roots_untracked_dist_info_signature(tmp_path):
     sp.run(["git", "-C", str(tmp_path), "add", "tracked.txt"], check=True)
     sp.run(["git", "-C", str(tmp_path), "commit", "-m", "tracked only"], check=True)
 
-    result = validation_mod._vendored_dep_roots(
+    result = validation_cleanup_mod._vendored_dep_roots(
         tmp_path,
         [
             ".pkgs/anyio-4.0.dist-info/METADATA",
@@ -830,7 +831,7 @@ def test_vendored_dep_roots_tracked_dir_not_returned(tmp_path):
     )
     _commit_all(tmp_path)
 
-    result = validation_mod._vendored_dep_roots(
+    result = validation_cleanup_mod._vendored_dep_roots(
         tmp_path,
         [
             ".pkgs/anyio-4.0.dist-info/METADATA",
@@ -859,7 +860,7 @@ def test_vendored_dep_roots_normal_dir_no_markers(tmp_path):
     sp.run(["git", "-C", str(tmp_path), "add", "tracked.txt"], check=True)
     sp.run(["git", "-C", str(tmp_path), "commit", "-m", "tracked only"], check=True)
 
-    result = validation_mod._vendored_dep_roots(
+    result = validation_cleanup_mod._vendored_dep_roots(
         tmp_path,
         ["mypkg/module.py", "mypkg/utils.py"],
         "main",
@@ -873,7 +874,7 @@ def test_vendored_dep_roots_top_level_files_skipped(tmp_path):
     (tmp_path / "README.md").write_text("readme")
     _commit_all(tmp_path)
 
-    result = validation_mod._vendored_dep_roots(
+    result = validation_cleanup_mod._vendored_dep_roots(
         tmp_path,
         ["README.md"],
         "main",
@@ -899,7 +900,7 @@ def test_vendored_dep_roots_node_modules_is_strong_marker(tmp_path):
     sp.run(["git", "-C", str(tmp_path), "add", "tracked.txt"], check=True)
     sp.run(["git", "-C", str(tmp_path), "commit", "-m", "tracked only"], check=True)
 
-    result = validation_mod._vendored_dep_roots(
+    result = validation_cleanup_mod._vendored_dep_roots(
         tmp_path,
         [
             "frontend/node_modules/.package-lock.json",
@@ -928,7 +929,7 @@ def test_vendored_dep_roots_single_dist_info_not_enough(tmp_path):
     sp.run(["git", "-C", str(tmp_path), "add", "tracked.txt"], check=True)
     sp.run(["git", "-C", str(tmp_path), "commit", "-m", "tracked only"], check=True)
 
-    result = validation_mod._vendored_dep_roots(
+    result = validation_cleanup_mod._vendored_dep_roots(
         tmp_path,
         [
             ".deps/six-1.16.0.dist-info/METADATA",
@@ -955,8 +956,10 @@ def test_scope_guardrail_expand_cap_splits_and_proceeds(monkeypatch):
         "introduced_files",
         lambda *a: ["in_scope.py", "new_module.py"],
     )
-    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
-    monkeypatch.setattr(validation_mod, "_vendored_dep_roots", lambda *a, **kw: set())
+    monkeypatch.setattr(validation_cleanup_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(
+        validation_cleanup_mod, "_vendored_dep_roots", lambda *a, **kw: set()
+    )
     monkeypatch.setattr(
         ValidationMixin,
         "_finalize",
@@ -1045,8 +1048,10 @@ def test_scope_guardrail_expand_cap_dedup_skips_duplicate_child(monkeypatch):
         "introduced_files",
         lambda *a: ["in_scope.py", "new_module.py"],
     )
-    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
-    monkeypatch.setattr(validation_mod, "_vendored_dep_roots", lambda *a, **kw: set())
+    monkeypatch.setattr(validation_cleanup_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(
+        validation_cleanup_mod, "_vendored_dep_roots", lambda *a, **kw: set()
+    )
     monkeypatch.setattr(
         ValidationMixin,
         "_finalize",
@@ -1130,8 +1135,10 @@ def test_scope_guardrail_expand_cap_split_create_failure_does_not_block_parent(
         "introduced_files",
         lambda *a: ["in_scope.py", "new_module.py"],
     )
-    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
-    monkeypatch.setattr(validation_mod, "_vendored_dep_roots", lambda *a, **kw: set())
+    monkeypatch.setattr(validation_cleanup_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(
+        validation_cleanup_mod, "_vendored_dep_roots", lambda *a, **kw: set()
+    )
     monkeypatch.setattr(
         ValidationMixin,
         "_finalize",
@@ -1198,8 +1205,10 @@ def test_scope_guardrail_expand_under_cap_proceeds(monkeypatch):
         "introduced_files",
         lambda *a: ["in_scope.py", "other.py"],
     )
-    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
-    monkeypatch.setattr(validation_mod, "_vendored_dep_roots", lambda *a, **kw: set())
+    monkeypatch.setattr(validation_cleanup_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(
+        validation_cleanup_mod, "_vendored_dep_roots", lambda *a, **kw: set()
+    )
     monkeypatch.setattr(
         ValidationMixin,
         "_finalize",
@@ -1264,11 +1273,11 @@ def test_scope_guardrail_vendored_dep_flood_skips_guard(monkeypatch):
         flood.append(f".local-packages/pkg{i}-{i}.0.dist-info/METADATA")
         flood.append(f".local-packages/pkg{i}-{i}.0.dist-info/RECORD")
     monkeypatch.setattr(validation_mod.git_ops, "introduced_files", lambda *a: flood)
-    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(validation_cleanup_mod, "_is_binary_artifact", lambda *a: False)
 
     # Monkeypatch _vendored_dep_roots to avoid needing a real git repo.
     monkeypatch.setattr(
-        validation_mod,
+        validation_cleanup_mod,
         "_vendored_dep_roots",
         lambda repo_dir, paths, target: {".local-packages"},
     )
@@ -1309,11 +1318,11 @@ def test_scope_guardrail_genuine_flood_still_blocks(monkeypatch):
 
     flood = [f"gen/file_{i}.py" for i in range(60)]
     monkeypatch.setattr(validation_mod.git_ops, "introduced_files", lambda *a: flood)
-    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(validation_cleanup_mod, "_is_binary_artifact", lambda *a: False)
 
     # _vendored_dep_roots returns empty → these are genuine files.
     monkeypatch.setattr(
-        validation_mod,
+        validation_cleanup_mod,
         "_vendored_dep_roots",
         lambda repo_dir, paths, target: set(),
     )
@@ -1369,9 +1378,9 @@ def test_scope_guardrail_vendored_dirs_logged(monkeypatch, caplog):
         ".pip-packages/idna/__init__.py",
     ]
     monkeypatch.setattr(validation_mod.git_ops, "introduced_files", lambda *a: flood)
-    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(validation_cleanup_mod, "_is_binary_artifact", lambda *a: False)
     monkeypatch.setattr(
-        validation_mod,
+        validation_cleanup_mod,
         "_vendored_dep_roots",
         lambda repo_dir, paths, target: {".pip-packages"},
     )
@@ -1433,11 +1442,11 @@ def test_scope_guardrail_standard_config_auto_reverted(monkeypatch):
     monkeypatch.setattr(
         validation_mod.git_ops, "introduced_files", lambda *a: introduced
     )
-    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(validation_cleanup_mod, "_is_binary_artifact", lambda *a: False)
 
     # _vendored_dep_roots returns empty → files pass through vendored filter.
     monkeypatch.setattr(
-        validation_mod,
+        validation_cleanup_mod,
         "_vendored_dep_roots",
         lambda repo_dir, paths, target: set(),
     )
@@ -1518,9 +1527,9 @@ def test_scope_guardrail_standard_config_all_reverted_skips_guard(monkeypatch):
     monkeypatch.setattr(
         validation_mod.git_ops, "introduced_files", lambda *a: introduced
     )
-    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(validation_cleanup_mod, "_is_binary_artifact", lambda *a: False)
     monkeypatch.setattr(
-        validation_mod,
+        validation_cleanup_mod,
         "_vendored_dep_roots",
         lambda repo_dir, paths, target: set(),
     )
@@ -1860,7 +1869,7 @@ def _triage_raising(monkeypatch, exc):
     monkeypatch.setattr(
         validation_mod.git_ops, "introduced_files", lambda *a: ["a.py", "b.py"]
     )
-    monkeypatch.setattr(validation_mod, "_is_binary_artifact", lambda *a: False)
+    monkeypatch.setattr(validation_cleanup_mod, "_is_binary_artifact", lambda *a: False)
     monkeypatch.setattr(
         validation_mod.subprocess,
         "run",

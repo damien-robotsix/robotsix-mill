@@ -52,18 +52,17 @@ from .helpers import (
     UNMERGED_BRANCH_PREFIX,
     _build_candidates_block,
     _build_deployed_log_summary,
-    _draft_has_complete_spec,
     _human_size,
     _is_doc_only_change,
     _rationale_claims_external_fix,
     _resolve_next_state,
-    _spec_is_degenerate,
     _tail_file,
     _verify_branch_merged,
     _verify_cited_fix_at_head,
     log,
     verify_claim,
 )
+from .spec_validation import _draft_has_complete_spec, _spec_is_degenerate
 
 __all__ = [
     "DEDUP_ALREADY_DONE_PREFIX",
