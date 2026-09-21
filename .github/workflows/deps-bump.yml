@@ -7,10 +7,13 @@
 # The workflow mints an installation token from the shared GitHub App
 # (RELEASE_APP_PRIVATE_KEY) per run; no expiry/rotation, bot identity.
 #
-# Upstream robotsix-github-workflows/bump.yml has a bug in its action
-# metadata that prevents callers from passing custom action outputs.
-# Until that is fixed, we implement the bump logic inline here with the
-# same structure (minted token, checkout, uv upgrade, bump-commit-pr action).
+# Upstream robotsix-github-workflows/bump.yml calls the bump-setup composite
+# action, which has a bug in bump-setup/action.yml: the `repositories` input
+# description contains a literal `${{ github.repository }}` expression that the
+# runner's ActionManifestManagerLegacy cannot template-expand, causing
+# `Unrecognized named-value: 'github'` errors. Until that is fixed, we implement
+# the bump logic inline here with the same structure (minted token, checkout, uv
+# upgrade, bump-commit-pr action).
 #
 # TODO: revert to the shared bump.yml caller once upstream
 # robotsix-github-workflows fixes bump-setup's action metadata.
