@@ -40,11 +40,16 @@ jobs:
           app-id: ${{ vars.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
           # owner/repositories omitted → token scoped to this repository only
+          # Scope the minted token to only what this workflow needs
+          # (push the bump branch + open the PR), instead of inheriting
+          # the App installation's blanket permissions.
+          permission-contents: write
+          permission-pull-requests: write
       - name: Check out with bump credential
         # persist-credentials intentionally default-true: the push step needs
         # the minted credential in git's credential store.
         # zizmor: ignore[artipacked]
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
