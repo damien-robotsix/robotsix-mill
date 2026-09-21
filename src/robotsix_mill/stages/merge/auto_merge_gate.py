@@ -6,11 +6,14 @@ only re-polls CI and triggers auto-merge when the branch is green. It does
 not participate in the IMPLEMENT_COMPLETE or HUMAN_MR_APPROVAL routing.
 
 The path is a single method on :class:`AutoMergeGateMixin`, which
-:class:`~.core.MergeStage` inherits alongside :class:`~.ci_poll.CIPollMixin`.
-The shared eligibility/merge helpers it calls (``_check_pr_baseline``,
-``_auto_merge_eligible``, ``_try_auto_merge``, …) live on ``CIPollMixin``
-and resolve at runtime through the assembled ``MergeStage`` MRO — declared
-for the type checker on :class:`~._base._MergeStageBase`.
+:class:`~.core.MergeStage` inherits alongside the other merge mixins.
+The shared eligibility/merge helpers it calls
+(``_check_pr_baseline``/``_auto_merge_eligible`` on
+:class:`~.pr_baseline.PrBaselineMixin`; ``_try_auto_merge``/
+``_try_update_branch_for_conflict`` on
+:class:`~.human_approval.HumanApprovalMixin`) resolve at runtime through
+the assembled ``MergeStage`` MRO — declared for the type checker on
+:class:`~._base._MergeStageBase`.
 """
 
 from __future__ import annotations

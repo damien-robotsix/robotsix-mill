@@ -29,7 +29,9 @@ class _MergeStageBase:
         _review_changes_requested_outcome: ClassVar[Any]
         _auto_merge_eligible: ClassVar[Any]
         _multi_repo_fix_ci: ClassVar[Any]
-        # Seams on CIPollMixin, called cross-mixin from AutoMergeGateMixin.
+        # Seams on PrBaselineMixin (_check_pr_baseline) and HumanApprovalMixin
+        # (_try_auto_merge, _try_update_branch_for_conflict), called
+        # cross-mixin from CIPollMixin and AutoMergeGateMixin.
         _check_pr_baseline: ClassVar[Any]
         _try_auto_merge: ClassVar[Any]
         _try_update_branch_for_conflict: ClassVar[Any]

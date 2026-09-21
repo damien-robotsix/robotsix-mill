@@ -3,6 +3,8 @@
 Assembles the responsibility-focused mixins
 (:class:`~.multi_repo.MultiRepoMixin`,
 :class:`~.ci_poll.CIPollMixin`,
+:class:`~.human_approval.HumanApprovalMixin`,
+:class:`~.pr_baseline.PrBaselineMixin`,
 :class:`~.auto_merge_gate.AutoMergeGateMixin`,
 :class:`~.rebase.RebaseMixin`,
 :class:`~.review_revision.ReviewRevisionMixin`) into the public
@@ -31,7 +33,9 @@ from ._shared import (
 from .auto_merge_gate import AutoMergeGateMixin
 from .ci_fix_mixin import MultiRepoCiFixMixin
 from .ci_poll import CIPollMixin
+from .human_approval import HumanApprovalMixin
 from .multi_repo import MultiRepoMixin
+from .pr_baseline import PrBaselineMixin
 from .rebase import RebaseMixin
 from .review_revision import ReviewRevisionMixin
 
@@ -40,6 +44,8 @@ class MergeStage(
     MultiRepoCiFixMixin,
     MultiRepoMixin,
     CIPollMixin,
+    HumanApprovalMixin,
+    PrBaselineMixin,
     AutoMergeGateMixin,
     RebaseMixin,
     ReviewRevisionMixin,

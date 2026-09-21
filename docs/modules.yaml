@@ -290,6 +290,8 @@ modules:
       - src/robotsix_mill/stages/merge/_base.py
       - src/robotsix_mill/stages/merge/_shared.py
       - src/robotsix_mill/stages/merge/ci_poll.py
+      - src/robotsix_mill/stages/merge/human_approval.py
+      - src/robotsix_mill/stages/merge/pr_baseline.py
       - src/robotsix_mill/stages/merge/auto_merge_gate.py
       - src/robotsix_mill/stages/merge/core.py
       - src/robotsix_mill/stages/merge/multi_repo.py
