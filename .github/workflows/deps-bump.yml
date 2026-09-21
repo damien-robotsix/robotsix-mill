@@ -4,38 +4,77 @@
 # GITHUB_TOKEN to prevent recursion — CI workflows will NOT fire on the
 # bump PR if you pass GITHUB_TOKEN.
 #
-# The reusable workflow mints an installation token from the shared
-# GitHub App (RELEASE_APP_PRIVATE_KEY) per run; no expiry/rotation,
-# bot identity.
+# The workflow mints an installation token from the shared GitHub App
+# (RELEASE_APP_PRIVATE_KEY) per run; no expiry/rotation, bot identity.
 #
-# This caller targets the shared implementation workflow bump.yml
-# directly (with bump-mode: deps) instead of the self-documenting
-# deps-bump.yml wrapper: the upstream wrapper uses GitHub's
-# self-repository syntax for its nested reusable-workflow call, which
-# does NOT resolve for cross-repo callers and fails the caller run at
-# workflow-graph assembly (startup_failure, no jobs). bump.yml carries
-# no such self-repository references and is safe to call cross-repo.
+# Upstream robotsix-github-workflows/bump.yml calls the bump-setup composite
+# action, which has a bug in bump-setup/action.yml: the `repositories` input
+# description contains a literal `${{ github.repository }}` expression that the
+# runner's ActionManifestManagerLegacy cannot template-expand, causing
+# `Unrecognized named-value: 'github'` errors. Until that is fixed, we implement
+# the bump logic inline here with the same structure (minted token, checkout, uv
+# upgrade, bump-commit-pr action).
+#
+# TODO: revert to the shared bump.yml caller once upstream
+# robotsix-github-workflows fixes bump-setup's action metadata.
 
 name: Dependency Bump
-
 on:
   schedule:
     - cron: "0 8 * * 1"
   workflow_dispatch:
-
-permissions: {}  # no workflow-level default; the job grants its own
-
+permissions: {}
 jobs:
   bump:
     name: Bump uv.lock
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write       # push bump branch
       pull-requests: write  # create/update PR
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/bump.yml@e42cc030647f612e556e398be10cdf1678451324  # main 2026-09-11
-    with:
-      bump-mode: "deps"
-      packages: "robotsix-llmio robotsix-board robotsix-yaml-config robotsix-modules"
-      app-id: ${{ vars.RELEASE_APP_ID }}
-      bump-branch: "deps/bump-uv-lock"
-    secrets:
-      app-private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+    steps:
+      - name: Mint GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349  # v2.2.2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # owner/repositories omitted → token scoped to this repository only
+          # Scope the minted token to only what this workflow needs
+          # (push the bump branch + open the PR), instead of inheriting
+          # the App installation's blanket permissions.
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Check out with bump credential
+        # persist-credentials intentionally default-true: the push step needs
+        # the minted credential in git's credential store.
+        # zizmor: ignore[artipacked]
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
+        with:
+          version: "0.12.5"
+      - name: Set git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Upgrade first-party pins
+        run: >
+          uv lock
+          --upgrade-package robotsix-llmio
+          --upgrade-package robotsix-board
+          --upgrade-package robotsix-yaml-config
+          --upgrade-package robotsix-modules
+      - uses: damien-robotsix/robotsix-github-workflows/.github/actions/bump-commit-pr@0584b087d3ae384050ef06723d3f4e6e06d523da
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          bump-branch: "deps/bump-uv-lock"
+          default-branch: "main"
+          diff-files: uv.lock
+          add-files: uv.lock
+          commit-message: "chore: bump first-party pins"
+          pr-title: "chore: bump first-party pins"
+          pr-body: "Automated first-party pin bump via `uv lock --upgrade-package`."
