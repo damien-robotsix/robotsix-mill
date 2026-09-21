@@ -230,19 +230,19 @@ jobs:
         run: uv run python scripts/check_wheel_contents.py
 
       - name: Lint main Dockerfile (hadolint)
-        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5  # v3.3.0
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387  # v3.5.0
         with:
           dockerfile: Dockerfile
           failure-threshold: warning
 
       - name: Lint sandbox Dockerfile (hadolint)
-        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5  # v3.3.0
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387  # v3.5.0
         with:
           dockerfile: sandbox/Dockerfile
           failure-threshold: warning
 
       - name: Lint sandbox proxy Dockerfile (hadolint)
-        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5  # v3.3.0
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387  # v3.5.0
         with:
           dockerfile: sandbox/proxy/Dockerfile
           failure-threshold: warning
