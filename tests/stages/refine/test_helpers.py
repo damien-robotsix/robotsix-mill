@@ -26,13 +26,15 @@ from robotsix_mill.core.states import State
 from robotsix_mill.stages import refine as refine_module
 from robotsix_mill.stages.refine.helpers import (
     _advisory_candidate_id,
-    _count_distinct_backtick_paths,
-    _draft_is_near_empty,
-    _fast_path_scope_checks,
     _strip_advisory_block,
     _triage_note_signals_wrong_repo,
     ops_shape_marker,
     verify_claim,
+)
+from robotsix_mill.stages.refine.spec_validation import (
+    _count_distinct_backtick_paths,
+    _draft_is_near_empty,
+    _fast_path_scope_checks,
 )
 
 # ---------------------------------------------------------------------------

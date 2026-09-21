@@ -25,10 +25,10 @@ from .helpers import (
     UNMERGED_BRANCH_PREFIX,
     _rationale_claims_external_fix,
     _resolve_next_state,
-    _spec_is_degenerate,
     _verify_cited_fix_at_head,
     log,
 )
+from .spec_validation import _spec_is_degenerate
 
 # -- shared outcome / thread / artifact helpers -------------------------
 

@@ -3,6 +3,7 @@
 Assembles the responsibility-focused mixins
 (:class:`~.multi_repo.MultiRepoMixin`,
 :class:`~.ci_poll.CIPollMixin`,
+:class:`~.auto_merge_gate.AutoMergeGateMixin`,
 :class:`~.rebase.RebaseMixin`,
 :class:`~.review_revision.ReviewRevisionMixin`) into the public
 ``Stage`` subclass via multiple inheritance.
@@ -27,6 +28,7 @@ from ._shared import (
     _write_reason,
     log,
 )
+from .auto_merge_gate import AutoMergeGateMixin
 from .ci_fix_mixin import MultiRepoCiFixMixin
 from .ci_poll import CIPollMixin
 from .multi_repo import MultiRepoMixin
@@ -38,6 +40,7 @@ class MergeStage(
     MultiRepoCiFixMixin,
     MultiRepoMixin,
     CIPollMixin,
+    AutoMergeGateMixin,
     RebaseMixin,
     ReviewRevisionMixin,
     Stage,
