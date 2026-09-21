@@ -242,7 +242,7 @@ EXPOSE 8077
 # container to `unhealthy` during normal busy periods. retries=3 still catches
 # a genuine hang.
 HEALTHCHECK --interval=30s --timeout=25s --start-period=10s --retries=3 \
-    CMD python -c "from urllib.request import urlopen; urlopen('http://localhost:8077/health')" || exit 1
+    CMD ["python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:8077/health')"]
 
 ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/app/entrypoint.sh"]
 
