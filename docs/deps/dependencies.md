@@ -89,13 +89,16 @@ can never land silently on `main`.
   reach. Pin + bump is fully mill-side and "simplest to operate"; it
   catches breakage slightly later (in the bump PR rather than upstream)
   but with zero cross-repo coordination.
-- **Renovate `lockFileMaintenance` (the alternative bump mechanism).**
-  Enabling `"lockFileMaintenance"` in `renovate.json` would also refresh
-  `uv.lock` periodically. It was **not** chosen because Renovate's
+- **Renovate `lockFileMaintenance` (considered and rejected).** An
+  earlier iteration of this design considered enabling
+  `"lockFileMaintenance"` in `renovate.json` as an alternative way to
+  refresh `uv.lock` periodically. It was **rejected**: Renovate's
   `pep621` manager does **not** bump `git+https` version refs, and
   lockfile maintenance requires the Renovate runner to have `uv` +
   GitHub network access to re-resolve the git deps — making it less
-  deterministic than the self-contained scheduled workflow above.
+  deterministic than the self-contained scheduled workflow above. This
+  option is historical only: the Renovate bot is not installed on this
+  repo, so `renovate.json` is dormant and never runs.
 
 ## CI-monitor heuristic
 
@@ -116,8 +119,9 @@ duplicate fix drafts (7eab, e2ec).
 
 **With pin + bump in place**, that same llmio commit could not have
 reached mill `main` directly. It would have entered **only** through a
-bump PR — `deps-bump.yml`'s `uv lock --upgrade` (or, under alternative
-(b), Renovate `lockFileMaintenance`) advancing the llmio pin. That bump
+bump PR — `deps-bump.yml`'s `uv lock --upgrade` advancing the llmio pin
+(the Renovate `lockFileMaintenance` alternative above was considered and
+rejected, so the bump workflow is the only live mechanism). That bump
 PR's CI would have run `tests/agents/test_retry.py`, gone **red in the
 PR**, and **blocked the merge** — leaving `main` green and unpoisoned.
 
