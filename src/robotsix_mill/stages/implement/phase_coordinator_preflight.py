@@ -22,7 +22,7 @@ from ..._resources import agent_definitions_dir
 from ...agents.runners.diagnostic_events import emit_diagnostic_event
 from ...agents.yaml_loader import load_agent_definition
 from ...core.constants import EXTERNAL_SCOPE_PREFIX
-from ...core.models import Ticket, TicketKind
+from ...core.models import Comment, Ticket, TicketKind
 from ...core.states import State
 from ...core.workspace import (
     Workspace,
@@ -202,7 +202,214 @@ def _references_local_path(actionable: str, external_ids: set[str]) -> bool:
     return False
 
 
-def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
+# Workspace artifacts the external-scope gate uses to break resume ->
+# re-block loops and to consume a one-shot operator override.
+_EXTERNAL_SCOPE_LAST_NOTE_FILE = "external_scope_last_note"
+_EXTERNAL_SCOPE_OVERRIDE_FILE = "external_scope_override_consumed"
+
+# Reference-context patterns whose repo-name tokens are DATA, not the
+# location of the change.  A pull-request / issue reference
+# (``robotsix-llmio#42``), a dependency-bump phrase (``bump anyio``) and
+# a version pin (``anyio==4.0``) all name a repo/package without
+# implying the change lives there.  These spans are blanked before repo
+# IDs are matched so a name that appears only as fixture data does not
+# count as external scope.
+_PR_ISSUE_REF_RE = re.compile(r"[\w./-]*#\d+")
+_DEP_BUMP_RE = re.compile(r"\bbump(?:ing|ed|s)?\s+[\w.@/-]+", re.IGNORECASE)
+_PIN_RE = re.compile(r"[\w./-]+\s*(?:==|>=|<=|~=|!=|@)\s*[\w.*+-]+")
+
+# Phrases in an operator resume-blocked note that explicitly assert the
+# change targets this workspace, authorising a one-shot gate override.
+_IN_WORKSPACE_OVERRIDE_PHRASES = (
+    "in-workspace",
+    "in workspace",
+    "this workspace",
+    "current workspace",
+    "in-repo",
+    "in this repo",
+    "in the current repo",
+    "target file is in",
+    "scope is local",
+    "local scope",
+)
+
+
+def _names_existing_workspace_path(
+    actionable: str, repo_dir: str | Path | None
+) -> bool:
+    """True when *actionable* names at least one file path that EXISTS in
+    this workspace.
+
+    This is the strongest evidence the gate has: a path that resolves to
+    a real file/dir here proves the change targets this workspace,
+    regardless of which repository names also appear in the text.  A
+    spec commonly names a file by its package-relative path
+    (``agents/runners/pin_bump_runner.py``) rather than its repo-root
+    path (``src/robotsix_mill/agents/...``); accept either form by also
+    probing under each top-level ``src/`` package.
+    """
+    if not repo_dir:
+        return False
+    root = Path(repo_dir)
+    src_pkgs: list[Path] = []
+    src_dir = root / "src"
+    if src_dir.is_dir():
+        src_pkgs = [
+            p for p in src_dir.iterdir() if p.is_dir() and not p.name.startswith(".")
+        ]
+    for token in actionable.split():
+        # A path reference contains a "/" and is never as long as a
+        # pasted log/blob line; both guards keep the regex scan linear.
+        if len(token) > _MAX_PATH_TOKEN_LEN or "/" not in token:
+            continue
+        for path in _PATH_TOKEN_RE.findall(token):
+            if (root / path).exists():
+                return True
+            for pkg in src_pkgs:
+                if (pkg / path).exists():
+                    return True
+    return False
+
+
+def _mask_repo_name_data(text: str) -> str:
+    """Blank out spans where a repository name appears as DATA rather
+    than as the location of the change.
+
+    Removes pull-request / issue references, dependency-bump and pin
+    phrases, and git branch names / refs (slash-joined tokens whose
+    final segment carries no file extension, e.g.
+    ``mill/pin-bump/<dep>``).  A real file path keeps its extension and
+    is preserved, so a repo named as a path location still counts.
+    """
+    text = _PR_ISSUE_REF_RE.sub(" ", text)
+    text = _DEP_BUMP_RE.sub(" ", text)
+    text = _PIN_RE.sub(" ", text)
+    masked: list[str] = []
+    for token in re.split(r"(\s+)", text):
+        if not token or token.isspace():
+            masked.append(token)
+            continue
+        core = token.strip("`'\"(),.;:[]{}")
+        if "/" in core and not re.search(r"\.[A-Za-z0-9]{1,8}$", core):
+            masked.append(" " * len(token))
+        else:
+            masked.append(token)
+    return "".join(masked)
+
+
+def _note_asserts_in_workspace(note: str) -> bool:
+    """True when a resume note explicitly asserts in-workspace scope."""
+    low = note.lower()
+    return any(phrase in low for phrase in _IN_WORKSPACE_OVERRIDE_PHRASES)
+
+
+def _latest_operator_note(ctx: StageContext, ticket: Ticket) -> str | None:
+    """Return the body of the most recent operator (resume-blocked)
+    comment on *ticket*, or ``None`` when there is none / on error.
+    """
+    try:
+        comments: list[Comment] = ctx.service.list_comments(ticket.id)
+    except Exception:
+        return None
+    for comment in reversed(comments):
+        if (
+            getattr(comment, "author", "") == "operator"
+            and (comment.body or "").strip()
+        ):
+            return comment.body
+    return None
+
+
+def _consume_in_workspace_override(
+    ctx: StageContext, ticket: Ticket, ws: Workspace
+) -> bool:
+    """Honour an explicit operator override ONCE.
+
+    When the latest operator resume note asserts the change is
+    in-workspace, suppress the gate for this attempt.  The note's
+    fingerprint is recorded so an unchanged note left on the ticket does
+    not silently suppress the gate on every future attempt.
+    """
+    note = _latest_operator_note(ctx, ticket)
+    if not note or not _note_asserts_in_workspace(note):
+        return False
+    consumed_path = ws.artifacts_dir / _EXTERNAL_SCOPE_OVERRIDE_FILE
+    override_fp = hashlib.sha256(note.encode("utf-8")).hexdigest()[:16]
+    prev = ""
+    if consumed_path.exists():
+        try:
+            prev = consumed_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            prev = ""
+    if prev == override_fp:
+        return False
+    try:
+        consumed_path.write_text(override_fp, encoding="utf-8")
+    except OSError:
+        log.warning("%s: failed to persist external-scope override marker", ticket.id)
+    return True
+
+
+def _record_or_escalate(
+    candidate: str, ctx: StageContext, ticket: Ticket, ws: Workspace
+) -> str:
+    """Return *candidate* block note, unless it is byte-identical to the
+    note emitted on the previous attempt for this ticket — in which case
+    the automated resume -> re-block cycle is looping without progress,
+    so escalate for human routing (emit a diagnostic and return a
+    distinct escalation note) instead of re-blocking identically.
+    """
+    last_path = ws.artifacts_dir / _EXTERNAL_SCOPE_LAST_NOTE_FILE
+    last_note = ""
+    if last_path.exists():
+        try:
+            last_note = last_path.read_text(encoding="utf-8")
+        except OSError:
+            last_note = ""
+
+    if last_note and last_note == candidate:
+        escalation = (
+            f"{EXTERNAL_SCOPE_PREFIX} ESCALATION — this ticket was already "
+            "blocked with an identical external-scope reason on the previous "
+            "attempt, so the automated resume -> re-block cycle is looping "
+            "without progress.  Routing to a human for manual triage: "
+            "re-file on the correct board, split out the external work, or "
+            "resume-blocked with a note asserting the change is in-workspace. "
+            "\n\nOriginal reason:\n" + candidate
+        )
+        try:
+            board_id = ctx.memory_board_id(ticket)
+            emit_diagnostic_event(
+                ctx.settings,
+                board_id,
+                category="EXTERNAL_SCOPE_ESCALATION",
+                ticket_id=ticket.id,
+                reason=escalation,
+                normalized_key="external_scope_escalation:"
+                + hashlib.sha256(f"{ticket.id}:{candidate}".encode()).hexdigest()[:16],
+            )
+        except Exception:
+            log.warning(
+                "%s: external-scope escalation diagnostic emit failed", ticket.id
+            )
+        _write_external_scope_note(last_path, escalation, ticket)
+        return escalation
+
+    _write_external_scope_note(last_path, candidate, ticket)
+    return candidate
+
+
+def _write_external_scope_note(path: Path, note: str, ticket: Ticket) -> None:
+    """Best-effort persist of the last external-scope note (loop guard)."""
+    try:
+        path.write_text(note, encoding="utf-8")
+    except OSError:
+        log.warning("%s: failed to persist external-scope note artifact", ticket.id)
+
+
+def _detect_external_scope(
+    spec: str, ctx: StageContext, ws: Workspace, ticket: Ticket
+) -> str | None:
     """Detect when a spec's actionable sections reference only external repos.
 
     Parses the ``## Scope`` and ``## Acceptance criteria`` sections of
@@ -256,10 +463,25 @@ def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
     if not actionable:
         return None
 
+    # (1) Strongest evidence: an in-workspace file PATH in the actionable
+    # sections is decisive.  When the spec names at least one path that
+    # exists in this workspace, the change targets here — pass regardless
+    # of which repository names also appear in the text (they are
+    # context / fixture data, not the location of the change).
+    if _names_existing_workspace_path(actionable, ws.repo_dir):
+        return None
+
+    # (2) Repository names that appear only as DATA — inside a git branch
+    # name, a dependency-bump / pin phrase, or a pull-request / issue
+    # reference — are not evidence that the change belongs to that repo.
+    # Blank those spans before matching so only a name used as the
+    # LOCATION of the change counts.
+    matchable = _mask_repo_name_data(actionable)
+
     # Find which external repos are referenced in the actionable sections.
     referenced_external: set[str] = set()
     for rid in external_ids:
-        if re.search(_repo_id_pattern(rid), actionable):
+        if re.search(_repo_id_pattern(rid), matchable):
             referenced_external.add(rid)
 
     if not referenced_external:
@@ -268,7 +490,7 @@ def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
     # Check whether the current repo is ALSO referenced in the
     # actionable sections.  If it is, the spec has mixed scope —
     # the implement agent may have local work to do.
-    if re.search(_repo_id_pattern(current_repo_id), actionable):
+    if re.search(_repo_id_pattern(current_repo_id), matchable):
         return None
 
     # In-repo tickets often reference the current repo only through a
@@ -283,13 +505,26 @@ def _detect_external_scope(spec: str, ctx: StageContext) -> str | None:
     # Every referenced repo is external — the implement agent cannot
     # produce a diff in this workspace.
     repos_str = ", ".join(sorted(referenced_external))
-    return (
+    candidate = (
         f"{EXTERNAL_SCOPE_PREFIX} the spec's Scope / Acceptance criteria "
         f"reference only external repos ({repos_str}) — no changes target "
         f"this workspace ({current_repo_id}).  The implement agent cannot "
         "produce a diff here.  Re-route the ticket to the correct board "
         "or split the external work into a separate ticket."
     )
+
+    # (3) Honour an explicit operator override.  A resume-blocked note
+    # that asserts the change is in-workspace suppresses the gate for
+    # that attempt (consumed once, so an unchanged note left on the
+    # ticket does not suppress every future attempt).
+    if _consume_in_workspace_override(ctx, ticket, ws):
+        return None
+
+    # (4) Never re-block with a byte-identical reason.  If the gate is
+    # about to emit the same note it emitted on the previous attempt for
+    # this ticket, the automated resume -> re-block loop is not making
+    # progress — escalate for human routing instead.
+    return _record_or_escalate(candidate, ctx, ticket, ws)
 
 
 _PROVENANCE_KEYS = ("kind", "source", "origin", "origin_session")
@@ -430,7 +665,7 @@ def run_preflight_checks(
     #      implement agent cannot produce a diff here.  Block
     #      immediately instead of burning a full trace cycle.
     if spec and ctx.repo_config is not None:
-        block_note = _detect_external_scope(spec, ctx)
+        block_note = _detect_external_scope(spec, ctx, ws, ticket)
         if block_note is not None:
             return Outcome(State.BLOCKED, block_note)
 
