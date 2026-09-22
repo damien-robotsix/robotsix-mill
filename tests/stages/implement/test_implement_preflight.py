@@ -2368,3 +2368,240 @@ def test_external_scope_gate_still_blocks_external_owned_path_with_local_dir_pre
     assert out.next_state is State.BLOCKED
     assert "external scope gate" in out.note
     assert "robotsix-github-workflows" in out.note
+
+
+def test_external_scope_gate_passes_when_scope_path_exists_in_workspace(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """3e08 regression: a spec whose Scope names an in-workspace file
+    path must PASS even when its Acceptance mentions external repo names
+    only inside branch names and pull-request references.
+
+    An in-workspace file path is the strongest evidence the gate has —
+    it is decisive regardless of which repository names also appear as
+    fixture data in the text."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Supersede stale own pin-bump PRs",
+        body=(
+            "## Problem\n\n"
+            "The pin-bump runner leaves its own stale PRs holding the "
+            "three-slot in-flight cap.\n\n"
+            "## Scope\n\n"
+            "Single file in THIS workspace: "
+            "`agents/runners/pin_bump_runner.py`.\n\n"
+            "## Acceptance criteria\n\n"
+            "- A fake-forge regression test uses branch names of the form "
+            "`mill/pin-bump/robotsix-llmio` and pull requests such as "
+            "`robotsix-llmio#57` of consumer repositories as fixture data.\n"
+        ),
+    )
+
+    # The scope path exists in this workspace (under the src package),
+    # named by its package-relative form.
+    ws = ctx.service.workspace(t)
+    target = (
+        Path(ws.repo_dir)
+        / "src"
+        / "robotsix_mill"
+        / "agents"
+        / "runners"
+        / "pin_bump_runner.py"
+    )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("# stub\n", encoding="utf-8")
+
+    registry = _make_repos_registry("test-repo", "robotsix-llmio")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    # In-workspace file path is decisive — must not be blocked as
+    # external-only.
+    if out is not None:
+        assert "external scope gate" not in (out.note or "")
+
+
+def test_external_scope_gate_passes_when_external_repo_only_in_branch_and_pr(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A repo name that appears only inside a git branch name or a
+    pull-request reference is DATA, not the location of the change — the
+    gate must not treat it as external scope (no in-workspace path
+    needed to prove the point)."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Supersede stale own pin-bump PRs",
+        body=(
+            "## Problem\n\nStale PRs saturate the in-flight cap.\n\n"
+            "## Scope\n\n"
+            "- Supersede the runner's own stale pin-bump pull requests.\n\n"
+            "## Acceptance criteria\n\n"
+            "- A fake-forge test drives branch names of the form "
+            "`mill/pin-bump/robotsix-llmio` and pull request "
+            "`robotsix-llmio#57` as fixtures.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix-llmio")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    if out is not None:
+        assert "external scope gate" not in (out.note or "")
+
+
+def test_external_scope_gate_still_blocks_nonexistent_external_paths(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """No regression in the gate's real purpose: a spec naming only paths
+    that do NOT exist in this workspace (all owned by an external repo)
+    must still BLOCK."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Fix llmio module",
+        body=(
+            "## Problem\n\nBug in llmio.\n\n"
+            "## Scope\n\n- Add `src/robotsix_llmio/newmod.py`\n\n"
+            "## Acceptance criteria\n\n"
+            "- robotsix_llmio exposes the new module.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix_llmio")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "external scope gate" in out.note
+    assert "robotsix_llmio" in out.note
+
+
+def test_external_scope_gate_honours_in_workspace_override_once(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """An operator resume note that explicitly asserts in-workspace scope
+    suppresses the gate for exactly one attempt; a further attempt with
+    the same note re-blocks."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Fix llmio bug",
+        body=(
+            "## Problem\n\nThere is a bug in robotsix_llmio.\n\n"
+            "## Scope\n\n- Modify `src/robotsix_llmio/claude_sdk/pipeline.py`\n\n"
+            "## Acceptance criteria\n\n"
+            "- The fix in robotsix_llmio should resolve the crash.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix_llmio")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    # No override yet — the gate blocks as external-only.
+    out = ImplementStage().preflight(t, ctx)
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "external scope gate" in out.note
+
+    # Operator resumes with an explicit in-workspace override note.
+    ctx.service.add_comment(
+        t.id,
+        "Override: the target file is in-workspace, implement here.",
+        author="operator",
+    )
+    out2 = ImplementStage().preflight(t, ctx)
+    if out2 is not None:
+        assert "external scope gate" not in (out2.note or "")
+
+    # The override is consumed once — a further attempt with the same
+    # note no longer suppresses the gate.
+    out3 = ImplementStage().preflight(t, ctx)
+    assert out3 is not None
+    assert out3.next_state is State.BLOCKED
+    assert "external scope gate" in out3.note
+
+
+def test_external_scope_gate_escalates_on_identical_reblock(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A second identical external-scope block for the same ticket must
+    escalate for human routing instead of re-blocking byte-identically."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Fix llmio bug",
+        body=(
+            "## Problem\n\nThere is a bug in robotsix_llmio.\n\n"
+            "## Scope\n\n- Modify `src/robotsix_llmio/claude_sdk/pipeline.py`\n\n"
+            "## Acceptance criteria\n\n"
+            "- The fix in robotsix_llmio should resolve the crash.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix_llmio")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    first = ImplementStage().preflight(t, ctx)
+    assert first is not None
+    assert first.next_state is State.BLOCKED
+    assert "external scope gate" in first.note
+    assert "ESCALATION" not in first.note
+
+    second = ImplementStage().preflight(t, ctx)
+    assert second is not None
+    assert second.next_state is State.BLOCKED
+    # Not a byte-identical re-block — escalated for human routing.
+    assert second.note != first.note
+    assert "ESCALATION" in second.note
