@@ -2368,3 +2368,150 @@ def test_external_scope_gate_still_blocks_external_owned_path_with_local_dir_pre
     assert out.next_state is State.BLOCKED
     assert "external scope gate" in out.note
     assert "robotsix-github-workflows" in out.note
+
+
+def test_external_scope_gate_passes_when_local_path_is_outside_actionable_sections(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A spec that names the file it changes in ``## Problem`` / ``## Fix``
+    and keeps Acceptance as prose must not be misrouted as external-only.
+
+    Live case: robotsix-mill ticket ``...-3e08`` (pin_bump runner supersedes
+    its own stale PRs).  Its Problem section names
+    ``agents/runners/pin_bump_runner.py`` — unambiguously in this workspace —
+    while its Acceptance section mentions ``robotsix-llmio`` only inside the
+    BRANCH NAME ``mill/pin-bump/robotsix-llmio``.  Scanning only the
+    actionable sections for the local-path signal left the branch-name token
+    as the sole evidence, so the gate blocked the ticket on 2026-09-08,
+    2026-09-09 and again on 2026-09-22 with a byte-identical note — a
+    deterministic resume -> re-block loop that kept the fix unimplementable
+    for 14 days."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="pin_bump runner: supersede stale own PRs",
+        body=(
+            "## Problem\n\n"
+            "`agents/runners/pin_bump_runner.py` opens one "
+            "`mill/pin-bump/<dep>` PR per dependency and never supersedes "
+            "its own stale ones.\n\n"
+            "## Fix\n\n"
+            "- Close the stale PR and open a fresh bump.\n\n"
+            "## Acceptance\n\n"
+            "- One runner pass closes them and opens fresh "
+            "`mill/pin-bump/robotsix-llmio` targeting the current SHAs.\n"
+            "- A stale own PR never blocks a newer bump of the same "
+            "dependency.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix-llmio")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    if out is not None:
+        assert "external scope gate" not in (out.note or "")
+
+
+def test_external_scope_gate_passes_when_external_repo_is_only_an_example(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """An external repo named as an illustrative example in Acceptance must
+    not outweigh a local file path named elsewhere in the spec.
+
+    Live case: robotsix-github-workflows ticket ``...-9073``.  The change
+    targets ``scripts/render_harden_dockerfile.py`` in this workspace; the
+    Acceptance section names ``robotsix-file-hub`` only as "a real publish of
+    a non-root component (e.g. robotsix-file-hub) still succeeds"."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Harden layer must not publish a root image",
+        body=(
+            "## Context\n\n"
+            "`scripts/render_harden_dockerfile.py::extract_user` returns "
+            "an empty string on every unrecognised input.\n\n"
+            "## The defect\n\n"
+            "The published image then inherits `USER root`.\n\n"
+            "## Acceptance criteria\n\n"
+            "- A malformed config fails the render instead of yielding a "
+            "rootful Dockerfile.\n"
+            "- A real publish of a non-root component (e.g. "
+            "robotsix-file-hub, `USER app`) still succeeds.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix-file-hub")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    if out is not None:
+        assert "external scope gate" not in (out.note or "")
+
+
+def test_external_scope_gate_still_blocks_when_spec_names_no_local_path(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Negative control for the whole-spec local-path scan.
+
+    Widening the local-path scan from the actionable sections to the whole
+    spec must not defeat the gate's real purpose.  A spec that names an
+    external repo and no in-workspace file path ANYWHERE is still
+    external-only and must block.
+
+    Live case: robotsix-mill ticket ``...-89fc`` — filed on the mill board
+    but asking for a change to a robotsix-chat periodic prompt.  It names no
+    mill file, and the gate is correct to re-route it."""
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+    )
+    t = _ticket(
+        ctx,
+        title="Prompt: surface critical findings immediately",
+        body=(
+            "## Problem\n\n"
+            "A periodic mill-drain session deferred a critical finding to "
+            "an end-of-session summary that was lost to a restart.\n\n"
+            "## Scope\n\n"
+            "Update the robotsix-chat mill-drain periodic prompt so "
+            "critical findings are surfaced when discovered.\n\n"
+            "## Acceptance criteria\n\n"
+            "- The robotsix-chat prompt requires immediate surfacing.\n"
+        ),
+    )
+
+    registry = _make_repos_registry("test-repo", "robotsix-chat")
+    monkeypatch.setattr(
+        "robotsix_mill.config.repos.get_repos_config",
+        lambda: registry,
+    )
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.BLOCKED
+    assert "external scope gate" in (out.note or "")
