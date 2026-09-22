@@ -595,6 +595,28 @@ class PollLoopsMixin(_WorkerBase):
                 )
             except Exception:
                 log.exception("upstream-ci-recovery poll failed")
+
+            # Same mechanism, account-scoped: escalate ONCE fleet-wide and
+            # auto-resume tickets parked on the GitHub account/billing block.
+            try:
+                from ...agents.runners.infra_account_block_runner import (
+                    run_infra_account_block_recovery,
+                )
+
+                ab_result = await asyncio.to_thread(
+                    run_infra_account_block_recovery,
+                    settings,
+                )
+                log.info(
+                    "infra-account-block: pass complete — escalated=%d "
+                    "resumed=%d still_parked=%d skipped=%d",
+                    ab_result.get("escalated", 0),
+                    ab_result.get("resumed", 0),
+                    ab_result.get("still_parked", 0),
+                    ab_result.get("skipped", 0),
+                )
+            except Exception:
+                log.exception("infra-account-block poll failed")
             await asyncio.sleep(interval)
 
     async def _blocked_auto_resume_poll_loop(self) -> None:
@@ -911,6 +933,41 @@ class PollLoopsMixin(_WorkerBase):
 
         return logs, fetch_error, False, False
 
+    def _is_account_blocked_run(
+        self,
+        forge: Forge,
+        run: dict[str, Any],
+        repo_label: str,
+        wf_name: str,
+    ) -> bool:
+        """True when *run* was refused by GitHub's account/billing block.
+
+        Reads the run's aggregate check conclusion (whose failing checks
+        carry the annotations) and matches the billing / spending-limit
+        signature. Best-effort: any lookup error means "not blocked", so a
+        transient API hiccup never suppresses a genuine failure ticket.
+        """
+        from ...stages.ci_infra_block import INFRA_ACCOUNT_BLOCKED, classify_ci_run
+
+        sha = run.get("head_sha", "")
+        if not sha:
+            return False
+        try:
+            conclusion = forge.commit_ci_conclusion(sha=sha)
+        except Exception:
+            return False
+        if not conclusion or classify_ci_run(conclusion) != INFRA_ACCOUNT_BLOCKED:
+            return False
+        log.info(
+            "CI monitor (%s): %s @ %s refused by GitHub (account/billing "
+            "block) — suppressing per-repo ticket (covered by the "
+            "fleet-wide escalation)",
+            repo_label,
+            wf_name,
+            sha[:8] if isinstance(sha, str) else sha,
+        )
+        return True
+
     # ------------------------------------------------------------------
     # _poll_one_repo_ci — coordinator
     # ------------------------------------------------------------------
@@ -980,6 +1037,18 @@ class PollLoopsMixin(_WorkerBase):
             # for the exact same failing commit.
             key = f"{wf}:{run.get('head_sha')}"
             if key in seen:
+                continue
+
+            # Account-block suppression: when GitHub refused to START the
+            # hosted job (billing / spending-limit — empty steps, single
+            # billing annotation), do NOT file a per-repo ticket. It would
+            # duplicate the single fleet-wide escalation the account-block
+            # recovery pass raises, and it is not a code defect. Mark the
+            # commit seen so we don't re-check every cycle.
+            if not startup_failure and self._is_account_blocked_run(
+                forge, run, repo_label, wf_name
+            ):
+                seen[key] = now
                 continue
 
             # 3. Canonical-ticket consolidation.

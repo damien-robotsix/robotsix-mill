@@ -1677,6 +1677,13 @@
           "title": "Implement Zero Diff Abort Threshold",
           "type": "integer"
         },
+        "infra_account_block_reescalate_seconds": {
+          "default": 86400,
+          "description": "Minimum seconds between fleet-wide operator escalations for the GitHub account/billing CI block while it remains unresolved.",
+          "minimum": 0,
+          "title": "Infra Account Block Reescalate Seconds",
+          "type": "integer"
+        },
         "ingest_blocked_source_tags": {
           "default": [
             "caretaker",

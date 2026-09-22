@@ -1611,3 +1611,59 @@ def test_is_network_down_error_called_from_monitor(tmp_path, monkeypatch):
     # is_network_down_error was called and returned True.
     assert len(calls) >= 1
     assert calls[0] is True
+
+
+def test_account_block_run_is_suppressed_not_filed(tmp_path, monkeypatch):
+    """A GitHub account/billing block must NOT file a per-repo CI ticket.
+
+    The refused hosted run concludes ``failure`` with empty steps and a
+    single billing check-run annotation.  Filing a ticket would duplicate
+    the one fleet-wide escalation the account-block recovery pass raises,
+    so the monitor suppresses it and marks the commit seen.
+    """
+    ctx = _ctx(
+        tmp_path,
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    forge = _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 5,
+                "name": "CI",
+                "workflow_id": 300,
+                "head_sha": "def",
+                "conclusion": "failure",
+                "html_url": "http://run/5",
+                "created_at": "2026-09-18T20:00:00Z",
+            },
+        ],
+        logs="",
+    )
+    billing = (
+        "The job was not started because recent account payments have "
+        "failed or your spending limit needs to be increased."
+    )
+    forge.commit_ci_conclusion = lambda *, sha: {
+        "conclusion": "failure",
+        "failing": [{"name": "CI", "annotations": [{"message": billing}]}],
+        "pending": [],
+    }
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    _run_one_cycle(worker, monkeypatch)
+
+    # No CI ticket filed — covered by the single fleet-wide escalation.
+    assert [t for t in ctx.service.list() if t.source == "ci"] == []
+    # Commit marked seen so the monitor does not re-check it every cycle.
+    state = json.loads(state_path.read_text("utf-8"))
+    assert "300:def" in state["seen"]
