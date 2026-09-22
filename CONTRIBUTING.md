@@ -419,8 +419,16 @@ when `format=sarif` (unless `limit-severities-for-sarif=true`).
 Combining them into one step would silently scan **all** severities and
 fail on HIGH/MEDIUM, defeating the CRITICAL-only gate.
 
-Renovate (weekly, `renovate.json`) keeps pip, Docker, GitHub Actions, and
-pre-commit dependencies current as PRs, auto-merging patch/minor/digest
-updates via GitHub's platform auto-merge once CI is green. Dependabot
-(`.github/dependabot.yml`) only submits the dependency graph
-(`open-pull-requests-limit: 0`; it opens no version-update PRs).
+**Dependabot is the active dependency updater** (`.github/dependabot.yml`):
+its `github-actions` ecosystem opens version-update PRs whenever a pinned
+action or reusable-workflow ref moves (recent merged examples:
+astral-sh/setup-uv, hadolint, the codeql-action group), while its `uv` and
+`docker` ecosystems only submit the dependency graph
+(`open-pull-requests-limit: 0`; they open no version-update PRs).
+`renovate.json` is **dormant**, not the active updater: the Renovate bot is
+not installed on this repo, so there are no Renovate-authored PRs and no
+Dependency Dashboard issue. Patch/minor/digest updates are auto-merged
+**only** for `dependabot[bot]` PRs, by
+`.github/workflows/dependabot-auto-merge.yml`, which delegates to the shared
+`robotsix-github-workflows/dependabot-auto-merge.yml@e33f19f` once CI is
+green.
