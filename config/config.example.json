@@ -402,6 +402,7 @@
         "triage_boilerplate_interval_seconds": 604800,
         "triage_request_limit": 8,
         "upstream_ci_recovery_interval_seconds": 600,
+        "infra_account_block_reescalate_seconds": 86400,
         "blocked_auto_resume_interval_seconds": 600,
         "blocked_auto_resume_cooldown_seconds": 1800,
         "blocked_auto_resume_max_per_ticket": 1,

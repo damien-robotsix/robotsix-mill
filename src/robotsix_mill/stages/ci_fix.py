@@ -72,6 +72,11 @@ from .ci_fix_helpers import (
     _write_counter,
     _write_text,
 )
+from .ci_infra_block import (
+    INFRA_ACCOUNT_BLOCKED,
+    classify_ci_run,
+    infra_account_block_note,
+)
 
 log = logging.getLogger("robotsix_mill.stages.ci_fix")
 
@@ -342,6 +347,24 @@ class CIFixStage(Stage):
         )
         if upstream_block is not None:
             return Outcome(State.BLOCKED, upstream_block)
+
+        # --- Infra account-block gate (before spending any attempt) ---
+        # When GitHub refuses to START hosted jobs (failed payment /
+        # spending-limit cap), the run concludes ``failure`` with empty
+        # ``steps`` and a single billing check-run annotation. No code edit
+        # can fix that, and every re-run is refused the same way — running
+        # the ci_fix agent burns an implement-class session on an unfixable
+        # condition (the 4-day, 15-ticket outage of 2026-09-18). Detect the
+        # signature from the failing checks' annotations and park the ticket
+        # immediately; the account-block recovery pass raises a single
+        # fleet-wide escalation and auto-resumes once hosted CI works again.
+        if classify_ci_run({"failing": failing}) == INFRA_ACCOUNT_BLOCKED:
+            log.warning(
+                "%s: CI refused by GitHub (account/billing block) — parking "
+                "BLOCKED without running ci_fix",
+                ticket.id,
+            )
+            return Outcome(State.BLOCKED, infra_account_block_note())
 
         # --- Early guard: CodeQL failing but alerts unreadable (403) ---
         # When CodeQL is among the failing checks and the alerts API

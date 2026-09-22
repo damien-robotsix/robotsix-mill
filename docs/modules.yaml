@@ -303,6 +303,7 @@ modules:
       - src/robotsix_mill/stages/ci_fix_analysis.py
       - src/robotsix_mill/stages/ci_fix_helpers.py
       - src/robotsix_mill/stages/ci_fix_codeql.py
+      - src/robotsix_mill/stages/ci_infra_block.py
       - src/robotsix_mill/stages/ci_transient.py
       - src/robotsix_mill/stages/pause.py
       - src/robotsix_mill/stages/retrospect.py
@@ -354,6 +355,7 @@ modules:
       - tests/stages/test_ci_fix.py
       - tests/stages/test_ci_fix_out_of_scope.py
       - tests/stages/test_ci_fix_helpers.py
+      - tests/stages/test_ci_infra_block.py
       - tests/stages/test_ci_transient.py
       - tests/stages/test_stage_cache.py
       - tests/stages/merge/test_ci_poll.py

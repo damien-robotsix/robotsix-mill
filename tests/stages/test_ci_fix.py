@@ -3927,3 +3927,57 @@ def test_total_attempt_cap_disabled(tmp_path):
     summary = "## ❌ FAILED: ci / tests\n"
     for _ in range(5):
         assert stage._check_total_attempt_cap(t, ctx, summary) is None
+
+
+def test_infra_account_block_parks_without_running_agent(tmp_path, monkeypatch):
+    """GitHub account/billing block → BLOCKED with the marker, no agent run.
+
+    The failing run's checks carry the billing annotation; the gate must
+    park the ticket immediately and never reach ``_run_agent_and_finalize``
+    (the whole cost saving — no implement-class session on an unfixable
+    condition).
+    """
+    from robotsix_mill.stages.ci_fix_helpers import _FailingContext
+    from robotsix_mill.stages.ci_infra_block import INFRA_ACCOUNT_BLOCK_MARKER
+
+    ctx = _gh(tmp_path)
+    t = _fixing_ci(ctx)
+    stage = CIFixStage()
+
+    billing = (
+        "The job was not started because recent account payments have "
+        "failed or your spending limit needs to be increased."
+    )
+    fctx = _FailingContext(
+        repo_dir=str(tmp_path),
+        branch=t.branch,
+        failing_summary="CI\n" + billing,
+        failing=[
+            {
+                "name": "CI",
+                "summary": None,
+                "text": None,
+                "annotations": [{"message": billing, "level": "failure"}],
+            }
+        ],
+    )
+    monkeypatch.setattr(stage, "_resolve_clone_and_status", lambda ticket, c: fctx)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix._emit_ci_failure_event",
+        lambda *a, **k: None,
+    )
+    # Target branch is green (upstream check returns None) so we reach the gate.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix._check_upstream_ci_breakage",
+        lambda *a, **k: None,
+    )
+
+    def _boom(*a, **k):
+        raise AssertionError("ci_fix agent must NOT run for an account block")
+
+    monkeypatch.setattr(stage, "_run_agent_and_finalize", _boom)
+
+    out = stage.run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert INFRA_ACCOUNT_BLOCK_MARKER in (out.note or "")

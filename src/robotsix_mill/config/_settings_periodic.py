@@ -79,6 +79,18 @@ class _PeriodicSettings(BaseModel):
         description="Seconds between upstream-CI recovery passes (auto-resume tickets parked on a red target branch once it is green). 0 = disabled.",
     )
 
+    # --- infra account-block escalation ---
+    # The account-block recovery pass (piggy-backed on the upstream-CI
+    # recovery loop) raises ONE fleet-wide operator escalation while any
+    # ticket is parked on the GitHub account/billing block, then re-escalates
+    # only after this many seconds if the condition is still unresolved.
+    # Default 86400 = once per day.
+    infra_account_block_reescalate_seconds: int = Field(
+        default=86400,
+        ge=0,
+        description="Minimum seconds between fleet-wide operator escalations for the GitHub account/billing CI block while it remains unresolved.",
+    )
+
     # --- blocked auto-resume (deterministic, no LLM) ---
     # Retries BLOCKED tickets whose latest block note matches one of the
     # resumable patterns, once per ticket after a cooldown. Live (7d to
