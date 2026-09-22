@@ -499,7 +499,18 @@ def _detect_external_scope(
     # shared-workflow pin bump referencing ``robotsix-github-workflows``.
     # Such a local file-path reference proves the work targets this
     # workspace; don't misroute it as external-only.
-    if _references_local_path(actionable, external_ids):
+    #
+    # Scan the WHOLE spec, not just the actionable sections.  Restricting
+    # the scan to Scope/Acceptance is right for detecting external repo
+    # MENTIONS (a Problem section may name another repo as mere context),
+    # but it is wrong for the local-targeting signal: specs routinely put
+    # the file they change in ``## Problem`` / ``## Fix`` / ``## Context``
+    # and keep Acceptance as prose.  Excluding those sections left a repo
+    # id occurring only in a branch name or an illustrative aside as the
+    # sole signal, which blocked in-workspace tickets in a resume ->
+    # re-block loop.  A path that names a file in THIS workspace is
+    # decisive wherever it appears.
+    if _references_local_path(spec, external_ids):
         return None
 
     # Every referenced repo is external — the implement agent cannot
