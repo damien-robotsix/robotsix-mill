@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.7](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.6...v0.15.7) (2026-09-25)
+
+
+### Bug Fixes
+
+* ci_fix out-of-scope spawner can create a mutual dependency deadlock, and never rebases a behind-main branch before declaring it red (20260922T091737Z-ci-fix-out-of-scope-spawner-can-create-a-a78c) ([#3312](https://github.com/damien-robotsix/robotsix-mill/issues/3312)) ([b04382b](https://github.com/damien-robotsix/robotsix-mill/commit/b04382b90dd77047ee89c3156f2a88f281ff1ae3))
+
 ## [0.15.6](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.5...v0.15.6) (2026-09-19)
 
 
