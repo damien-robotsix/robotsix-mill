@@ -487,3 +487,76 @@ def test_unblocks_merge_skips_self_reference() -> None:
     _tid, targets = service.unblocks_calls[0]
     assert "fix-shared" not in targets
     assert targets == ["parked-1", "parked-2"]
+
+
+# ---------------------------------------------------------------------------
+# Cycle refusal — never wire a mutual-dependency deadlock
+# ---------------------------------------------------------------------------
+
+
+def test_reused_fix_creating_cycle_is_refused() -> None:
+    """When the deduped fix ticket already reaches the parking ticket via
+    the unblocks graph, parking would form a cycle (both BLOCKED forever).
+    The park is refused: no depends_on/unblocks edges are written and the
+    outcome escalates for manual resolution."""
+    # The parking ticket ("orig-6f1a") already unblocks the reused fix
+    # ("fix-2b23") — modelled via the fake's constant unblocks payload.
+    existing = SimpleNamespace(
+        id="fix-2b23",
+        title="dup title",
+        state=State.READY,
+        labels=json.dumps(["ci_fp:zizmor"]),
+    )
+    service = FakeService(
+        recent_tickets_data=[existing],
+        existing_unblocks=["fix-2b23"],
+    )
+
+    ticket = SimpleNamespace(id="orig-6f1a")
+    outcome = spawn_dependency_fix(
+        ticket,
+        _ctx(service),
+        title="fix zizmor",
+        description="d",
+        source_kind=SourceKind.CI_FIX_DEPENDENCY,
+        block_reason_prefix="out of scope",
+        dedup_labels=["ci_fp:zizmor"],
+    )
+
+    # No new ticket created (reused via label dedup) and, crucially, no
+    # dependency edges wired in either direction.
+    assert service.create_calls == []
+    assert service.depends_on_calls == []
+    assert service.unblocks_calls == []
+
+    # Escalated, not silently parked.
+    assert outcome.next_state is State.BLOCKED
+    assert "cycle" in (outcome.note or "").lower()
+    assert "fix-2b23" in (outcome.note or "")
+    assert any(
+        "cycle" in note and tid == "orig-6f1a" for tid, note in service.history_notes
+    )
+
+
+def test_dedup_never_matches_the_parking_ticket_itself() -> None:
+    """A ticket carrying its own fingerprint label must not dedup to
+    itself (which would raise a self-dependency error). It is excluded, so
+    a fresh fix ticket is created and wired normally."""
+    self_cand = SimpleNamespace(
+        id="orig-1",
+        title="fix the thing",
+        state=State.READY,
+        labels=json.dumps(["ci_fp:self"]),
+    )
+    service = FakeService(
+        recent_tickets_data=[self_cand],
+        created_id="fix-new",
+    )
+
+    outcome = _spawn(service, dedup_labels=["ci_fp:self"])
+
+    # Self-match excluded → fresh create + normal wiring.
+    assert len(service.create_calls) == 1
+    assert service.depends_on_calls == [("orig-1", ["fix-new"])]
+    assert service.unblocks_calls == [("fix-new", ["orig-1"])]
+    assert outcome.next_state is State.BLOCKED
