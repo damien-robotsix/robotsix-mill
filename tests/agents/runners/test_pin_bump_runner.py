@@ -704,6 +704,78 @@ class TestActuator:
         mock_forge.open_merge_request.assert_not_called()
         assert "already open" in caplog.text
 
+    def test_pr_lookup_5xx_skipped(self, tmp_path, caplog):
+        """A persistent 5xx on the PR lookup skips the pin (no crash)."""
+        import logging
+
+        import httpx
+
+        from robotsix_mill.agents.runners.pin_bump_runner import (
+            run_pin_bump_pr_actuator,
+        )
+        from robotsix_mill.config.repos import load_repos_config
+        from robotsix_mill.deps.internal_graph import (
+            GitPin,
+            InternalDepGraph,
+        )
+
+        repos_yaml_path = tmp_path / "repos.yaml"
+        repos_yaml_path.write_text(_repos_yaml_str("a", "b"))
+        registry = load_repos_config(str(repos_yaml_path))
+
+        graph = InternalDepGraph(
+            pins={
+                "a": {
+                    "b": GitPin(
+                        git_url=f"https://{INTERNAL_GIT_HOST}b",
+                        rev="old_sha",
+                    )
+                },
+                "b": {},
+            },
+            topo_order=["b", "a"],
+        )
+
+        mock_forge = MagicMock()
+        # The PR lookup 500s persistently (e.g. a PR stuck in a bad state).
+        request = httpx.Request("GET", "https://api.github.com/repos/x/y/pulls/94")
+        response = httpx.Response(500, request=request)
+        mock_forge.pr_status.side_effect = httpx.HTTPStatusError(
+            "Server error '500 Internal Server Error'",
+            request=request,
+            response=response,
+        )
+
+        import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
+
+        with (
+            patch.object(
+                runner_mod,
+                "Settings",
+                return_value=MagicMock(pin_bump_interval_seconds=86400),
+            ),
+            patch.object(runner_mod, "get_repos_config", return_value=registry),
+            patch.object(runner_mod, "github_token", return_value="fake-token"),
+            patch.object(runner_mod, "github_push_token", return_value="fake-token"),
+            patch.object(runner_mod, "target_branch_for", return_value="main"),
+            patch.object(runner_mod, "get_forge", return_value=mock_forge),
+            patch.object(runner_mod.git_ops, "ls_remote_sha", return_value="new_sha"),
+            patch.object(runner_mod.git_ops, "clone") as mock_clone,
+            caplog.at_level(
+                logging.INFO, logger="robotsix_mill.agents.runners.pin_bump_runner"
+            ),
+        ):
+            # Must not raise — the pass swallows the 5xx and skips the pin.
+            run_pin_bump_pr_actuator(
+                session_id="s1",
+                repo_config=registry.repos["a"],
+                graph=graph,
+            )
+
+        mock_clone.assert_not_called()
+        mock_forge.open_merge_request.assert_not_called()
+        assert "PR lookup failed" in caplog.text
+
     def test_inflight_cap_skipped(self, tmp_path, caplog):
         """When in-flight pin-bump PRs reach max_inflight_prs, skip."""
         import logging
