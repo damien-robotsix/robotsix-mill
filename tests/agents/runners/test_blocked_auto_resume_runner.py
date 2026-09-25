@@ -78,6 +78,7 @@ def test_fresh_block_is_left_cooling(tmp_path):
         "cooling": 1,
         "budget_exhausted": 0,
         "not_matched": 0,
+        "cycles_escalated": 0,
     }
     assert service.get(t.id).state is State.BLOCKED
 
@@ -133,6 +134,109 @@ def test_matches_helper_is_case_insensitive_and_ignores_bad_patterns():
     assert bar._matches("Agent Error — Resumable: x", ["agent error — resumable"])
     assert not bar._matches("agent error — resumable: spec unchanged", ["— resumable"])
     assert bar._matches("stage timed out", ["([unclosed", "timed out"])
+
+
+def _cycle_marker_comments(service, ticket_id):
+    return [
+        c
+        for c in service.list_comments(ticket_id)
+        if (c.body or "").startswith(bar.CYCLE_MARKER)
+    ]
+
+
+def test_two_ticket_cycle_is_escalated_not_resumed(tmp_path):
+    """A ↔ B dependency deadlock: both members are escalated with a
+    cycle-marker comment and are NOT auto-resumed, even though their block
+    notes match a resumable pattern."""
+    settings, service = _prepare(tmp_path)
+    a = _blocked_ticket(service, "agent error — resumable: boom", "a")
+    b = _blocked_ticket(service, "agent error — resumable: boom", "b")
+    service.set_depends_on(a.id, [b.id])
+    service.set_depends_on(b.id, [a.id])
+
+    result = bar.run_blocked_auto_resume(settings, now=_LATER)
+
+    assert result["cycles_escalated"] == 2
+    assert result["resumed"] == 0
+    assert result["not_matched"] == 0
+    for t in (a, b):
+        assert service.get(t.id).state is State.BLOCKED
+        assert len(_cycle_marker_comments(service, t.id)) == 1
+
+
+def test_n_ticket_cycle_marks_every_member(tmp_path):
+    """A → B → C → A is found and all three members are escalated."""
+    settings, service = _prepare(tmp_path)
+    a = _blocked_ticket(service, "no matching reason", "a")
+    b = _blocked_ticket(service, "no matching reason", "b")
+    c = _blocked_ticket(service, "no matching reason", "c")
+    service.set_depends_on(a.id, [b.id])
+    service.set_depends_on(b.id, [c.id])
+    service.set_depends_on(c.id, [a.id])
+
+    result = bar.run_blocked_auto_resume(settings, now=_LATER)
+
+    assert result["cycles_escalated"] == 3
+    assert result["not_matched"] == 0
+    for t in (a, b, c):
+        assert len(_cycle_marker_comments(service, t.id)) == 1
+
+
+def test_edge_into_cycle_is_not_a_member(tmp_path):
+    """A ticket with several outgoing edges — one into a B ↔ C cycle, one to
+    an acyclic D — is not itself in the cycle and is not escalated."""
+    settings, service = _prepare(tmp_path)
+    x = _blocked_ticket(service, "no matching reason", "x")
+    b = _blocked_ticket(service, "no matching reason", "b")
+    c = _blocked_ticket(service, "no matching reason", "c")
+    d = _blocked_ticket(service, "no matching reason", "d")
+    service.set_depends_on(b.id, [c.id])
+    service.set_depends_on(c.id, [b.id])
+    service.set_depends_on(x.id, [b.id, d.id])
+
+    result = bar.run_blocked_auto_resume(settings, now=_LATER)
+
+    assert result["cycles_escalated"] == 2  # only b and c
+    for t in (b, c):
+        assert len(_cycle_marker_comments(service, t.id)) == 1
+    for t in (x, d):
+        assert _cycle_marker_comments(service, t.id) == []
+    # x and d are the only tickets left for the ordinary classification path.
+    assert result["not_matched"] == 2
+
+
+def test_repeated_runs_do_not_re_report_cycle(tmp_path):
+    """The CYCLE_MARKER comment is the idempotency key: a second pass over the
+    still-unbroken cycle escalates nothing."""
+    settings, service = _prepare(tmp_path)
+    a = _blocked_ticket(service, "no matching reason", "a")
+    b = _blocked_ticket(service, "no matching reason", "b")
+    service.set_depends_on(a.id, [b.id])
+    service.set_depends_on(b.id, [a.id])
+
+    first = bar.run_blocked_auto_resume(settings, now=_LATER)
+    second = bar.run_blocked_auto_resume(settings, now=_LATER)
+
+    assert first["cycles_escalated"] == 2
+    assert second["cycles_escalated"] == 0
+    for t in (a, b):
+        assert len(_cycle_marker_comments(service, t.id)) == 1
+
+
+def test_cycle_via_unblocks_edges_is_detected(tmp_path):
+    """The inverse edge a dependency park leaves (``unblocks``) also closes a
+    cycle: A unblocks B and B unblocks A is a 2-cycle."""
+    settings, service = _prepare(tmp_path)
+    a = _blocked_ticket(service, "no matching reason", "a")
+    b = _blocked_ticket(service, "no matching reason", "b")
+    service.set_unblocks(a.id, [b.id])
+    service.set_unblocks(b.id, [a.id])
+
+    result = bar.run_blocked_auto_resume(settings, now=_LATER)
+
+    assert result["cycles_escalated"] == 2
+    for t in (a, b):
+        assert len(_cycle_marker_comments(service, t.id)) == 1
 
 
 def test_default_patterns_cover_scope_triage_agent_error():
