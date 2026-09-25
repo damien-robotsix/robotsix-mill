@@ -132,6 +132,50 @@ When a ticket fails or behaves unexpectedly, follow this workflow:
    uv run pytest tests/ -xvs  # reproduce test failure
    ```
 
+#### Workspace Preservation
+
+By default, workspaces are deleted when a ticket reaches a terminal state (closed, merged, or abandoned). In some cases — post-mortem investigation, compliance audit, or debugging a stale issue — you may want to preserve the workspace.
+
+**Preserve a workspace:**
+```bash
+# Disable automatic cleanup for new tickets
+export MILL_PRUNE_CLONE_ON_CLOSE=false
+
+# Or in config.json:
+# "prune_clone_on_close": false
+
+# Restart the worker to pick up the change
+systemctl restart robotsix-mill
+```
+
+**When to preserve:**
+- Post-mortem investigation: analyze what failed after the fact
+- Compliance/audit: retain evidence of changes and test coverage
+- Stale debugging: reproduce intermittent failures days or weeks later
+
+**Monitor disk space:**
+```bash
+# Check workspace directory size
+du -sh ~/.mill/workspaces/
+
+# List workspaces by age
+ls -lht ~/.mill/workspaces/ | head -20
+
+# Clean up specific old workspaces if disk is constrained
+rm -rf ~/.mill/workspaces/<old-ticket-id>
+```
+
+**Auto-cleanup after investigation:**
+```bash
+# Re-enable cleanup for future tickets
+unset MILL_PRUNE_CLONE_ON_CLOSE
+
+# Or in config.json: "prune_clone_on_close": true
+
+# Restart the worker
+systemctl restart robotsix-mill
+```
+
 ### Step 5: Validate Configuration
 
 1. Check that the mill is correctly configured:
@@ -195,25 +239,63 @@ When a ticket fails or behaves unexpectedly, follow this workflow:
 - `error": "OOM killer", "oom": true` in logs
 - Agent stops mid-execution with no final message
 - Trace ends abruptly with no tool response
+- Worker process dies without logging a graceful shutdown
 
 **Diagnosis:**
-1. Check system memory:
+1. Check the heartbeat.json diagnostic file (persists OOM clues):
    ```bash
-   free -h
-   ```
-2. Check sandbox resource limits (if containerized):
-   ```bash
-   # Docker
-   docker stats <container-id>
+   # On startup after an abrupt process death, the mill logs OOM suspicion:
+   grep "died abruptly\|suspected OOM kill" ~/.mill/logs/*.log
    
-   # Kubernetes
-   kubectl top pod <pod-name>
+   # Read the heartbeat file in the data dir
+   cat ~/.mill/heartbeat.json
+   # Expected output on OOM: {"process_id": ..., "timestamp": "...", "was_abrupt": true}
+   
+   # Check for graceful shutdown logs (OOM typically skips these):
+   grep -i "graceful\|shutdown\|signal" ~/.mill/logs/*.log | tail -5
    ```
-3. Review what the agent was doing when it OOM'd — check Langfuse traces for the last tool call
+
+2. Check cgroup OOM kill counter (if containerized):
+   ```bash
+   # Docker container — shows if OomKilled is true
+   docker inspect <container-id> | grep -A 5 '"OomKilled"'
+   
+   # Kubernetes pod — look for OOMKilled state
+   kubectl describe pod <pod-name> | grep -A 5 "Last State"
+   kubectl get pod <pod-name> -o jsonpath='{.status.containerStatuses[*].lastState}'
+   
+   # Linux cgroup (direct access) — memory.oom_control counts OOM kills
+   cat /sys/fs/cgroup/memory.oom_control
+   cat /sys/fs/cgroup/memory/memory.oom_control  # cgroup v2
+   cat /proc/<pid>/cgroup | grep memory
+   ```
+
+3. Check system memory and pressure at time of failure:
+   ```bash
+   # Current memory state
+   free -h
+   
+   # Historical memory pressure (if available)
+   cat /proc/pressure/memory  # Linux PSI metrics
+   dmesg | grep -i "oom\|out of memory" | tail -10
+   ```
+
+4. Review what the agent was doing when it OOM'd:
+   ```bash
+   # Check Langfuse traces for the last tool call
+   # Look for: large context window agent call, file read on multi-GB codebase, or subprocess memory spike
+   ```
 
 **Recovery:**
 1. **Increase available memory** — resize the container or node
-2. **Reduce scope** — split the ticket into smaller pieces
+   ```bash
+   # Docker: update memory limit
+   docker update --memory 8g <container-id>
+   
+   # Kubernetes: edit pod spec
+   kubectl set resources pod <pod-name> --limits=memory=8Gi
+   ```
+2. **Reduce scope** — split the ticket into smaller pieces (especially for implement passes with large context windows)
 3. **Optimize the agent** — if a tool call uses excessive memory (e.g., loading entire repo into memory), optimize that tool
 4. **Restart the worker** — OOM can leave the process in a bad state:
    ```bash
@@ -223,6 +305,7 @@ When a ticket fails or behaves unexpectedly, follow this workflow:
    # Systemd
    systemctl restart robotsix-mill
    ```
+5. **Clear stale workspaces** — if disk is full and blocking the process, clean up old workspace clones (see "Workspace Preservation" section below)
 
 ---
 
@@ -342,7 +425,90 @@ When a ticket fails or behaves unexpectedly, follow this workflow:
 
 ---
 
-### Failure 6: Observability Infrastructure Failure
+### Failure 6: Merge-Poll Failures
+
+The mill's merge stage enters a polling loop to check whether a PR is ready to merge. Three ceilings prevent infinite polling when the PR is stuck in a merge-blocking state:
+
+**Symptom 1: Green Unpromotable (CI passes but forge refuses merge)**
+- `ticket → IMPLEMENT_COMPLETE → HUMAN_MR_APPROVAL → ... polling ...`
+- Logs show: `"green_unpromotable_poll_count"` reaching default limit (10 polls)
+- **Cause:** All CI checks report green, but GitHub branch protection requires a status context that no workflow produces
+- **Diagnosis:**
+  ```bash
+  # Check branch protection rules
+  gh api repos/<owner>/<repo>/branches/<branch>/protection
+  
+  # Look for required_status_checks that don't match any workflow
+  grep -r "required_status_checks" .github/workflows/
+  ```
+- **Recovery:**
+  1. Fix the branch protection rule to remove the missing context, or
+  2. Add the missing workflow context check, or
+  3. Increase `MILL_GREEN_UNPROMOTABLE_MAX_POLLS` (default 10) if temporary
+  4. Manually approve and merge via GitHub UI if only human oversight is needed
+
+**Symptom 2: Empty Rollup (CI succeeds but shows zero checks)**
+- `ticket → HUMAN_MR_APPROVAL → ... polling ...`
+- Logs show: `"empty_rollup_poll_count"` reaching default limit (3 polls)
+- PR state: `mergeable_state=blocked`, zero check runs reported
+- **Cause:** PR's `pull_request` event never fired in GitHub Actions, so no workflows ran
+- **Diagnosis:**
+  ```bash
+  # Check PR event triggers in workflows
+  grep -r "pull_request:" .github/workflows/ | head -5
+  
+  # Query the PR directly
+  gh pr view <pr-number> --json mergeStateStatus,reviewDecision
+  ```
+- **Recovery:**
+  1. **Mill auto-heals (default):** After 3 polls, the mill closes and reopens the PR to trigger the event
+  2. **Manual trigger:** Close and reopen the PR yourself:
+     ```bash
+     gh pr close <pr-number>
+     gh pr reopen <pr-number>
+     ```
+  3. Increase `MILL_EMPTY_ROLLUP_MAX_POLLS` (default 3) to allow more time before auto-heal
+
+**Symptom 3: Merge PR Missing (PR not found after multiple polls)**
+- `ticket → HUMAN_MR_APPROVAL → ... polling ...`
+- Logs show: `"merge_pr_missing_poll_count"` reaching default limit (20 polls)
+- **Cause:** The PR is not found in the expected repository (common in cross-repo / multi-repo delivery)
+- **Diagnosis:**
+  ```bash
+  # Single-repo delivery: Check if PR exists
+  gh pr view <pr-number> --repo <owner>/<repo>
+  
+  # Multi-repo delivery: Check pr_urls.json in the workspace
+  cd ~/.mill/workspaces/<ticket-id>
+  cat pr_urls.json | jq .
+  ```
+- **Recovery:**
+  1. **Single-repo:** If the PR was deleted, the ticket must be manually recovered or marked BLOCKED
+  2. **Multi-repo:** Verify that all expected repositories have the PR:
+     ```bash
+     while read url; do gh pr view --web "$url"; done < pr_urls.json
+     ```
+  3. If a repo is missing a PR, file a separate ticket to diagnose why
+  4. Increase `MILL_MERGE_PR_MISSING_MAX_POLLS` (default 20) if delivery is slow
+
+**Configuring merge-poll ceilings:**
+```bash
+# All three can be tuned via env vars or config.json
+export MILL_GREEN_UNPROMOTABLE_MAX_POLLS=10      # default
+export MILL_EMPTY_ROLLUP_MAX_POLLS=3             # default
+export MILL_MERGE_PR_MISSING_MAX_POLLS=20        # default
+
+# Or in config.json
+# {"pipeline": {
+#   "green_unpromotable_max_polls": 10,
+#   "empty_rollup_max_polls": 3,
+#   "merge_pr_missing_max_polls": 20
+# }}
+```
+
+---
+
+### Failure 7: Observability Infrastructure Failure
 
 **Symptoms:**
 - Langfuse traces are missing for recent runs
@@ -403,6 +569,41 @@ git status --short
 
 # View the full diff with context
 git diff HEAD~1
+```
+
+### Workspace Preservation
+
+By default, when a ticket reaches a terminal state (DONE, BLOCKED, ARCHIVED), its workspace clone is **deleted** to save disk space. For post-mortem investigation or long-term tracking, preserve clones on close:
+
+```bash
+# Set globally (all future closed tickets preserve workspaces)
+export MILL_PRUNE_CLONE_ON_CLOSE=false
+
+# Or in config file
+# config.json: {"pipeline": {"prune_clone_on_close": false}}
+
+# Verify the setting
+robotsix-mill config show | grep prune_clone_on_close
+```
+
+**When to preserve:**
+- Debugging catastrophic failures (OOM, merge conflicts, sandbox errors)
+- Post-mortem root cause analysis
+- Regulatory or auditing requirements to retain evidence
+
+**Important:** Preserved workspaces accumulate on disk. Monitor space regularly:
+```bash
+du -sh ~/.mill/workspaces/  # total size
+du -sh ~/.mill/workspaces/*/  | sort -h | tail -10  # top 10 largest
+```
+
+**Cleanup stale workspaces (manual):**
+```bash
+# Delete workspaces older than 30 days
+find ~/.mill/workspaces/ -type d -mtime +30 -exec rm -rf {} \;
+
+# Or delete specific workspace
+rm -rf ~/.mill/workspaces/<ticket-id>/
 ```
 
 ### Inspecting Agent Artifacts
