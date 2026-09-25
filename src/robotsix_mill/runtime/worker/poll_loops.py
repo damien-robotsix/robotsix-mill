@@ -640,11 +640,12 @@ class PollLoopsMixin(_WorkerBase):
                 result = await asyncio.to_thread(run_blocked_auto_resume, settings)
                 log.info(
                     "blocked-auto-resume: pass complete — resumed=%d cooling=%d "
-                    "budget_exhausted=%d not_matched=%d",
+                    "budget_exhausted=%d not_matched=%d cycles_escalated=%d",
                     result.get("resumed", 0),
                     result.get("cooling", 0),
                     result.get("budget_exhausted", 0),
                     result.get("not_matched", 0),
+                    result.get("cycles_escalated", 0),
                 )
             except Exception:
                 log.exception("blocked-auto-resume poll failed")

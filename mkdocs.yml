@@ -38,6 +38,7 @@ nav:
       - Skills: skills/index.md
       - Audit agent: agents/audit-agent.md
       - Blocked ticket recovery: stages/blocked-ticket-recovery.md
+      - Dependency cycles: cycles.md
       - Retrospect memory: stages/retrospect-memory.md
       - Retrospect chain guard: stages/retrospect-chain-guard.md
       - Trace-health check: langfuse/trace-health.md
