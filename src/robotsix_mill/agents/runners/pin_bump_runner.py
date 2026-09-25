@@ -382,7 +382,23 @@ def _pr_guards_ok(
     Returns ``False`` (with an appropriate log message) when an open
     PR already exists or the in-flight cap has been reached.
     """
-    existing = forge.pr_status(source_branch=branch_name)
+    try:
+        existing = forge.pr_status(source_branch=branch_name)
+    except Exception as exc:
+        # A persistent GitHub 5xx (e.g. a PR stuck in a bad state) on the
+        # lookup must not crash the whole pin-bump pass — the transport
+        # already retries transient network errors and 401s, so reaching
+        # here means a durable failure. Skip this pin (conservatively, so
+        # we never open a duplicate PR) and let the pass continue.
+        log.warning(
+            "pin_bump: PR lookup failed for %s → %s (branch %s) — "
+            "skipping to avoid a duplicate PR (%s)",
+            repo_id,
+            dep_name,
+            branch_name,
+            exc,
+        )
+        return False
     if existing is not None and existing.get("state") == "open":
         log.info(
             "pin_bump: PR for %s → %s already open (%s) — skipping",
