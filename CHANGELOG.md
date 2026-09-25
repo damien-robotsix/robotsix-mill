@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.8](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.7...v0.15.8) (2026-09-25)
+
+
+### Bug Fixes
+
+* pin_bump errors on GitHub API for robotsix-http (500 Server Error, 7×) (20260925T124900Z-pin-bump-errors-on-github-api-for-robots-375b) ([#3316](https://github.com/damien-robotsix/robotsix-mill/issues/3316)) ([b51e490](https://github.com/damien-robotsix/robotsix-mill/commit/b51e490df4fe636b6f2cfeaef06d9b0faef69c20))
+
 ## [0.15.7](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.6...v0.15.7) (2026-09-25)
 
 
