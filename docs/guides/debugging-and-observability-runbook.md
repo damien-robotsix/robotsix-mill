@@ -1,431 +1,494 @@
-# Debugging & Observability Runbook
+# Debugging and Observability Runbook
 
-This is the operator's single starting point for diagnosing and
-recovering from a failed or misbehaving ticket run. It consolidates the
-troubleshooting knowledge that is otherwise scattered across the
-architecture docs, and connects the observability signals — the board
-UI, Langfuse traces, request-ID-correlated logs, the run registry,
-Prometheus metrics, and preserved workspaces — to a concrete diagnosis
-workflow.
+This runbook provides operators with a structured approach to diagnosing and recovering from common robotsix-mill failures. It consolidates observability guidance, debugging workflows, and recovery procedures in one place.
 
-It does **not** duplicate the authoritative docs. Where a failure has a
-dedicated page (cycle detection, OOM tuning, configuration), this
-runbook tells you *when* you are in that situation and links you to the
-single source of truth. See [Cross-references](#cross-references).
+## Observability Stack Overview
 
-> **Scope.** This guide is about diagnosing runs, not about the
-> pipeline's normal operation. For the stage lifecycle see
-> [runtime/worker.md](../runtime/worker.md); for the agent catalog see
-> [agents/index.md](../agents/index.md).
+The mill exposes observability across four layers:
 
----
+### 1. Request Context (Board UI → Worker)
 
-## 1. Observability stack overview
+Every ticket and execution carries a **request ID** that flows through all subsequent agent calls:
 
-robotsix-mill exposes five complementary observability surfaces. Each
-answers a different question; effective debugging means moving between
-them, not living in one.
+- **Ticket ID** — stable identifier for the issue being worked (e.g., `TICKET-123`)
+- **Run ID** — unique per ticket execution (e.g., `run_abc123def456`)
+- **Agent Call ID** — unique per agent invocation within a run (e.g., `agent_xyz789`)
 
-| Surface | Answers | Where |
-|---|---|---|
-| **Board UI** | *What state is this ticket in? Which stage failed?* | `GET /board` |
-| **Langfuse traces** | *What did the agent actually do this run — prompts, tool calls, tokens?* | Langfuse web UI, per ticket |
-| **Logs (request-ID correlated)** | *What happened in the process at that moment, across concurrent tickets?* | container logs |
-| **Run registry** | *When did each periodic pass last run, and did it succeed?* | `GET /health` |
-| **Prometheus metrics** | *Is the service healthy in aggregate — latency, request volume, cost?* | `GET /metrics`, `GET /metrics/step-usage` |
+These IDs link board UI logs, worker logs, and traces so you can follow a single execution end-to-end.
 
-### Request-ID correlation across logs
+### 2. Langfuse Tracing
 
-Every HTTP request is tagged with a request id by
-`RequestIDMiddleware` in
-`src/robotsix_mill/runtime/middleware.py`. The middleware reads an
-incoming `X-Request-ID` header if the caller supplied one, otherwise it
-generates a fresh `uuid.uuid4().hex`. The id is:
+[Langfuse](https://langfuse.com) is the authoritative trace store. Every agent call, tool invocation, and model interaction is recorded there.
 
-- stored in a `ContextVar` (and `scope["state"]`) so route handlers and
-  any code on the same async task can read it,
-- echoed back on the response as the `X-Request-ID` header, and
-- injected into every log record by `RequestIDLogFilter`, which the log
-  formatter renders as `[%(request_id)s]` (the formatter is patched in
-  `runtime/lifespan.py`).
+- **Access:** `https://<langfuse-instance>/traces`
+- **Filter by request ID:** Each trace is tagged with the ticket/run ID
+- **What you see:** Prompt sent, model response, tool calls made, tokens consumed, latency, errors
+- **When to use:** Model hallucination, unexpected tool invocation, token overage, latency investigation
 
-**Why it matters:** the worker processes up to `MILL_MAX_CONCURRENCY`
-tickets in parallel, so their log lines interleave. Grepping for a
-single request id lets you reconstruct one request's timeline out of
-the interleaved stream:
+### 3. Worker Logs
 
-```sh
-docker compose logs mill | grep '\[<request-id>\]'
-```
+Structured JSON logs from the mill worker process. Entries include:
 
-You get the request id from the `X-Request-ID` response header of the
-API call you made (e.g. a manual transition or pass trigger), or from
-the first log line the operation emitted.
+- **timestamp** — ISO 8601 (UTC)
+- **level** — DEBUG, INFO, WARNING, ERROR, CRITICAL
+- **message** — human-readable summary
+- **request_id** / **run_id** — links to traces and tickets
+- **module** — source component (`agents.base`, `forge.github`, `runtime.executor`, etc.)
+- **details** — contextual fields (error type, retry count, agent name, etc.)
 
-### How Langfuse traces map to ticket runs
+**Log location depends on deployment:**
+- **Local dev:** stdout / `~/.mill/logs/`
+- **Docker:** container stdout (accessible via `docker logs <container>`)
+- **Kubernetes:** pod logs (accessible via `kubectl logs <pod>`)
+- **Systemd:** `journalctl -u robotsix-mill` or log aggregation system
 
-Tracing is implemented in `runtime/tracing.py` (delegating the OTLP →
-Langfuse plumbing to `robotsix_llmio.core.tracing`). The mapping is:
+### 4. Workspace Artifacts
 
-- **One root span per stage run.** `start_ticket_root_span(ticket_id,
-  stage_name)` opens a root OTel span named after the stage (`refine`,
-  `implement`, `review`, …). Sub-operations become child spans via
-  `trace_stage(...)`.
-- **The Langfuse session id is the ticket id**, repo-qualified as
-  `<repo> · <ticket-id>` so a shared project's session list stays
-  legible. To find a ticket's runs in Langfuse, search the session list
-  for the ticket id.
-- **Per-turn cost is recorded on the span** by `record_step_usage(...)`
-  as `langfuse.observation.metadata.mill.step_usage` — token counts and
-  tool-call counts per turn, for cost analysis.
-- **Input/output payloads** are attached to the root span (JSON,
-  capped at 8,000 chars) and rendered at the trace level.
+Each ticket's workspace persists:
+- Source code and git history
+- Agent-generated diffs and branches
+- Test output and coverage reports
+- Sandbox execution logs and container images
 
-Langfuse is **global**: one project configured in the `secrets:` block
-of `config/config.json`, applied uniformly to every repo. There is no
-per-repo Langfuse project. See
-[langfuse/observability.md](../langfuse/observability.md) for the
-configuration surface.
-
-If traces are missing, check `GET /health/langfuse-status` — it returns
-a ring buffer of recent export failures maintained by `tracing.py`. No
-credentials configured means the whole tracing layer is a silent no-op
-(by design), so absent traces can simply mean Langfuse was never wired
-up.
-
-### Prometheus metrics
-
-Metrics are exposed at **`GET /metrics`**, wired via
-`prometheus_fastapi_instrumentator` in
-`src/robotsix_mill/runtime/api.py`. If the instrumentator package is
-not installed, a warning is logged and `/metrics` is simply
-unavailable — it is not fatal. The default instrumentation covers
-request counts, latency histograms, and request/response sizes.
-
-A second endpoint, **`GET /metrics/step-usage`**
-(`runtime/routes/_step_usage.py`), returns server-side stage × model
-token aggregates computed from the local SQLite mirror — useful for
-cost attribution without round-tripping to Langfuse.
-
-### Board UI and the run registry
-
-The Kanban board at `GET /board` shows every ticket across the
-automated pipeline columns; the column *is* the stage, so the column a
-ticket is stuck in tells you which stage to investigate. See
-[runtime/board.md](../runtime/board.md).
-
-The **run registry** (`runtime/run_registry.py`) is the durable record
-of *periodic* pass executions (audit, health, trace-health, …), surfaced
-via `GET /health`. Each `RunEntry` records `kind`, `started_at`,
-`finished_at`, `status` (`running` / `ok` / `error`), a `summary`, and
-an `error` string. Two properties matter when debugging:
-
-- Only `ok` entries reset a pass's due-timer, so an errored or
-  interrupted run does not silently push the next fire window out.
-- Entries left `running` after an unclean restart are reconciled to
-  `error` with `"interrupted by process restart"` on load — so a stale
-  `running` entry in the UI is itself a signal that the process died
-  mid-pass (see [OOM pressure](#oom-memory-pressure)).
+**Location:** Configurable (typically `~/.mill/workspaces/<ticket-id>/`)
 
 ---
 
-## 2. Step-by-step debugging workflow
+## Step-by-Step Debugging Workflow
 
-Follow the signals from coarse to fine. Most investigations resolve in
-the first two steps.
+When a ticket fails or behaves unexpectedly, follow this workflow:
 
-```
-        ┌─────────────────────────────────────────────┐
-        │ START: "a ticket run failed / is stuck"      │
-        └───────────────────────┬─────────────────────┘
-                                 │
-                                 ▼
-  1. BOARD UI  ── which column (stage) is the ticket in?
-        │
-        ├─ BLOCKED ──────────────► go to §3 (match the failure mode)
-        ├─ ERRORED ──────────────► worker-level crash → check logs + heartbeat (§3 OOM)
-        ├─ stuck "retrying" ─────► §3 "Stuck retries"
-        ├─ stuck at human gate ──► approval pending, not a failure
-        └─ moving normally ──────► not stuck; observe
-                                 │
-                                 ▼
-  2. LANGFUSE (per ticket) ── open the session = <repo> · <ticket-id>
-        │   inspect the failed stage's root span:
-        │   - last tool call before failure?
-        │   - error text in the output payload?
-        │   - token blow-up / truncation?
-        └─ still unclear ────────►
-                                 │
-                                 ▼
-  3. LOGS (request-ID correlated) ── grep the container logs
-        │   - find the stage's request id, grep '[<id>]'
-        │   - look for tracebacks, retry/backoff lines, SIGKILL gaps
-        └─ points at workspace state ►
-                                 │
-                                 ▼
-  4. WORKSPACE INSPECTION ── if preserved (§4), inspect the clone,
-        git state, dependency tree, and artifacts/ error logs.
-```
+### Step 1: Check the Board UI
 
-### Step 1 — Board UI: identify the stage and state
+1. Go to the board (local: `http://localhost:8000`, prod: configured URL)
+2. Find the ticket and open it
+3. Look at the **ticket status** and **current stage** (e.g., `refine → implement → review`)
+4. Read the **latest comment** — it often summarizes the failure
+5. Note the **request ID** and **run ID** visible in the UI (usually in a `[run_...]` or `[TICKET-...]` label)
 
-Open the board (or `robotsix-mill ticket show <id>`). The column names
-the stage; the state tells you the failure class:
+### Step 2: Check Langfuse Traces
 
-- **BLOCKED** — a fatal stage error, exhausted retries, or a cycle. The
-  `[cycle-detected]` comment (if present) means a dependency cycle — go
-  to [cycles.md](../cycles.md), not to logs.
-- **ERRORED** — a rare worker-level crash. Usually a process-level
-  event (OOM, restart), not a stage bug.
-- **retrying** — a transient error is being retried with backoff.
+1. Open Langfuse at your configured instance
+2. Search traces by **request ID** (the run ID from Step 1)
+3. Look for the **most recent trace** — expand it to see:
+   - The agent's system prompt and user input
+   - The model's response
+   - Tool calls made (including any failures)
+   - Final status (success, error, timeout)
+4. Common findings:
+   - **Tool error in trace:** The agent called a tool correctly, but the tool returned an error (e.g., git command failed)
+   - **Hallucinated tool call:** The agent called a tool that doesn't exist or with invalid arguments
+   - **Truncated response:** The model hit a token limit mid-response
+   - **Timeout:** The model didn't respond within the deadline
 
-Never hand-edit the database to move a ticket. Use the CLI, which
-respects the state machine:
+### Step 3: Check Worker Logs
 
-```sh
-robotsix-mill ticket state <id> <new-state>
-```
+1. Fetch logs from your deployment:
+   ```bash
+   # Docker
+   docker logs <container-id> | grep <request-id>
+   
+   # Kubernetes
+   kubectl logs -n <namespace> <pod-name> | grep <request-id>
+   
+   # Local dev
+   grep <request-id> ~/.mill/logs/*.log
+   
+   # Systemd
+   journalctl -u robotsix-mill | grep <request-id>
+   ```
 
-### Step 2 — Langfuse: replay what the agent did
+2. Look for **ERROR** or **CRITICAL** entries with that request ID
+3. Common log patterns:
+   - `"message": "Agent failed", "error": "FileNotFoundError"` → file path issue
+   - `"message": "Tool timeout"` → subprocess took too long
+   - `"message": "Sandbox limit exceeded"` → resource exhaustion
+   - `"message": "Git conflict"` → merge/rebase failed
 
-Open the Langfuse session for the ticket (`<repo> · <ticket-id>`) and
-select the failed stage's root span. The span's input/output payloads
-and `step_usage` metadata reconstruct the run: the last successful tool
-call, the error surfaced to the agent, and whether the context blew up
-(a large-context implement pass is also an OOM risk — see §3).
+### Step 4: Inspect Workspace
 
-### Step 3 — Logs: reconstruct the process timeline
+1. Locate the workspace for the ticket:
+   ```bash
+   ls ~/.mill/workspaces/  # or configured path
+   cd ~/.mill/workspaces/<ticket-id>
+   ```
 
-When Langfuse is inconclusive (or tracing is disabled), grep the
-container logs by request id (see
-[request-ID correlation](#request-id-correlation-across-logs)). Look
-for:
+2. Check git state:
+   ```bash
+   git status      # current branch, unstaged changes
+   git log --oneline -10  # recent commits
+   git branch -a   # branches created by agents
+   git diff HEAD~1 # what changed in the last commit
+   ```
 
-- Python tracebacks (the proximate exception),
-- `stage_retry` backoff lines (transient-error churn),
-- an abrupt end with **no** shutdown lines followed by a Docker restart
-  (a SIGKILL — suspect OOM, §3).
+3. Check for agent artifacts:
+   ```bash
+   ls -la  # look for .agent.log, test output, coverage reports
+   cat .agent.log | tail -50  # recent agent stderr
+   ```
 
-### Step 4 — Workspace inspection
+4. Run any tests locally:
+   ```bash
+   uv run pytest tests/ -xvs  # reproduce test failure
+   ```
 
-If the workspace clone was preserved (§4), inspect the on-disk state
-the agent left behind: final git status, dependency tree, and the
-`artifacts/` error logs.
+### Step 5: Validate Configuration
 
----
+1. Check that the mill is correctly configured:
+   ```bash
+   robotsix-mill config show  # or cat config/config.example.json
+   ```
 
-## 3. Common failure modes
-
-For each mode: **symptoms → diagnosis → recovery**. Where a dedicated
-doc owns the topic, this section only helps you recognize the mode and
-routes you there.
-
-### Sandbox execution errors
-
-**Symptoms.** A stage (implement / refine) fails with a command that
-never ran, exited non-zero unexpectedly, or reports a missing tool or a
-path outside the sandbox. The worker itself is healthy; only the
-stage's delegated command failed.
-
-**Diagnosis.** The worker never runs agent commands directly — the
-implement and refine stages delegate to the **sandbox** subsystem,
-which spawns a fresh disposable Docker container per command. Check the
-stage's Langfuse span for the exact command and its captured
-stdout/stderr, then the logs for container-spawn errors. Confirm the
-command respects path confinement — the sandbox is network-isolated and
-path-confined by design.
-
-**Recovery.** Fix the underlying command/spec issue, then re-run only
-the failed stage:
-
-```sh
-robotsix-mill ticket state <id> resume-blocked
-```
-
-See [sandbox/security.md](../sandbox/security.md) for the security model
-and [docker-architecture.md](../docker-architecture.md) for the
-container topology.
-
-### OOM / memory pressure
-
-**Symptoms.** The process dies abruptly with **no** Python traceback and
-**no** uvicorn shutdown lines, followed by a Docker auto-restart that
-kills in-flight sandbox spawns. Tickets that were mid-stage land in
-ERRORED, and run-registry entries that were `running` show up as
-`interrupted by process restart`.
-
-**Diagnosis — don't guess.** The mill persists a crash-diagnostic
-heartbeat (`heartbeat.json` in the data dir). On the next startup, when
-the previous run never reached graceful shutdown, it logs:
-
-```
-previous process ... died abruptly ... suspected OOM kill
-```
-
-and reads the cgroup `oom_kill` counter where available. Large-context
-implement work is the usual trigger — prompts of ~139k tokens were
-observed in flight at crash time. The mill worker is single-process, so
-the `mem_limit: 4g` ceiling in `docker-compose.yml` must cover the LLM
-streaming buffers *plus* the worker pool and subprocesses.
-
-**Recovery.** Raise `mem_limit` (e.g. `6g`–`8g`) and/or add a
-`mem_reservation` in `docker-compose.override.yml`, then resume the
-affected tickets with `resume-blocked`. Full tuning guidance and the
-incident write-up live in
-[dev-tooling/deployment.md](../dev-tooling/deployment.md#oom-pressure-under-large-context-implement-work).
-
-### Config loading errors
-
-**Symptoms.** The process fails to start, a repo is silently skipped, or
-a newly added setting appears to have no effect.
-
-**Diagnosis.** A setting that has no effect is usually **config drift** —
-a Pydantic field that was never wired to `config/config.example.json`
-and the model alias in the same commit is invisible to the sync
-checker. Confirm the field exists on both surfaces. For a
-`config/repos.yaml` value that seems ignored, remember there is **no**
-`${ENV_VAR}` interpolation in that file (use literal paths), and a
-per-repo `langfuse:` block is silently ignored (Langfuse is global).
-
-**Recovery.** Fix the config surface, restart the worker, and re-run
-`uv run python scripts/emit_config_schema.py --check` if you changed a
-settings field. The full env-var reference and the drift-prevention rule
-are in [config/configuration.md](../config/configuration.md).
-
-### Stuck retries
-
-**Symptoms.** A ticket sits in a `retrying` state, cycling through
-backoff without progressing, or repeatedly re-enters the same stage.
-
-**Diagnosis.** Transient stage failures (git outage, provider 5xx) are
-retried with exponential backoff by `runtime/stage_retry.py`
-(configurable via `MILL_STAGE_RETRY_*`). A ticket that never clears is
-hitting a non-transient error being misclassified as transient, or the
-external dependency is genuinely down. Grep the logs by request id for
-the repeated backoff lines and the underlying exception. For the
-implement stage specifically, the fix loop is bounded
-(`max_fix_iterations`, default 8) and escalates to BLOCKED on repeated
-no-progress passes — a ticket that reached BLOCKED this way has already
-exhausted its automatic retries.
-
-**Recovery.** Once the root cause is addressed, clear the retry state
-and re-enqueue:
-
-```sh
-robotsix-mill ticket state <id> resume-blocked
-```
-
-Exhausted retries land in BLOCKED; from there `resume-blocked` re-runs
-only the failed stage, while a manual override to `READY`/`DRAFT`
-forces a full re-run. No raw database editing is ever needed — see
-[runtime/worker.md](../runtime/worker.md#blocked-recovery).
-
-### Merge-poll failures
-
-**Symptoms.** A ticket sits at `human_mr_approval` (PR open) long after
-the PR was merged, or never advances to `done`.
-
-**Diagnosis.** `human_mr_approval` means the PR is the review; the
-merge-poll loop (`PollLoopsMixin` in the worker) flips the state once it
-observes the merge. If it never flips, the poll loop is not seeing the
-merge — check forge credentials/connectivity and the poll-loop log
-lines for the ticket's PR. CI status is polled on the same tick-based
-loop.
-
-**Recovery.** Restore forge connectivity; the next poll tick advances
-the ticket. If the PR truly merged but the poll missed it, a manual
-state transition can move the ticket forward — verify the merge on the
-forge first.
-
-### Dependency cycles (deadlocked BLOCKED tickets)
-
-**Symptoms.** Several BLOCKED tickets never auto-resume and each carries
-a `[cycle-detected]` comment listing a cycle path (e.g. `A → B → C →
-A`).
-
-**Diagnosis & recovery.** This is a circular `depends_on` / `unblocks`
-graph that auto-resume cannot break. Do not go to the logs — go
-straight to [cycles.md](../cycles.md), which owns detection and
-resolution (sever one edge, or close a member).
+2. Verify connectivity to external services:
+   ```bash
+   # GitHub API
+   curl -H "Authorization: Bearer $GITHUB_TOKEN" \
+     https://api.github.com/user
+   
+   # Langfuse
+   curl https://<langfuse-host>/api/health
+   
+   # Model endpoint (if custom)
+   curl https://<model-endpoint>/health
+   ```
 
 ---
 
-## 4. Workspace inspection (post-mortem)
+## Common Failure Modes
 
-By default, a ticket's `repo/` clone is deleted when it closes
-(`MILL_PRUNE_CLONE_ON_CLOSE=true`), and a backstop GC prunes clones in
-terminal-ticket workspaces after a day. That reclaims disk but destroys
-the on-disk evidence you need for a post-mortem.
+### Failure 1: Sandbox Execution Errors
 
-**To preserve the clone for inspection**, set:
+**Symptoms:**
+- `error": "Sandbox execution failed"` in logs
+- Traces show tool timeout or "command not found"
+- Workspace `.agent.log` is truncated or empty
 
-```sh
-MILL_PRUNE_CLONE_ON_CLOSE=false
-```
+**Diagnosis:**
+1. Check logs for the exact error message:
+   ```bash
+   grep "Sandbox execution failed" ~/.mill/logs/*.log
+   ```
+2. Check if the tool exists in the sandbox:
+   ```bash
+   # Verify uv is available
+   uv --version
+   # Verify Python
+   python3 --version
+   ```
+3. Look at the command that failed in Langfuse traces — verify it's syntactically correct
 
-With pruning disabled, the `repo/` clone survives after the ticket
-finishes, so you can inspect the exact state the agent left:
-
-```sh
-cd <data-dir>/<board>/<ticket-id>/repo
-
-git status                 # uncommitted/failed edits
-git log --oneline -10      # what the agent committed
-git diff HEAD~1            # the last change
-uv tree                    # resolved dependency tree (dependency errors)
-```
-
-Note that `description.md` and the entire `artifacts/` tree
-(`implement.md`, `retrospect.md`, stage logs, `screenshots/`) are
-**always** preserved regardless of the prune setting — start there for
-the agent's own account of the run, then drop into the clone for ground
-truth. Pruning is best-effort: a failed delete is logged, never raised.
-
-Full pruning/GC semantics are in
-[core/workspace-cleanup.md](../core/workspace-cleanup.md).
-
----
-
-## 5. Health & drain endpoints (quick reference)
-
-| Endpoint | Use |
-|---|---|
-| `GET /health` | Service status, uptime, worker health, run-registry results |
-| `GET /health/worker` | Per-repo concurrency detail |
-| `GET /health/langfuse-status` | Recent Langfuse export failures (ring buffer) |
-| `POST /health/langfuse-status/clear` | Acknowledge/clear export-failure entries |
-| `GET /metrics` | Prometheus request/latency/size metrics |
-| `GET /metrics/step-usage` | Stage × model token aggregates (cost) |
-| `GET /system/drain` / `POST /system/drain` | Drain mode — stop starting heavy stages so the mill quiesces before a deploy |
-
-See [runtime/routes.md](../runtime/routes.md) for the full route
-inventory.
+**Recovery:**
+1. **If a tool is missing:** Install it (e.g., `uv sync --frozen`) or add it to the sandbox environment
+2. **If a command timed out:** Increase the timeout in the agent definition or optimize the command
+3. **If git fails:** Check for uncommitted changes or conflicts:
+   ```bash
+   cd ~/.mill/workspaces/<ticket-id>
+   git status
+   git reset --hard HEAD  # if needed to recover
+   ```
 
 ---
 
-## Cross-references
+### Failure 2: Out-of-Memory (OOM) Errors
 
-The docs below remain the **single source of truth** for their topics;
-this runbook only points you to the right one.
+**Symptoms:**
+- `error": "OOM killer", "oom": true` in logs
+- Agent stops mid-execution with no final message
+- Trace ends abruptly with no tool response
 
-- [cycles.md](../cycles.md) — dependency-cycle detection and resolution.
-- [dev-tooling/deployment.md](../dev-tooling/deployment.md) — OOM
-  diagnostics, `mem_limit` tuning, and the heartbeat/`oom_kill` clues.
-- [config/configuration.md](../config/configuration.md) — full env-var
-  reference and config-drift prevention.
-- [core/workspace-cleanup.md](../core/workspace-cleanup.md) — clone
-  pruning and data-dir GC semantics.
-- [runtime/tracing.md](../runtime/tracing.md) — Langfuse tracing
-  architecture.
-- [runtime/run-registry.md](../runtime/run-registry.md) — periodic-pass
-  run registry.
-- [runtime/worker.md](../runtime/worker.md) — stage lifecycle, retries,
-  and BLOCKED recovery.
-- [runtime/board.md](../runtime/board.md) — the Kanban board and column
-  automation.
-- [runtime/routes.md](../runtime/routes.md) — API and health endpoints.
-- [langfuse/observability.md](../langfuse/observability.md) — Langfuse
-  and deployed-log configuration.
-- [sandbox/security.md](../sandbox/security.md) — sandbox execution
-  model.
-- [index.md](../index.md) — documentation home.
+**Diagnosis:**
+1. Check system memory:
+   ```bash
+   free -h
+   ```
+2. Check sandbox resource limits (if containerized):
+   ```bash
+   # Docker
+   docker stats <container-id>
+   
+   # Kubernetes
+   kubectl top pod <pod-name>
+   ```
+3. Review what the agent was doing when it OOM'd — check Langfuse traces for the last tool call
+
+**Recovery:**
+1. **Increase available memory** — resize the container or node
+2. **Reduce scope** — split the ticket into smaller pieces
+3. **Optimize the agent** — if a tool call uses excessive memory (e.g., loading entire repo into memory), optimize that tool
+4. **Restart the worker** — OOM can leave the process in a bad state:
+   ```bash
+   # Docker
+   docker restart <container-id>
+   
+   # Systemd
+   systemctl restart robotsix-mill
+   ```
+
+---
+
+### Failure 3: Configuration Errors
+
+**Symptoms:**
+- `error": "NotConfiguredError"` or `"ConfigValidationError"` in logs
+- Agent doesn't run or runs with wrong parameters
+- Environment variable not found
+
+**Diagnosis:**
+1. Check the config file:
+   ```bash
+   cat config/config.example.json  # what was configured
+   robotsix-mill config show        # what's actually loaded
+   ```
+2. Check environment variables:
+   ```bash
+   env | grep MILL_  # all mill-related vars
+   ```
+3. Look at the error message in logs — it should say which config key is missing or invalid
+
+**Recovery:**
+1. **Missing env var:** Add it:
+   ```bash
+   export MILL_<VAR>=<value>
+   ```
+2. **Invalid config value:** Fix the value and restart:
+   ```bash
+   # Edit config file or re-export env var
+   systemctl restart robotsix-mill  # or docker restart
+   ```
+3. **Schema mismatch:** Check the config schema:
+   ```bash
+   cat config/config.schema.json
+   ```
+
+---
+
+### Failure 4: Stuck Retries or Infinite Loops
+
+**Symptoms:**
+- A ticket has been in the same stage for hours
+- Logs show the same error repeated many times
+- Agent keeps retrying the same operation
+
+**Diagnosis:**
+1. Check how long the ticket has been stuck:
+   ```bash
+   # On the board UI: look at the timestamp of the latest comment
+   ```
+2. Check the retry count in logs:
+   ```bash
+   grep "retry_count" ~/.mill/logs/*.log | tail -20
+   ```
+3. Look at Langfuse traces — see if the model keeps making the same failing tool call
+
+**Recovery:**
+1. **If retrying forever:** Stop the worker and manually edit the ticket's status:
+   ```bash
+   # Stop worker
+   systemctl stop robotsix-mill
+   
+   # Edit the ticket (API call or direct database)
+   robotsix-mill ticket show <ticket-id>  # see current state
+   ```
+2. **If the model is stuck in a loop:** The underlying issue (e.g., test failure) must be fixed before the agent can proceed — see the test logs for the actual error
+3. **Escalate:** If a retry loop is due to a model hallucination or incorrect tool behavior, file a separate issue and move the ticket to a blocked state
+
+---
+
+### Failure 5: Git Merge Conflicts
+
+**Symptoms:**
+- `error": "Git merge conflict"` in logs
+- Workspace has conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`)
+- Agent can't commit or push
+
+**Diagnosis:**
+1. Check git status:
+   ```bash
+   cd ~/.mill/workspaces/<ticket-id>
+   git status
+   ```
+2. See which files have conflicts:
+   ```bash
+   git diff --name-only --diff-filter=U
+   ```
+3. Look at the actual conflicts:
+   ```bash
+   git diff  # shows conflict regions
+   ```
+
+**Recovery:**
+1. **Automatic resolution (if safe):** Use a merge strategy:
+   ```bash
+   cd ~/.mill/workspaces/<ticket-id>
+   git merge --abort  # if you want to start over
+   # OR
+   git checkout --theirs <file>  # take incoming changes
+   git add <file>
+   git commit -m "Resolve conflict"
+   ```
+2. **Manual resolution:** Edit the conflicted file, remove conflict markers, then:
+   ```bash
+   git add <file>
+   git commit
+   ```
+3. **Rebase instead:** If the agent was rebasing when it failed:
+   ```bash
+   git rebase --abort  # to cancel
+   # OR
+   # Fix the conflict and continue
+   git add <file>
+   git rebase --continue
+   ```
+
+---
+
+### Failure 6: Observability Infrastructure Failure
+
+**Symptoms:**
+- Langfuse traces are missing for recent runs
+- Logs aren't appearing in the aggregation system
+- `error": "Failed to send trace to Langfuse"` in logs
+
+**Diagnosis:**
+1. Check Langfuse availability:
+   ```bash
+   curl https://<langfuse-host>/api/health
+   ```
+2. Check network connectivity from worker:
+   ```bash
+   # From the worker container/pod
+   curl https://<langfuse-host>/api/health
+   ping -c 1 <langfuse-host>
+   ```
+3. Check logs for trace send errors:
+   ```bash
+   grep "trace.*failed\|langfuse.*error" ~/.mill/logs/*.log
+   ```
+
+**Recovery:**
+1. **Langfuse is down:** Restart it (not the worker — the worker will queue traces and retry)
+2. **Network issue:** Check firewall rules, DNS, and connectivity
+3. **Credentials expired:** Regenerate API keys and update `MILL_LANGFUSE_*` env vars
+4. **Worker continues without traces:** Traces are optional; the worker will log locally and continue. Once Langfuse is back, pending traces will be sent on retry
+
+---
+
+## Workspace Inspection Guide
+
+### Git Commands for Investigation
+
+```bash
+cd ~/.mill/workspaces/<ticket-id>
+
+# See current branch and status
+git status
+
+# See recent commits (who made them, when)
+git log --oneline -20
+
+# See what changed in the last commit
+git show HEAD
+
+# See branches created by agents (prefixed with agent/ or agent_)
+git branch -a
+
+# See the diff between current and main
+git diff origin/main
+
+# See all commits since main
+git log --oneline origin/main..HEAD
+
+# Check for uncommitted changes
+git status --short
+
+# View the full diff with context
+git diff HEAD~1
+```
+
+### Inspecting Agent Artifacts
+
+```bash
+cd ~/.mill/workspaces/<ticket-id>
+
+# Agent log (if present)
+cat .agent.log 2>/dev/null | tail -100
+
+# Test output
+ls test-output.* coverage.*
+
+# Agent-generated files (look for .agent.* or .mill.* prefixes)
+find . -name ".agent.*" -o -name ".mill.*"
+```
+
+### Running Tests Locally
+
+```bash
+cd ~/.mill/workspaces/<ticket-id>
+
+# Run the same tests the agent ran
+uv run pytest tests/ -xvs
+
+# Or run specific test file
+uv run pytest tests/test_specific.py -xvs
+
+# See coverage
+uv run pytest --cov=src tests/
+```
+
+---
+
+## Recovery Checklist
+
+When a ticket is stuck or failed, use this checklist to systematically work through recovery:
+
+- [ ] **Board UI:** Read the latest comment and note the run ID
+- [ ] **Langfuse traces:** Search by run ID, review the last trace, identify where it failed
+- [ ] **Worker logs:** Grep for the run ID, find ERROR or CRITICAL entries
+- [ ] **Workspace:** Check git status, run tests locally if applicable
+- [ ] **Configuration:** Verify env vars and config file are correct
+- [ ] **External services:** Confirm Langfuse, GitHub, and model endpoint are reachable
+- [ ] **Capacity:** Check available memory, disk, CPU
+- [ ] **Documentation:** Consult relevant docs (e.g., for git conflicts, see [Git Workflow](../git-workflow.md))
+- [ ] **Action:** Based on the failure mode, apply the recovery steps above
+- [ ] **Verify:** Confirm the ticket can now progress (run tests, check logs again)
+
+---
+
+## Getting Help
+
+If a ticket is stuck and the runbook doesn't help:
+
+1. **Check the docs** referenced throughout this runbook:
+   - [Agent Definitions](../agents/agent-yaml-schema.md) — how agents are configured
+   - [Cycles and Merging](../deployment/cycles.md) — how the mill orchestrates work
+   - [Deployment](../deployment/deployment.md) — infrastructure setup
+   - [Workspace Cleanup](../dev-tooling/workspace-cleanup.md) — cleaning up stuck workspaces
+
+2. **Collect diagnostics** to share:
+   ```bash
+   # Log snippet (last 50 lines for the run ID)
+   grep <run-id> ~/.mill/logs/*.log | tail -50
+   
+   # Config (sanitized of credentials)
+   robotsix-mill config show | head -30
+   
+   # Langfuse trace link (if available)
+   https://<langfuse-host>/traces/<trace-id>
+   ```
+
+3. **File a draft ticket** on the board with:
+   - Ticket ID that's stuck
+   - How long it's been stuck
+   - Latest log excerpt
+   - What you've tried so far
+
+4. **Escalate to the team** if it's a systematic issue (e.g., Langfuse down, infra failure)
+
+---
+
+## Additional Resources
+
+- **Config reference:** [configuration.md](../config/configuration.md)
+- **Module taxonomy:** [modules.yaml](../../docs/modules.yaml)
+- **CI policy:** [ci-policy.md](../dev-tooling/ci-policy.md)
+- **Agent references:** [agent_references/](../agent_references/)
