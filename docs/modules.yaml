@@ -591,16 +591,16 @@ modules:
       - tests/conftest.py
       - tests/test_doctests.py
       - tests/script_loader.py
-      - tests/dev-tooling/test_check_config_docs_sync.py
-      - tests/dev-tooling/test_check_config_sync.py
-      - tests/dev-tooling/test_check_cve_ignore_sync.py
-      - tests/dev-tooling/test_docs_nav.py
-      - tests/dev-tooling/test_emit_config_schema.py
-      - tests/dev-tooling/test_modules_yaml_paths.py
-      - tests/dev-tooling/test_render_harden_dockerfile.py
-      - tests/dev-tooling/test_resolve_docker_digest.py
-      - tests/dev-tooling/test_check_wheel_contents.py
-      - tests/dev-tooling/autoupdate/**/*.py
+      - tests/dev_tooling/test_check_config_docs_sync.py
+      - tests/dev_tooling/test_check_config_sync.py
+      - tests/dev_tooling/test_check_cve_ignore_sync.py
+      - tests/dev_tooling/test_docs_nav.py
+      - tests/dev_tooling/test_emit_config_schema.py
+      - tests/dev_tooling/test_modules_yaml_paths.py
+      - tests/dev_tooling/test_render_harden_dockerfile.py
+      - tests/dev_tooling/test_resolve_docker_digest.py
+      - tests/dev_tooling/test_check_wheel_contents.py
+      - tests/dev_tooling/autoupdate/**/*.py
       - alembic.ini
       - alembic/env.py
       - alembic/script.py.mako

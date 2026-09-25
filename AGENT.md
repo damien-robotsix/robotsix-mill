@@ -194,7 +194,7 @@ The canonical pattern:
    CI-gated).
 4. Document the env var in `docs/config/configuration.md` — the
    config-docs-sync test
-   (`tests/dev-tooling/test_check_config_docs_sync.py`) enforces
+   (`tests/dev_tooling/test_check_config_docs_sync.py`) enforces
    model↔example↔docs parity.
 5. Add a regression test asserting the runner wires the configured
    `request_limit` (see the existing periodic-agent runner tests under
