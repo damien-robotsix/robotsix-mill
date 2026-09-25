@@ -448,7 +448,7 @@ When a ticket is stuck or failed, use this checklist to systematically work thro
 - [ ] **Configuration:** Verify env vars and config file are correct
 - [ ] **External services:** Confirm Langfuse, GitHub, and model endpoint are reachable
 - [ ] **Capacity:** Check available memory, disk, CPU
-- [ ] **Documentation:** Consult relevant docs (e.g., for git conflicts, see [Git Workflow](../git-workflow.md))
+- [ ] **Documentation:** Consult relevant docs for additional context (see the runbook sections above for git conflicts)
 - [ ] **Action:** Based on the failure mode, apply the recovery steps above
 - [ ] **Verify:** Confirm the ticket can now progress (run tests, check logs again)
 
@@ -460,9 +460,9 @@ If a ticket is stuck and the runbook doesn't help:
 
 1. **Check the docs** referenced throughout this runbook:
    - [Agent Definitions](../agents/agent-yaml-schema.md) — how agents are configured
-   - [Cycles and Merging](../deployment/cycles.md) — how the mill orchestrates work
-   - [Deployment](../deployment/deployment.md) — infrastructure setup
-   - [Workspace Cleanup](../dev-tooling/workspace-cleanup.md) — cleaning up stuck workspaces
+   - [Cycles and Merging](../cycles.md) — how the mill orchestrates work
+   - [Deployment](../dev-tooling/deployment.md) — infrastructure setup
+   - [Workspace Cleanup](../core/workspace-cleanup.md) — cleaning up stuck workspaces
 
 2. **Collect diagnostics** to share:
    ```bash
@@ -489,6 +489,6 @@ If a ticket is stuck and the runbook doesn't help:
 ## Additional Resources
 
 - **Config reference:** [configuration.md](../config/configuration.md)
-- **Module taxonomy:** [modules.yaml](../../docs/modules.yaml)
+- **Module taxonomy:** [modules.yaml](../modules.yaml)
 - **CI policy:** [ci-policy.md](../dev-tooling/ci-policy.md)
 - **Agent references:** [agent_references/](../agent_references/)
