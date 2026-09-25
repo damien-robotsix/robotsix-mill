@@ -122,6 +122,63 @@ def test_trace_stage_noop_when_disabled():
         assert True  # body executed
 
 
+def test_start_ticket_root_span_stamps_stage_name_as_trace_name(monkeypatch):
+    """The root span must carry an explicit ``langfuse.trace.name`` equal
+    to the stage name — never the repo-qualified session id.
+
+    Regression for a real implement run whose Langfuse trace reached
+    cost-monitor's /api/by-agent breakdown tagged with its raw session id
+    (``robotsix-mill · <ticket-id>``) instead of ``implement``, so its
+    spend showed up as its own line rather than rolling into the
+    ``implement`` function total. We now stamp the trace name ourselves
+    rather than relying on llmio's span-name-else-session-id heuristic.
+    """
+    import opentelemetry.trace as otel_trace
+
+    captured: dict[str, object] = {}
+
+    class _CapSpan:
+        def is_recording(self):
+            return True
+
+        def set_attribute(self, k, v):
+            pass
+
+    class _CapTracer:
+        @contextlib.contextmanager
+        def start_as_current_span(self, name, attributes=None):
+            captured["name"] = name
+            captured["attributes"] = dict(attributes or {})
+            yield _CapSpan()
+
+    monkeypatch.setattr(otel_trace, "get_tracer", lambda *a, **k: _CapTracer())
+    # Skip real Langfuse provider setup; pretend a provider is ready.
+    monkeypatch.setattr(tracing, "_ensure_tracing", lambda rc=None: None)
+    tracing._provider_ready = True
+
+    rc = RepoConfig(
+        repo_id="robotsix-mill",
+        board_id="b",
+        langfuse_project_name="proj",
+        langfuse_public_key="pk-a",
+        langfuse_secret_key="sk-a",
+    )
+    ticket_id = "20260925T043947Z-add-periodic-cycle-detection-for-blocked-fa54"
+    with tracing.start_ticket_root_span(ticket_id, "implement", repo_config=rc):
+        pass
+
+    session_id = tracing.qualify_session(ticket_id, rc)
+    attrs = captured["attributes"]
+    # The OTel span name and the explicit Langfuse trace name are both
+    # the stage name — the stable, per-function label cost-monitor groups on.
+    assert captured["name"] == "implement"
+    assert attrs["langfuse.trace.name"] == "implement"
+    # session.id still groups the ticket's stage traces, but must NOT be
+    # what the trace is named after.
+    assert attrs["session.id"] == session_id
+    assert attrs["langfuse.trace.name"] != session_id
+
+
 # --- _ensure_tracing delegation ----------------------------------------
 
 

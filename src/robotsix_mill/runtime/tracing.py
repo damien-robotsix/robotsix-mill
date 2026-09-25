@@ -609,6 +609,7 @@ def start_ticket_root_span(
 
     from opentelemetry import trace
     from robotsix_llmio.core import tracing as _llmio_tracing
+    from robotsix_llmio.core._otel import LANGFUSE_TRACE_NAME
 
     # Resolve the public_key for routing: per-repo first, fall back to
     # the global secrets pk (single-repo / legacy mode). Enter llmio's
@@ -643,7 +644,20 @@ def start_ticket_root_span(
         _board_token = _current_board_id.set(board_id)
         stack.callback(_current_board_id.reset, _board_token)
         tracer = trace.get_tracer("robotsix-mill")
-        attrs: dict[str, str] = {"session.id": session_id}
+        # Stamp the Langfuse trace name EXPLICITLY (not just via the OTel
+        # span name). llmio's stamp processor only derives the trace name
+        # from ``span.name`` when the root span is the first span it sees
+        # with the session context intact; otherwise it falls back to the
+        # session id — which surfaced an implement trace tagged with the
+        # raw ``<repo> · <ticket>`` session id instead of "implement" in
+        # cost-monitor's /api/by-agent breakdown. Setting
+        # ``langfuse.trace.name`` on the root span ourselves makes the
+        # trace name deterministically the stage (function) name and
+        # never a per-run session id, regardless of that heuristic.
+        attrs: dict[str, str] = {
+            "session.id": session_id,
+            LANGFUSE_TRACE_NAME: stage_name,
+        }
         if extra_attributes:
             attrs.update(extra_attributes)
         with tracer.start_as_current_span(
