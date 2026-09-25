@@ -267,7 +267,7 @@ convention = "google"
 "tests/runtime/test_worker.py" = ["C901"]
 "tests/runtime/test_api.py" = ["C901"]
 "tests/cli/test_cli.py" = ["C901"]
-"tests/dev-tooling/autoupdate/test_autoupdate.py" = ["C901"]
+"tests/dev_tooling/autoupdate/test_autoupdate.py" = ["C901"]
 # --- src/ legacy hot spots --------------------------------------------------
 # F821 in these files: string-typed annotations referencing types
 # that are intentionally imported lazily inside the function body
