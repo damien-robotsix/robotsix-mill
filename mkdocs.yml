@@ -79,6 +79,7 @@ nav:
   - Guides:
       - Adding a New Agent: guides/adding-a-new-agent.md
       - Image handling: guides/image-handling.md
+      - Debugging and observability runbook: guides/debugging-and-observability-runbook.md
   - API Reference:
       - Agents: agents/reference.md
       - Core: reference/core.md
