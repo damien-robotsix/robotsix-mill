@@ -4,19 +4,10 @@
 # GITHUB_TOKEN to prevent recursion — CI workflows will NOT fire on the
 # bump PR if you pass GITHUB_TOKEN.
 #
-# The workflow mints an installation token from the shared GitHub App
-# (RELEASE_APP_PRIVATE_KEY) per run; no expiry/rotation, bot identity.
-#
-# Upstream robotsix-github-workflows/bump.yml calls the bump-setup composite
-# action, which has a bug in bump-setup/action.yml: the `repositories` input
-# description contains a literal `${{ github.repository }}` expression that the
-# runner's ActionManifestManagerLegacy cannot template-expand, causing
-# `Unrecognized named-value: 'github'` errors. Until that is fixed, we implement
-# the bump logic inline here with the same structure (minted token, checkout, uv
-# upgrade, bump-commit-pr action).
-#
-# TODO: revert to the shared bump.yml caller once upstream
-# robotsix-github-workflows fixes bump-setup's action metadata.
+# This workflow delegates to the shared robotsix-github-workflows/bump.yml
+# reusable workflow (bump-mode: deps). The shared workflow mints an
+# installation token from the GitHub App (RELEASE_APP_PRIVATE_KEY) per run;
+# no expiry/rotation, bot identity.
 
 name: Dependency Bump
 on:
@@ -27,54 +18,12 @@ permissions: {}
 jobs:
   bump:
     name: Bump uv.lock
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write       # push bump branch
-      pull-requests: write  # create/update PR
-    steps:
-      - name: Mint GitHub App installation token
-        id: app-token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349  # v2.2.2
-        with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          # owner/repositories omitted → token scoped to this repository only
-          # Scope the minted token to only what this workflow needs
-          # (push the bump branch + open the PR), instead of inheriting
-          # the App installation's blanket permissions.
-          permission-contents: write
-          permission-pull-requests: write
-      - name: Check out with bump credential
-        # persist-credentials intentionally default-true: the push step needs
-        # the minted credential in git's credential store.
-        # zizmor: ignore[artipacked]
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          fetch-depth: 0
-      - name: Install uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
-        with:
-          version: "0.12.5"
-      - name: Set git identity
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-      - name: Upgrade first-party pins
-        run: >
-          uv lock
-          --upgrade-package robotsix-llmio
-          --upgrade-package robotsix-board
-          --upgrade-package robotsix-yaml-config
-          --upgrade-package robotsix-modules
-      - uses: damien-robotsix/robotsix-github-workflows/.github/actions/bump-commit-pr@0584b087d3ae384050ef06723d3f4e6e06d523da
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          bump-branch: "deps/bump-uv-lock"
-          default-branch: "main"
-          diff-files: uv.lock
-          add-files: uv.lock
-          commit-message: "chore: bump first-party pins"
-          pr-title: "chore: bump first-party pins"
-          pr-body: "Automated first-party pin bump via `uv lock --upgrade-package`."
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/bump.yml@b8568722fa33fba3196a0364609b4c8bbb065a83
+    with:
+      bump-mode: "deps"
+      packages: "robotsix-llmio robotsix-board robotsix-yaml-config robotsix-modules"
+      default-branch: "main"
+      bump-branch: "deps/bump-uv-lock"
+      app-id: ${{ vars.RELEASE_APP_ID }}
+    secrets:
+      app-private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
