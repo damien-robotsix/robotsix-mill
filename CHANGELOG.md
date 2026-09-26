@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.9](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.8...v0.15.9) (2026-09-26)
+
+
+### Bug Fixes
+
+* Implement agent false file-state verification claims delay CI discovery (20260926T120632Z-implement-agent-false-file-state-verific-05e5) ([#3320](https://github.com/damien-robotsix/robotsix-mill/issues/3320)) ([39d54de](https://github.com/damien-robotsix/robotsix-mill/commit/39d54de9b6de826b0c102129157750ea3a546d2d))
+
 ## [0.15.8](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.7...v0.15.8) (2026-09-25)
 
 
