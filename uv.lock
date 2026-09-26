@@ -1746,7 +1746,7 @@ openrouter = [
 
 [[package]]
 name = "robotsix-mill"
-version = "0.15.7"
+version = "0.15.8"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
