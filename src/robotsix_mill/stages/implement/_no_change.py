@@ -107,6 +107,34 @@ def _emit_no_diff_diagnostic(
         )
 
 
+def _has_outstanding_review_directives(new_ic: _ImplementContext | None) -> bool:
+    """True when a reviewer left directive(s) on still-open review thread(s).
+
+    Used to reject a ``no_change_needed`` empty-diff conclusion during a
+    review-rework cycle: an empty diff that claims the files are "already
+    correct" while a review directive is still open is the false-state
+    claim this guard exists to prevent — the reviewer explicitly asked for
+    a change that does not exist at HEAD (e.g. the missing ``mkdocs.yml``
+    nav entry only CI later caught, ticket 20260925T170057Z).
+
+    Requires BOTH signals so a stray operator/author comment or an
+    already-resolved thread never triggers a false block:
+
+      * at least one open (unresolved) thread — ``open_thread_ids`` is
+        non-empty (set in ``_preflight`` from comments whose ``parent_id``
+        is ``None`` and ``closed_at`` is ``None``);
+      * the feedback carries an actual reviewer directive — a ``[REVIEW ``
+        tag, written only for ``author == 'review'`` comments in
+        ``_preflight``.
+    """
+    if new_ic is None:
+        return False
+    if not getattr(new_ic, "open_thread_ids", None):
+        return False
+    feedback = getattr(new_ic, "feedback", None) or ""
+    return "[REVIEW " in feedback
+
+
 def _run_no_change_contradiction_check(
     cls: Any,
     ctx: StageContext,
@@ -251,6 +279,44 @@ def _run_no_change_contradiction_check(
                     outcome=Outcome(
                         State.BLOCKED,
                         "unverified 'already fixed' claim (cited commit not at origin/main)",
+                    ),
+                )
+            # Guard: the reviewer requested specific changes that are still
+            # outstanding (open review thread(s)) yet the agent produced an
+            # empty diff and concluded no_change_needed. "Files already in
+            # their correct state" directly contradicts a live review
+            # directive — closing DONE would silently drop the requested
+            # work (as happened when a missing mkdocs.yml nav entry was only
+            # caught hours later by CI). BLOCK for inspection instead of a
+            # false DONE.
+            if _has_outstanding_review_directives(new_ic):
+                diag = (
+                    f"{no_change_rationale.strip() or summary}\n\n"
+                    "[Diagnostic] implement concluded ``no_change_needed`` with "
+                    "an empty diff, but the reviewer left directive(s) on still-"
+                    "open review thread(s). Claiming the files are 'already "
+                    "correct' contradicts an outstanding review request; closing "
+                    "DONE would silently drop the requested change. Re-run "
+                    "implement and either make the requested change (verify it "
+                    "lands with ``git diff``) or, if no change is genuinely "
+                    "needed, reply on each open thread explaining why — do not "
+                    "close as no-change while review directives are open."
+                )
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    diag,
+                    ok=False,
+                    reference_files=ref_files,
+                    extra_roots=extra_roots,
+                )
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(
+                        State.BLOCKED,
+                        "no_change_needed with empty diff but open review directives",
                     ),
                 )
             # No contradiction — close DONE.
