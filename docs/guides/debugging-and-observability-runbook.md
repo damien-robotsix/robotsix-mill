@@ -142,7 +142,7 @@ By default, workspaces are deleted when a ticket reaches a terminal state (close
 export MILL_PRUNE_CLONE_ON_CLOSE=false
 
 # Or in config.json:
-# "prune_clone_on_close": false
+# {"settings": {"prune_clone_on_close": false}}
 
 # Restart the worker to pick up the change
 systemctl restart robotsix-mill
@@ -499,7 +499,7 @@ export MILL_EMPTY_ROLLUP_MAX_POLLS=3             # default
 export MILL_MERGE_PR_MISSING_MAX_POLLS=20        # default
 
 # Or in config.json
-# {"pipeline": {
+# {"settings": {
 #   "green_unpromotable_max_polls": 10,
 #   "empty_rollup_max_polls": 3,
 #   "merge_pr_missing_max_polls": 20
@@ -569,41 +569,6 @@ git status --short
 
 # View the full diff with context
 git diff HEAD~1
-```
-
-### Workspace Preservation
-
-By default, when a ticket reaches a terminal state (DONE, BLOCKED, ARCHIVED), its workspace clone is **deleted** to save disk space. For post-mortem investigation or long-term tracking, preserve clones on close:
-
-```bash
-# Set globally (all future closed tickets preserve workspaces)
-export MILL_PRUNE_CLONE_ON_CLOSE=false
-
-# Or in config file
-# config.json: {"pipeline": {"prune_clone_on_close": false}}
-
-# Verify the setting
-robotsix-mill config show | grep prune_clone_on_close
-```
-
-**When to preserve:**
-- Debugging catastrophic failures (OOM, merge conflicts, sandbox errors)
-- Post-mortem root cause analysis
-- Regulatory or auditing requirements to retain evidence
-
-**Important:** Preserved workspaces accumulate on disk. Monitor space regularly:
-```bash
-du -sh ~/.mill/workspaces/  # total size
-du -sh ~/.mill/workspaces/*/  | sort -h | tail -10  # top 10 largest
-```
-
-**Cleanup stale workspaces (manual):**
-```bash
-# Delete workspaces older than 30 days
-find ~/.mill/workspaces/ -type d -mtime +30 -exec rm -rf {} \;
-
-# Or delete specific workspace
-rm -rf ~/.mill/workspaces/<ticket-id>/
 ```
 
 ### Inspecting Agent Artifacts
