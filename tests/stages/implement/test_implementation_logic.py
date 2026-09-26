@@ -934,6 +934,63 @@ class TestEvaluateTestResults:
         assert result.outcome.next_state is State.DONE
         assert result.outcome.note.startswith("no change needed")
 
+    def test_no_change_needed_with_open_review_directives_blocks(self, monkeypatch):
+        """no_change_needed + empty diff while a review directive is open → BLOCKED.
+
+        Regression for the false-state-claim gap: review sends implement a
+        directive, implement produces no diff and claims the files are
+        "already correct", and the requested change is only caught later by
+        CI (ticket 20260925T170057Z — missing mkdocs.yml nav entry).
+        """
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+
+        review_ic = _ic(
+            feedback=(
+                "[REVIEW id=42 @ 2026-09-25T11:46:00] Add the mkdocs.yml nav "
+                "entry, fix the config path, and add the dedup section."
+            ),
+            open_thread_ids={42},
+        )
+        result = self._call(
+            monkeypatch,
+            no_change_needed=True,
+            no_change_rationale="files appear to already be in their correct state",
+            ic=review_ic,
+            new_ic=review_ic,
+        )
+        assert result.next_action == "return"
+        assert result.outcome.next_state is State.BLOCKED
+        assert "open review directives" in result.outcome.note.lower()
+
+    def test_no_change_needed_with_resolved_review_stays_done(self, monkeypatch):
+        """Review feedback present but NO open thread → still DONE (no false block)."""
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+
+        resolved_ic = _ic(
+            feedback="[REVIEW id=42 @ 2026-09-25T11:46:00] Please add the nav entry.",
+            open_thread_ids=None,
+        )
+        result = self._call(
+            monkeypatch,
+            no_change_needed=True,
+            no_change_rationale="already satisfied",
+            ic=resolved_ic,
+            new_ic=resolved_ic,
+        )
+        assert result.next_action == "return"
+        assert result.outcome.next_state is State.DONE
+        assert result.outcome.note.startswith("no change needed")
+
     def test_edit_claim_contradiction_blocks(self, monkeypatch):
         """no_change_needed but edit tools were invoked → BLOCKED."""
         self._install_default_patches(monkeypatch)
