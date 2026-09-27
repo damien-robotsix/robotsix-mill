@@ -46,6 +46,65 @@ delivery after the cooldown includes the total suppressed count. This
 prevents a sweep of 41 blocked tickets from becoming 41 pushes — the
 sink receives one notification with `suppressed_count: 40`.
 
+## Operator escalations (fleet-wide alerts)
+
+When a condition affects multiple tickets across boards — e.g. GitHub
+account billing block preventing hosted CI on every repo — the escalation
+system sends a single fleet-wide operator alert instead of per-ticket
+notifications.  This uses the same `fleet_notify_url` endpoint as
+per-ticket fleet notifications but with a different payload structure
+(no `ticket_id` / `ticket_title`; free-form operator message instead).
+
+### Configuration
+
+Operator escalations use the same `secrets:` configuration as per-ticket
+fleet notifications:
+
+| Secret key | Description |
+|---|---|
+| `fleet_notify_url` | Fleet notification endpoint URL. When unset, escalations fall back to `log.warning()`. |
+| `fleet_notify_token` | Optional bearer token sent as `Authorization: Bearer <token>`. |
+
+### Payload shape
+
+When an operator escalation fires, the endpoint receives a JSON body with:
+
+| Field | Type | Description |
+|---|---|---|
+| `source` | `string` | Always `"mill"`. |
+| `severity` | `string` | `"critical"` (account block), `"warning"` (default), or `"info"`. |
+| `category` | `string` | Escalation type, e.g. `"infra_account_block"`. |
+| `message` | `string` | Free-form operator-facing alert text. |
+| `dedup_key` | `string` | Deduplication key; defaults to category. |
+| `timestamp` | `string` | ISO-8601 UTC timestamp of the escalation. |
+
+### Examples
+
+When GitHub's hosted runners are blocked for the account (e.g. billing
+issue), the infra account-block runner escalates once per outage:
+
+```json
+{
+  "source": "mill",
+  "severity": "critical",
+  "category": "infra_account_block",
+  "message": "OPERATOR ESCALATION — GitHub hosted CI is blocked (account / billing / spending-limit) for repo(s): repo-a, repo-b. First observed: 2026-09-18T15:30:00Z. Hosted jobs are refused before they start; self-hosted jobs are unaffected. Clear the block in GitHub 'Billing & plans'; parked tickets auto-resume once a hosted run on the repo succeeds again.",
+  "dedup_key": "infra_account_block",
+  "timestamp": "2026-09-18T15:31:45Z"
+}
+```
+
+### Behavior
+
+- **Fire-and-forget:** network errors are logged and never block ticket
+  processing.
+- **Deduplication:** the same escalation (by `dedup_key`) is only sent
+  once per configured `infra_account_block_reescalate_seconds` interval
+  (default: 86400 seconds, 24 hours). This prevents re-escalating
+  continuously while an outage is unresolved.
+- **Fallback:** when `fleet_notify_url` is unset or delivery fails, the
+  escalation falls back to `log.warning()` so the alert is never lost.
+
 ## Legacy ntfy fallback
 
 If `fleet_notify_url` is unset but `ntfy_url` is configured, mill falls

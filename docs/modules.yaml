@@ -507,6 +507,7 @@ modules:
     paths:
       - src/robotsix_mill/notify/__init__.py
       - src/robotsix_mill/notify/fleet.py
+      - src/robotsix_mill/notify/user_chat.py
       - tests/notify/test_notify.py
       - docs/notify/**/*
     dependencies: [config, core]

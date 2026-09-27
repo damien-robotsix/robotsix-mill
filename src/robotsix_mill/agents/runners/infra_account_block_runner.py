@@ -105,22 +105,33 @@ def _record_escalation(settings: Settings, now: datetime, repos: list[str]) -> N
 
 
 def _default_escalate(repos: list[str], first_observed: str | None) -> None:
-    """Default operator escalation: a single consolidated WARNING.
+    """Default operator escalation: route to the ``user_chat`` channel.
 
-    The 2026-09-04 escalation design routes such alerts to a chat
-    ``user_chat`` subsession, but no such primitive exists in this repo
-    yet — this WARNING is the operator-facing signal, and callers can pass
-    ``escalate=`` to route it to a real channel once one exists.
+    The 2026-09-04 escalation design routes such alerts to the operator
+    ``user_chat`` channel; :func:`~robotsix_mill.notify.user_chat.escalate_to_user_chat`
+    posts the alert to the configured fleet operator endpoint.  When no
+    channel is configured (or delivery fails) we fall back to a single
+    consolidated WARNING — the durable operator-facing signal.  Callers can
+    still pass ``escalate=`` to route it elsewhere.
     """
-    log.warning(
+    message = (
         "OPERATOR ESCALATION — GitHub hosted CI is blocked (account / "
-        "billing / spending-limit) for repo(s): %s. First observed: %s. "
-        "Hosted jobs are refused before they start; self-hosted jobs are "
-        "unaffected. Clear the block in GitHub 'Billing & plans'; parked "
-        "tickets auto-resume once a hosted run on the repo succeeds again.",
-        ", ".join(repos) or "unknown",
-        first_observed or "unknown",
-    )
+        "billing / spending-limit) for repo(s): {repos}. First observed: "
+        "{first}. Hosted jobs are refused before they start; self-hosted "
+        "jobs are unaffected. Clear the block in GitHub 'Billing & plans'; "
+        "parked tickets auto-resume once a hosted run on the repo succeeds "
+        "again."
+    ).format(repos=", ".join(repos) or "unknown", first=first_observed or "unknown")
+
+    from ...notify.user_chat import escalate_to_user_chat
+
+    if escalate_to_user_chat(
+        message, severity="critical", category="infra_account_block"
+    ):
+        log.info("infra_account_block: operator escalation routed to user_chat")
+        return
+
+    log.warning("%s", message)
 
 
 def _collect_parked_by_board(

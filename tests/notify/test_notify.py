@@ -10,6 +10,7 @@ import pytest
 from robotsix_mill.core.states import State
 from robotsix_mill.notify import send_notification
 from robotsix_mill.notify.fleet import _DEDUP_WINDOW, _reset_fleet_notifier
+from robotsix_mill.notify.user_chat import escalate_to_user_chat
 from robotsix_mill.runtime.worker import process_ticket
 from robotsix_mill.stages import Outcome, StageContext, registry
 from robotsix_mill.stages.base import Stage
@@ -392,6 +393,83 @@ def test_fleet_preferred_when_both_configured(
     assert len(rec.calls) == 1
     assert rec.calls[0]["url"] == "https://fleet.example.com/notify"
     assert rec.calls[0]["headers"]["Content-Type"] == "application/json"
+
+
+# ---------------------------------------------------------------------------
+# user_chat operator-escalation primitive tests
+# ---------------------------------------------------------------------------
+
+
+def test_user_chat_noop_when_url_unset(secrets_set):
+    """No fleet endpoint configured → returns False, no POST attempted."""
+    secrets_set(fleet_notify_url=None)
+    assert escalate_to_user_chat("alert") is False
+
+
+def test_user_chat_posts_json_payload(monkeypatch, secrets_set):
+    """Happy path: a JSON POST is made and True is returned."""
+    secrets_set(fleet_notify_url="https://fleet.example.com/notify")
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    ok = escalate_to_user_chat(
+        "hosted CI blocked", severity="critical", category="infra_account_block"
+    )
+
+    assert ok is True
+    assert len(rec.calls) == 1
+    c = rec.calls[0]
+    assert c["url"] == "https://fleet.example.com/notify"
+    assert c["headers"]["Content-Type"] == "application/json"
+    payload = c["json"]
+    assert payload["source"] == "mill"
+    assert payload["severity"] == "critical"
+    assert payload["category"] == "infra_account_block"
+    assert payload["message"] == "hosted CI blocked"
+    assert payload["dedup_key"] == "infra_account_block"  # defaults to category
+    assert "timestamp" in payload
+
+
+def test_user_chat_dedup_key_override(monkeypatch, secrets_set):
+    """An explicit dedup_key overrides the category default."""
+    secrets_set(fleet_notify_url="https://fleet.example.com/notify")
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    escalate_to_user_chat("x", category="cat", dedup_key="custom-key")
+    assert rec.calls[0]["json"]["dedup_key"] == "custom-key"
+
+
+def test_user_chat_token_sent_as_bearer(monkeypatch, secrets_set):
+    """fleet_notify_token is sent as Authorization: Bearer."""
+    secrets_set(
+        fleet_notify_url="https://fleet.example.com/notify",
+        fleet_notify_token="tk_fleet",
+    )
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    escalate_to_user_chat("x")
+    assert rec.calls[0]["headers"]["Authorization"] == "Bearer tk_fleet"
+
+
+def test_user_chat_network_error_returns_false(monkeypatch, caplog, secrets_set):
+    """A POST failure is caught, logged, and returns False (caller falls back)."""
+    secrets_set(fleet_notify_url="https://fleet.example.com/notify")
+    rec = _RecordingPost(exc=ConnectionError("refused"))
+    monkeypatch.setattr(httpx, "post", rec)
+
+    assert escalate_to_user_chat("x") is False
+    assert "user_chat escalation failed" in caplog.text
+
+
+def test_user_chat_non_2xx_returns_false(monkeypatch, secrets_set):
+    """A 500 response is treated as a delivery failure → returns False."""
+    secrets_set(fleet_notify_url="https://fleet.example.com/notify")
+    rec = _RecordingPost(status_code=500)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    assert escalate_to_user_chat("x") is False
 
 
 # ---------------------------------------------------------------------------
