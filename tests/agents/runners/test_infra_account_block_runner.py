@@ -148,6 +148,44 @@ def test_tickets_resume_when_hosted_ci_green_again(tmp_path, monkeypatch):
     )
 
 
+def test_default_escalate_routes_to_user_chat(monkeypatch, caplog):
+    """_default_escalate delegates to the user_chat primitive; no WARNING
+    fallback when the channel accepts the alert."""
+    sent: list[tuple[str, dict]] = []
+
+    def _fake(message, **kwargs):
+        sent.append((message, kwargs))
+        return True
+
+    monkeypatch.setattr("robotsix_mill.notify.user_chat.escalate_to_user_chat", _fake)
+
+    with caplog.at_level("WARNING"):
+        iab._default_escalate(["repo-a", "repo-b"], "2026-09-18T00:00:00+00:00")
+
+    assert len(sent) == 1
+    message, kwargs = sent[0]
+    assert "repo-a, repo-b" in message
+    assert "2026-09-18T00:00:00+00:00" in message
+    assert kwargs["category"] == "infra_account_block"
+    assert kwargs["severity"] == "critical"
+    assert "OPERATOR ESCALATION" not in caplog.text  # no WARNING fallback
+
+
+def test_default_escalate_warns_when_no_channel(monkeypatch, caplog):
+    """When user_chat has no channel (returns False), fall back to WARNING."""
+    monkeypatch.setattr(
+        "robotsix_mill.notify.user_chat.escalate_to_user_chat",
+        lambda message, **kwargs: False,
+    )
+
+    with caplog.at_level("WARNING"):
+        iab._default_escalate(["repo-a"], None)
+
+    assert "OPERATOR ESCALATION" in caplog.text
+    assert "repo-a" in caplog.text
+    assert "unknown" in caplog.text  # first_observed is None
+
+
 def test_unrelated_blocks_are_ignored_no_escalation(tmp_path, monkeypatch):
     forge = _FakeForge(conclusion="failure")
     settings, services = _prepare(tmp_path, monkeypatch, forge, boards=["board-a"])
