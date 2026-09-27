@@ -17,7 +17,7 @@ ENV UV_INSTALL_DIR=/usr/local/bin
 # hadolint ignore=DL3008,DL4006
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates \
-        nodejs=20.19.2+dfsg-1+deb13u2 \
+        nodejs=20.19.2+dfsg-1+deb13u3 \
         npm=9.2.0~ds1-3 \
     && curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh \
     && chmod a+rx /usr/local/bin/uv \
