@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.10](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.9...v0.15.10) (2026-09-27)
+
+
+### Bug Fixes
+
+* CI failure: Release on main (20260927T123036Z-ci-failure-release-on-main-fe9d) ([#3324](https://github.com/damien-robotsix/robotsix-mill/issues/3324)) ([ad244aa](https://github.com/damien-robotsix/robotsix-mill/commit/ad244aaa06c06156cdc694f2e9d36fb4c6ecdc36))
+
 ## [0.15.9](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.8...v0.15.9) (2026-09-26)
 
 
