@@ -701,7 +701,7 @@ def test_load_context_blocked_resume_skips_feedback(ctx_factory, monkeypatch):
     ctx = ctx_factory()
     t = _ticket(ctx)
     ctx.service.add_comment(t.id, "real review feedback", author="reviewer")
-    t.blocked_from = "READY"  # BLOCKED resume — feedback still injected (b92d)
+    t.blocked_from = "ready"  # BLOCKED resume — feedback still injected (b92d)
     monkeypatch.setattr(pc, "load_memory", lambda p: "")
 
     ic = ImplementStage._load_implement_context(ctx, t, ctx.settings)
