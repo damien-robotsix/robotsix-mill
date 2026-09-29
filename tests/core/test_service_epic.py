@@ -605,6 +605,36 @@ def test_mark_done_no_repo_clone_no_crash(service):
         assert comment.body == "Fixed in PR #9999"
 
 
+def test_commit_citation_re_ignores_pure_decimal_run_ids():
+    """Pure decimal run IDs (e.g. GitHub Actions run IDs) must NOT match
+    the commit citation regex, while real hex SHAs (containing at least
+    one a-f letter) must match. Regression for false-positive warnings
+    on CI auto-close notes citing green run IDs.
+    """
+    from robotsix_mill.core.service._transition_mixin import (
+        _COMMIT_CITATION_RE,
+    )
+
+    decimal_run_ids = [
+        "36436856099",
+        "36435778761",
+        "36401237334",
+        "36395983109",
+        "36347927386",
+        "36319699739",
+    ]
+    for run_id in decimal_run_ids:
+        assert not _COMMIT_CITATION_RE.search(run_id), run_id
+
+    valid_shas = [
+        "e95be552",
+        "abcdef1234567890abcdef1234567890abcdef12",
+        "1234abc",
+    ]
+    for sha in valid_shas:
+        assert _COMMIT_CITATION_RE.search(sha), sha
+
+
 def _setup_repo_with_branch(repo_dir, ticket_id, branch_prefix="mill/"):
     """Create a git repo with an initial commit on origin/main and a
     feature branch <branch_prefix><ticket_id>.
