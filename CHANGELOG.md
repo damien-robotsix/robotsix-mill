@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.11](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.10...v0.15.11) (2026-09-29)
+
+
+### Bug Fixes
+
+* uppercase state examples in epic_status agent system_prompt (20260928T134836Z-fix-uppercase-state-examples-in-epic-sta-33ca) ([#3333](https://github.com/damien-robotsix/robotsix-mill/issues/3333)) ([69df03c](https://github.com/damien-robotsix/robotsix-mill/commit/69df03c6e7c8cb05469aaeec69b4d1752ce52461))
+* uppercase state value "READY" in test (tests/stages/implement/test_implement_phase_coordinator.py) (20260928T134836Z-fix-uppercase-state-value-ready-in-test-1d01) ([#3332](https://github.com/damien-robotsix/robotsix-mill/issues/3332)) ([b760d12](https://github.com/damien-robotsix/robotsix-mill/commit/b760d128111dc2a6114d02fea3febda542bf6724))
+
 ## [0.15.10](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.9...v0.15.10) (2026-09-27)
 
 
