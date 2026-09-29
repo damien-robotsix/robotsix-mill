@@ -314,7 +314,7 @@ _TERMINAL_STATES: set[State] = {
 _PR_CITATION_RE = re.compile(r"(?:PR\s+)?#(\d{1,5})", re.IGNORECASE)
 
 # Matches 7–40 hex SHA-like tokens (same pattern as refine's _COMMIT_SHA_RE).
-_COMMIT_CITATION_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
+_COMMIT_CITATION_RE = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")
 
 
 def _verify_citations(note: str, repo_dir: Path | None) -> str:
