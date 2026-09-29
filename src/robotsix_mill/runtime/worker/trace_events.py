@@ -58,7 +58,7 @@ def _post_trace_event(
 
 
 def _root_span_attributes(
-    ticket, stage_name: str, dispatch_counts: Counter[str]
+    ticket: Ticket, stage_name: str, dispatch_counts: Counter[str]
 ) -> dict[str, str]:
     """Build span attributes for Langfuse searchability from ticket metadata.
 
@@ -82,7 +82,7 @@ def _root_span_attributes(
 
 
 def _root_input_summary(
-    ticket, ticket_id: str, stage_name: str, dispatch_count: int = 0
+    ticket: Ticket, ticket_id: str, stage_name: str, dispatch_count: int = 0
 ) -> dict[str, Any]:
     """Build the input-summary dict attached to the Langfuse root span.
 

@@ -29,7 +29,7 @@ class GitHubForgePRReviewOpsMixin:
         Never raises.
         """
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)  # type: ignore[attr-defined]
         if pr is None:
             return False
         return self._post_pr_comment(
@@ -46,7 +46,7 @@ class GitHubForgePRReviewOpsMixin:
         and ``body``. Returns ``[]`` when no PR exists for the branch.
         """
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)  # type: ignore[attr-defined]
         if pr is None:
             return []
         return self._list_pr_reviews(
@@ -62,7 +62,7 @@ class GitHubForgePRReviewOpsMixin:
         not found (or on any API failure). Must NEVER raise.
         """
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)  # type: ignore[attr-defined]
         if pr is None:
             return False
         return self._dismiss_review(
@@ -80,7 +80,7 @@ class GitHubForgePRReviewOpsMixin:
         when no PR exists for the branch.
         """
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)  # type: ignore[attr-defined]
         if pr is None:
             return []
         return self._list_review_comments(
