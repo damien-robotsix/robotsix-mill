@@ -22,6 +22,7 @@ from .github_ci import GitHubForgeCIMixin
 from .github_code_scanning import GitHubForgeCodeScanningMixin
 from .github_dependabot import GitHubForgeDependabotMixin
 from .github_pr import GitHubForgePRMixin
+from .github_pr_review_ops import GitHubForgePRReviewOpsMixin
 from .github_security import GitHubForgeSecurityMixin
 
 # ---------------------------------------------------------------------------
@@ -81,6 +82,7 @@ def _parse_repo_info(r: dict[str, Any]) -> RepoInfo:
 
 class GitHubForge(
     GitHubForgePRMixin,
+    GitHubForgePRReviewOpsMixin,
     GitHubForgeCIMixin,
     GitHubForgeCodeScanningMixin,
     GitHubForgeDependabotMixin,
