@@ -85,8 +85,9 @@ jobs:
           #
           # pypdf advisories GHSA-763m-79hh-57f2, GHSA-23w6-3w8w-8484,
           # GHSA-jp53-mhqp-8xcg (and the earlier GHSA-fp3f-mc75-235c /
-          # GHSA-fwg2-594c-jp42) are fixed by pypdf 6.16.1; uv.lock
-          # resolves 6.16.2, so no pypdf advisory is ignored here.
+          # GHSA-fwg2-594c-jp42) plus the Oct-2026 PDF-parsing DoS batch
+          # are fixed by pypdf 6.19.0; uv.lock resolves 6.19.0, so no
+          # pypdf advisory is ignored here.
           uv audit --frozen \
             --ignore PYSEC-2025-183 \
             --ignore MAL-2026-4750 \

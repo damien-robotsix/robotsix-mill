@@ -68,13 +68,17 @@ docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27", "pymdown-extensions>
 # an explicit `--group dev` on every sync.
 default-groups = ["dev"]
 exclude-newer = "7d"
-# pypdf 6.16.1 fixes GHSA-763m-79hh-57f2, GHSA-23w6-3w8w-8484 and
-# GHSA-jp53-mhqp-8xcg (PDF-parsing / untrusted-input) and supersedes the
-# 6.15.0 pin that carried GHSA-fp3f-mc75-235c / GHSA-fwg2-594c-jp42 fixes.
+# pypdf 6.19.0 fixes the Oct-2026 batch of PDF-parsing DoS advisories
+# (CVE-2026-102993..103000 / their GHSA/PYSEC aliases: unbounded memory and
+# long runtimes on malformed font data, /ToUnicode streams, FlateDecode
+# streams, indirect objects, embedded files and page labels). It supersedes
+# the earlier 6.16.1 pin that carried GHSA-763m-79hh-57f2,
+# GHSA-23w6-3w8w-8484, GHSA-jp53-mhqp-8xcg and the 6.15.0-era
+# GHSA-fp3f-mc75-235c / GHSA-fwg2-594c-jp42 fixes.
 # The per-package override lets exactly this one package escape the rolling
 # 7-day window; the cutoff must post-date the release itself (uv resolves
-# 6.16.2, published 2026-08-23).
-exclude-newer-package = { pypdf = "2026-08-24T00:00:00Z" }
+# 6.19.0).
+exclude-newer-package = { pypdf = "2026-10-05T00:00:00Z" }
 # robotsix-github-auth pins robotsix-http to an older rev (4cf79993) while
 # robotsix-llmio pins ba90d55ea.  The two transitive exact-rev pins are
 # otherwise irreconcilable; both are ancestors of the rev below, so
