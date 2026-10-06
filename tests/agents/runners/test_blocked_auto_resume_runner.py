@@ -252,3 +252,28 @@ def test_default_patterns_cover_scope_triage_agent_error():
         "resume-blocked re-runs the triage — out-of-scope: `a.py`"
     )
     assert bar._matches(note, patterns)
+
+
+def test_default_patterns_match_openrouter_402_credit_shortfall():
+    """The live 2026-09-24 / 2026-10-02 block notes: an OpenRouter 402 on the
+    fallback slot is a provider balance condition, not a ticket defect, and
+    must be auto-resumable (six tickets sat BLOCKED on it for up to 12 days)."""
+    from robotsix_mill.agents.runners.blocked_auto_resume_runner import _matches
+    from robotsix_mill.config._settings_periodic import _PeriodicSettings
+
+    patterns = _PeriodicSettings.model_fields["blocked_auto_resume_patterns"].default
+    note = (
+        "status_code: 402, model_name: deepseek/deepseek-v4-pro-0813, body: "
+        "{'message': 'This request requires more credits, or fewer max_tokens. "
+        "You requested up to 131072 tokens, but can only afford 578. To increase, "
+        "visit https://openrouter.ai/settings/credits and add more credits', "
+        "'code': 402, 'metadata': {'limit_source': 'openrouter_credits'}}"
+    )
+    assert _matches(note, patterns)
+    assert _matches(
+        "review agent error — resumable: status_code: 402 … Insufficient credits",
+        patterns,
+    )
+    assert not _matches(
+        "spec unchanged since last spec-determined implement attempt", patterns
+    )

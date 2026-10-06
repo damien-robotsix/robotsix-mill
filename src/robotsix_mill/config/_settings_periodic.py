@@ -124,6 +124,14 @@ class _PeriodicSettings(BaseModel):
             r"review rounds exhausted",
             r"Infrastructure: LLM model outage",
             r"scope-triage agent error",
+            # OpenRouter 402 on the fallback slot ("This request requires more
+            # credits, or fewer max_tokens … can only afford N"): a provider
+            # balance condition, not a ticket defect. Six tickets sat BLOCKED on
+            # it for up to 12 days (2026-09-24..10-06) while the default Claude
+            # slot was healthy, because no pattern matched the bare 402 note.
+            r"requires more credits",
+            r"insufficient_credits",
+            r"insufficient credits",
         ],
         description="Regexes (case-insensitive) matched against the latest BLOCKED note; a match makes the block auto-resumable. Spec-fingerprint and upstream-CI parks are always excluded.",
     )
