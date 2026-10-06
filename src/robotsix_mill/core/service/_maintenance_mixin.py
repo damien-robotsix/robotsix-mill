@@ -17,6 +17,7 @@ from ..models import (
 )
 from ..states import State
 from ._base import _ServiceBase
+from ._delete_mixin import _bulk_delete_ticket_rows
 
 log = logging.getLogger("robotsix_mill.service")
 
@@ -238,16 +239,60 @@ class _MaintenanceMixin(_ServiceBase):
                 )
         return closed
 
+    def _reconcile_orphan_cards(self) -> int:
+        """Reconcile the board's card source against its ticket store.
+
+        Every card on the board is rendered from a :class:`Ticket` row,
+        so a card id returned by ``GET /board/cards`` must always
+        resolve via ``GET /tickets/{id}``.  History and comment rows,
+        however, can outlive their ticket when a delete is interrupted
+        or a row is removed out-of-band — leaving a ``ticket_id`` that
+        still has ``TicketEvent`` / ``Comment`` rows but no backing
+        ``Ticket`` row.  Such orphans make ``GET /tickets/{id}`` and
+        ``…/history`` answer 404 while the dangling rows linger in the
+        DB and inflate board/blocked counters.
+
+        Find every ``ticket_id`` referenced by an event or comment row
+        with no matching ``Ticket`` row, log each one deterministically
+        (sorted), and bulk-delete the dangling rows so the two views
+        agree.  Returns the number of distinct orphaned ids repaired.
+
+        Only the ``ticket_id`` column is selected — never whole
+        ``TicketEvent`` rows — so a legacy ``state`` value since retired
+        from :class:`State` can't raise ``KeyError`` mid-sweep, mirroring
+        the rationale in ``_bulk_delete_ticket_rows``.
+        """
+        with retry_on_db_full(self.settings, self.board_id) as s:
+            live_ids = set(s.exec(select(Ticket.id)).all())
+            referenced_ids = set(
+                s.exec(select(TicketEvent.ticket_id).distinct()).all()
+            ) | set(s.exec(select(Comment.ticket_id).distinct()).all())
+            orphan_ids = sorted(referenced_ids - live_ids)
+            if not orphan_ids:
+                return 0
+            for tid in orphan_ids:
+                log.warning(
+                    "db-maintenance: reconciling orphaned card %s on board "
+                    "%r — no ticket row; purging dangling event/comment rows",
+                    tid,
+                    self.board_id or "<default>",
+                )
+                _bulk_delete_ticket_rows(s, tid)
+            s.commit()
+        return len(orphan_ids)
+
     def db_maintenance_pass(self) -> dict[str, int]:
-        """Run one DB maintenance sweep: draft TTL auto-close, archive
-        purge, per-ticket event cap, and SQLite ``PRAGMA optimize``.
+        """Run one DB maintenance sweep: draft TTL auto-close, orphan-card
+        reconcile, archive purge, per-ticket event cap, and SQLite
+        ``PRAGMA optimize``.
 
         Returns a summary dict with keys ``drafts_auto_closed``,
-        ``archived_purged``, ``events_pruned``, ``comments_pruned``,
-        and ``tickets_pruned``.
+        ``orphans_reconciled``, ``archived_purged``, ``events_pruned``,
+        ``comments_pruned``, and ``tickets_pruned``.
         """
         result: dict[str, int] = {
             "drafts_auto_closed": 0,
+            "orphans_reconciled": 0,
             "archived_purged": 0,
             "events_pruned": 0,
             "comments_pruned": 0,
@@ -256,6 +301,10 @@ class _MaintenanceMixin(_ServiceBase):
 
         # 0. Auto-close stale drafts (board hygiene TTL).
         result["drafts_auto_closed"] = self._maybe_auto_close_stale_drafts()
+
+        # 0.5 Reconcile orphaned cards: event/comment rows whose Ticket
+        # row is gone make /tickets/{id} 404 while the card still lists.
+        result["orphans_reconciled"] = self._reconcile_orphan_cards()
 
         # 1. Count terminal tickets before purge, then run it.
         with retry_on_db_full(self.settings, self.board_id) as s:

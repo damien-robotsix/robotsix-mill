@@ -2602,6 +2602,7 @@ class TestDbMaintenancePass:
         summary = service.db_maintenance_pass()
         assert summary == {
             "drafts_auto_closed": 0,
+            "orphans_reconciled": 0,
             "archived_purged": 0,
             "events_pruned": 0,
             "comments_pruned": 0,
@@ -2928,11 +2929,84 @@ class TestDbMaintenancePass:
         # Spot-check: the summary contract is unchanged.
         assert set(summary.keys()) == {
             "drafts_auto_closed",
+            "orphans_reconciled",
             "archived_purged",
             "events_pruned",
             "comments_pruned",
             "tickets_pruned",
         }
+
+    def test_reconcile_orphan_cards_purges_rows_with_missing_ticket(
+        self, service, settings, caplog
+    ):
+        """A card whose Ticket row is gone but whose event/comment rows
+        linger (an interrupted delete / out-of-band removal) is the exact
+        shape that makes ``/board/cards`` list an id which 404s on
+        ``GET /tickets/{id}``.  The maintenance reconcile logs each such
+        id and purges the dangling rows so the two views agree."""
+        import logging
+
+        from sqlmodel import select
+
+        from robotsix_mill.core import db
+        from robotsix_mill.core.models import Comment, Ticket, TicketEvent
+
+        # Orphan ticket: has history + a comment, then its row vanishes.
+        orphan = service.create("orphan card")
+        service.add_step_event(orphan.id, "work step")
+        service.add_comment(orphan.id, "a comment")
+
+        # Healthy ticket that must survive the reconcile untouched.
+        healthy = service.create("healthy card")
+        service.add_step_event(healthy.id, "healthy step")
+
+        # Simulate the divergence: delete ONLY the Ticket row, leaving
+        # its event/comment rows dangling (a card with no ticket store row).
+        with db.session(settings, service.board_id) as s:
+            s.delete(s.get(Ticket, orphan.id))
+            s.commit()
+
+        # Pre-condition: the id 404s (get() is what /tickets/{id} uses)
+        # yet its event rows still reference it.
+        assert service.get(orphan.id) is None
+        with db.session(settings, service.board_id) as s:
+            assert (
+                s.exec(
+                    select(TicketEvent.ticket_id).where(
+                        TicketEvent.ticket_id == orphan.id
+                    )
+                ).first()
+                is not None
+            )
+
+        with caplog.at_level(logging.WARNING, logger="robotsix_mill.service"):
+            summary = service.db_maintenance_pass()
+        assert summary["orphans_reconciled"] == 1
+        assert any(orphan.id in r.getMessage() for r in caplog.records)
+
+        # The dangling event/comment rows are gone...
+        with db.session(settings, service.board_id) as s:
+            assert (
+                s.exec(
+                    select(TicketEvent.ticket_id).where(
+                        TicketEvent.ticket_id == orphan.id
+                    )
+                ).first()
+                is None
+            )
+            assert (
+                s.exec(
+                    select(Comment.ticket_id).where(Comment.ticket_id == orphan.id)
+                ).first()
+                is None
+            )
+
+        # ...and the healthy ticket plus its history are untouched.
+        assert service.get(healthy.id) is not None
+        assert len(service.history(healthy.id)) >= 2
+
+        # Idempotent: a second pass finds nothing left to reconcile.
+        assert service.db_maintenance_pass()["orphans_reconciled"] == 0
 
 
 def test_close_tracker_from_blocked_clears_blocked_from(service):
