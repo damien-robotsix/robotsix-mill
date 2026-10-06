@@ -129,7 +129,9 @@ class _PeriodicSettings(BaseModel):
             # balance condition, not a ticket defect. Six tickets sat BLOCKED on
             # it for up to 12 days (2026-09-24..10-06) while the default Claude
             # slot was healthy, because no pattern matched the bare 402 note.
-            r"requires more credits|insufficient_credits|insufficient credits",
+            r"requires more credits",
+            r"insufficient_credits",
+            r"insufficient credits",
         ],
         description="Regexes (case-insensitive) matched against the latest BLOCKED note; a match makes the block auto-resumable. Spec-fingerprint and upstream-CI parks are always excluded.",
     )
