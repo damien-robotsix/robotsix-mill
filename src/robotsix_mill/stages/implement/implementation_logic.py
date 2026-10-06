@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -307,6 +308,29 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             return -1
         return None
 
+    @staticmethod
+    def _make_ci_log_fetch_fn(ctx: StageContext) -> Callable[[int, bool], str]:
+        """Build the host-side forge probe the agent's ``fetch_ci_logs``
+        tool calls.
+
+        Returns a closure that calls ``forge.fetch_workflow_job_logs()``
+        for a given run id and *full_log* flag.  The closure is lazy — the
+        forge is resolved only when the agent actually invokes the tool —
+        so wiring it for every implement pass (including non-CI tickets or
+        boards without a GitHub forge) is cheap and side-effect-free.  This
+        lets implement autonomously pull a failing ``security-audit`` run's
+        logs to extract an OSV advisory id, which the sandbox cannot
+        reproduce (api.osv.dev is not reachable from the agent's network).
+        """
+
+        def fetch_fn(run_id: int, full_log: bool) -> str:
+            from ...forge import get_forge
+
+            forge = get_forge(ctx.settings, repo_config=ctx.repo_config)
+            return forge.fetch_workflow_job_logs(run_id=run_id, full_log=full_log)
+
+        return fetch_fn
+
     @classmethod
     def _invoke_implement_agent(
         cls,
@@ -352,6 +376,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                 if ctx.repo_config
                 else None,
                 target_branch=target_branch,
+                ci_log_fetch_fn=cls._make_ci_log_fetch_fn(ctx),
             )
         except AgentBudgetError as e:
             if e.conversation_state is not None and ws is not None:

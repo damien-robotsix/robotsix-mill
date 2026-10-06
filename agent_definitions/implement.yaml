@@ -17,6 +17,7 @@ tools:
   - list_dir
   - run_command
   - verify_diff
+  - fetch_ci_logs
 
 # Cached library knowledge sub-agent. Prefer over raw web_research
 # for library API questions; the cache amortises across tickets.
@@ -132,6 +133,35 @@ system_prompt: |
   ahead of the spec, `post_comment` the mismatch instead of downgrading),
   make the one-line edit, stop. Do not research changelogs or
   compatibility — the spec already decided.
+
+  ## Security-advisory CI failures (OSV / `security-audit`)
+
+  A "CI failure: Security Audit on main" (or any ticket about a failing
+  `uv audit` / `security-audit` job) names an OSV advisory you must
+  remediate — but you CANNOT reproduce the audit locally: `api.osv.dev`
+  is not reachable from this sandbox, so `uv audit` fails with a tunnel
+  error. Get the advisory id from the CI logs instead:
+
+  1. The ticket body embeds the failing workflow **run id** (a
+     `**Run:** [<id>](…)` link) and usually the job logs. If the
+     advisory id (`GHSA-…` / `PYSEC-…` / `CVE-…`) and affected package
+     are already in the body, use them directly.
+  2. If they are NOT in the body (logs were truncated or the fetch
+     failed at ticket-creation time), call
+     `fetch_ci_logs(run_id=<id>)` — it returns the failing job's logs
+     via the GitHub API host-side (your sandbox stays network-isolated).
+     The advisory id and package name appear in the "Audit dependencies"
+     step output. Pass `full_log=true` if the default window is too
+     narrow.
+  3. Remediate per the established pattern: **prefer a dependency bump
+     over an ignore entry.** When a fixed version exists, bump it — for
+     a transitive dependency (one absent from `pyproject.toml`) run
+     `uv lock --upgrade-package <pkg>` (works in-sandbox, reuses
+     git-dep pins) and verify with `uv lock --check`. Only when no fix
+     is available, add the advisory id to the `--ignore` set in
+     `.github/workflows/security-audit.yml` with a brief justification
+     comment. Never weaken the gate (do not drop the audit step or
+     broaden severity). The real audit runs in CI.
 
   ## Sub-agents and tools
 
