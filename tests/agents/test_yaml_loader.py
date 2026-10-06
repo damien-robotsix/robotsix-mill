@@ -487,42 +487,6 @@ def test_inject_agent_md_can_be_false():
 # ── Structural verification: all agent_definitions/*.yaml ─────────────
 
 
-# Known-valid tool names (mirrors ToolRegistry + fs_tools).
-_VALID_TOOL_NAMES = frozenset(
-    {
-        "clone_repo",
-        "explore",
-        "parallel_explore",
-        "read_file",
-        "write_file",
-        "edit_file",
-        "delete_file",
-        "list_dir",
-        "run_command",
-        "verify_diff",
-        "langfuse_session_summary",
-        "langfuse_list_traces",
-        "langfuse_trace_detail",
-        "langfuse_session_cost",
-        "langfuse_inspect_trace",
-        "inspect_cost",
-        "query_app_logs",
-        "create_repo",
-        "fetch_ci_logs",
-        "fork_repo",
-        "post_findings",
-        "git_fetch",
-        "git_remote_sha",
-        "git_push_with_lease",
-        "git_branch_ancestry",
-    }
-)
-
-# Known-valid categories.
-_VALID_CATEGORIES = frozenset(
-    {"pipeline", "periodic", "sub_agent", "interactive", "sandboxed"}
-)
-
 # Mapping from ${VAR} → Settings field alias (from config.py).
 _ENV_VAR_TO_SETTINGS_ALIAS: dict[str, str] = {
     "MILL_MODEL": "MILL_MODEL",
@@ -644,29 +608,49 @@ def test_output_type_exists_in_module(monkeypatch):
         )
 
 
-def test_tool_names_are_valid(monkeypatch):
-    """Every tool name in each YAML's tools list is known-valid."""
-    for var in _ENV_VAR_TO_SETTINGS_ALIAS:
-        monkeypatch.setenv(var, "mock/model")
+def test_invalid_category_raises_validation_error(tmp_path):
+    """An unknown ``category`` fails fast at load time with a clear error.
 
-    for yf, ad in _all_definitions():
-        for tool in ad.tools:
-            assert tool in _VALID_TOOL_NAMES, (
-                f"{yf.name}: unknown tool '{tool}'. Known: {sorted(_VALID_TOOL_NAMES)}"
-            )
+    The semantic enum validation now lives in the ``AgentDefinition``
+    Pydantic schema (``category`` is a ``Literal``), so an invalid value
+    raises ``ValidationError`` at ``load_agent_definition`` time rather
+    than only at test time.
+    """
+    p = _write_yaml(
+        tmp_path,
+        """\
+name: bad-category
+category: not-a-real-category
+level: 1
+system_prompt: test
+""",
+    )
+    with pytest.raises(ValidationError) as exc_info:
+        load_agent_definition(p)
+    err_str = str(exc_info.value)
+    assert "category" in err_str.lower()
 
 
-def test_category_is_valid(monkeypatch):
-    """Every YAML with category set has a valid value."""
-    for var in _ENV_VAR_TO_SETTINGS_ALIAS:
-        monkeypatch.setenv(var, "mock/model")
+def test_invalid_tool_name_raises_validation_error(tmp_path):
+    """An unknown tool name fails fast at load time with a clear error.
 
-    for yf, ad in _all_definitions():
-        if ad.category is not None:
-            assert ad.category in _VALID_CATEGORIES, (
-                f"{yf.name}: invalid category '{ad.category}'. "
-                f"Valid: {sorted(_VALID_CATEGORIES)}"
-            )
+    Tool-name validation now lives in the ``AgentDefinition`` schema via
+    a ``field_validator``, so an invalid tool raises ``ValidationError``
+    at ``load_agent_definition`` time.
+    """
+    p = _write_yaml(
+        tmp_path,
+        """\
+name: bad-tool
+level: 1
+system_prompt: test
+tools:
+  - not_a_real_tool
+""",
+    )
+    with pytest.raises(ValidationError) as exc_info:
+        load_agent_definition(p)
+    assert "Unknown tools" in str(exc_info.value)
 
 
 def test_report_issue_consistency(monkeypatch):
