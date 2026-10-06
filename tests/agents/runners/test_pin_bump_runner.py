@@ -65,9 +65,9 @@ def _fresh_pass_guard():
     """Each test starts as if no cross-repo pass had run in this process."""
     import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
 
-    runner_mod._reset_pass_guard()
+    runner_mod._last_pass_started_monotonic = None
     yield
-    runner_mod._reset_pass_guard()
+    runner_mod._last_pass_started_monotonic = None
 
 
 class TestPassGuard:
@@ -132,7 +132,7 @@ class TestPassGuard:
         assert runner_mod._pass_recently_ran(100.0, 50.0)
         assert runner_mod._pass_recently_ran(100.0, 89.0)
         assert not runner_mod._pass_recently_ran(100.0, 90.0)
-        runner_mod._reset_pass_guard()
+        runner_mod._last_pass_started_monotonic = None
         assert not runner_mod._pass_recently_ran(100.0, 1.0)
 
     def test_disabled_interval_does_not_arm_the_guard(self):

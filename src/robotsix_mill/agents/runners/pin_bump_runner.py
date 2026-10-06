@@ -57,12 +57,6 @@ _last_pass_started_monotonic: float | None = None
 _PASS_GUARD_FRACTION = 0.9
 
 
-def _reset_pass_guard() -> None:
-    """Forget the last pass start (tests; a process restart does this too)."""
-    global _last_pass_started_monotonic
-    _last_pass_started_monotonic = None
-
-
 def _pass_recently_ran(interval_seconds: float, now: float) -> bool:
     """Return True when a cross-repo pass started within the guard window."""
     last = _last_pass_started_monotonic
