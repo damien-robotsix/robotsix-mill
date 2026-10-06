@@ -16,6 +16,7 @@ re-runs the coordinator fresh — it re-explores, no transcript needed).
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +88,7 @@ def run_implement_agent(
     sandbox_image: str | None = None,
     stage_name: str = "implement",
     target_branch: str = "main",
+    ci_log_fetch_fn: Callable[[int, bool], str] | None = None,
 ) -> tuple[str, list[str], str, bytes | None, bytes | None, bool, str]:
     """Run ONE coordinator pass for this ticket. Returns
     ``(summary, reference_files, updated_memory, conversation_state,
@@ -112,6 +114,14 @@ def run_implement_agent(
     ``extra_roots`` — additional repo roots forwarded to the coordinator
     so the agent can read/write across multiple cloned repos
     (meta-board tickets).
+    ``ci_log_fetch_fn`` — host-side forge probe that returns the job
+    logs for a workflow run id (and *full_log* flag). When provided, the
+    coordinator gets the ``fetch_ci_logs`` tool so it can autonomously
+    pull a failing CI run's logs — e.g. to extract an OSV advisory id
+    from a ``security-audit`` failure the sandbox cannot reproduce
+    (api.osv.dev is not reachable from the agent's network). ``None``
+    (the default) still wires the tool, but every call reports the
+    capability is unavailable.
     The implement agent is always the primary worker and can delegate
     to per-domain expert sub-agents via its ``consult_expert`` tool,
     with each expert keeping its own memory ledger.
@@ -140,6 +150,7 @@ def run_implement_agent(
             sandbox_image=sandbox_image,
             stage_name=stage_name,
             target_branch=target_branch,
+            ci_log_fetch_fn=ci_log_fetch_fn,
         )
 
     try:
@@ -206,6 +217,7 @@ def run_implement_agent(
                 sandbox_image=sandbox_image,
                 stage_name=stage_name,
                 target_branch=target_branch,
+                ci_log_fetch_fn=ci_log_fetch_fn,
             )
         except Exception as fallback_e:
             # Keep BOTH failures typed: ``cause`` carries the fallback's

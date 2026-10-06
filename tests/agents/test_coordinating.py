@@ -783,6 +783,37 @@ class TestRunCoordinator:
             in user_prompt
         )
 
+    # -- fetch_ci_logs wiring --------------------------------------------
+
+    def test_fetch_ci_logs_tool_wired_and_forwards_fn(self, settings, tmp_path):
+        """run_coordinator always wires the ``fetch_ci_logs`` tool, and a
+        provided ``ci_log_fetch_fn`` is what the tool calls host-side — the
+        seam that lets implement pull a failing security-audit run's logs to
+        extract an OSV advisory id."""
+        calls: list[tuple[int, bool]] = []
+
+        def _fetch_fn(run_id: int, full_log: bool) -> str:
+            calls.append((run_id, full_log))
+            return f"GHSA-xxxx advisory in run {run_id}"
+
+        self._run(settings, tmp_path, ci_log_fetch_fn=_fetch_fn)
+
+        tools = {t.__name__: t for t in self.captured["tools"]}
+        assert "fetch_ci_logs" in tools
+        out = tools["fetch_ci_logs"](run_id=42)
+        assert "GHSA-xxxx" in out
+        assert calls == [(42, False)]
+
+    def test_fetch_ci_logs_tool_unavailable_without_fn(self, settings, tmp_path):
+        """With no ``ci_log_fetch_fn`` (default) the tool is still wired so
+        the prompt's call directive resolves, but reports it is unavailable
+        rather than raising."""
+        self._run(settings, tmp_path)
+        tools = {t.__name__: t for t in self.captured["tools"]}
+        assert "fetch_ci_logs" in tools
+        out = tools["fetch_ci_logs"](run_id=42)
+        assert "CI_LOG_FETCH_UNAVAILABLE" in out
+
     # -- language_instructions -------------------------------------------
 
     def test_language_instructions_not_duplicated_into_user_prompt(

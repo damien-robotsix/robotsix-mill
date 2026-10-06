@@ -403,6 +403,7 @@ def run_coordinator(
     sandbox_image: str | None = None,
     stage_name: str = "implement",
     target_branch: str = "main",
+    ci_log_fetch_fn: Callable[[int, bool], str] | None = None,
 ) -> ImplementResult:
     """Run ONE explore→read→edit pass for the ticket and return the
     structured result.
@@ -418,6 +419,7 @@ def run_coordinator(
     from pydantic_ai.usage import UsageLimits
 
     from .base import _safe_close, build_agent_from_definition
+    from .ci_log_fetch_tool import build_ci_log_fetch_tool
     from .explore import make_explore_tool, make_parallel_explore_tool
     from .fs_tools import build_fs_tools
     from .retry import run_agent
@@ -546,6 +548,12 @@ def run_coordinator(
         make_spawn_subtask_tool(settings, repo_dir),
         make_post_comment_tool(settings, agent_name="implement"),
         make_verify_diff_tool(repo_dir),
+        # fetch_ci_logs: host-side forge probe so the agent can pull a
+        # failing CI run's logs on demand (e.g. extract an OSV advisory id
+        # from a security-audit failure the sandbox cannot reproduce).
+        # Always wired so the prompt's call directive resolves; when
+        # ci_log_fetch_fn is None every call reports CI_LOG_FETCH_UNAVAILABLE.
+        build_ci_log_fetch_tool(branch=target_branch, fetch_fn=ci_log_fetch_fn),
         *fs_tools,
     ]
     # Wrap when either signal is needed: the watchdog event (gated on
