@@ -531,3 +531,64 @@ def test_read_body_from_args_os_error_exits_two(tmp_path):
     with pytest.raises(SystemExit) as excinfo:
         _read_body_from_args(args)
     assert excinfo.value.code == 2
+
+
+# --- epic command tests ---
+
+
+def test_epic_new_success(monkeypatch, capsys):
+    """`epic new` posts to /epics, prints the new epic id, and exits 0."""
+    posted: dict = {}
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def post(self, url, **kwargs):
+            posted["url"] = url
+            posted["json"] = kwargs.get("json")
+            return _ErrResponse(200, {"id": "epic-123"})
+
+    _patch_client(monkeypatch, FakeClient)
+    rc = main(["epic", "new", "--title", "An epic", "--repo-id", "test-repo"])
+    assert rc == 0
+    assert posted["url"] == "/epics"
+    assert posted["json"] == {
+        "title": "An epic",
+        "description": "",
+        "repo_id": "test-repo",
+    }
+    assert capsys.readouterr().out.strip() == "epic-123"
+
+
+def test_epic_new_api_error_raises(monkeypatch):
+    """`epic new` has no try/except; a non-2xx response propagates.
+
+    Unlike ``ticket new``/``list``/``show``, ``_epic_new`` calls
+    ``raise_for_status()`` directly, so an HTTP failure surfaces as an
+    ``httpx.HTTPStatusError`` rather than an exit-1 return.
+    """
+    import httpx
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def post(self, url, **kwargs):
+            return _ErrResponse(500)
+
+    _patch_client(monkeypatch, FakeClient)
+    with pytest.raises(httpx.HTTPStatusError):
+        main(["epic", "new", "--title", "An epic", "--repo-id", "test-repo"])
