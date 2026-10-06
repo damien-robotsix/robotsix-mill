@@ -1472,11 +1472,13 @@ class PollLoopsMixin(_WorkerBase):
                     if any(summary.values()):
                         log.info(
                             "db-maintenance: %s — archived_purged=%d "
-                            "events_pruned=%d tickets_pruned=%d",
+                            "events_pruned=%d tickets_pruned=%d "
+                            "orphans_reconciled=%d",
                             label,
                             summary["archived_purged"],
                             summary["events_pruned"],
                             summary["tickets_pruned"],
+                            summary["orphans_reconciled"],
                         )
                 except Exception:
                     log.exception("db-maintenance poll failed for %s", label)
