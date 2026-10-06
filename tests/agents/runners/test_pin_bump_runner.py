@@ -60,6 +60,94 @@ def _make_repo_config(forge_remote_url):
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _fresh_pass_guard():
+    """Each test starts as if no cross-repo pass had run in this process."""
+    import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
+
+    runner_mod._last_pass_started_monotonic = None
+    yield
+    runner_mod._last_pass_started_monotonic = None
+
+
+class TestPassGuard:
+    """One fleet-wide pass per interval, however many per-repo loops fire it."""
+
+    def _settings(self):
+        return MagicMock(pin_bump_interval_seconds=86400)
+
+    def test_second_firing_within_interval_is_skipped(self, caplog):
+        """Two per-repo firings in one interval → the registry is read once."""
+        import logging
+
+        import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
+
+        registry = MagicMock()
+        registry.repos = {}
+        with (
+            patch.object(runner_mod, "Settings", return_value=self._settings()),
+            patch.object(
+                runner_mod, "get_repos_config", return_value=registry
+            ) as mock_registry,
+            caplog.at_level(logging.INFO),
+        ):
+            runner_mod.run_pin_bump_pass(
+                session_id="s1", repo_config=_make_repo_config("https://x/a")
+            )
+            runner_mod.run_pin_bump_pass(
+                session_id="s2", repo_config=_make_repo_config("https://x/b")
+            )
+
+        assert mock_registry.call_count == 1
+        assert "cross-repo pass already ran" in caplog.text
+        assert "skipping the firing for repo test-repo" in caplog.text
+
+    def test_firing_after_interval_runs_again(self):
+        """Once the guard window has elapsed the next firing does the work."""
+        import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
+
+        registry = MagicMock()
+        registry.repos = {}
+        clock = iter([1000.0, 1000.0 + 86400 * 0.95])
+        with (
+            patch.object(runner_mod, "Settings", return_value=self._settings()),
+            patch.object(
+                runner_mod, "get_repos_config", return_value=registry
+            ) as mock_registry,
+            patch.object(runner_mod.time, "monotonic", side_effect=lambda: next(clock)),
+        ):
+            runner_mod.run_pin_bump_pass(
+                session_id="s1", repo_config=_make_repo_config("https://x/a")
+            )
+            runner_mod.run_pin_bump_pass(
+                session_id="s2", repo_config=_make_repo_config("https://x/b")
+            )
+
+        assert mock_registry.call_count == 2
+
+    def test_guard_window_is_a_fraction_of_the_interval(self):
+        import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
+
+        runner_mod._last_pass_started_monotonic = 0.0
+        assert runner_mod._pass_recently_ran(100.0, 50.0)
+        assert runner_mod._pass_recently_ran(100.0, 89.0)
+        assert not runner_mod._pass_recently_ran(100.0, 90.0)
+        runner_mod._last_pass_started_monotonic = None
+        assert not runner_mod._pass_recently_ran(100.0, 1.0)
+
+    def test_disabled_interval_does_not_arm_the_guard(self):
+        """interval<=0 returns before the guard so re-enabling runs at once."""
+        import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
+
+        with patch.object(
+            runner_mod, "Settings", return_value=MagicMock(pin_bump_interval_seconds=0)
+        ):
+            runner_mod.run_pin_bump_pass(
+                session_id="s1", repo_config=_make_repo_config("https://x/a")
+            )
+        assert runner_mod._last_pass_started_monotonic is None
+
+
 class TestRunPinBumpPass:
     def test_no_repo_config(self):
         """repo_config=None → returns immediately."""

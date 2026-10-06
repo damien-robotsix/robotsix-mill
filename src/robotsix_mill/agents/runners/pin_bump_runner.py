@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import re
 import tempfile
+import time
 from pathlib import Path
 
 from robotsix_mill.config.repos import (
@@ -37,6 +38,54 @@ log = logging.getLogger(__name__)
 # pin-bump sweep PR.  These branches are created ticket-less by design;
 # consumers (e.g. the orphaned-PR check) use this to recognize them.
 PIN_BUMP_BRANCH_SEGMENT = "pin-bump/"
+
+# Monotonic timestamp of the last cross-repo pass that did the work. The
+# periodic supervisor runs one ``pin_bump`` loop PER registered repo, and every
+# loop calls :func:`run_pin_bump_pass` with its own ``repo_config`` — but the
+# pass itself is fleet-wide (full registry, every pyproject, every pin). Before
+# this guard each of the ~20 per-repo firings re-ran the whole pass: 20 full
+# passes a day instead of one, bunching into bursts of up to eight concurrent
+# passes (2026-10-05 15:03Z) whose ``pulls?head=`` lookups and clones pushed
+# the GitHub App installation over its hourly request quota every hour
+# (``403 Forbidden`` at minutes :06–:13, merge-stage PR polls failing).
+_last_pass_started_monotonic: float | None = None
+
+# Fraction of ``pin_bump_interval_seconds`` that must elapse before another
+# per-repo firing is allowed to run the cross-repo pass. Below 1.0 so the
+# per-repo loops (which drift against each other) still produce one pass per
+# interval instead of occasionally skipping a whole interval.
+_PASS_GUARD_FRACTION = 0.9
+
+
+def _pass_recently_ran(interval_seconds: float, now: float) -> bool:
+    """Return True when a cross-repo pass started within the guard window."""
+    last = _last_pass_started_monotonic
+    return last is not None and (now - last) < interval_seconds * _PASS_GUARD_FRACTION
+
+
+def _claim_pass_slot(interval_seconds: float, repo_id: str) -> bool:
+    """Record this firing as THE cross-repo pass of the current interval.
+
+    Returns False (after logging) when the periodic is disabled
+    (``interval_seconds <= 0``) or another firing already ran the pass
+    inside the guard window, so the caller should return without work.
+    """
+    global _last_pass_started_monotonic
+    if interval_seconds <= 0:
+        log.info("pin_bump: periodic pin bump is disabled (interval=0) — nothing to do")
+        return False
+    now = time.monotonic()
+    if _pass_recently_ran(interval_seconds, now):
+        log.info(
+            "pin_bump: cross-repo pass already ran %.0fs ago (interval %ss) — "
+            "skipping the firing for repo %s",
+            now - (_last_pass_started_monotonic or now),
+            interval_seconds,
+            repo_id,
+        )
+        return False
+    _last_pass_started_monotonic = now
+    return True
 
 
 def _fetch_one_pyproject(
@@ -101,19 +150,19 @@ def run_pin_bump_pass(
 
     Returns immediately when *repo_config* is ``None`` (the periodic
     supervisor fires per-repo, but the pin_bump pass is cross-repo —
-    it needs the full registry, so the first invocation with a
-    non-None *repo_config* does the work and subsequent invocations
-    in the same pass are no-ops via the early return).
+    it needs the full registry).  Because every per-repo loop fires this
+    same fleet-wide pass, only the first firing per
+    ``pin_bump_interval_seconds`` does the work; the others log and return
+    (see ``_last_pass_started_monotonic``).
 
-    Detection only — computes and logs the topological order and
-    current pin SHAs.  Zero PRs are created.
+    Detection, then the PR actuator — computes and logs the topological
+    order and current pin SHAs, then bumps stale pins.
     """
     if repo_config is None:
         return
 
     settings = Settings()
-    if settings.pin_bump_interval_seconds <= 0:
-        log.info("pin_bump: periodic pin bump is disabled (interval=0) — nothing to do")
+    if not _claim_pass_slot(settings.pin_bump_interval_seconds, repo_config.repo_id):
         return
 
     registry = get_repos_config()
