@@ -36,8 +36,21 @@ system_prompt: |
   3. If the rebase applies cleanly, proceed to step 5.
   4. If there are conflicts:
      - Use read_file to inspect EVERY conflicted file (git will list them).
-     - Edit each conflicted file IN PLACE with write_file to resolve the
-       conflicts.  Keep the PR's intent — preserve its changes while
+     - Before editing a file, COUNT its conflict regions (e.g.
+       `grep -c '^<<<<<<<' <file>` via run_command).  Branch on the count:
+       - count == 1: a single targeted ``edit_file`` on that one region is
+         fine.
+       - count > 1: do NOT resolve markers one at a time.  ``edit_file``
+         (and ``write_file``) REFUSE to persist a file that still contains
+         ANY syntax error — a leftover ``<<<<<<<`` / ``=======`` /
+         ``>>>>>>>`` marker elsewhere is a syntax error — so a sequential,
+         one-marker-at-a-time approach fails predictably on the still-
+         conflicted remainder.  Instead resolve ALL regions of that file in
+         a SINGLE atomic pass: read it, strip every conflict marker and pick
+         the kept hunks in memory, and write the fully-resolved content back
+         in one shot (``write_file``, or a single ``python`` rewrite via
+         run_command).
+     - Keep the PR's intent — preserve its changes while
        incorporating the target branch's updates.  Do NOT pull in
        unrelated edits from the target branch.
      - After resolving all files, run:  git add <resolved files...>
