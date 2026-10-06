@@ -3307,3 +3307,25 @@ def test_clear_stale_index_lock_no_lock(tmp_path):
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
     assert git_ops.clear_stale_index_lock(repo) is False
+
+
+def test_pr_reconciliation_new_module_importable():
+    """The extracted module exposes the public PR-reconciliation API."""
+    from robotsix_mill.vcs.pr_reconciliation import (  # noqa: F401
+        PostPushResult,
+        post_push_check,
+        push_with_lease,
+        reconcile_with_remote_pr,
+    )
+
+
+def test_git_ops_reexports_pr_reconciliation_identity():
+    """git_ops re-exports the same objects defined in pr_reconciliation."""
+    from robotsix_mill.vcs import pr_reconciliation
+
+    assert (
+        git_ops.reconcile_with_remote_pr is pr_reconciliation.reconcile_with_remote_pr
+    )
+    assert git_ops.push_with_lease is pr_reconciliation.push_with_lease
+    assert git_ops.post_push_check is pr_reconciliation.post_push_check
+    assert git_ops.PostPushResult is pr_reconciliation.PostPushResult

@@ -81,7 +81,7 @@ class TestPostTraceEvent:
     def test_langfuse_url_none_noop(self, ctx, monkeypatch):
         """langfuse_trace_url returns None (Langfuse unconfigured) → no-op."""
         monkeypatch.setattr(
-            "robotsix_mill.runtime.worker.processing.langfuse_trace_url",
+            "robotsix_mill.runtime.worker.trace_events.langfuse_trace_url",
             lambda trace_id, repo_config=None: None,
         )
         ctx.service.add_history_note = MagicMock()
@@ -91,7 +91,7 @@ class TestPostTraceEvent:
     def test_normal_path(self, ctx, monkeypatch):
         """Posts a history note containing the trace URL and stage name."""
         monkeypatch.setattr(
-            "robotsix_mill.runtime.worker.processing.langfuse_trace_url",
+            "robotsix_mill.runtime.worker.trace_events.langfuse_trace_url",
             lambda trace_id, repo_config=None: "https://lf.example/trace/trace-abc",
         )
         ctx.service.add_history_note = MagicMock()
@@ -106,7 +106,7 @@ class TestPostTraceEvent:
     def test_add_history_note_raises_no_propagation(self, ctx, monkeypatch):
         """When add_history_note raises, the exception is caught + logged."""
         monkeypatch.setattr(
-            "robotsix_mill.runtime.worker.processing.langfuse_trace_url",
+            "robotsix_mill.runtime.worker.trace_events.langfuse_trace_url",
             lambda trace_id, repo_config=None: "https://lf.example/trace/trace-abc",
         )
         ctx.service.add_history_note = MagicMock(side_effect=RuntimeError("boom"))

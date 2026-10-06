@@ -151,6 +151,25 @@ def _mock_httpx_delete(monkeypatch, *, delete_response=None, raise_exc=None):
     return captured
 
 
+def test_github_forge_exposes_review_ops_via_new_mixin():
+    """The review/comment ops split into ``GitHubForgePRReviewOpsMixin`` are
+    still reachable on ``GitHubForge`` and resolve via the new mixin."""
+    from robotsix_mill.forge.github_pr_review_ops import (
+        GitHubForgePRReviewOpsMixin,
+    )
+
+    for name in (
+        "list_pr_reviews",
+        "dismiss_review",
+        "list_review_comments",
+        "post_pr_comment",
+    ):
+        assert hasattr(GitHubForge, name)
+        # behavior unchanged — the method resolves to the one defined on the
+        # new mixin (not the PR mixin it was extracted from).
+        assert getattr(GitHubForge, name) is getattr(GitHubForgePRReviewOpsMixin, name)
+
+
 def test_delete_branch_204_returns_true(tmp_path, monkeypatch):
     cap = _mock_httpx_delete(monkeypatch, delete_response=_make_response(204, {}))
     forge = _forge(tmp_path)
