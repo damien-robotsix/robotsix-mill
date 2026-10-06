@@ -17,14 +17,50 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .._resources import agent_definitions_dir
 from ..core.duration import parse_duration
 
 _MAX_INCLUDE_DEPTH = 10
+
+# Known-valid tool names (mirrors ToolRegistry + fs_tools). Declared in the
+# schema layer so an unknown tool name fails fast at parse time in
+# ``load_agent_definition`` rather than only at test time.
+_VALID_TOOL_NAMES = frozenset(
+    {
+        "clone_repo",
+        "explore",
+        "parallel_explore",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "delete_file",
+        "list_dir",
+        "run_command",
+        "verify_diff",
+        "validate_artifact",
+        "detect_duplication",
+        "read_ticket",
+        "langfuse_session_summary",
+        "langfuse_list_traces",
+        "langfuse_trace_detail",
+        "langfuse_session_cost",
+        "langfuse_inspect_trace",
+        "inspect_cost",
+        "query_app_logs",
+        "create_repo",
+        "fetch_ci_logs",
+        "fork_repo",
+        "post_findings",
+        "git_fetch",
+        "git_remote_sha",
+        "git_push_with_lease",
+        "git_branch_ancestry",
+    }
+)
 
 if TYPE_CHECKING:
     from ..config import Settings
@@ -42,7 +78,9 @@ class AgentDefinition(BaseModel):
 
     name: str
     description: str | None = None
-    category: str | None = None
+    category: (
+        Literal["pipeline", "periodic", "sub_agent", "interactive", "sandboxed"] | None
+    ) = None
     # Capability level (1/2/3) → resolved to (transport, model) by build_agent
     # via llmio's tier defaults (see llmio tier config for current mapping).
     # Replaces the old provider-specific ``model`` field.
@@ -93,6 +131,16 @@ class AgentDefinition(BaseModel):
     interval: str | None = None
     interval_seconds: int | None = None
     enabled: bool | None = None
+
+    @field_validator("tools")
+    @classmethod
+    def _validate_tool_names(cls, v: list[str]) -> list[str]:
+        invalid = [t for t in v if t not in _VALID_TOOL_NAMES]
+        if invalid:
+            raise ValueError(
+                f"Unknown tools: {invalid}. Valid tools: {sorted(_VALID_TOOL_NAMES)}"
+            )
+        return v
 
     @model_validator(mode="after")
     def _interval_xor(self) -> AgentDefinition:
