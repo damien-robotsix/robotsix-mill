@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.15.12](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.11...v0.15.12) (2026-10-06)
+
+
+### Bug Fixes
+
+* **blocked_auto_resume:** auto-resume tickets blocked by an OpenRouter 402 credit shortfall ([#3339](https://github.com/damien-robotsix/robotsix-mill/issues/3339)) ([030db38](https://github.com/damien-robotsix/robotsix-mill/commit/030db38a3752d09b19041b688cd75ced85268d59))
+* CI failure: Security Audit on main (20261006T115338Z-ci-failure-security-audit-on-main-80d7) ([#3343](https://github.com/damien-robotsix/robotsix-mill/issues/3343)) ([791e241](https://github.com/damien-robotsix/robotsix-mill/commit/791e2418fec7c7415cb1a08933b719da6237a3e1))
+* **ci:** bump the shared Docker workflow pin so the hardening render step runs from the shared repo ([#3340](https://github.com/damien-robotsix/robotsix-mill/issues/3340)) ([7ae4225](https://github.com/damien-robotsix/robotsix-mill/commit/7ae4225437934f9901eb6b2ccdadf68eb7658a16))
+* **pin_bump:** run the cross-repo pass once per interval, not once per repo loop ([#3338](https://github.com/damien-robotsix/robotsix-mill/issues/3338)) ([23e5954](https://github.com/damien-robotsix/robotsix-mill/commit/23e5954212ab1d014217d11aed48f30d7cb5c43a))
+* trace-review: 1 finding(s) for trace `286caccb` (session: 20260928T185245Z-add-structured-logging-instrumentation-t-e6fd) (20261006T161424Z-trace-review-1-finding-s-for-trace-286ca-b8e6) ([#3348](https://github.com/damien-robotsix/robotsix-mill/issues/3348)) ([ab91fbc](https://github.com/damien-robotsix/robotsix-mill/commit/ab91fbc66e4bf32175f164e70b1c54b7a6b8e902))
+
 ## [0.15.11](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.10...v0.15.11) (2026-09-29)
 
 
