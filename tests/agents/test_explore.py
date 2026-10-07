@@ -7,7 +7,7 @@ import threading
 import pytest
 from pydantic import ValidationError
 
-from robotsix_mill.agents import explore
+from robotsix_mill.agents import explore, explore_retry
 from robotsix_mill.agents.explore import make_explore_tool
 from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
@@ -934,7 +934,9 @@ def test_trace_stage_explore_nests_under_parent(tmp_path, monkeypatch):
         spans.append(name)
         yield
 
-    monkeypatch.setattr(explore, "trace_stage", fake_trace_stage)
+    # The ``explore`` child span is opened inside _run_single_explore_attempt,
+    # which lives in the explore_retry module — patch the seam there.
+    monkeypatch.setattr(explore_retry, "trace_stage", fake_trace_stage)
     _patch_explore_model(monkeypatch, {})
 
     class FakeAgent:

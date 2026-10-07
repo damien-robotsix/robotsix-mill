@@ -336,6 +336,8 @@ modules:
       - tests/stages/refine/test_stage_triage.py
       - tests/stages/refine/test_helpers.py
       - tests/stages/refine/test_orchestration.py
+      - tests/stages/refine/test_orchestration_fast_paths.py
+      - tests/stages/refine/test_orchestration_routing.py
       - tests/stages/refine/test_checkpoint.py
       - tests/stages/refine/test_gates.py
       - tests/stages/refine/test_reconcile.py
@@ -353,6 +355,8 @@ modules:
       - tests/stages/merge/conftest.py
       - tests/stages/test_ci_failure_buckets.py
       - tests/stages/test_ci_fix.py
+      - tests/stages/test_ci_fix_parsing.py
+      - tests/stages/test_ci_fix_guards.py
       - tests/stages/test_ci_fix_out_of_scope.py
       - tests/stages/test_ci_fix_helpers.py
       - tests/stages/test_ci_infra_block.py
