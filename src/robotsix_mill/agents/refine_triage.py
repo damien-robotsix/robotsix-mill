@@ -310,8 +310,25 @@ _AUTO_APPROVE_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?\s*```\s*$", re
 # ``### APPROVE``) are stripped before the token: the level-1 model bolds the
 # verdict about as often as it emits it bare (2026-09-08, ticket 29d1 parked at
 # a human gate on ``'**NEEDS_APPROVAL** — Cross-repo runtime dependency …'``).
+# An optional ``Decision:`` label may precede the token, itself possibly
+# bolded or fenced (``**Decision:** APPROVE``, ``**Decision: APPROVE**``,
+# ```` ```\nDECISION: APPROVE\n``` ````) — 4 docs-only tickets fell to the
+# human gate on 2026-10-12 for exactly those shapes.
+# A fenced verdict followed by prose (```` ```\nDECISION: APPROVE\n```\n\n**Reason:** … ````):
+# the fence wraps only the verdict line, so the full-answer fence regex above
+# does not match — unwrap it and keep the trailing prose as the reason.
+_AUTO_APPROVE_LEADING_FENCE_RE = re.compile(
+    r"^```(?:json)?\s*\n(.*?)\n\s*```\s*(.*)$", re.DOTALL
+)
+
+# A ``**Reason:**`` label leading the reason text (optionally emphasised).
+_AUTO_APPROVE_REASON_LABEL_RE = re.compile(
+    r"^[\s*_`#]*reason[*_`]*\s*:[*_`\s]*", re.IGNORECASE
+)
+
 _AUTO_APPROVE_TOKEN_RE = re.compile(
-    r"^[\s*_`#]*(APPROVE|NEEDS_APPROVAL)\b[*_`]*[:\s—-]*(.*)$",
+    r"^[\s*_`#]*(?:decision[*_`]*\s*:[*_`\s]*)?(APPROVE|NEEDS_APPROVAL)\b"
+    r"[*_`]*[:\s—-]*(.*)$",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -349,11 +366,17 @@ def _parse_auto_approve_answer(text: str) -> AutoApproveResult:
         # leading-verdict-token heuristic below.
         pass
 
-    # Fall back to a leading verdict token in prose.
-    m = _AUTO_APPROVE_TOKEN_RE.match(raw)
+    # Fall back to a leading verdict token in prose. A fenced block that was
+    # not JSON (```` ```\nDECISION: APPROVE\n``` ````) is matched on its
+    # unfenced content.
+    leading_fence = _AUTO_APPROVE_LEADING_FENCE_RE.match(raw)
+    if leading_fence:
+        candidate = f"{leading_fence.group(1).strip()}\n{leading_fence.group(2)}"
+    m = _AUTO_APPROVE_TOKEN_RE.match(candidate) or _AUTO_APPROVE_TOKEN_RE.match(raw)
     if m:
         decision = m.group(1).upper()
-        reason = m.group(2).strip() or f"{decision} — no reason given"
+        reason = _AUTO_APPROVE_REASON_LABEL_RE.sub("", m.group(2)).strip()
+        reason = reason or f"{decision} — no reason given"
         return AutoApproveResult(decision=decision, reason=reason)
 
     raise ValueError(

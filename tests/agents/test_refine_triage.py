@@ -1157,6 +1157,22 @@ def test_auto_approve_triage_retry_succeeds_second_attempt(
         ),
         ("### APPROVE\nSingle-file docs change.", "APPROVE"),
         ("`APPROVE`: trivial rename", "APPROVE"),
+        # Observed 2026-10-12 12:08–12:19Z (4 docs-only tickets parked at the
+        # human gate): the level-1 model prefixes a ``Decision:`` label, bolded
+        # in one of two ways, or fences a bare ``DECISION: APPROVE`` line.
+        (
+            "**Decision:** APPROVE\n\n**Reason:** Internal refactoring to extract",
+            "APPROVE",
+        ),
+        (
+            "**Decision: APPROVE**\n\nInternal logging refactor adopting structlog",
+            "APPROVE",
+        ),
+        (
+            "```\nDECISION: APPROVE\n```\n\n**Reason:** Proposes standardized metrics",
+            "APPROVE",
+        ),
+        ("Decision: NEEDS_APPROVAL — touches the CI pipeline", "NEEDS_APPROVAL"),
     ],
 )
 def test_auto_approve_parse_strips_markdown_emphasis(answer, expected):
