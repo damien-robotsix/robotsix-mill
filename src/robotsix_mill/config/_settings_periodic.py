@@ -746,6 +746,23 @@ class _PeriodicSettings(BaseModel):
         default=False,
         description="When true, also file tracking tickets for foreign (non-mill) open PRs.",
     )
+    # Opt-in: auto-dispose foreign (non-board) open PRs instead of filing one
+    # human-gate tracking ticket per PR.  For each foreign PR the pass first
+    # checks the live CI conclusion and mergeability: green + conflict-free +
+    # mergeable PRs are merged directly (standard path, no shell), while
+    # red / conflicted / ambiguous ones are consolidated into a single daily
+    # digest ticket per board (title ``External PR review digest: <repo> <date>``)
+    # so the human gate sees at most one tracking ticket per board per day.
+    # Legacy per-PR ``Track external PR`` shells are auto-collapsed into the
+    # digest.  Respects ``orphaned_pr_dry_run``.  Default False (opt-in).
+    orphaned_pr_auto_dispose_foreign_prs: bool = Field(
+        default=False,
+        description=(
+            "When true, auto-dispose foreign (non-mill) open PRs: merge green "
+            "conflict-free ones directly and consolidate the rest into a single "
+            "daily per-board digest ticket instead of one human-gate shell per PR."
+        ),
+    )
     # Foreign PRs whose head branch starts with one of these prefixes are
     # owned by OTHER automation (dependabot / renovate bumps, release-please
     # release PRs, the pin-bump runners) and are handled by the repo-hygiene
