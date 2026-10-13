@@ -938,7 +938,7 @@ def run_refine_agent(
         # Claude CLI auto-caches system prompts >= 1024 chars; OpenRouter
         # reports cached_tokens when an upstream Anthropic cache is warm.
         try:
-            _u = result.usage()
+            _u = result.usage
             _cache_read = getattr(_u, "cache_read_tokens", 0) or 0
             _cache_write = getattr(_u, "cache_write_tokens", 0) or 0
             if _cache_read or _cache_write:
