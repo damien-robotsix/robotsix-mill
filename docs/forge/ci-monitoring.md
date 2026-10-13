@@ -66,6 +66,67 @@ or SHA. Each entry:
 }
 ```
 
+### `list_workflow_run_jobs(*, run_id: int) -> list[dict]`
+
+Lists the jobs of a single workflow run. Returns a list of dicts, each
+with `id`, `name`, `status`, and `conclusion`.
+
+An **empty list** means the run never started a job — the signature of a
+self-hosted queue timeout where GitHub auto-cancelled the run before any
+runner picked it up. Callers use this to distinguish a queue-timeout
+`cancelled` conclusion from a concurrency-cancelled run that did start
+jobs.
+
+```python
+[
+    {
+        "id": int,
+        "name": str,
+        "status": str,  # e.g. "in_progress", "completed"
+        "conclusion": str | None,  # e.g. "success", "failure", "cancelled"
+    }
+]
+```
+
+Concrete default returns `[]` — only GitHub implements this. Non-GitHub
+forges inherit the no-op. May raise on transport error so callers can
+distinguish "no jobs" from "could not tell".
+
+### `has_online_runner() -> bool`
+
+Returns `True` when at least one self-hosted runner for the repo is
+online.
+
+Reads `GET /repos/{owner}/{repo}/actions/runners` and checks for any
+runner with `status == "online"`. A repo with no self-hosted runners
+(e.g. a GitHub-hosted-only repo) returns `False` — which naturally
+scopes runner-gated behavior (such as re-dispatching a queue-timed-out
+publish) to self-hosted repos.
+
+Concrete default returns `False` — only GitHub implements this. Must
+**NEVER raise** — any API failure returns `False`.
+
+### `dispatch_workflow(*, workflow_id: int, ref: str) -> dict`
+
+Triggers a `workflow_dispatch` for a workflow on a given ref (branch/tag).
+
+Returns `{"dispatched": True}` on success, `{"dispatched": False,
+"reason": ...}` when the forge does not support manual dispatch, the
+workflow lacks a `workflow_dispatch` trigger (GitHub returns HTTP 422),
+or the operation otherwise fails.
+
+```python
+# Success
+{"dispatched": True}
+
+# Failure
+{"dispatched": False, "reason": "no workflow_dispatch trigger"}
+```
+
+Concrete default returns `{"dispatched": False, "reason": "not
+supported"}` — only GitHub implements this. Must **NEVER raise** — all
+failures are caught and returned as a failure dict.
+
 ## GitHub implementation
 
 `GitHubForge.check_status()` merges two GitHub API concepts:

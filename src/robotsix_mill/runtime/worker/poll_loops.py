@@ -54,6 +54,18 @@ _CI_LOG_FETCH_MAX_DEFERRALS = 3
 # whose ``permissions:`` starved its reusable workflow stayed red for 11 days
 # with nothing filed (robotsix-mill-ros2 Release Please, 2026-08-30 → 09-10).
 _CI_FAILING_CONCLUSIONS = frozenset({"failure", "startup_failure"})
+# A ``cancelled`` run that never STARTED a job (empty ``jobs``) on the target
+# branch is the signature of a self-hosted queue timeout: GitHub auto-cancels
+# a self-hosted job left queued past its 24 h limit (robotsix-invest's
+# ``Publish Image`` on a down bequiet runner, 2026-10-07 → 10-12). Nothing
+# re-dispatches it when the runner returns, so the image/artifact for the
+# current head stays stale. The monitor re-dispatches the workflow via
+# ``workflow_dispatch`` once a runner is back online — bounded to
+# ``_REDISPATCH_MAX_ATTEMPTS`` attempts spaced ``_REDISPATCH_MIN_INTERVAL``
+# apart. A ticket is filed only if a re-dispatched run then *fails* (handled
+# by the ordinary ``_CI_FAILING_CONCLUSIONS`` path).
+_REDISPATCH_MIN_INTERVAL_SECONDS = 6 * 3600  # once per 6 h
+_REDISPATCH_MAX_ATTEMPTS = 3
 # Agents read ticket descriptions through tool calls whose results are
 # hard-capped well below 100K chars — an embedded log tail beyond that
 # makes the whole description unreadable to them (the full logs stay one
@@ -824,11 +836,13 @@ class PollLoopsMixin(_WorkerBase):
         deferred: dict[str, Any],
         now: float,
         ttl_seconds: int,
+        redispatch: dict[str, Any] | None = None,
     ) -> None:
         """Prune ``seen`` entries older than *ttl_seconds* and drop
-        ``deferred`` records that have been handled or aged out.
+        ``deferred`` / ``redispatch`` records that have been handled or
+        aged out.
 
-        Mutates *seen* and *deferred* in place.
+        Mutates *seen*, *deferred*, and (when given) *redispatch* in place.
         """
         stale = [
             key
@@ -846,6 +860,16 @@ class PollLoopsMixin(_WorkerBase):
             or (now - v.get("ts", now)) > ttl_seconds
         ]:
             del deferred[key]
+        # Drop re-dispatch records that resolved (now seen) or aged out.
+        if redispatch is not None:
+            for key in [
+                k
+                for k, v in redispatch.items()
+                if k in seen
+                or not isinstance(v, dict)
+                or (now - v.get("ts", now)) > ttl_seconds
+            ]:
+                del redispatch[key]
 
     @staticmethod
     async def _latest_runs_by_workflow(forge: Forge, target: str) -> dict[str, Any]:
@@ -995,6 +1019,101 @@ class PollLoopsMixin(_WorkerBase):
         )
         return True
 
+    def _maybe_redispatch_cancelled(
+        self,
+        forge: Forge,
+        run: dict[str, Any],
+        wf: Any,
+        key: str,
+        redispatch: dict[str, Any],
+        now: float,
+        repo_label: str,
+        target: str,
+    ) -> bool:
+        """Handle a ``cancelled`` latest run on *target*.
+
+        A cancelled run that never started a job is treated as
+        "image/artifact missing for the current head" and re-dispatched via
+        ``workflow_dispatch`` once a runner is online, bounded to
+        ``_REDISPATCH_MAX_ATTEMPTS`` attempts ``_REDISPATCH_MIN_INTERVAL``
+        apart (state tracked in *redispatch* keyed by *key*).
+
+        Returns ``True`` when the run is terminally handled (the caller
+        should mark *key* seen and stop re-checking it) and ``False`` when
+        the caller should leave *key* unseen so a later cycle can retry
+        (runner still offline, or waiting out the re-dispatch interval).
+        """
+        run_id_val: Any = run.get("id")
+        wf_name = run.get("name", "unknown")
+
+        # Within the per-attempt interval — wait it out (keep unseen).
+        record = redispatch.get(key)
+        if isinstance(record, dict):
+            if record.get("n", 0) >= _REDISPATCH_MAX_ATTEMPTS:
+                # Budget exhausted — stop re-dispatching; do not spam a
+                # ticket (spec: a ticket only when a re-dispatched run fails).
+                log.info(
+                    "CI monitor (%s): %s (run %s) still cancelled after %d "
+                    "re-dispatch attempts — giving up",
+                    repo_label,
+                    wf_name,
+                    run_id_val,
+                    _REDISPATCH_MAX_ATTEMPTS,
+                )
+                return True
+            if (now - record.get("ts", 0)) < _REDISPATCH_MIN_INTERVAL_SECONDS:
+                return False
+
+        # Did the run actually start a job? A concurrency-cancelled run
+        # (started jobs) is routine churn, not a queue timeout — ignore it.
+        try:
+            jobs = forge.list_workflow_run_jobs(run_id=run_id_val)
+        except Exception as exc:
+            log.warning(
+                "CI monitor (%s): could not list jobs for cancelled run %s "
+                "(%s) — skipping re-dispatch: %s",
+                repo_label,
+                run_id_val,
+                wf_name,
+                exc,
+            )
+            return True
+        if jobs:
+            return True
+
+        # Queue timeout: only re-dispatch once a runner is back online.
+        if not forge.has_online_runner():
+            log.info(
+                "CI monitor (%s): %s (run %s) cancelled (queue timeout) but "
+                "no runner online — deferring re-dispatch",
+                repo_label,
+                wf_name,
+                run_id_val,
+            )
+            return False
+
+        result = forge.dispatch_workflow(workflow_id=wf, ref=target)
+        n = (record.get("n", 0) if isinstance(record, dict) else 0) + 1
+        redispatch[key] = {"n": n, "ts": now}
+        if result.get("dispatched"):
+            log.info(
+                "CI monitor (%s): re-dispatched %s (previous run %s "
+                "cancelled: queue timeout)",
+                repo_label,
+                wf_name,
+                run_id_val,
+            )
+        else:
+            log.warning(
+                "CI monitor (%s): failed to re-dispatch %s (previous run %s "
+                "cancelled: queue timeout): %s",
+                repo_label,
+                wf_name,
+                run_id_val,
+                result.get("reason", "unknown"),
+            )
+        return False
+
     # ------------------------------------------------------------------
     # _poll_one_repo_ci — coordinator
     # ------------------------------------------------------------------
@@ -1023,7 +1142,10 @@ class PollLoopsMixin(_WorkerBase):
 
         # 1. Load + prune dedup state.
         state, seen, deferred = self._load_ci_state(state_path)
-        self._prune_ci_state(seen, deferred, now, ttl_seconds)
+        # Per-key re-dispatch bookkeeping for queue-timeout cancellations:
+        # ``{key: {"n": <attempts>, "ts": <epoch of last dispatch>}}``.
+        redispatch = state.setdefault("redispatch", {})
+        self._prune_ci_state(seen, deferred, now, ttl_seconds, redispatch)
 
         # 2. Latest run per workflow on the target branch.
         forge = get_forge(settings, repo_config=rc)
@@ -1046,6 +1168,20 @@ class PollLoopsMixin(_WorkerBase):
 
         for wf, run in latest_by_wf.items():
             conclusion = run.get("conclusion")
+            # Queue-timeout re-dispatch: a ``cancelled`` latest run that never
+            # started a job means the image/artifact for the current head is
+            # missing. Re-dispatch it (once a runner is online) rather than
+            # filing a ticket — a ticket is filed only if a re-dispatched run
+            # then fails (handled by the failing-conclusions path below).
+            if conclusion == "cancelled":
+                key = f"{wf}:{run.get('head_sha')}"
+                if key in seen:
+                    continue
+                if self._maybe_redispatch_cancelled(
+                    forge, run, wf, key, redispatch, now, repo_label, target
+                ):
+                    seen[key] = now
+                continue
             if conclusion not in _CI_FAILING_CONCLUSIONS:
                 continue
             # ``startup_failure`` = GitHub could not START the run (workflow

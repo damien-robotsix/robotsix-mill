@@ -495,6 +495,52 @@ class Forge(ABC):
         """
         return {"approved": False, "reason": "not supported"}
 
+    def list_workflow_run_jobs(self, *, run_id: int) -> list[dict[str, Any]]:
+        """List the jobs of a single workflow run.
+
+        Returns a list of dicts, each with ``id``, ``name``,
+        ``status``, and ``conclusion``.  An **empty** list means the run
+        never started a job (e.g. a self-hosted queue timeout that
+        auto-cancelled the run before any runner picked it up) — callers
+        use this to distinguish a queue-timeout ``cancelled`` from a
+        concurrency-cancelled run that did start jobs.
+
+        Concrete (not abstract) with a ``[]`` default — only GitHub
+        implements this.  Non-GitHub forges inherit the no-op.  May raise
+        on transport error so callers can tell "no jobs" apart from "could
+        not tell".
+        """
+        return []
+
+    def has_online_runner(self) -> bool:
+        """True when at least one self-hosted runner for the repo is online.
+
+        Reads ``GET /repos/{owner}/{repo}/actions/runners`` and returns
+        ``True`` when any runner reports ``status == "online"``.  A repo
+        with no self-hosted runners (e.g. a GitHub-hosted-only repo)
+        returns ``False`` — which naturally scopes runner-gated behaviour
+        (such as re-dispatching a queue-timed-out publish) to self-hosted
+        repos.
+
+        Concrete (not abstract) with a ``False`` default — only GitHub
+        implements this.  Must NEVER raise — any API failure returns
+        ``False``.
+        """
+        return False
+
+    def dispatch_workflow(self, *, workflow_id: int, ref: str) -> dict[str, Any]:
+        """Trigger a ``workflow_dispatch`` for *workflow_id* on *ref*.
+
+        Returns ``{"dispatched": True}`` on success, ``{"dispatched":
+        False, "reason": ...}`` when the forge does not support manual
+        dispatch, the workflow lacks a ``workflow_dispatch`` trigger
+        (GitHub returns HTTP 422), or the operation otherwise fails.
+
+        Concrete (not abstract) with a ``{"dispatched": False}`` default —
+        only GitHub implements this.  Must NEVER raise.
+        """
+        return {"dispatched": False, "reason": "not supported"}
+
     def delete_branch(self, *, branch: str) -> bool:
         """Delete the remote head branch *branch* after merge.
 
