@@ -173,10 +173,11 @@ classifies the failure as **transient** (an infrastructure flake) vs
 network resets (`ECONNRESET`/`ECONNREFUSED`), buildx "booting buildkit"
 timeouts, `astral-sh/setup-uv` fetch failures, runner shutdown / lost
 communication, HTTP 5xx / API rate limits, package-manager network
-unreachability — are not code-fixable, so instead of spawning a blocking
-fix ticket the stage automatically re-runs the failing workflow runs via
-the forge's `rerun_workflow` primitive, records a history note, and
-returns to `IMPLEMENT_COMPLETE` to re-poll CI.
+unreachability, lychee link-checker network errors / timeouts — are not
+code-fixable, so instead of spawning a blocking fix ticket the stage
+automatically re-runs the failing workflow runs via the forge's
+`rerun_workflow` primitive, records a history note, and returns to
+`IMPLEMENT_COMPLETE` to re-poll CI.
 
 - Classification is performed by a signature-pattern matcher
   (`stages/ci_transient.py`) against the full failing summary.
@@ -187,6 +188,16 @@ returns to `IMPLEMENT_COMPLETE` to re-poll CI.
   deterministic `ci_fix_dependency` fix ticket as before.
 - Only the failed workflow runs for the current head SHA are re-queued;
   the operation is best-effort and never raises.
+
+**Lychee link-checker:** The lychee pre-commit hook may report network
+errors or timeouts when checking external URLs — these are self-clearing
+upstream outages and are automatically classified as transient. However, a
+concrete HTTP 4xx status (e.g., `[404]` for a moved link, `[403]` for
+access denied) indicates a broken link and is classified as deterministic.
+When lychee fails transient and retries are exhausted, the spawned
+dependency-fix ticket includes specific guidance to add the failing
+URL(s) to the lychee exclude list (e.g., `exclude` entries in
+`lychee.toml` or `.pre-commit-config.yaml` hook args).
 
 This prevents transient infra flakes from being converted into
 deterministic fix tickets that block, and de-duplicates identical flakes
