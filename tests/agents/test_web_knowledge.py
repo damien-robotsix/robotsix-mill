@@ -535,7 +535,13 @@ class _FakeBudgetExhaustedAgent(_FakeAgent):
 
 def _patch_agent_chain(monkeypatch, agent_cls=_FakeAgent):
     """Replace the lazy Agent import + the level-1 model seam with stubs
-    so ``run_web_knowledge`` builds nothing real."""
+    so ``run_web_knowledge`` builds nothing real.
+
+    Pins the active provider slot to OpenRouter (``level_uses_claude`` →
+    ``False``) so the runner takes the pydantic-ai ``Agent`` path. The
+    hermetic default slot resolves to the keyless Claude SDK, so without
+    this pin the runner would route through ``build_subagent`` instead —
+    see :func:`_patch_claude_chain` for that path."""
     import pydantic_ai
 
     from robotsix_mill.agents import base as bmod
@@ -548,6 +554,7 @@ def _patch_agent_chain(monkeypatch, agent_cls=_FakeAgent):
         return inst
 
     monkeypatch.setattr(pydantic_ai, "Agent", make)
+    monkeypatch.setattr(bmod, "level_uses_claude", lambda level: False)
     monkeypatch.setattr(
         bmod,
         "build_openrouter_model",
@@ -556,15 +563,45 @@ def _patch_agent_chain(monkeypatch, agent_cls=_FakeAgent):
     return instances
 
 
+def _patch_claude_chain(monkeypatch, agent_cls=_FakeAgent):
+    """Pin the active provider slot to the keyless Claude SDK
+    (``level_uses_claude`` → ``True``) and stub ``build_subagent`` so the
+    runner takes the SDK tool-loop path and builds nothing real.
+
+    ``build_subagent`` returns ``(agent, None)`` on Claude tiers — no
+    httpx client — so the stub mirrors that (client is ``None``)."""
+    from robotsix_mill.agents import base as bmod
+
+    instances: list[_FakeAgent] = []
+
+    def make_subagent(*a, **kw):
+        inst = agent_cls(
+            system_prompt=kw.get("system_prompt", ""),
+            tools=kw.get("tools"),
+            name=kw.get("name", ""),
+        )
+        instances.append(inst)
+        return inst, None
+
+    monkeypatch.setattr(bmod, "level_uses_claude", lambda level: True)
+    monkeypatch.setattr(bmod, "build_subagent", make_subagent)
+    return instances
+
+
 class TestRunWebKnowledge:
     """The async runner's contract: degrade on missing key, degrade on
     runtime error, return the agent output on success, and always
     close the http client in the ``finally`` block."""
 
-    def test_missing_api_key_returns_unavailable_string(self, tmp_path, secrets_set):
-        """No OPENROUTER_API_KEY → short, deterministic error string
-        and NO agent construction."""
+    def test_missing_api_key_returns_unavailable_string(
+        self, tmp_path, secrets_set, monkeypatch
+    ):
+        """No OPENROUTER_API_KEY on the OpenRouter slot → short,
+        deterministic error string and NO agent construction."""
         secrets_set(openrouter_api_key="")
+        from robotsix_mill.agents import base as bmod
+
+        monkeypatch.setattr(bmod, "level_uses_claude", lambda level: False)
         s = _settings(tmp_path)
         out = asyncio.run(run_web_knowledge(settings=s, question="anything"))
         assert "unavailable" in out
@@ -687,6 +724,98 @@ class TestRunWebKnowledge:
         out = asyncio.run(run_web_knowledge(settings=s, question="q"))
         assert out.startswith("web_knowledge failed:")
         assert len(closed) == 1
+
+    # ----- Claude SDK slot (the default, keyless provider) ----------------
+
+    def test_claude_slot_routes_through_build_subagent_not_agent(
+        self, tmp_path, secrets_set, monkeypatch
+    ):
+        """On the keyless Claude SDK slot the runner must build the agent
+        via ``build_subagent`` (the SDK tool loop), NOT a raw pydantic-ai
+        ``Agent`` — which would raise the ClaudeSDKModel tool error."""
+        secrets_set(openrouter_api_key="k")
+        import pydantic_ai
+
+        agent_calls: list = []
+        monkeypatch.setattr(
+            pydantic_ai,
+            "Agent",
+            lambda *a, **k: agent_calls.append((a, k)),
+        )
+        sub_instances = _patch_claude_chain(monkeypatch)
+        s = _settings(tmp_path)
+        out = asyncio.run(run_web_knowledge(settings=s, question="what is X?"))
+        assert out == "the answer"
+        assert len(sub_instances) == 1
+        assert agent_calls == [], "must not build a raw pydantic-ai Agent on Claude"
+
+    def test_claude_slot_runs_without_openrouter_key(
+        self, tmp_path, secrets_set, monkeypatch
+    ):
+        """The keyless Claude SDK path needs no OPENROUTER_API_KEY — a
+        consult must still return an answer, not the unavailable string."""
+        secrets_set(openrouter_api_key="")
+        _patch_claude_chain(monkeypatch)
+        s = _settings(tmp_path)
+        out = asyncio.run(run_web_knowledge(settings=s, question="q"))
+        assert out == "the answer"
+        assert "unavailable" not in out
+
+    def test_claude_slot_passes_no_usage_limits(
+        self, tmp_path, secrets_set, monkeypatch
+    ):
+        """The SDK loop runs its own agent loop and drops pydantic-ai
+        usage_limits; the runner must not forward them on Claude."""
+        secrets_set(openrouter_api_key="k")
+        sub_instances = _patch_claude_chain(monkeypatch)
+        s = _settings(tmp_path)
+        asyncio.run(run_web_knowledge(settings=s, question="precise question"))
+        assert len(sub_instances) == 1
+        assert sub_instances[0].last_question == "precise question"
+        assert sub_instances[0].last_limits is None
+
+    def test_claude_slot_does_not_close_none_client(
+        self, tmp_path, secrets_set, monkeypatch
+    ):
+        """``build_subagent`` returns a None client on Claude tiers; the
+        finally block must skip the close rather than call it on None."""
+        secrets_set(openrouter_api_key="k")
+        _patch_claude_chain(monkeypatch)
+        closed: list = []
+
+        async def fake_close(client):
+            closed.append(client)
+
+        from robotsix_mill.agents import base as _agents_base
+
+        monkeypatch.setattr(_agents_base, "_aclose_async_client", fake_close)
+        s = _settings(tmp_path)
+        out = asyncio.run(run_web_knowledge(settings=s, question="q"))
+        assert out == "the answer"
+        assert closed == []
+
+    def test_claude_route_logged_once_per_process(
+        self, tmp_path, secrets_set, monkeypatch, caplog
+    ):
+        """The Claude-routing notice is emitted once per process, not per
+        call — and no ClaudeSDKModel tool-calling warning is logged."""
+        import logging
+
+        secrets_set(openrouter_api_key="k")
+        _patch_claude_chain(monkeypatch)
+        monkeypatch.setattr(web_knowledge, "_claude_route_logged", False)
+        s = _settings(tmp_path)
+        with caplog.at_level(logging.INFO, logger="robotsix_mill.agents.web_knowledge"):
+            asyncio.run(run_web_knowledge(settings=s, question="q1"))
+            asyncio.run(run_web_knowledge(settings=s, question="q2"))
+        route_logs = [
+            r for r in caplog.records if "routes to the keyless Claude SDK" in r.message
+        ]
+        assert len(route_logs) == 1
+        assert not any(
+            "does not support function/tool calling" in r.message
+            for r in caplog.records
+        )
 
 
 # ---------------------------------------------------------------------------

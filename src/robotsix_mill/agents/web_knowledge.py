@@ -119,6 +119,29 @@ _GENERAL_FILENAME = "_general.md"
 _trace_search_calls: int = 0
 _trace_search_max_calls: int = 0
 
+# Whether we have already logged (once per process) that the consult is
+# routing through the keyless Claude SDK tool loop. The default provider
+# slot resolves to the Claude subscription — i.e. almost always — so a
+# per-call log would spam the journal; emit it once.
+_claude_route_logged: bool = False
+
+
+def _log_claude_route_once(level: int) -> None:
+    """Emit a single INFO per process noting the consult routes through
+    the Claude SDK tool loop (pydantic-ai function tools are unavailable
+    on that slot). Idempotent across calls so the journal stays clean.
+    """
+    global _claude_route_logged
+    if _claude_route_logged:
+        return
+    _claude_route_logged = True
+    log.info(
+        "web_knowledge: level %d routes to the keyless Claude SDK — running "
+        "the consult through the SDK tool loop (ClaudeSDKModel rejects "
+        "pydantic-ai function tools)",
+        level,
+    )
+
 
 def reset_trace_web_search_budget(max_calls: int) -> None:
     """Zero the per-survey-run web_search counter and set a new cap.
@@ -606,7 +629,19 @@ async def run_web_knowledge(
     Degrades to a short error string on any failure — never raises;
     the calling coordinator can carry on.
     """
-    if not get_secrets().openrouter_api_key:
+    from .base import level_uses_claude
+
+    # web_knowledge runs on the flash tier (level 1). An explicit
+    # ``web_knowledge_model`` alias only overrides the model NAME, not the
+    # provider slot — the failover tracker still picks the slot, so the
+    # level drives the Claude-vs-OpenRouter routing decision.
+    level = 1
+    on_claude = level_uses_claude(level)
+
+    # The OpenRouter key is required ONLY for the OpenRouter path. On the
+    # default (keyless Claude SDK) slot the consult runs through the SDK's
+    # own tool loop and needs no key, so don't short-circuit there.
+    if not on_claude and not get_secrets().openrouter_api_key:
         return "web_knowledge unavailable: OPENROUTER_API_KEY is not set"
 
     # Reset the per-consult web_fetch budget so this consult — and every
@@ -624,35 +659,60 @@ async def run_web_knowledge(
     from pydantic_ai.exceptions import UsageLimitExceeded
     from pydantic_ai.usage import UsageLimits
 
-    from .base import _aclose_async_client, build_openrouter_model
-    from .retry import acall_with_retry
-
-    model, client = build_openrouter_model(
-        settings.web_knowledge_model if settings.web_knowledge_model else 1
+    from .base import (
+        _aclose_async_client,
+        build_openrouter_model,
+        build_subagent,
     )
+    from .retry import acall_with_retry
 
     index = _build_index(settings)
     request_limit = settings.web_knowledge_request_limit
-    agent = Agent(
-        model=model,
-        system_prompt=_SYSTEM_PROMPT_TEMPLATE.format(
-            index=index,
-            stale_days=settings.web_knowledge_stale_days,
-            cache_ttl_hours=settings.web_knowledge_cache_ttl_hours,
-            request_limit=request_limit,
-            request_limit_minus_2=max(1, request_limit - 2),
-        ),
-        output_type=str,
-        tools=_make_tools(settings),
-        name="web_knowledge",
-        retries=2,
+    system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(
+        index=index,
+        stale_days=settings.web_knowledge_stale_days,
+        cache_ttl_hours=settings.web_knowledge_cache_ttl_hours,
+        request_limit=request_limit,
+        request_limit_minus_2=max(1, request_limit - 2),
     )
+    tools = _make_tools(settings)
 
-    limits = UsageLimits(request_limit=settings.web_knowledge_request_limit)
+    if on_claude:
+        _log_claude_route_once(level)
+        # The default slot resolves to the keyless Claude SDK, whose model
+        # rejects pydantic-ai function tools ("ClaudeSDKModel does not
+        # support function/tool calling" — same class as the trace-review
+        # inspector, mill #3205). Route through the SDK's own tool loop via
+        # build_subagent: the knowledge-file and web_search tools become
+        # injected MCP tools, exactly like the explore scout. The SDK loop
+        # warns on and drops pydantic-ai usage_limits, so pass none.
+        agent, client = build_subagent(
+            settings,
+            level=level,
+            system_prompt=system_prompt,
+            tools=tools,
+            name="web_knowledge",
+        )
+        limits: UsageLimits | None = None
+    else:
+        model, client = build_openrouter_model(
+            settings.web_knowledge_model if settings.web_knowledge_model else level
+        )
+        agent = Agent(
+            model=model,
+            system_prompt=system_prompt,
+            output_type=str,
+            tools=tools,
+            name="web_knowledge",
+            retries=2,
+        )
+        limits = UsageLimits(request_limit=request_limit)
+
+    run_kwargs: dict[str, Any] = {} if limits is None else {"usage_limits": limits}
     try:
         with trace_stage("ask_web_knowledge"):
             result = await acall_with_retry(
-                lambda: agent.run(question, usage_limits=limits),
+                lambda: agent.run(question, **run_kwargs),
                 what="web_knowledge",
             )
         return str(result.output)
@@ -668,7 +728,10 @@ async def run_web_knowledge(
         log.warning("web_knowledge failed: %s", e)
         return f"web_knowledge failed: {e}"
     finally:
-        await _aclose_async_client(client)
+        # ``client`` is None on the Claude SDK path (the CLI is the
+        # transport); only the OpenRouter path has an httpx client to close.
+        if client is not None:
+            await _aclose_async_client(client)
 
 
 # ---------------------------------------------------------------------------
