@@ -334,6 +334,8 @@
         "sandbox_reaper_interval_seconds": 3600,
         "sandbox_slot_timeout": 1800,
         "sandbox_tmpfs_size": "512m",
+        "scanner_auto_disposition_dry_run": true,
+        "scanner_auto_disposition_policy": {},
         "scanner_max_drafts_per_run": 5,
         "scanner_rollup": true,
         "scope_triage_enabled": true,

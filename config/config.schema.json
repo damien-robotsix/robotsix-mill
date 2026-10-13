@@ -2713,6 +2713,20 @@
           "title": "Sandbox Tmpfs Size",
           "type": "string"
         },
+        "scanner_auto_disposition_dry_run": {
+          "default": true,
+          "description": "When true, the per-source scanner auto-disposition policy only logs what it would do (close / ready / hold) without enforcing it. Flip to false to enforce the policy and keep scanner findings out of the human gate.",
+          "title": "Scanner Auto Disposition Dry Run",
+          "type": "boolean"
+        },
+        "scanner_auto_disposition_policy": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Per-source override of the scanner auto-disposition policy, mapping a SourceKind value to one of \"auto-close-stale\", \"auto-ready\", or \"hold-for-human\". Unset sources fall back to the built-in defaults.",
+          "title": "Scanner Auto Disposition Policy",
+          "type": "object"
+        },
         "scanner_max_drafts_per_run": {
           "default": 5,
           "description": "Hard cap on drafts a single scanner pass may file.",

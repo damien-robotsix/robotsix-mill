@@ -31,6 +31,7 @@ from .helpers import (
     log,
     ops_shape_marker,
 )
+from .scanner_disposition import ScannerDisposition, resolve_scanner_disposition
 from .spec_validation import _draft_has_complete_spec, _fast_path_scope_checks
 
 # ---------------------------------------------------------------------------
@@ -433,6 +434,94 @@ def split_child_fast_path(
 # ---------------------------------------------------------------------------
 
 
+def _scanner_auto_disposition(
+    ctx: StageContext,
+    ticket: Ticket,
+    draft: str,
+    ws: Workspace,
+    s: Settings,
+) -> Outcome | None:
+    """Apply the per-source scanner bulk auto-disposition policy.
+
+    Scanner / finding sources (audit, module_curator, health, …) fan out
+    auto-generated drafts that otherwise stall the human gate.  Each
+    covered source is mapped to a deterministic disposition
+    (``auto-close-stale`` / ``auto-ready`` / ``hold-for-human``) via
+    :func:`resolve_scanner_disposition`.  When
+    ``scanner_auto_disposition_dry_run`` is True (the default) the policy
+    only logs what it *would* do and returns ``None`` so the ticket
+    follows its normal triage path — letting the policy be validated
+    against the live backlog before enforcement.
+
+    Returns an :class:`Outcome` to short-circuit, or ``None`` to fall
+    through (source not covered, or dry-run).
+    """
+    disposition = resolve_scanner_disposition(ticket.source, s)
+    if disposition is None:
+        return None
+
+    if s.scanner_auto_disposition_dry_run:
+        log.info(
+            "%s: scanner auto-disposition DRY-RUN — source %r would be "
+            "dispositioned as %s (not enforced)",
+            ticket.id,
+            ticket.source,
+            disposition.value,
+        )
+        return None
+
+    if disposition == ScannerDisposition.AUTO_CLOSE_STALE:
+        log.info(
+            "%s: scanner auto-disposition — auto-close-stale (source %r)",
+            ticket.id,
+            ticket.source,
+        )
+        return _triage_outcome(
+            ctx,
+            ws,
+            draft,
+            ticket.id,
+            f"scanner auto-disposition: auto-close-stale "
+            f"(source {ticket.source!r}) — closed without human gate per policy",
+            state=State.CLOSED,
+        )
+
+    if disposition == ScannerDisposition.AUTO_READY:
+        log.info(
+            "%s: scanner auto-disposition — auto-ready (source %r)",
+            ticket.id,
+            ticket.source,
+        )
+        return _triage_outcome(
+            ctx,
+            ws,
+            draft,
+            ticket.id,
+            f"scanner auto-disposition: auto-ready (source {ticket.source!r}) "
+            "— routed to implement without human gate per policy",
+            extract_paths_from_draft=True,
+            state=State.READY,
+        )
+
+    # HOLD_FOR_HUMAN: retain the human decision, but as a single
+    # consolidated gate item — the draft is already parented to the
+    # source's rollup epic (pass_runner._find_or_create_scanner_epic).
+    log.info(
+        "%s: scanner auto-disposition — hold-for-human (source %r)",
+        ticket.id,
+        ticket.source,
+    )
+    return _triage_outcome(
+        ctx,
+        ws,
+        draft,
+        ticket.id,
+        f"scanner auto-disposition: hold-for-human (source {ticket.source!r}) "
+        "— retained under source rollup for a single human decision",
+        state=State.HUMAN_ISSUE_APPROVAL,
+    )
+
+
 def deterministic_triage_pre_checks(
     ctx: StageContext,
     ticket: Ticket,
@@ -448,6 +537,15 @@ def deterministic_triage_pre_checks(
 
     Returns an :class:`Outcome` to short-circuit, or ``None``.
     """
+    # Scanner bulk auto-disposition runs first: a covered scanner source
+    # under an enforced policy is dispositioned here, before any other
+    # pre-check or the refine LLM, keeping scanner findings out of the
+    # human gate.  No-op (returns None) for non-scanner sources or in
+    # dry-run mode.
+    scanner_outcome = _scanner_auto_disposition(ctx, ticket, draft, ws, s)
+    if scanner_outcome is not None:
+        return scanner_outcome
+
     # Deterministic pre-check: throwaway/test-fixture tickets. Agents
     # have (mis)used ticket creation to make themselves a live-board
     # fixture (noop-8835, dummy-2218 leaked and one flowed through

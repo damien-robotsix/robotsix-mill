@@ -567,6 +567,37 @@ class _StagesSettings(BaseModel):
         description="Hard cap on drafts a single scanner pass may file.",
         default=5,
     )
+    # Bulk auto-disposition policy for scanner/finding sources (audit,
+    # module_curator, health, …).  Scanner findings otherwise fan out
+    # into HUMAN_ISSUE_APPROVAL and stall the human gate; this gives each
+    # source a deterministic disposition (auto-close-stale / auto-ready /
+    # hold-for-human), applied in the refine triage before a scanner
+    # draft can reach the human gate.  Equivalent to the orphaned-PR bulk
+    # auto-disposition but for the scanner categories.  Dry-run by default:
+    # the policy only logs what it would do until explicitly enforced.
+    scanner_auto_disposition_dry_run: bool = Field(
+        default=True,
+        description=(
+            "When true, the per-source scanner auto-disposition policy only "
+            "logs what it would do (close / ready / hold) without enforcing "
+            "it. Flip to false to enforce the policy and keep scanner "
+            "findings out of the human gate."
+        ),
+    )
+    # Per-source override of the built-in scanner auto-disposition
+    # defaults.  Keys are SourceKind values ("audit", "module_curator",
+    # …); values are one of "auto-close-stale", "auto-ready",
+    # "hold-for-human".  Unset sources fall back to
+    # ``robotsix_mill.stages.refine.scanner_disposition.DEFAULT_SCANNER_DISPOSITION``.
+    scanner_auto_disposition_policy: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Per-source override of the scanner auto-disposition policy, "
+            'mapping a SourceKind value to one of "auto-close-stale", '
+            '"auto-ready", or "hold-for-human". Unset sources fall back to '
+            "the built-in defaults."
+        ),
+    )
     # Hard cap on the total number of drafts a single retrospect pass
     # may file (systemic draft + concrete follow-up).  Default 2 matches
     # the existing two-path ceiling; set lower when the board is
