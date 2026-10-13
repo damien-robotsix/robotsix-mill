@@ -307,6 +307,12 @@ _TERMINAL_STATES: set[State] = {
     State.ERRORED,
 }
 
+# Terminal epic states. Re-closing an already-closed epic is a no-op
+# (see the same-state guard in :meth:`_TransitionMixin.transition`).
+_TERMINAL_EPIC_STATES: set[State] = {
+    State.EPIC_CLOSED,
+}
+
 
 # --- PR/commit citation verification for mark_done -----------------------
 
@@ -439,6 +445,16 @@ class _TransitionMixin(_ServiceBase):
         """
         with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
             ticket = _get_ticket(s, ticket_id)
+            # Idempotent no-op: re-closing an already-closed epic is a
+            # no-op rather than an error. Concurrent closers race here —
+            # the orphan sweep (runtime/worker/core._maybe_sweep_orphaned_epic)
+            # and the child-close epic re-eval can both decide to close the
+            # same all-children-terminal epic. Whichever loses would
+            # otherwise hit `epic_closed -> epic_closed not allowed` and
+            # spam the worker log with a traceback. Treat a same-state
+            # transition into a terminal epic state as a no-op.
+            if ticket.state is dst and dst in _TERMINAL_EPIC_STATES:
+                return ticket
             blocked_from = State(ticket.blocked_from) if ticket.blocked_from else None
             paused_from = State(ticket.paused_from) if ticket.paused_from else None
             if not can_transition(ticket.state, dst, blocked_from, paused_from):
