@@ -23,6 +23,12 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from ...config import RepoConfig, Settings
+from ...core.constants import (
+    DEDUP_ALREADY_DONE_PREFIX,
+    DEDUP_DUPLICATE_PREFIX,
+    MARK_DONE_NOTE_PREFIX,
+)
+from ...core.datetime_utils import _as_utc
 from ...core.models import SourceKind, Ticket
 from ...core.service import TicketService
 from ...core.states import State
@@ -199,6 +205,26 @@ _CLOSE_CLASSIFICATIONS: frozenset[OrphanClassification] = frozenset(
     }
 )
 
+# DONE/CLOSED note prefixes that mark a prior tracking ticket as a
+# *disposition* rather than a reason to refile: an operator ``mark done`` or a
+# dedup closure ("duplicate of" / "already implemented in").  When the tracked
+# PR is still open but its tracking ticket was closed this way, refiling just
+# re-triggers the same disposition — the supersede/dedup annihilation class
+# (mill #3158).  The pass instead records the disposition on the PR and skips.
+_DISPOSITION_NOTE_PREFIXES: tuple[str, ...] = (
+    MARK_DONE_NOTE_PREFIX,
+    DEDUP_DUPLICATE_PREFIX,
+    DEDUP_ALREADY_DONE_PREFIX,
+)
+
+# How far back a CLOSED tracking ticket still counts as a binding disposition.
+# Beyond this window the PR may legitimately be re-surfaced for a fresh look.
+_DISPOSITION_WINDOW_DAYS: int = 14
+
+# Hidden marker embedded in the disposition PR comment so the pass can post it
+# at most once per PR (idempotency) instead of re-commenting every daily pass.
+_DISPOSITION_COMMENT_MARKER: str = "<!-- mill:orphaned-pr-disposition -->"
+
 
 @dataclass
 class OrphanedPrCheckResult:
@@ -209,6 +235,7 @@ class OrphanedPrCheckResult:
     closed: int = 0
     filed: int = 0
     skipped: int = 0
+    disposed: int = 0  # PRs whose prior tracker was mark-done'd/deduped
     human_pr_skipped: int = 0  # PRs skipped because author is not the bot
     foreign_filed: int = 0  # tracking tickets filed for non-board (foreign) PRs
     foreign_skipped: int = 0  # foreign PRs skipped (dedup / dry-run / cap)
@@ -339,6 +366,11 @@ def run_orphaned_pr_check_pass(
         if not settings.orphaned_pr_dry_run
         else frozenset()
     )
+    disposed_trackers: dict[str, str] = (
+        _load_disposed_trackers(service, repo_config)
+        if not settings.orphaned_pr_dry_run
+        else {}
+    )
 
     # Reconcile stale tracker tickets whose PRs are no longer open.
     if open_prs:
@@ -358,6 +390,7 @@ def run_orphaned_pr_check_pass(
         repo_config,
         result,
         open_orphan_titles,
+        disposed_trackers,
     )
 
     # --- foreign (non-board) PR tracking (opt-in) ---------------------
@@ -408,6 +441,7 @@ def _classify_branches(
     repo_config: RepoConfig,
     result: OrphanedPrCheckResult,
     open_orphan_titles: frozenset[str] = frozenset(),
+    disposed_trackers: dict[str, str] | None = None,
 ) -> None:
     """Iterate sorted mill PRs, classify each, and update *result*.
 
@@ -466,7 +500,34 @@ def _classify_branches(
         repo_config,
         result,
         open_orphan_titles,
+        disposed_trackers,
     )
+
+
+def _resolve_orphan_action(
+    cpr: ClassifiedOrphanPr,
+    should_close: bool,
+    open_orphan_titles: frozenset[str],
+    disposed_trackers: dict[str, str],
+    repo_config: RepoConfig,
+) -> tuple[str, str | None]:
+    """Decide the action for a classified orphan PR.
+
+    Returns ``(action, disposed_ticket_id)`` where ``action`` is one of
+    ``CLOSE`` / ``DEDUP_SKIP`` / ``DISPOSED_SKIP`` / ``FILE_TICKET``.
+    ``disposed_ticket_id`` is the prior tracking-ticket id only for
+    ``DISPOSED_SKIP`` (a tracker previously mark-done'd / deduped for the
+    same still-open PR), else ``None``.
+    """
+    if should_close:
+        return "CLOSE", None
+    title = _orphan_ticket_title(repo_config, cpr.branch)
+    if title in open_orphan_titles:
+        return "DEDUP_SKIP", None
+    disposed_ticket_id = disposed_trackers.get(title)
+    if disposed_ticket_id:
+        return "DISPOSED_SKIP", disposed_ticket_id
+    return "FILE_TICKET", None
 
 
 def _apply_classifications(
@@ -477,8 +538,10 @@ def _apply_classifications(
     repo_config: RepoConfig,
     result: OrphanedPrCheckResult,
     open_orphan_titles: frozenset[str] = frozenset(),
+    disposed_trackers: dict[str, str] | None = None,
 ) -> None:
     """Act on each classification up to per-type and combined action caps."""
+    disposed_trackers = disposed_trackers or {}
     max_actions = settings.orphaned_pr_max_actions_per_pass
     max_closes = settings.orphaned_pr_max_closes_per_pass
     max_files = settings.orphaned_pr_max_files_per_pass
@@ -517,14 +580,11 @@ def _apply_classifications(
                 result.skipped += 1
                 continue
 
-        is_dedup = (
-            not should_close
-            and _orphan_ticket_title(repo_config, cpr.branch) in open_orphan_titles
+        action, disposed_ticket_id = _resolve_orphan_action(
+            cpr, should_close, open_orphan_titles, disposed_trackers, repo_config
         )
+        is_dedup = action == "DEDUP_SKIP"
 
-        action = (
-            "CLOSE" if should_close else ("DEDUP_SKIP" if is_dedup else "FILE_TICKET")
-        )
         state_label = cpr.ticket_state or "NOT_FOUND"
         log_line = (
             f"repo={repo_config.repo_id} branch={cpr.branch} "
@@ -532,11 +592,20 @@ def _apply_classifications(
             f"classification={cpr.classification.value} "
             f"dry_run={settings.orphaned_pr_dry_run}"
         )
+        if disposed_ticket_id:
+            log_line += f" prior_ticket={disposed_ticket_id}"
         log.info("orphaned-pr-check: %s", log_line)
         result.actions.append(log_line)
 
         if settings.orphaned_pr_dry_run or is_dedup:
             result.skipped += 1
+            continue
+
+        if action == "DISPOSED_SKIP" and disposed_ticket_id:
+            _record_disposition(
+                forge, cpr.branch, disposed_ticket_id, repo_config.repo_id
+            )
+            result.disposed += 1
             continue
 
         if should_close:
@@ -737,6 +806,57 @@ def _build_close_comment(cpr: ClassifiedOrphanPr, repo_id: str) -> str:
     )
 
 
+def _build_disposition_comment(prior_ticket_id: str, repo_id: str) -> str:
+    """Build the Markdown comment recording a prior tracking-ticket disposition.
+
+    Posted (once — see :data:`_DISPOSITION_COMMENT_MARKER`) when a prior
+    tracking ticket for this open PR was closed by an operator ``mark done`` or
+    a dedup closure.  The pass honours that disposition and does NOT refile.
+    """
+    return (
+        f"{_DISPOSITION_COMMENT_MARKER}\n"
+        f"The mill's orphaned-PR check found no active tracking ticket for "
+        f"this PR, but a prior tracking ticket (`{prior_ticket_id}`) was "
+        f"already closed by an operator `mark done` or a dedup closure — "
+        f"without this PR being merged or closed.\n\n"
+        f"That is treated as a binding disposition, so the mill is **not** "
+        f"refiling a tracking ticket (repo `{repo_id}`). If this PR still "
+        f"needs work, reopen/continue the prior ticket or file one manually; "
+        f"if it is obsolete, close the PR."
+    )
+
+
+def _record_disposition(
+    forge: Forge,
+    branch: str,
+    prior_ticket_id: str,
+    repo_id: str,
+) -> None:
+    """Record a prior-tracker disposition on *branch*'s PR, at most once.
+
+    Idempotent: if a disposition comment (identified by the hidden marker)
+    already exists on the PR, posts nothing — this avoids re-commenting on
+    every daily pass while the PR stays open within the disposition window.
+    Best-effort: any forge error is swallowed; the disposition is honoured
+    regardless (no tracking ticket is refiled).
+    """
+    try:
+        existing = forge.list_pr_comments(source_branch=branch)
+    except Exception:
+        existing = []
+    if any(_DISPOSITION_COMMENT_MARKER in (c.get("body") or "") for c in existing):
+        return
+    body = _build_disposition_comment(prior_ticket_id, repo_id)
+    try:
+        forge.post_pr_comment(source_branch=branch, body=body)
+    except Exception:
+        log.debug(
+            "orphaned-pr-check: failed to post disposition comment on %s",
+            branch,
+            exc_info=True,
+        )
+
+
 def _orphan_ticket_title(repo_config: RepoConfig, branch: str) -> str:
     """Return the deterministic tracking-ticket title for an orphaned PR branch."""
     return f"Track orphaned PR: {repo_config.repo_id}/{branch}"
@@ -760,6 +880,54 @@ def _load_all_orphan_titles(service: TicketService) -> frozenset[str]:
         source=SourceKind.ORPHANED_PR_CHECK, limit=500
     )
     return frozenset(t.title for t in tickets)
+
+
+def _is_disposition_close(service: TicketService, ticket_id: str) -> bool:
+    """Return True when *ticket_id*'s terminal note is a mark-done / dedup
+    disposition (vs a real implementation or reconcile close).
+    """
+    try:
+        history = service.history(ticket_id)
+    except Exception:
+        log.debug(
+            "orphaned-pr-check: history lookup failed for %s", ticket_id, exc_info=True
+        )
+        return False
+    for ev in history:  # type: ignore[attr-defined]
+        if ev.state in (State.DONE, State.CLOSED):
+            note = (ev.note or "").strip().lower()
+            if note.startswith(_DISPOSITION_NOTE_PREFIXES):
+                return True
+    return False
+
+
+def _load_disposed_trackers(
+    service: TicketService,
+    repo_config: RepoConfig,
+) -> dict[str, str]:
+    """Map orphan-tracking-ticket title → prior ticket id for trackers that
+    were CLOSED by a mark-done / dedup disposition within the recency window.
+
+    Considers CLOSED/DONE tracking tickets (not only open ones) so a PR whose
+    prior tracker was mark-done'd or deduped — without the PR itself being
+    merged/closed — is NOT refiled on the next pass.  Newest disposed tracker
+    wins per title.
+    """
+    cutoff = datetime.now(UTC) - timedelta(days=_DISPOSITION_WINDOW_DAYS)
+    tickets: list[Ticket] = service.recent_proposals_for(
+        source=SourceKind.ORPHANED_PR_CHECK, limit=500
+    )
+    disposed: dict[str, str] = {}
+    for t in sorted(tickets, key=lambda x: _as_utc(x.updated_at), reverse=True):
+        if t.title in disposed:
+            continue  # already mapped a more-recent disposed tracker
+        if t.state not in (State.DONE, State.CLOSED):
+            continue
+        if _as_utc(t.updated_at) < cutoff:
+            continue
+        if _is_disposition_close(service, t.id):
+            disposed[t.title] = t.id
+    return disposed
 
 
 def _file_orphan_ticket(

@@ -41,6 +41,16 @@ NON_IMPLEMENTATION_CLOSE_PREFIXES: tuple[str, ...] = (
     NO_CHANGE_NEEDED_PREFIX,
 )
 
+# Prefix of the DONE event note written by an operator ``mark done``
+# transition (see ``core/service/_transition_mixin.py``: ``mark_done`` writes
+# ``"mark done"`` or ``"mark done: <note>"``).  A mark-done closure is an
+# operator disposition, NOT an implementation — the refine dedup guard and the
+# orphaned-PR check read it back to avoid treating a mark-done'd ticket as a
+# valid dedup target / a reason to refile (the supersede/dedup annihilation
+# class, mill #3158).  Kept out of ``NON_IMPLEMENTATION_CLOSE_PREFIXES`` so the
+# lifecycle transition guard still requires the normal branch/PR evidence.
+MARK_DONE_NOTE_PREFIX: str = "mark done"
+
 # File extensions that are likely binary — should be skipped during
 # text preview / log traversal.
 BINARY_EXTENSIONS: frozenset[str] = frozenset(
