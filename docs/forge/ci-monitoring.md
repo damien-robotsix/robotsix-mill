@@ -106,9 +106,26 @@ publish) to self-hosted repos.
 Concrete default returns `False` — only GitHub implements this. Must
 **NEVER raise** — any API failure returns `False`.
 
-### `dispatch_workflow(*, workflow_id: int, ref: str) -> dict`
+### `get_workflow_triggers(*, path: str) -> list[str] | None`
 
-Triggers a `workflow_dispatch` for a workflow on a given ref (branch/tag).
+Returns the top-level `on:` trigger event names of the workflow file
+at *path* (e.g. `.github/workflows/refresh-deps.yml`).
+
+Returns a list such as `["schedule", "workflow_dispatch"]`, or `None`
+on any error (missing file, transport failure, unparseable YAML).
+
+Used by the ci-auto-close pass to recognise a *cron-only* workflow:
+one with `schedule` + `workflow_dispatch` triggers but no `push` /
+`pull_request`, which never re-runs on its own after a fix merges to
+the target branch.
+
+### `dispatch_workflow(*, workflow_id=None, workflow_file=None, ref="main") -> dict`
+
+Triggers a `workflow_dispatch` run of a workflow on a given ref
+(branch/tag). Identify the workflow either by numeric `workflow_id`
+(used by the CI-monitor queue-timeout re-dispatch) or by `workflow_file`
+name (e.g. `refresh-deps.yml`, used by ci-auto-close) — GitHub's
+dispatch endpoint accepts either form in the same path slot.
 
 Returns `{"dispatched": True}` on success, `{"dispatched": False,
 "reason": ...}` when the forge does not support manual dispatch, the
@@ -127,6 +144,10 @@ Concrete default returns `{"dispatched": False, "reason": "not
 supported"}` — only GitHub implements this. Must **NEVER raise** — all
 failures are caught and returned as a failure dict.
 
+Used by ci-auto-close to re-trigger cron-only workflows after their
+fix PR merges, preventing the stale red run from lingering for up to
+a week until the next scheduled tick.
+
 ## GitHub implementation
 
 `GitHubForge.check_status()` merges two GitHub API concepts:
@@ -143,6 +164,16 @@ instead of failing.
 **Job logs** are fetched via `GET /repos/.../actions/jobs/{job_id}/logs`,
 filtered to failed-like conclusions (failure, cancelled, timed_out, etc.),
 up to `_MAX_FAILED_JOBS = 10`.
+
+**Workflow triggers** (`get_workflow_triggers()`) are fetched via
+`GET /repos/.../contents/{path}`, parsing the response's base64-encoded
+YAML to extract the `on:` block. Handles YAML 1.1's parsing of the bare
+`on` key as boolean `True`.
+
+**Workflow dispatch** (`dispatch_workflow()`) is triggered via
+`POST /repos/.../actions/workflows/{file}/dispatches` with
+`{"ref": ref}` in the request body. Uses exponential backoff retry for
+401 (auth) failures.
 
 ## GitLab implementation
 

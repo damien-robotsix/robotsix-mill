@@ -126,6 +126,32 @@ This re-dispatch behavior applies **only to repos and workflows that**:
   fail silently and are throttled by the 6-hour interval so dispatch
   spam is prevented).
 
+## CI auto-close periodic pass
+
+The ci-auto-close pass runs every 15 minutes and closes `source=ci`
+tickets when their workflow is green on the merge target (main).
+
+### Cron-only workflow dispatch
+
+When a workflow has **only** `schedule` + `workflow_dispatch` triggers
+(no `push` / `pull_request`), it never re-runs on its own after a fix
+PR merges. The stale red run lingers until the next scheduled tick,
+keeping the ci ticket unresolved for up to a week.
+
+**Auto-dispatch behavior**: When ci-auto-close detects a cron-only
+workflow still red on the stale failing commit, it automatically triggers
+one `workflow_dispatch` run on the merge target (`main`). This ensures
+a fresh run completes within minutes, allowing the next pass to close
+the ticket (or re-block it with the new run's result).
+
+**Guards**:
+- Dispatch at most once per ticket (checked via ticket history).
+- Skip when a run newer than the failing commit already exists (a fresh
+  run is on its way).
+
+The dispatch is recorded in the ticket's event history so it's visible
+in the UI and prevents accidental double-dispatch across restarts.
+
 ## Run registry
 
 The worker maintains a `RunRegistry` (`runtime/run_registry.py`) —

@@ -22,7 +22,7 @@ _BOARD = "test-board"
 
 
 class _FakeForge:
-    def __init__(self, runs, prs=None, runs_by_id=None):
+    def __init__(self, runs, prs=None, runs_by_id=None, triggers=None, dispatched=None):
         self._runs = runs
         # branch -> ``pr_status`` dict; mirrors the forge answer the API's
         # ``pr_url`` enrichment is built on (the Ticket row stores no url).
@@ -30,6 +30,10 @@ class _FakeForge:
         # run_id -> single-run dict, served by ``get_workflow_run`` (the
         # run-URL anchor fallback for refined tickets).
         self._runs_by_id = runs_by_id if runs_by_id is not None else {}
+        # ``on:`` trigger event names returned for any workflow file, or None.
+        self._triggers = triggers
+        # Shared record of (workflow_file, ref) dispatches across instances.
+        self._dispatched = dispatched if dispatched is not None else []
 
     def list_workflow_runs(self, *, branch=None, head_sha=None):
         return self._runs
@@ -40,12 +44,30 @@ class _FakeForge:
     def get_workflow_run(self, *, run_id):
         return self._runs_by_id.get(run_id)
 
+    def get_workflow_triggers(self, *, path):
+        return self._triggers
 
-def _prepare(tmp_path, monkeypatch, runs=None, prs=None, runs_by_id=None):
+    def dispatch_workflow(self, *, workflow_file, ref="main"):
+        self._dispatched.append((workflow_file, ref))
+        return {"dispatched": True}
+
+
+def _prepare(
+    tmp_path,
+    monkeypatch,
+    runs=None,
+    prs=None,
+    runs_by_id=None,
+    triggers=None,
+    dispatched=None,
+):
     # One shared ``prs`` dict across every forge instance the lambda builds,
     # so ``_ci_ticket(pr_url=...)`` can register a PR after ``_prepare``.
     prs = {} if prs is None else prs
     runs_by_id = {} if runs_by_id is None else runs_by_id
+    # Shared across every forge instance so dispatches recorded by the runner
+    # survive the per-call ``get_forge`` lambda (mirrors the ``prs`` pattern).
+    dispatched = [] if dispatched is None else dispatched
     db.reset_engine()
     settings = Settings(data_dir=str(tmp_path / "data"), require_approval="false")
     db.init_db(settings, board_id=_BOARD)
@@ -61,7 +83,9 @@ def _prepare(tmp_path, monkeypatch, runs=None, prs=None, runs_by_id=None):
     monkeypatch.setattr(
         car,
         "get_forge",
-        lambda settings, repo_config=None: _FakeForge(runs or [], prs, runs_by_id),
+        lambda settings, repo_config=None: _FakeForge(
+            runs or [], prs, runs_by_id, triggers, dispatched
+        ),
     )
     return settings, TicketService(settings, board_id=_BOARD)
 
@@ -811,3 +835,120 @@ def test_window_older_than_failure_still_unanchored():
     # and without a Created marker the behaviour is unchanged
     green, reason = car._green_since_failure(runs, "ci / tests", "abc123")
     assert (green, reason) == (None, "failing head outside run window")
+
+
+# ---------------------------------------------------------------------------
+# cron-only workflow dispatch after a fix merges
+# ---------------------------------------------------------------------------
+
+_CRON = ["schedule", "workflow_dispatch"]
+
+
+def _stale_red_run(f_sha="abc123"):
+    """A single red run whose head is the failing commit — the stale cron run
+    that lingers after a fix merged (no push trigger re-runs the workflow)."""
+    return [
+        {
+            "name": "Refresh git dependencies",
+            "head_sha": f_sha,
+            "conclusion": "failure",
+            "id": 100,
+            "html_url": "https://x/run/100",
+            "created_at": "2026-09-01T00:00:00Z",
+            "path": ".github/workflows/refresh-deps.yml",
+        }
+    ]
+
+
+def test_is_cron_only():
+    assert car._is_cron_only(["schedule", "workflow_dispatch"]) is True
+    assert car._is_cron_only(["workflow_dispatch", "schedule", "push"]) is False
+    assert car._is_cron_only(["schedule"]) is False  # no manual dispatch
+    assert car._is_cron_only(["workflow_dispatch"]) is False  # no schedule
+    assert car._is_cron_only(["schedule", "workflow_dispatch", "pull_request"]) is False
+    assert car._is_cron_only(None) is False
+    assert car._is_cron_only([]) is False
+
+
+def test_cron_only_still_red_dispatches(tmp_path, monkeypatch):
+    dispatched = []
+    settings, service = _prepare(
+        tmp_path,
+        monkeypatch,
+        runs=_stale_red_run(),
+        triggers=_CRON,
+        dispatched=dispatched,
+    )
+    t = _ci_ticket(service, settings, wf="Refresh git dependencies", f_sha="abc123")
+
+    result = _run(settings)
+
+    # Not closed — still red; the pass re-triggers the workflow instead.
+    assert result["closed"] == 0
+    assert dispatched == [("refresh-deps.yml", "main")]
+    notes = [e.note or "" for e in service.history(t.id)]
+    assert any(car._DISPATCH_NOTE in n for n in notes)
+    assert any("refresh-deps.yml" in n and "on main" in n for n in notes)
+
+
+def test_cron_only_dispatched_at_most_once(tmp_path, monkeypatch):
+    dispatched = []
+    settings, service = _prepare(
+        tmp_path,
+        monkeypatch,
+        runs=_stale_red_run(),
+        triggers=_CRON,
+        dispatched=dispatched,
+    )
+    t = _ci_ticket(service, settings, wf="Refresh git dependencies")
+
+    _run(settings)
+    _run(settings)  # second pass must see the history marker and skip
+
+    assert dispatched == [("refresh-deps.yml", "main")]
+    marker_events = [
+        e for e in service.history(t.id) if car._DISPATCH_NOTE in (e.note or "")
+    ]
+    assert len(marker_events) == 1
+
+
+def test_push_triggered_workflow_not_dispatched(tmp_path, monkeypatch):
+    dispatched = []
+    settings, service = _prepare(
+        tmp_path,
+        monkeypatch,
+        runs=_stale_red_run(),
+        triggers=["push", "schedule", "workflow_dispatch"],
+        dispatched=dispatched,
+    )
+    _ci_ticket(service, settings, wf="Refresh git dependencies")
+
+    _run(settings)
+
+    assert dispatched == []
+
+
+def test_newer_run_than_failure_not_dispatched(tmp_path, monkeypatch):
+    """A run newer than the failing commit already exists → no dispatch even
+    for a cron-only workflow (a fresh run is already on its way)."""
+    dispatched = []
+    runs = [
+        {
+            "name": "Refresh git dependencies",
+            "head_sha": "newhead",
+            "conclusion": "failure",
+            "id": 200,
+            "html_url": "https://x/run/200",
+            "created_at": "2026-09-02T00:00:00Z",
+            "path": ".github/workflows/refresh-deps.yml",
+        },
+        _stale_red_run()[0],
+    ]
+    settings, service = _prepare(
+        tmp_path, monkeypatch, runs=runs, triggers=_CRON, dispatched=dispatched
+    )
+    _ci_ticket(service, settings, wf="Refresh git dependencies", f_sha="abc123")
+
+    _run(settings)
+
+    assert dispatched == []

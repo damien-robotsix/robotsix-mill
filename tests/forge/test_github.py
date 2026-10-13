@@ -2587,3 +2587,79 @@ def test_get_authenticated_user_login_exception(tmp_path, monkeypatch):
     # Cache hit — should still be ''
     login2 = forge.get_authenticated_user_login()
     assert login2 == ""
+
+
+# ---------------------------------------------------------------------------
+# get_workflow_triggers / dispatch_workflow
+# ---------------------------------------------------------------------------
+
+
+def _b64(text):
+    import base64
+
+    return base64.b64encode(text.encode()).decode()
+
+
+def test_get_workflow_triggers_cron_only(tmp_path, monkeypatch):
+    """YAML 1.1 parses the bare ``on`` key as boolean True; the adapter must
+    still recover the trigger names from under it."""
+    wf_yaml = (
+        "name: Refresh git dependencies\n"
+        "on:\n"
+        "  schedule:\n"
+        "    - cron: '0 6 * * 1'\n"
+        "  workflow_dispatch: {}\n"
+        "jobs: {}\n"
+    )
+    get_map = {
+        "contents": _make_response(
+            200, {"content": _b64(wf_yaml), "encoding": "base64"}
+        )
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    triggers = forge.get_workflow_triggers(path=".github/workflows/refresh-deps.yml")
+    assert set(triggers) == {"schedule", "workflow_dispatch"}
+
+
+def test_get_workflow_triggers_list_form(tmp_path, monkeypatch):
+    get_map = {
+        "contents": _make_response(
+            200,
+            {"content": _b64("on: [push, schedule]\njobs: {}\n"), "encoding": "base64"},
+        )
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.get_workflow_triggers(path="x.yml") == ["push", "schedule"]
+
+
+def test_get_workflow_triggers_error_returns_none(tmp_path, monkeypatch):
+    get_map = {"contents": _make_response(404, {})}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.get_workflow_triggers(path="missing.yml") is None
+
+
+def test_dispatch_workflow_success(tmp_path, monkeypatch):
+    captured = _mock_httpx(monkeypatch, post_response=_make_response(204, {}))
+
+    forge = _forge(tmp_path)
+    result = forge.dispatch_workflow(workflow_file="refresh-deps.yml", ref="main")
+
+    assert result == {"dispatched": True}
+    assert "/actions/workflows/refresh-deps.yml/dispatches" in captured["post_url"]
+    assert captured["post_payload"] == {"ref": "main"}
+
+
+def test_dispatch_workflow_failure_returns_dict(tmp_path, monkeypatch):
+    _mock_httpx(monkeypatch, post_response=_make_response(500, {}, "boom"))
+
+    forge = _forge(tmp_path)
+    result = forge.dispatch_workflow(workflow_file="x.yml")
+
+    assert result["dispatched"] is False
+    assert "reason" in result

@@ -42,7 +42,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from ...config import get_repos_config
-from ...core.models import SourceKind
+from ...core.models import SourceKind, TicketEvent
 from ...core.service import TicketService
 from ...core.states import DONE_OR_CLOSED
 from ...forge import get_forge
@@ -68,6 +68,11 @@ _TERMINAL_CONCLUSIONS = frozenset({"success", "failure"})
 
 # Author recorded on force-closed BLOCKED tickets via ``mark_done``.
 _AUTHOR = "ci-auto-close"
+
+# Prefix written to ticket history when a cron-only workflow is manually
+# dispatched after its fix landed. Doubles as the dedupe key: its presence in
+# the ticket's history means "already dispatched — never dispatch twice".
+_DISPATCH_NOTE = "ci_auto_close: dispatched workflow"
 
 
 def _parse_workflow_branch(
@@ -289,10 +294,22 @@ def _maybe_close(
         runs, wf, f_sha, failing_created_at=failing_created_at
     )
     if not green_runs:
+        try:
+            dispatched = _maybe_dispatch_cron_workflow(
+                service, forge, ticket, wf, target, f_sha, runs
+            )
+        except Exception:
+            log.warning(
+                "ci_auto_close: cron-dispatch check failed for %s",
+                ticket.id,
+                exc_info=True,
+            )
+            dispatched = False
         log.info(
-            "ci_auto_close: skip %s — %s (source=%s)",
+            "ci_auto_close: skip %s — %s%s (source=%s)",
             ticket.id,
             skip_reason,
+            " (dispatched cron-only workflow)" if dispatched else "",
             source,
         )
         return False  # still red / not enough greens / cannot anchor
@@ -397,6 +414,108 @@ def _green_since_failure(
     if streak < 2 and not fix_identifiable:
         return None, "lone green on failing head, attempt 1"
     return green_runs, None
+
+
+def _is_cron_only(triggers: list[str] | None) -> bool:
+    """True when *triggers* describe a cron-only workflow.
+
+    A cron-only workflow runs on ``schedule`` and can be hand-triggered via
+    ``workflow_dispatch`` but has no ``push`` / ``pull_request`` trigger, so
+    landing a fix on the merge target never re-runs it — the last (red) run
+    lingers until the next scheduled tick (up to a week). Conservative: any
+    ``push`` / ``pull_request`` trigger (even branch-scoped) disqualifies it,
+    so we only auto-dispatch workflows that genuinely never run on a merge.
+    """
+    if not triggers:
+        return False
+    events = set(triggers)
+    return (
+        "schedule" in events
+        and "workflow_dispatch" in events
+        and "push" not in events
+        and "pull_request" not in events
+    )
+
+
+def _already_dispatched(service: TicketService, ticket_id: str) -> bool:
+    """True when a dispatch was already recorded for *ticket_id*.
+
+    Enforces "dispatch at most once per ticket". On any history-read failure
+    returns True (fail safe: never risk a second dispatch).
+    """
+    try:
+        events: list[TicketEvent] = service.history(ticket_id)
+    except Exception:
+        log.warning(
+            "ci_auto_close: history read failed for %s", ticket_id, exc_info=True
+        )
+        return True
+    return any(_DISPATCH_NOTE in (e.note or "") for e in events)
+
+
+def _maybe_dispatch_cron_workflow(
+    service: TicketService,
+    forge: Any,
+    ticket: Any,
+    wf: str,
+    target: str,
+    f_sha: str,
+    runs: list[dict[str, Any]],
+) -> bool:
+    """Dispatch a cron-only workflow once after its fix landed; return True iff
+    a dispatch was issued this pass.
+
+    Called when the workflow is not (yet) green. A workflow whose only
+    triggers are ``schedule`` + ``workflow_dispatch`` never re-runs when a fix
+    merges to *target*, so ``ci_auto_close`` would see the stale red run for up
+    to a week. When the latest run of *wf* is still the failing commit (no run
+    newer than the fix) and the workflow is cron-only, trigger one
+    ``workflow_dispatch`` run on *target* and record it; the next pass closes
+    (or re-blocks) on that run's conclusion.
+
+    Guards: dispatch at most once per ticket (:func:`_already_dispatched`), and
+    skip when a run newer than the failing commit already exists (a fresh run
+    is on its way — ``_green_since_failure`` handles it).
+    """
+    completed = [r for r in runs if (r.get("name") or "") == wf]
+    if not completed:
+        return False  # cannot resolve the workflow file
+    completed.sort(key=_created_at, reverse=True)
+    latest = completed[0]
+    # A run newer than the failing commit already exists → nothing to dispatch.
+    if (latest.get("head_sha") or "") != f_sha:
+        return False
+    path = (latest.get("path") or "").strip()
+    if not path:
+        return False
+    if _already_dispatched(service, ticket.id):
+        return False
+    if not _is_cron_only(forge.get_workflow_triggers(path=path)):
+        return False
+
+    workflow_file = path.rsplit("/", 1)[-1]
+    result = forge.dispatch_workflow(workflow_file=workflow_file, ref=target)
+    if not result.get("dispatched"):
+        log.warning(
+            "ci_auto_close: dispatch of %s for %s failed: %s",
+            workflow_file,
+            ticket.id,
+            result.get("reason"),
+        )
+        return False
+
+    service.add_step_event(
+        ticket.id,
+        f"{_DISPATCH_NOTE} '{wf}' ({workflow_file}) on {target} — cron-only "
+        "workflow re-triggered after its fix merged; awaiting the new run's "
+        "conclusion.",
+    )
+    log.info(
+        "ci_auto_close: dispatched cron-only workflow %s for %s",
+        workflow_file,
+        ticket.id,
+    )
+    return True
 
 
 def _process_board(

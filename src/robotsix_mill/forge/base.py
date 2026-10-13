@@ -528,8 +528,34 @@ class Forge(ABC):
         """
         return False
 
-    def dispatch_workflow(self, *, workflow_id: int, ref: str) -> dict[str, Any]:
-        """Trigger a ``workflow_dispatch`` for *workflow_id* on *ref*.
+    def get_workflow_triggers(self, *, path: str) -> list[str] | None:
+        """Top-level ``on:`` trigger event names of the workflow file at *path*.
+
+        Returns e.g. ``["schedule", "workflow_dispatch"]``, or ``None`` when
+        the triggers cannot be determined (unsupported forge, missing file,
+        parse/transport error).
+
+        Used by the ci-auto-close pass to recognise a *cron-only* workflow
+        (``schedule`` + ``workflow_dispatch`` triggers but no ``push`` /
+        ``pull_request``), which never re-runs on its own after a fix merges.
+        Default returns ``None`` — only GitHub implements workflow-file
+        introspection.  Must NEVER raise.
+        """
+        return None
+
+    def dispatch_workflow(
+        self,
+        *,
+        workflow_id: int | None = None,
+        workflow_file: str | None = None,
+        ref: str = "main",
+    ) -> dict[str, Any]:
+        """Trigger a ``workflow_dispatch`` run of a workflow on *ref*.
+
+        Identify the workflow either by numeric *workflow_id* (used by the
+        CI-monitor queue-timeout re-dispatch) or by *workflow_file* name
+        (e.g. ``refresh-deps.yml``, used by ci-auto-close) — GitHub's
+        dispatch endpoint accepts either form in the same path slot.
 
         Returns ``{"dispatched": True}`` on success, ``{"dispatched":
         False, "reason": ...}`` when the forge does not support manual
