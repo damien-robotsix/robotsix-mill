@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.16.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.12...v0.16.0) (2026-10-13)
+
+
+### Features
+
+* ci_fix transient detector: classify lychee link-check network errors (external URL unreachable) as transient and rerun instead of filing a CI-failure ticket (20261012T204101Z-ci-fix-transient-detector-classify-lyche-e2d9) ([#3354](https://github.com/damien-robotsix/robotsix-mill/issues/3354)) ([c203f44](https://github.com/damien-robotsix/robotsix-mill/commit/c203f44ed99c87d3b0f33951767865a2f0520ec2))
+
+
+### Bug Fixes
+
+* **ci-monitor:** match the workflow name as a whole word in the canonical-ticket title fallback ([#3361](https://github.com/damien-robotsix/robotsix-mill/issues/3361)) ([40c063a](https://github.com/damien-robotsix/robotsix-mill/commit/40c063a734376b899dfdce6f7a2b3fe6f533d499))
+* **deps:** pin robotsix-llmio to a backport of the claude_sdk fixes (connector + AskUserQuestion deny, Skill deny, confinement, prompt spill) ([#3357](https://github.com/damien-robotsix/robotsix-mill/issues/3357)) ([191f6ab](https://github.com/damien-robotsix/robotsix-mill/commit/191f6ab6d2569a490b647313dc39f6dd3dbbee8f))
+* **refine:** parse auto-approve verdicts prefixed by a Decision label ([#3352](https://github.com/damien-robotsix/robotsix-mill/issues/3352)) ([6a101fb](https://github.com/damien-robotsix/robotsix-mill/commit/6a101fb799ff82a97cdc5756a74be0f956acfc5c))
+* **tools:** accept write_file(file_path=), edit_file(replace_all=) and verify_diff(description=) ([#3358](https://github.com/damien-robotsix/robotsix-mill/issues/3358)) ([9407b93](https://github.com/damien-robotsix/robotsix-mill/commit/9407b930fe315d00d77dd869955c083357c9847e))
+
 ## [0.15.12](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.11...v0.15.12) (2026-10-06)
 
 
