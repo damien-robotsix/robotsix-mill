@@ -6,12 +6,34 @@ Split from ``github.py``.  Defines ``GitHubForgeCIMixin`` that
 
 from __future__ import annotations
 
+import base64
 import re
 from typing import Any
 
 import httpx
+import yaml
 
 from ._log_utils import _capture_failure_window, _strip_runner_noise
+
+
+def _trigger_event_names(on: Any) -> list[str] | None:
+    """Normalise a workflow ``on:`` value to a list of event names.
+
+    GitHub Actions ``on:`` may be a string (``on: push``), a list
+    (``on: [push, schedule]``) or a mapping
+    (``on: {schedule: [...], workflow_dispatch: {}}``).  Returns the event
+    names, or ``None`` when *on* is absent/unrecognised.
+    """
+    if on is None:
+        return None
+    if isinstance(on, str):
+        return [on]
+    if isinstance(on, list):
+        return [str(e) for e in on]
+    if isinstance(on, dict):
+        return [str(k) for k in on]
+    return None
+
 
 # Regex for stripping ANSI escape sequences (CSI / SGR).
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]{0,30}[a-zA-Z]")
@@ -508,8 +530,33 @@ class GitHubForgeCIMixin:
         except Exception:
             return False
 
-    def dispatch_workflow(self, *, workflow_id: int, ref: str) -> dict[str, Any]:
-        """Trigger a ``workflow_dispatch`` for *workflow_id* on *ref*.
+    def get_workflow_triggers(self, *, path: str) -> list[str] | None:
+        """Return the top-level ``on:`` trigger event names of the workflow
+        file at *path* (e.g. ``.github/workflows/refresh-deps.yml``).
+
+        Returns a list such as ``["schedule", "workflow_dispatch"]``, or
+        ``None`` on any error (missing file, transport failure, unparseable
+        YAML).  Must NEVER raise.
+        """
+        try:
+            owner, repo = self._owner_repo  # type: ignore[attr-defined]
+            return self._get_workflow_triggers(owner=owner, repo=repo, path=path)
+        except Exception:
+            return None
+
+    def dispatch_workflow(
+        self,
+        *,
+        workflow_id: int | None = None,
+        workflow_file: str | None = None,
+        ref: str = "main",
+    ) -> dict[str, Any]:
+        """Trigger a ``workflow_dispatch`` run of a workflow on *ref*.
+
+        Identify the workflow by numeric *workflow_id* (CI-monitor
+        queue-timeout re-dispatch) or by *workflow_file* name
+        (e.g. ``refresh-deps.yml``, ci-auto-close) — GitHub's dispatch
+        endpoint accepts either form in the same path slot.
 
         Returns ``{"dispatched": True}`` on success, ``{"dispatched":
         False, "reason": ...}`` on any failure (including HTTP 422 when the
@@ -518,7 +565,11 @@ class GitHubForgeCIMixin:
         try:
             owner, repo = self._owner_repo  # type: ignore[attr-defined]
             return self._dispatch_workflow(
-                owner=owner, repo=repo, workflow_id=workflow_id, ref=ref
+                owner=owner,
+                repo=repo,
+                workflow_id=workflow_id,
+                workflow_file=workflow_file,
+                ref=ref,
             )
         except Exception as e:
             return {"dispatched": False, "reason": str(e)}
@@ -906,13 +957,48 @@ class GitHubForgeCIMixin:
             return any(runner.get("status") == "online" for runner in runners)
         return False
 
+    def _get_workflow_triggers(
+        self, *, owner: str, repo: str, path: str
+    ) -> list[str] | None:
+        """GET /repos/{owner}/{repo}/contents/{path}; parse the ``on:`` block.
+
+        Reads the workflow file on the default branch and returns its
+        top-level trigger event names.
+        """
+        r = self._http.get(  # type: ignore[attr-defined]
+            f"/repos/{owner}/{repo}/contents/{path}",
+        )
+        r.raise_for_status()
+        payload = r.json()
+        raw = payload.get("content") or ""
+        if payload.get("encoding") == "base64":
+            text = base64.b64decode(raw).decode("utf-8", "replace")
+        else:
+            text = raw
+        data = yaml.safe_load(text)
+        if not isinstance(data, dict):
+            return None
+        # YAML 1.1 (PyYAML) parses the bare key ``on`` as the boolean True,
+        # so a workflow's ``on:`` block lands under the True key, not "on".
+        on = data.get("on")
+        if on is None:
+            on = data.get(True)
+        return _trigger_event_names(on)
+
     def _dispatch_workflow(
-        self, *, owner: str, repo: str, workflow_id: int, ref: str
+        self,
+        *,
+        owner: str,
+        repo: str,
+        workflow_id: int | None = None,
+        workflow_file: str | None = None,
+        ref: str,
     ) -> dict[str, Any]:
-        """POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches."""
+        """POST /repos/{owner}/{repo}/actions/workflows/{id_or_file}/dispatches."""
+        identifier = workflow_file if workflow_file is not None else workflow_id
         for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
             r = c.post(
-                f"{api}/repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches",
+                f"{api}/repos/{owner}/{repo}/actions/workflows/{identifier}/dispatches",
                 headers=headers,
                 json={"ref": ref},
             )
