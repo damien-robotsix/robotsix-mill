@@ -1835,6 +1835,31 @@ class CIFixStage(Stage):
                 "\n**Out-of-scope code-scanning alert(s):** "
                 f"{_format_alert_refs(out_of_scope_alerts)}\n"
             )
+        # A lychee link-checker network error / timeout that survived the
+        # transient re-runs is almost always a flaky external host, not a
+        # broken link.  Propose adding the URL(s) to the lychee exclude list
+        # rather than leaving the fixer to guess at a "CI pipeline" change.
+        from .ci_transient import (
+            extract_lychee_failing_urls,
+            is_transient_lychee_network_failure,
+        )
+
+        if is_transient_lychee_network_failure(failing_summary):
+            lychee_urls = extract_lychee_failing_urls(failing_summary)
+            url_list = (
+                "".join(f"\n- `{url}`" for url in lychee_urls)
+                if lychee_urls
+                else "\n- (see the failing lychee output above)"
+            )
+            description += (
+                "\n**Suggested fix:** the lychee link check failed with a "
+                "network error / timeout that persisted across automatic "
+                "re-runs — a flaky external host, not a broken link. Add the "
+                "URL(s) below to the lychee exclude list (e.g. the "
+                "`exclude`/`--exclude` entries in `lychee.toml` or the "
+                "`.pre-commit-config.yaml` lychee hook args) rather than making "
+                f"a CI-pipeline change:{url_list}\n"
+            )
         block_reason = "CI failure is out of scope for this ticket"
 
         # Dedup fingerprint from the failing CHECK NAMES only — an
