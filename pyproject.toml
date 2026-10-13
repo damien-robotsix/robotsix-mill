@@ -12,11 +12,12 @@ license = "MIT"
 authors = [{ name = "Damien Robotsix" }]
 dependencies = [
     "pydantic>=2",
-    # Floor 1.107.7 clears the pydantic-ai-slim advisory batch flagged by
-    # `uv audit` (all fixes land in the 1.107.x line). Capped `<2` to stay on
-    # the current major — the 2.x release is a breaking API migration out of
-    # scope for a security bump; lift the cap in a dedicated migration ticket.
-    "pydantic-ai-slim[openrouter,openai]>=1.107.7,<2",
+    # Floor 2.53 clears the 2026-10-12 pydantic-ai-slim advisories
+    # GHSA-6fqq-452j-qhrp / GHSA-v36g-jcw9-x7cw (fixed in 2.53.0) flagged by
+    # `uv audit`. The repo migrated to the 2.x major (the former `<2` cap and
+    # its 1.107.x pin are gone): `result.usage()` is now accessed as the
+    # `result.usage` property — see agents/retry.py and agents/refining.py.
+    "pydantic-ai-slim[openrouter,openai]>=2.53",
     # LLM I/O (OpenRouter model construction, DeepSeek pin, per-tier reasoning,
     # cost, retry/transient) extracted to a standalone library. See
     # agents/openrouter_cost.py + agents/retry.py (now thin shims).
@@ -98,7 +99,7 @@ exclude-newer-package = { pypdf = "2026-10-05T00:00:00Z" }
 override-dependencies = ["robotsix-http @ git+https://github.com/damien-robotsix/robotsix-http.git@cdfd4d1c42679fef73081439562872792e202dc4"]
 
 [tool.uv.sources]
-robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "c4fe26055bd08a5d878820dcb27c3c369e7516ef" }
+robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "9f51396bde2701716d2b36c0659a283de49e314f" }
 robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "081d680271dfd88f178f09077869eb4dcc1c9c78" }
 robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d916d1c14198dd00bb136605224177289c73352c" }
 robotsix-config = { git = "https://github.com/damien-robotsix/robotsix-config", rev = "0f2e484b59eb306b54ba25fc8bddb5a3e3ad2535" }

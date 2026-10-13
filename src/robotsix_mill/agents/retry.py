@@ -144,7 +144,7 @@ def _try_record_step_usage(
     non-pydantic-ai result or a missing OTel span never blocks the caller.
     """
     try:
-        usage = result.usage()
+        usage = result.usage
         model_name: str = getattr(result.response, "model_name", "") or ""
         request_count: int = usage.requests
         input_tokens: int = usage.input_tokens
@@ -514,7 +514,7 @@ def run_agent[T](
         )
 
     # Record per-step usage as a span attribute when the result is a
-    # pydantic-ai AgentRunResult (has .usage() and .all_messages()).
+    # pydantic-ai AgentRunResult (has .usage and .all_messages()).
     _try_record_step_usage(result, retry_count, last_reason)
     return result
 
