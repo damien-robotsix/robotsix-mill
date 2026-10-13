@@ -299,6 +299,20 @@ class Forge(ABC):
         where a retry yields a new pipeline id) report ``None``.
         """
 
+    def get_workflow_run(self, *, run_id: int) -> dict[str, Any] | None:
+        """Fetch a single workflow run by *run_id*, or ``None`` when unavailable.
+
+        Best-effort: returns a dict with keys ``id``, ``name``, ``path``,
+        ``head_branch``, ``head_sha``, ``conclusion``, ``run_attempt``,
+        ``html_url``, ``created_at`` on success, or ``None`` on any error or
+        when the forge does not support single-run lookups.  The default
+        implementation returns ``None``; GitHub overrides it with a real
+        ``GET /repos/{owner}/{repo}/actions/runs/{id}`` call so the
+        ci-auto-close runner can recover workflow/branch/head anchors from a
+        run URL when a refined ticket has lost its body markers and title.
+        """
+        return None
+
     @abstractmethod
     def fetch_workflow_job_logs(self, *, run_id: int, full_log: bool = False) -> str:
         """Fetch the logs of all failed jobs in a workflow run.
