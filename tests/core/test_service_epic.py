@@ -71,6 +71,29 @@ def test_get_epic_context_parent_not_epic(service):
     assert service.get_epic_context(child) == ""
 
 
+def test_reclose_closed_epic_is_noop(service):
+    """Closing an already-closed epic is an idempotent no-op, not an error.
+
+    Regression: two closers race on an all-children-terminal rollup epic —
+    the orphan sweep and the child-close epic re-eval can both decide to
+    close it. The loser used to hit `epic_closed -> epic_closed not allowed`
+    and spam the worker log with a traceback. A same-state transition into a
+    terminal epic state must now be a silent no-op.
+    """
+    epic = service.create("rollup epic", "roll up", kind=TicketKind.EPIC)
+    # All children closed, mirroring the observed rollup-pass epics.
+    for i in range(2):
+        child = service.create(f"child {i}", kind=TicketKind.TASK, parent_id=epic.id)
+        _close_ticket(service, child)
+    # First close moves it terminal.
+    _close_epic(service, epic)
+    assert service.get(epic.id).state == State.EPIC_CLOSED
+    # Second close (the losing racer) must not raise — idempotent no-op.
+    result = service.transition(epic.id, State.EPIC_CLOSED)
+    assert result.state == State.EPIC_CLOSED
+    assert service.get(epic.id).state == State.EPIC_CLOSED
+
+
 def test_list_children(service):
     """list_children returns all tickets with the given parent_id."""
     epic = service.create("Epic", "Overview", kind=TicketKind.EPIC)
