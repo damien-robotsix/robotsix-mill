@@ -22,11 +22,14 @@ _BOARD = "test-board"
 
 
 class _FakeForge:
-    def __init__(self, runs, prs=None):
+    def __init__(self, runs, prs=None, runs_by_id=None):
         self._runs = runs
         # branch -> ``pr_status`` dict; mirrors the forge answer the API's
         # ``pr_url`` enrichment is built on (the Ticket row stores no url).
         self._prs = prs if prs is not None else {}
+        # run_id -> single-run dict, served by ``get_workflow_run`` (the
+        # run-URL anchor fallback for refined tickets).
+        self._runs_by_id = runs_by_id if runs_by_id is not None else {}
 
     def list_workflow_runs(self, *, branch=None, head_sha=None):
         return self._runs
@@ -34,11 +37,15 @@ class _FakeForge:
     def pr_status(self, *, source_branch):
         return self._prs.get(source_branch)
 
+    def get_workflow_run(self, *, run_id):
+        return self._runs_by_id.get(run_id)
 
-def _prepare(tmp_path, monkeypatch, runs=None, prs=None):
+
+def _prepare(tmp_path, monkeypatch, runs=None, prs=None, runs_by_id=None):
     # One shared ``prs`` dict across every forge instance the lambda builds,
     # so ``_ci_ticket(pr_url=...)`` can register a PR after ``_prepare``.
     prs = {} if prs is None else prs
+    runs_by_id = {} if runs_by_id is None else runs_by_id
     db.reset_engine()
     settings = Settings(data_dir=str(tmp_path / "data"), require_approval="false")
     db.init_db(settings, board_id=_BOARD)
@@ -54,7 +61,7 @@ def _prepare(tmp_path, monkeypatch, runs=None, prs=None):
     monkeypatch.setattr(
         car,
         "get_forge",
-        lambda settings, repo_config=None: _FakeForge(runs or [], prs),
+        lambda settings, repo_config=None: _FakeForge(runs or [], prs, runs_by_id),
     )
     return settings, TicketService(settings, board_id=_BOARD)
 
@@ -492,9 +499,146 @@ def test_parse_workflow_branch_from_title_fallback():
     from types import SimpleNamespace
 
     ticket = SimpleNamespace(title="CI failure: ci / tests on main")
-    wf, branch = car._parse_workflow_branch(ticket, "")
+    wf, branch, source = car._parse_workflow_branch(ticket, "")
     assert wf == "ci / tests"
     assert branch == "main"
+    assert source == "title"
+
+
+def test_parse_workflow_branch_source_markers():
+    from types import SimpleNamespace
+
+    ticket = SimpleNamespace(title="anything")
+    body = "**Workflow:** ci / tests\n**Branch:** main\n"
+    wf, branch, source = car._parse_workflow_branch(ticket, body)
+    assert (wf, branch, source) == ("ci / tests", "main", "markers")
+
+
+def test_parse_workflow_branch_unparseable_source_none():
+    from types import SimpleNamespace
+
+    ticket = SimpleNamespace(title="Serialize release-please runs")
+    wf, branch, source = car._parse_workflow_branch(ticket, "no markers here")
+    assert source is None
+
+
+def test_run_url_id_extracts_first_run():
+    body = (
+        "The weekly workflow fails on `main` ... (run "
+        "[36392394152](https://github.com/damien-robotsix/robotsix-llmio/"
+        "actions/runs/36392394152), commit `e31d639`)."
+    )
+    assert car._run_url_id(body) == 36392394152
+    assert car._run_url_id("no url") is None
+
+
+def test_run_url_anchor_closes_refined_llmio_ticket(tmp_path, monkeypatch):
+    # robotsix-llmio ticket refined so both title and body markers are gone;
+    # only the ``**Run:**`` markdown link with a backticked workflow name
+    # survives.  The runner resolves the run URL to recover the anchors and
+    # closes once main is green on that workflow.
+    settings, service = _prepare(
+        tmp_path,
+        monkeypatch,
+        runs=[
+            {
+                "name": "Refresh git dependencies",
+                "head_sha": "feed01",
+                "conclusion": "success",
+                "id": 36400000000,
+                "html_url": "https://x/run/36400000000",
+                "created_at": "2026-09-29T00:00:00Z",
+            },
+            {
+                "name": "Refresh git dependencies",
+                "head_sha": "e31d639",
+                "conclusion": "failure",
+                "id": 36392394152,
+                "html_url": "https://x/run/36392394152",
+                "created_at": "2026-09-28T07:39:11Z",
+            },
+        ],
+        runs_by_id={
+            36392394152: {
+                "id": 36392394152,
+                "name": "Refresh git dependencies",
+                "path": ".github/workflows/bump.yml",
+                "head_sha": "e31d639",
+                "head_branch": "main",
+                "conclusion": "failure",
+                "run_attempt": 1,
+                "html_url": "https://x/run/36392394152",
+                "created_at": "2026-09-28T07:39:11Z",
+            }
+        },
+    )
+    body = (
+        "The weekly `Refresh git dependencies` workflow fails on `main` ... "
+        "(run [36392394152](https://github.com/damien-robotsix/robotsix-llmio/"
+        "actions/runs/36392394152), commit `e31d639`)."
+    )
+    t = service.create(
+        title=(
+            "CI failure: refresh-git-deps — re-pin shared bump.yml caller once "
+            "upstream bump-setup metadata fix propagates"
+        ),
+        description=body,
+        source=SourceKind.CI,
+    )
+
+    result = _run(settings)
+
+    assert result["closed"] == 1
+    assert service.get(t.id).state is State.DONE
+
+
+def test_run_url_anchor_still_red_not_closed_hexarchy(tmp_path, monkeypatch):
+    # hexarchy ticket refined into a feature ticket; body keeps the run URL.
+    # The workflow is still red on main → not closed, and the skip reason is
+    # a real green-check reason (not ``unparseable workflow/branch``).
+    settings, service = _prepare(
+        tmp_path,
+        monkeypatch,
+        runs=[
+            {
+                "name": "release-please",
+                "head_sha": "beef99",
+                "conclusion": "failure",
+                "id": 35433604318,
+                "html_url": "https://x/run/35433604318",
+                "created_at": "2026-09-19T09:17:15Z",
+            },
+        ],
+        runs_by_id={
+            35433604318: {
+                "id": 35433604318,
+                "name": "release-please",
+                "path": ".github/workflows/release-please.yml",
+                "head_sha": "beef99",
+                "head_branch": "main",
+                "conclusion": "failure",
+                "run_attempt": 1,
+                "html_url": "https://x/run/35433604318",
+                "created_at": "2026-09-19T09:17:15Z",
+            }
+        },
+    )
+    body = (
+        "Serialize release-please runs so concurrent merges stop clobbering "
+        "the release PR. Seen in run "
+        "[35433604318](https://github.com/damien-robotsix/hexarchy/actions/"
+        "runs/35433604318)."
+    )
+    t = service.create(
+        title="Serialize release-please runs to avoid race",
+        description=body,
+        source=SourceKind.CI,
+    )
+
+    result = _run(settings)
+
+    assert result["closed"] == 0
+    assert service.get(t.id).state is State.DRAFT
 
 
 def test_rerun_success_same_head_closes(tmp_path, monkeypatch):

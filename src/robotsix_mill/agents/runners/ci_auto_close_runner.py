@@ -60,6 +60,9 @@ _TITLE_RE = re.compile(r"CI failure: (.+?) on (\S+)$", re.IGNORECASE)
 _BODY_WF_RE = re.compile(r"\*\*Workflow:\*\*\s*(.+)")
 _BODY_COMMIT_RE = re.compile(r"\*\*Commit:\*\*\s*`([0-9a-fA-F]{6,})`")
 _BODY_CREATED_RE = re.compile(r"\*\*Created:\*\*\s*(\d{4}-\d{2}-\d{2}T[0-9:.]+Z?)")
+# First GitHub Actions run URL in the body (``.../actions/runs/<id>``). The
+# ``**Run:**`` link survives refinement even when markers and title do not.
+_RUN_URL_RE = re.compile(r"actions/runs/(\d+)")
 
 _TERMINAL_CONCLUSIONS = frozenset({"success", "failure"})
 
@@ -67,12 +70,15 @@ _TERMINAL_CONCLUSIONS = frozenset({"success", "failure"})
 _AUTHOR = "ci-auto-close"
 
 
-def _parse_workflow_branch(ticket: Any, body: str) -> tuple[str | None, str | None]:
-    """Extract ``(workflow_name, branch)`` from a ci ticket.
+def _parse_workflow_branch(
+    ticket: Any, body: str
+) -> tuple[str | None, str | None, str | None]:
+    """Extract ``(workflow_name, branch, source)`` from a ci ticket.
 
-    Prefers the ``**Workflow:**`` / ``**Branch:**`` body markers, falling back
-    to the ``CI failure: <wf> on <branch>`` title (which survives refinement
-    when the body is overwritten).
+    Prefers the ``**Workflow:**`` / ``**Branch:**`` body markers (``source``
+    ``"markers"``), falling back to the ``CI failure: <wf> on <branch>`` title
+    (``source`` ``"title"``).  ``source`` is ``None`` when neither path yields
+    both a workflow and a branch — the caller then tries the run-URL anchor.
     """
     body = body or ""
     m = _BODY_WF_RE.search(body)
@@ -82,14 +88,61 @@ def _parse_workflow_branch(ticket: Any, body: str) -> tuple[str | None, str | No
     if m:
         branch = m.group(1).strip()
     if wf and branch:
-        return wf, branch
-    # Title fallback (refined tickets keep wf+branch in the title).
+        return wf, branch, "markers"
+    # Title fallback (unrefined tickets keep wf+branch in the title).
     m = _TITLE_RE.match(ticket.title or "")
     if m:
         t_wf = m.group(1).strip()
         t_branch = m.group(2).strip()
-        return t_wf or wf, t_branch or branch
-    return wf, branch
+        return t_wf or wf, t_branch or branch, "title"
+    return wf, branch, None
+
+
+def _run_url_id(body: str) -> int | None:
+    """Return the first ``actions/runs/<id>`` run id in *body*, or ``None``.
+
+    Refine rewrites both the title and the body markers, but it keeps the
+    ``**Run:**`` link (a ``.../actions/runs/<id>`` URL) intact, so this is the
+    last anchor that survives refinement.
+    """
+    if not body:
+        return None
+    m = _RUN_URL_RE.search(body)
+    return int(m.group(1)) if m else None
+
+
+def _resolve_anchors(
+    forge: Any, ticket: Any, body: str
+) -> tuple[str | None, str | None, str | None, str | None, str | None]:
+    """Resolve ``(wf, branch, failing_head, failing_created_at, source)``.
+
+    Starts from the body markers / title (:func:`_parse_workflow_branch`) plus
+    the ``**Commit:**`` / ``**Created:**`` markers.  When markers *and* title
+    both fail to yield a workflow + branch, falls back to resolving the first
+    ``actions/runs/<id>`` URL in the body via ``forge.get_workflow_run`` and
+    uses the run's ``name``/``path``, ``head_branch``, ``head_sha`` and
+    ``created_at`` as anchors (``source`` ``"run-url"``).
+    """
+    wf, branch, source = _parse_workflow_branch(ticket, body)
+    f_sha = _failing_head(body)
+    created = _failing_created_at(body)
+    if wf and branch:
+        return wf, branch, f_sha, created, source
+
+    run_id = _run_url_id(body)
+    if run_id is None:
+        return wf, branch, f_sha, created, None
+    try:
+        run = forge.get_workflow_run(run_id=run_id)
+    except Exception:
+        run = None
+    if not run:
+        return wf, branch, f_sha, created, None
+    r_wf = (run.get("name") or run.get("path") or "").strip() or wf
+    r_branch = (run.get("head_branch") or "").strip() or branch
+    r_sha = (run.get("head_sha") or "").strip() or f_sha
+    r_created = (run.get("created_at") or "").strip() or created
+    return r_wf, r_branch, r_sha, r_created, "run-url"
 
 
 def _failing_head(body: str) -> str | None:
@@ -171,15 +224,6 @@ def _maybe_close(
         body = service.workspace(ticket).read_description() or ""
     except Exception:
         body = ""
-    wf, target = _parse_workflow_branch(ticket, body)
-    if not wf or not target:
-        log.info("ci_auto_close: skip %s — unparseable workflow/branch", ticket.id)
-        return False
-
-    f_sha = _failing_head(body)
-    if not f_sha:
-        log.info("ci_auto_close: skip %s — cannot anchor", ticket.id)
-        return False  # cannot anchor the failure — skip
 
     try:
         forge = get_forge(settings, repo_config=repo_config)
@@ -192,6 +236,19 @@ def _maybe_close(
         )
         return False
 
+    wf, target, f_sha, failing_created_at, source = _resolve_anchors(
+        forge, ticket, body
+    )
+    if not wf or not target:
+        log.info("ci_auto_close: skip %s — unparseable workflow/branch", ticket.id)
+        return False
+
+    if not f_sha:
+        log.info(
+            "ci_auto_close: skip %s — cannot anchor (source=%s)", ticket.id, source
+        )
+        return False  # cannot anchor the failure — skip
+
     # Keep the ticket's normal flow ONLY when its branch has an open MR
     # with unmerged work.  A branch by itself proves nothing: implement
     # sets ``ticket.branch`` the moment it starts, long before any MR
@@ -202,7 +259,11 @@ def _maybe_close(
     # ``if ticket.branch: return False`` skipped it every 15 min.
     try:
         if _has_open_mr(forge, ticket):
-            log.info("ci_auto_close: skip %s — open MR with unmerged work", ticket.id)
+            log.info(
+                "ci_auto_close: skip %s — open MR with unmerged work (source=%s)",
+                ticket.id,
+                source,
+            )
             return False
     except Exception:
         log.warning(
@@ -225,12 +286,18 @@ def _maybe_close(
         return False
 
     green_runs, skip_reason = _green_since_failure(
-        runs, wf, f_sha, failing_created_at=_failing_created_at(body)
+        runs, wf, f_sha, failing_created_at=failing_created_at
     )
     if not green_runs:
-        log.info("ci_auto_close: skip %s — %s", ticket.id, skip_reason)
+        log.info(
+            "ci_auto_close: skip %s — %s (source=%s)",
+            ticket.id,
+            skip_reason,
+            source,
+        )
         return False  # still red / not enough greens / cannot anchor
 
+    log.info("ci_auto_close: close %s — workflow green (source=%s)", ticket.id, source)
     _close(service, ticket.id, wf, target, green_runs)
     return True
 

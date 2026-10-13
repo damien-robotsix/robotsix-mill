@@ -420,6 +420,20 @@ class GitHubForgeCIMixin:
             head_sha=head_sha,
         )
 
+    def get_workflow_run(self, *, run_id: int) -> dict[str, Any] | None:
+        """Return a single GitHub Actions workflow run by *run_id*.
+
+        Best-effort: returns a dict with ``id``, ``name``, ``path``,
+        ``head_branch``, ``head_sha``, ``conclusion``, ``run_attempt``,
+        ``html_url``, and ``created_at`` on success, or ``None`` on any
+        error (missing run, transport failure, permission denial).
+        """
+        try:
+            owner, repo = self._owner_repo  # type: ignore[attr-defined]
+            return self._get_workflow_run(owner=owner, repo=repo, run_id=run_id)
+        except Exception:
+            return None
+
     def fetch_workflow_job_logs(self, *, run_id: int, full_log: bool = False) -> str:
         """Return the logs of the failed jobs in workflow run *run_id*.
 
@@ -665,6 +679,26 @@ class GitHubForgeCIMixin:
             }
             for run in raw
         ]
+
+    def _get_workflow_run(
+        self, *, owner: str, repo: str, run_id: int
+    ) -> dict[str, Any]:
+        r = self._http.get(  # type: ignore[attr-defined]
+            f"/repos/{owner}/{repo}/actions/runs/{run_id}",
+        )
+        r.raise_for_status()
+        run = r.json()
+        return {
+            "id": run["id"],
+            "name": run.get("name", ""),
+            "path": run.get("path", ""),
+            "head_sha": run.get("head_sha", ""),
+            "head_branch": run.get("head_branch"),
+            "conclusion": run.get("conclusion"),
+            "run_attempt": run.get("run_attempt"),
+            "html_url": run.get("html_url", ""),
+            "created_at": run.get("created_at", ""),
+        }
 
     def _fetch_workflow_job_logs(
         self,
