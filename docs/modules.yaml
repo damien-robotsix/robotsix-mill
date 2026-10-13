@@ -285,6 +285,7 @@ modules:
       - src/robotsix_mill/stages/refine/helpers.py
       - src/robotsix_mill/stages/refine/spec_validation.py
       - src/robotsix_mill/stages/refine/_impl_ready.py
+      - src/robotsix_mill/stages/refine/scanner_disposition.py
       - src/robotsix_mill/stages/answer.py
       - src/robotsix_mill/stages/merge/__init__.py
       - src/robotsix_mill/stages/merge/_base.py
@@ -344,6 +345,7 @@ modules:
       - tests/stages/refine/test_triage.py
       - tests/stages/refine/test_triage_skip.py
       - tests/stages/refine/test_impl_ready.py
+      - tests/stages/refine/test_scanner_disposition.py
       - tests/stages/refine/__init__.py
       - tests/stages/merge/test_core.py
       - tests/stages/merge/test_core_auto_merge.py
