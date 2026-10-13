@@ -599,6 +599,11 @@ def test_run_web_knowledge_resets_budget(tmp_path, monkeypatch):
     from robotsix_mill.agents import base as bmod
 
     monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    # Pin the active slot to OpenRouter so the runner takes the mocked
+    # pydantic-ai Agent path; the hermetic default slot resolves to the
+    # keyless Claude SDK, which would route through build_subagent and
+    # invoke the real CLI.
+    monkeypatch.setattr(bmod, "level_uses_claude", lambda level: False)
     monkeypatch.setattr(
         bmod,
         "build_openrouter_model",
