@@ -120,10 +120,7 @@ or the operation otherwise fails.
 {"dispatched": True}
 
 # Failure
-{
-    "dispatched": False,
-    "reason": "no workflow_dispatch trigger"
-}
+{"dispatched": False, "reason": "no workflow_dispatch trigger"}
 ```
 
 Concrete default returns `{"dispatched": False, "reason": "not
