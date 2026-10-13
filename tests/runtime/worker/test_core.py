@@ -1112,6 +1112,32 @@ def test_initial_delay_waits_when_recent(ctx, tmp_path):
     assert 86000 < delay <= 86800
 
 
+def test_orphaned_pr_check_interval_persists_across_restart(ctx, tmp_path):
+    """A completed orphaned-PR-check pass is recorded in the run registry, so a
+    worker restart does NOT re-fire the pass the same day.
+
+    Regression: the loop never recorded a run entry, so _initial_delay found no
+    prior run and scheduled the next pass ~immediately after every restart —
+    causing a second daily pass that refiled a mark-done'd tracker (#3158).
+    """
+    from robotsix_mill.runtime.run_registry import RunRegistry
+    from robotsix_mill.runtime.worker import Worker
+
+    db_path = tmp_path / "runs.json"
+    reg = RunRegistry(db_path)
+    # Simulate one completed pass (as the loop now does).
+    run_id = reg.start("orphaned-pr-check")
+    reg.finish_ok(run_id, "filed=0 closed=0")
+
+    # Simulate a worker restart: a fresh registry loads the persisted file.
+    reg_after_restart = RunRegistry(db_path)
+    w = Worker(ctx, run_registry=reg_after_restart)
+    delay = w._initial_delay("orphaned-pr-check", 86400)
+
+    # Anchor persisted → next pass waits ~the full interval, not ~1s.
+    assert delay > 43200
+
+
 def test_initial_delay_is_per_repo_scoped(ctx, tmp_path):
     """A recent audit on ONE repo must NOT delay another repo's first run.
 

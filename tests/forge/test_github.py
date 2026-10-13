@@ -1224,6 +1224,53 @@ def test_list_review_comments_http_error(tmp_path, monkeypatch):
     assert forge.list_review_comments(source_branch="feature/x") == []
 
 
+def test_list_pr_comments_happy_path(tmp_path, monkeypatch):
+    """PR exists → list_pr_comments returns issue-comment dicts."""
+    list_resp = [{"number": 7}]
+    detail_resp = {
+        "number": 7,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/7",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    comments_resp = [
+        {
+            "id": 9001,
+            "user": {"login": "carol"},
+            "created_at": "2025-01-15T14:00:00Z",
+            "body": "disposition note",
+        },
+    ]
+    get_map = {
+        "issues/7/comments": _make_response(200, comments_resp),
+        "repos/o/r/pulls/7": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, list_resp),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_pr_comments(source_branch="feature/x")
+    assert result == [
+        {
+            "id": 9001,
+            "author": "carol",
+            "created_at": "2025-01-15T14:00:00Z",
+            "body": "disposition note",
+        }
+    ]
+
+
+def test_list_pr_comments_no_pr(tmp_path, monkeypatch):
+    """No PR → returns []."""
+    get_map = {"repos/o/r/pulls": _make_response(200, [])}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.list_pr_comments(source_branch="feature/x") == []
+
+
 def test_list_review_comments_multi_page(tmp_path, monkeypatch):
     """More than 100 review comments → all pages are fetched (bug fix)."""
     list_resp = [{"number": 7}]

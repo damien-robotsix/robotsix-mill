@@ -27,6 +27,7 @@ from ..base import Outcome, StageContext
 from .helpers import (
     DEDUP_ALREADY_DONE_PREFIX,
     DEDUP_DUPLICATE_PREFIX,
+    MARK_DONE_NOTE_PREFIX,
     NON_IMPLEMENTATION_CLOSE_PREFIXES,
     OPERATOR_SENDBACK_PREFIX,
     REFINE_PROGRESS_STATES,
@@ -389,10 +390,26 @@ def _is_valid_dedup_target(
         # external fix (PR/commit reference), the claim is unverified —
         # reject the dedup target so refine proceeds and produces a spec
         # that goes through implement for live re-check against HEAD.
+        #
+        # A bare operator ``mark done`` is also rejected: a mark-done'd
+        # ticket was never implemented (no PR merged), so closing a live
+        # ticket as "duplicate of" it would annihilate the capability —
+        # the same supersede/dedup failure class as the external-fix guard
+        # (mill #3158).  This matters most for orphaned-PR tracking tickets,
+        # which an operator mark-done's without the tracked PR ever merging.
         if not cand.branch:
             for ev in history:  # type: ignore[attr-defined]
                 if ev.state == State.DONE:
-                    note = (ev.note or "").lower()
+                    note = (ev.note or "").strip().lower()
+                    if note.startswith(MARK_DONE_NOTE_PREFIX):
+                        log.info(
+                            "%s: dedup candidate %s was operator mark-done'd "
+                            "(no implementation) — not a valid dedup target, "
+                            "proceeding with refine",
+                            ticket.id,
+                            candidate_id,
+                        )
+                        return False
                     if _rationale_claims_external_fix(note):
                         log.info(
                             "%s: dedup candidate %s was human-closed with an "

@@ -393,6 +393,24 @@ class GitHubForgePRMixin:
             pull_number=pr["number"],
         )
 
+    def list_pr_comments(self, *, source_branch: str) -> list[dict[str, Any]]:
+        """Return the plain (issue) comments on *source_branch*'s PR.
+
+        Each entry is a ``dict`` with ``id``, ``author``, ``created_at``, and
+        ``body``.  Returns ``[]`` when no PR exists for the branch.  These are
+        the conversation-level comments posted by :meth:`post_pr_comment`
+        (GitHub's issue-comments endpoint), not inline review comments.
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        if pr is None:
+            return []
+        return self._list_pr_comments(
+            owner=owner,
+            repo=repo,
+            pull_number=pr["number"],
+        )
+
     def pr_review_status(self, *, source_branch: str) -> dict[str, Any] | None:
         """Return the aggregate review status for *source_branch*'s PR.
 
@@ -872,6 +890,28 @@ class GitHubForgePRMixin:
                 "file_path": item.get("path", ""),
                 "line": item.get("line") or item.get("original_line"),
                 "diff_hunk": item.get("diff_hunk", ""),
+            },
+            fallback=[],
+        )
+
+    def _list_pr_comments(
+        self,
+        *,
+        owner: str,
+        repo: str,
+        pull_number: int,
+    ) -> list[dict[str, Any]]:
+        # Plain PR comments live on the issue-comments endpoint (a PR is an
+        # issue in GitHub's data model), distinct from the pulls/.../comments
+        # review-comments endpoint used by ``_list_review_comments``.
+        return _paginated_get(
+            self._http,  # type: ignore[attr-defined]
+            f"/repos/{owner}/{repo}/issues/{pull_number}/comments",
+            item_fn=lambda item: {
+                "id": item["id"],
+                "author": (item.get("user") or {}).get("login", ""),
+                "created_at": item.get("created_at", ""),
+                "body": item.get("body") or "",
             },
             fallback=[],
         )

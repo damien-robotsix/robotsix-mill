@@ -754,36 +754,58 @@ class PeriodicPassesMixin(_WorkerBase):
         initial = self._initial_delay("orphaned-pr-check", interval)
         await asyncio.sleep(initial)
         while True:
-            repos = get_repos_config()
-            for repo_config in list(repos.repos.values()):
-                try:
-                    # run_orphaned_pr_check_pass does synchronous forge
-                    # (list/close PR) I/O — offload so a slow/stalled forge
-                    # call never blocks the event loop (and every HTTP route
-                    # mill serves) for its duration.
-                    result = await self._tracked_to_thread(
-                        run_orphaned_pr_check_pass,
-                        repo_config=repo_config,
+            # Record each pass in the run registry so the daily interval
+            # anchor survives a worker restart — without this, _initial_delay
+            # finds no prior run and fires again ~immediately, causing a
+            # second pass the same day (which is how a mark-done'd tracker got
+            # refiled and re-implemented after a restart).
+            run_id = None
+            if self.run_registry:
+                run_id = self.run_registry.start("orphaned-pr-check")
+            try:
+                totals = {"filed": 0, "closed": 0}
+                repos = get_repos_config()
+                for repo_config in list(repos.repos.values()):
+                    try:
+                        # run_orphaned_pr_check_pass does synchronous forge
+                        # (list/close PR) I/O — offload so a slow/stalled forge
+                        # call never blocks the event loop (and every HTTP route
+                        # mill serves) for its duration.
+                        result = await self._tracked_to_thread(
+                            run_orphaned_pr_check_pass,
+                            repo_config=repo_config,
+                        )
+                        totals["filed"] += result.filed
+                        totals["closed"] += result.closed
+                        log.info(
+                            "orphaned-pr-check: repo %s — scanned=%d closed=%d "
+                            "filed=%d skipped=%d disposed=%d foreign_filed=%d "
+                            "foreign_skipped=%d foreign_ignored=%d dry_run=%s",
+                            repo_config.repo_id,
+                            result.total_scanned,
+                            result.closed,
+                            result.filed,
+                            result.skipped,
+                            result.disposed,
+                            result.foreign_filed,
+                            result.foreign_skipped,
+                            result.foreign_ignored,
+                            result.dry_run,
+                        )
+                    except Exception:
+                        log.exception(
+                            "orphaned-pr-check: error on repo %s",
+                            repo_config.repo_id,
+                        )
+                if self.run_registry and run_id:
+                    self.run_registry.finish_ok(
+                        run_id,
+                        f"filed={totals['filed']} closed={totals['closed']}",
                     )
-                    log.info(
-                        "orphaned-pr-check: repo %s — scanned=%d closed=%d "
-                        "filed=%d skipped=%d foreign_filed=%d foreign_skipped=%d "
-                        "foreign_ignored=%d dry_run=%s",
-                        repo_config.repo_id,
-                        result.total_scanned,
-                        result.closed,
-                        result.filed,
-                        result.skipped,
-                        result.foreign_filed,
-                        result.foreign_skipped,
-                        result.foreign_ignored,
-                        result.dry_run,
-                    )
-                except Exception:
-                    log.exception(
-                        "orphaned-pr-check: error on repo %s",
-                        repo_config.repo_id,
-                    )
+            except Exception as e:
+                log.exception("orphaned-pr-check: pass failed")
+                if self.run_registry and run_id:
+                    self.run_registry.finish_error(run_id, str(e))
             await asyncio.sleep(interval)
 
     async def _sandbox_reaper_loop(self) -> None:

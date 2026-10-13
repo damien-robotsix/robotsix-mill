@@ -282,6 +282,22 @@ class Forge(ABC):
         ``line`` (int or ``None``), ``diff_hunk``.
         """
 
+    def list_pr_comments(self, *, source_branch: str) -> list[dict[str, Any]]:
+        """Return the plain (issue) comments on the PR for *source_branch*.
+
+        These are the conversation-level comments posted by
+        :meth:`post_pr_comment` — distinct from the inline code-review
+        comments returned by :meth:`list_review_comments`.  Each dict has:
+        ``id``, ``author``, ``created_at``, ``body``.  Returns ``[]`` when
+        no PR exists for the branch.
+
+        Best-effort capability: the default implementation returns ``[]``
+        (callers degrade to "cannot tell what was already posted"); forges
+        that support reading issue comments override it (see
+        :class:`~robotsix_mill.forge.github_pr.GitHubForgePRMixin`).
+        """
+        return []
+
     @abstractmethod
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None

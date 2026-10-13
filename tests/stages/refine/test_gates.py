@@ -376,6 +376,20 @@ def test_valid_target_unmerged_branch_is_false(ctx_factory, monkeypatch):
     assert RefineStage._is_valid_dedup_target(ctx, t, cand.id, None) is False
 
 
+def test_valid_target_mark_done_tracker_is_false(ctx_factory):
+    """A prior tracking ticket closed by operator mark-done (no branch, no
+    implementation) is NOT a valid dedup target — closing a live ticket as
+    'duplicate of' it would annihilate the capability (mill #3158)."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    cand = _ticket(ctx, title="Track orphaned PR: test-repo/mill/branch-x")
+    ctx.service.mark_done(cand.id, note="resolved by operator triage")
+    cand = ctx.service.get(cand.id)
+    assert cand.branch is None
+
+    assert RefineStage._is_valid_dedup_target(ctx, t, cand.id, None) is False
+
+
 def test_valid_target_merged_branch_is_true(ctx_factory, monkeypatch):
     ctx = ctx_factory()
     t = _ticket(ctx)

@@ -853,12 +853,16 @@ class TestIdempotentFileTicket:
             ),
             state=State.READY,
         )
-        # First call: no existing tickets → file
-        # Second call: existing ticket → dedup
+        # Each pass calls recent_proposals_for four times: open titles, all
+        # titles, disposed trackers, reconcile.
+        # First pass: no existing tickets → file.
+        # Second pass: existing (open) ticket → dedup skip.
         svc.recent_proposals_for.side_effect = [
             [],
             [],
             [],
+            [],
+            [existing],
             [existing],
             [existing],
             [existing],
@@ -875,6 +879,121 @@ class TestIdempotentFileTicket:
         assert result2.filed == 0
         assert result2.skipped >= 1
         assert any("DEDUP_SKIP" in a for a in result2.actions)
+
+
+class TestDisposedSkip:
+    """A prior tracking ticket closed by mark-done / dedup is a disposition:
+    the next pass must NOT refile a tracking ticket for the still-open PR."""
+
+    _BRANCH = "mill/20250101T000000Z-orphan-a1b2"
+    _TITLE = "Track orphaned PR: test-owner/test-repo/" + _BRANCH
+
+    def _prior(self, note: str, *, days_ago: float = 1.0, state=State.DONE):
+        return _ticket(
+            ticket_id="20250101T000000Z-prior-b069",
+            title=self._TITLE,
+            state=state,
+            updated_at=datetime.now(UTC) - timedelta(days=days_ago),
+        )
+
+    def _done_event(self, note: str):
+        ev = MagicMock()
+        ev.state = State.DONE
+        ev.note = note
+        return ev
+
+    def test_mark_done_tracker_is_disposed_not_refiled(self, monkeypatch):
+        s = _settings(orphaned_pr_dry_run=False)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None  # no active ticket drives the branch
+        forge = _mock_forge(open_branches={self._BRANCH})
+        forge.list_pr_comments.return_value = []
+        _install_seams(monkeypatch, s, forge, svc)
+
+        prior = self._prior("mark done: resolved by operator triage")
+        svc.recent_proposals_for.return_value = [prior]
+        svc.history.return_value = [
+            self._done_event("mark done: resolved by operator triage")
+        ]
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert svc.create.call_count == 0
+        assert result.filed == 0
+        assert result.disposed == 1
+        assert any(
+            "DISPOSED_SKIP" in a and "prior_ticket=20250101T000000Z-prior-b069" in a
+            for a in result.actions
+        )
+        forge.post_pr_comment.assert_called_once()
+        body = forge.post_pr_comment.call_args.kwargs["body"]
+        assert "20250101T000000Z-prior-b069" in body
+
+    def test_duplicate_of_tracker_is_disposed(self, monkeypatch):
+        s = _settings(orphaned_pr_dry_run=False)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(open_branches={self._BRANCH})
+        forge.list_pr_comments.return_value = []
+        _install_seams(monkeypatch, s, forge, svc)
+
+        prior = self._prior("duplicate of 20250101T000000Z-other-cafe")
+        svc.recent_proposals_for.return_value = [prior]
+        svc.history.return_value = [
+            self._done_event("duplicate of 20250101T000000Z-other-cafe: dedup")
+        ]
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert svc.create.call_count == 0
+        assert result.disposed == 1
+
+    def test_disposition_comment_is_idempotent(self, monkeypatch):
+        """A PR that already carries the disposition marker is not re-commented."""
+        from robotsix_mill.agents.runners.orphaned_pr_check import (
+            _DISPOSITION_COMMENT_MARKER,
+        )
+
+        s = _settings(orphaned_pr_dry_run=False)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(open_branches={self._BRANCH})
+        forge.list_pr_comments.return_value = [
+            {"body": _DISPOSITION_COMMENT_MARKER + "\nprior disposition"}
+        ]
+        _install_seams(monkeypatch, s, forge, svc)
+
+        prior = self._prior("mark done")
+        svc.recent_proposals_for.return_value = [prior]
+        svc.history.return_value = [self._done_event("mark done")]
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.disposed == 1
+        forge.post_pr_comment.assert_not_called()
+
+    def test_stale_disposition_outside_window_refiles(self, monkeypatch):
+        """A tracker disposed longer ago than the window no longer suppresses."""
+        s = _settings(orphaned_pr_dry_run=False)
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(open_branches={self._BRANCH})
+        forge.list_pr_comments.return_value = []
+        _install_seams(monkeypatch, s, forge, svc)
+
+        prior = self._prior("mark done", days_ago=30)
+        svc.recent_proposals_for.return_value = [prior]
+        svc.history.return_value = [self._done_event("mark done")]
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert svc.create.call_count == 1
+        assert result.filed == 1
+        assert result.disposed == 0
 
 
 class TestPrStatusNoneSkipped:
@@ -1211,10 +1330,14 @@ class TestForeignPrTracking:
             title="Track external PR: test-owner/test-repo#404",
             state=State.READY,
         )
+        # Four recent_proposals_for calls per pass: open titles, all titles,
+        # disposed trackers, reconcile.
         svc.recent_proposals_for.side_effect = [
             [],
             [],
             [],
+            [],
+            [existing],
             [existing],
             [existing],
             [existing],
