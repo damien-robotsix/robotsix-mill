@@ -117,6 +117,62 @@ TRANSIENT_PATTERNS: list[re.Pattern[str]] = [
 ]
 
 
+# lychee link-checker transient signals.  A bare network/connection error
+# (DNS/TLS/connection reset) or a request timeout on an EXTERNAL URL is a
+# self-clearing upstream outage, NOT a broken link.  lychee prints these as
+# ``✗ [ERR] <url> | Failed: Network error: error sending request for url`` or
+# ``✗ [TIMEOUT] <url>`` (robotsix-mill-ros2 CI main 2026-10-06 20:49Z: the
+# only failing pre-commit hook was lychee, with
+# ``Failed: Network error: error sending request`` on contributor-covenant.org
+# — the ticket then sat 6 days at human approval while the repo stayed red).
+_LYCHEE_NETWORK_ERROR = re.compile(
+    r"\[ERR\][^\n]*(?:Network error|error sending request|"
+    r"error trying to connect|operation timed out|connection (?:reset|closed))"
+    r"|\[TIMEOUT\]\s*https?://",
+    re.IGNORECASE,
+)
+# A lychee failure carrying a concrete HTTP 4xx status (``[404]``/``[403]``/
+# ``[410]`` …) IS deterministic — the link is genuinely broken/moved and a
+# re-run will not fix it.  Its presence vetoes transient classification even
+# when a network error is also reported for a different URL in the same run
+# (keeps "a deterministic lychee failure still files" intact).
+_LYCHEE_STATUS_ERROR = re.compile(r"\[\s*4\d\d\s*\]\s*https?://", re.IGNORECASE)
+
+# Capture the failing external URL(s) from lychee ``[ERR]``/``[TIMEOUT]``
+# lines so the out-of-scope ticket body can propose an exclude-list entry.
+_LYCHEE_URL_LINE = re.compile(
+    r"\[(?:ERR|TIMEOUT)\]\s*(https?://\S+)",
+    re.IGNORECASE,
+)
+
+
+def is_transient_lychee_network_failure(failing_summary: str) -> bool:
+    """Return ``True`` for a lychee network/timeout failure that is safe to re-run.
+
+    True only when a lychee network error or timeout is present AND no link in
+    the same run failed with a concrete HTTP 4xx status — i.e. the lychee
+    failure is a self-clearing upstream outage, not a broken link that a
+    re-run cannot fix.
+    """
+    if not _LYCHEE_NETWORK_ERROR.search(failing_summary):
+        return False
+    return not _LYCHEE_STATUS_ERROR.search(failing_summary)
+
+
+def extract_lychee_failing_urls(failing_summary: str) -> list[str]:
+    """Return the external URL(s) from lychee ``[ERR]``/``[TIMEOUT]`` lines.
+
+    Order-preserving and de-duplicated.  Used to propose an exclude-list
+    entry in the out-of-scope ticket body.
+    """
+    urls: list[str] = []
+    for match in _LYCHEE_URL_LINE.finditer(failing_summary):
+        url = match.group(1).rstrip("|").strip()
+        if url and url not in urls:
+            urls.append(url)
+    return urls
+
+
 def is_transient_ci_failure(
     failing_summary: str,
     failing: list[dict[str, Any]] | None = None,
@@ -127,4 +183,6 @@ def is_transient_ci_failure(
     logs) is searched; *failing* (the raw check dicts) is accepted for
     future use but currently ignored.
     """
+    if is_transient_lychee_network_failure(failing_summary):
+        return True
     return any(pattern.search(failing_summary) for pattern in TRANSIENT_PATTERNS)

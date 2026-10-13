@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from robotsix_mill.stages.ci_transient import is_transient_ci_failure
+from robotsix_mill.stages.ci_transient import (
+    extract_lychee_failing_urls,
+    is_transient_ci_failure,
+    is_transient_lychee_network_failure,
+)
 
 
 class TestIsTransientCiFailure:
@@ -439,3 +443,68 @@ class TestIsTransientCiFailure:
             "```\n"
         )
         assert is_transient_ci_failure(summary) is True
+
+    # --- lychee link-checker network error / timeout ---
+
+    def test_detects_lychee_network_error(self):
+        """robotsix-mill-ros2 CI main 2026-10-06: lychee's only failure is a
+        bare network error on an external host — self-clearing, re-runnable."""
+        summary = (
+            "## ❌ FAILED: CI\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "✗ [ERR] https://www.contributor-covenant.org/faq | "
+            "Failed: Network error: error sending request for url\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_detects_lychee_timeout(self):
+        summary = (
+            "## ❌ FAILED: CI\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "✗ [TIMEOUT] https://slow.example.com/page\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is True
+
+    def test_lychee_404_is_deterministic(self):
+        """A lychee 404 on a real link is a broken link — must still file."""
+        summary = (
+            "## ❌ FAILED: CI\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "✗ [404] https://example.com/moved-page\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is False
+        assert is_transient_lychee_network_failure(summary) is False
+
+    def test_lychee_network_error_with_concurrent_404_still_files(self):
+        """A network error alongside a genuine 404 broken link must NOT be
+        auto-re-run — the 404 vetoes transient classification."""
+        summary = (
+            "## ❌ FAILED: CI\n\n"
+            "**Job logs:**\n"
+            "```\n"
+            "✗ [ERR] https://www.contributor-covenant.org/faq | "
+            "Failed: Network error: error sending request for url\n"
+            "✗ [404] https://example.com/moved-page\n"
+            "```\n"
+        )
+        assert is_transient_ci_failure(summary) is False
+
+    def test_extract_lychee_failing_urls(self):
+        summary = (
+            "✗ [ERR] https://www.contributor-covenant.org/faq | "
+            "Failed: Network error: error sending request for url\n"
+            "✗ [TIMEOUT] https://slow.example.com/page\n"
+        )
+        assert extract_lychee_failing_urls(summary) == [
+            "https://www.contributor-covenant.org/faq",
+            "https://slow.example.com/page",
+        ]
+
+    def test_extract_lychee_failing_urls_empty_without_lychee_lines(self):
+        assert extract_lychee_failing_urls("ECONNRESET in logs") == []
