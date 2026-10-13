@@ -74,6 +74,58 @@ retrying ticket → resume-blocked             (clears retry state, re-enqueues)
 
 No raw database editing is ever needed for recovery.
 
+## CI monitor: Queue-timeout re-dispatch
+
+The CI monitor (`_poll_one_repo_ci()`) detects when a workflow run
+concludes `cancelled` because the self-hosted runner was offline and
+GitHub auto-cancelled the queued job after 24 hours. Rather than filing
+a ticket (which would mislead the operator into thinking the code is
+broken), the monitor **automatically re-dispatches the workflow** via
+`workflow_dispatch` once the runner comes back online.
+
+### Detection
+
+A cancelled run is treated as a queue timeout when:
+1. Its `conclusion` is `"cancelled"`
+2. It never **started** a job (empty `jobs` list)
+
+A concurrency-cancelled run (one that started jobs but was cancelled by
+GitHub's concurrency control) is routine churn and is ignored.
+
+### Re-dispatch strategy
+
+- Once a runner is back online (`has_online_runner()` returns true),
+  the monitor calls `dispatch_workflow()` to re-trigger the workflow
+  on the current target branch.
+- Re-dispatch is bounded: max **3 attempts** per cancelled run, spaced
+  **6 hours apart** (via `_REDISPATCH_MIN_INTERVAL_SECONDS`). This
+  prevents spam if the runner stays offline or if the workflow lacks a
+  `workflow_dispatch` trigger.
+- Attempt count is persisted per cancelled run (keyed by workflow id +
+  head SHA) in the CI monitor state file.
+- A **ticket is filed only if a re-dispatched run then fails** (handled
+  by the ordinary CI failure path). If the re-dispatch succeeds, no
+  ticket is created.
+
+### Example workflow
+
+1. **2026-10-07 10:00 UTC**: Publish Image workflow queued on main, runner offline
+2. **2026-10-08 10:00 UTC**: GitHub auto-cancels due to 24h queue timeout
+3. **2026-10-08 10:30 UTC**: Runner comes back online
+4. **2026-10-08 10:31 UTC**: CI monitor detects cancelled run + online runner,
+   re-dispatches via `workflow_dispatch`
+5. **2026-10-08 10:35 UTC**: Publish Image workflow re-runs, succeeds
+6. **Result**: Image artifact for the current head is now up-to-date; no ticket filed
+
+### Scope
+
+This re-dispatch behavior applies **only to repos and workflows that**:
+- Use self-hosted runners (GitHub-hosted-only repos return `False` from
+  `has_online_runner()`).
+- Have the `workflow_dispatch` trigger configured (workflows without it
+  fail silently and are throttled by the 6-hour interval so dispatch
+  spam is prevented).
+
 ## Run registry
 
 The worker maintains a `RunRegistry` (`runtime/run_registry.py`) —
