@@ -1394,8 +1394,25 @@ def _build_file_operations_tools(state: _FsToolState) -> list[Any]:
             return f"syntax error in {path} line {line}: {e.msg}"
         return None
 
-    def write_file(path: str, content: str) -> str:
-        """Create or overwrite a file in the repository with ``content``."""
+    def write_file(
+        path: str | None = None,
+        content: str | None = None,
+        *,
+        file_path: str | None = None,
+        target_file: str | None = None,
+    ) -> str:
+        """Create or overwrite a file in the repository with ``content``.
+
+        ``file_path`` / ``target_file`` are accepted as aliases of ``path``
+        (Claude Code's own Write tool spells it ``file_path``; the SDK path
+        validates the schema before the body runs, so such calls were
+        rejected outright — two in one mill window on 2026-10-13).
+        """
+        path = path or file_path or target_file
+        if not path:
+            return "error: write_file requires `path` (the repo-relative file to write)"
+        if content is None:
+            return "error: write_file requires `content`"
         blocked = _check_write_allowed(path)
         if blocked is not None:
             return blocked
@@ -1437,6 +1454,7 @@ def _build_file_operations_tools(state: _FsToolState) -> list[Any]:
         *,
         file_path: str | None = None,
         target_file: str | None = None,
+        replace_all: bool = False,
     ) -> str:
         """Replace a unique string in a file. Reads the file, locates
         ``old_string``, and if it appears at least ``count`` times
@@ -1448,7 +1466,10 @@ def _build_file_operations_tools(state: _FsToolState) -> list[Any]:
         (Claude Code's own Edit tool spells it ``file_path``, and the SDK
         path validates the schema before the body runs — three ci_fix
         edits were rejected with "Additional properties are not allowed
-        ('file_path' was unexpected)" on 2026-09-09).
+        ('file_path' was unexpected)" on 2026-09-09). ``replace_all=True``
+        replaces every occurrence (Claude Code's Edit tool flag; two such
+        calls were rejected on 2026-10-13) — equivalent to passing
+        ``count`` equal to the number of occurrences.
         """
         path = path or file_path or target_file
         if not path:
@@ -1464,6 +1485,8 @@ def _build_file_operations_tools(state: _FsToolState) -> list[Any]:
                 with _lock_for(p):
                     content = _read_cached(p)
                     occurrences = content.count(old_string)
+                    if replace_all and occurrences:
+                        count = occurrences
                     if occurrences == 0:
                         return (
                             f"edit_file: old_string not found in {path} "

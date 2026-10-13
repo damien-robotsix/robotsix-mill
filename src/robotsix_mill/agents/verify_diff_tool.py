@@ -79,7 +79,10 @@ def make_verify_diff_tool(repo_dir: Path) -> Callable[..., str]:
     with both sync and async pydantic-ai tool dispatch.
     """
 
-    def verify_diff(expected_files: list[str] | None = None) -> str:
+    def verify_diff(
+        expected_files: list[str] | None = None,
+        description: str | None = None,
+    ) -> str:
         """Run ``git diff --stat`` and return a single diff summary.
 
         Call this ONCE after a batch of edits instead of verifying
@@ -91,6 +94,9 @@ def make_verify_diff_tool(repo_dir: Path) -> Callable[..., str]:
                 expect to appear in the diff.  When provided the tool
                 cross-checks them and reports any missing or unexpected
                 files.
+            description: Ignored. Claude Code's built-in tools take a
+                free-text ``description``; models carry the habit over and
+                the SDK path rejected the whole call at the schema level.
 
         Returns:
             A string containing the ``git diff --stat`` output plus
