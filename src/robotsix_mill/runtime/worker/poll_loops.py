@@ -61,6 +61,26 @@ _CI_FAILING_CONCLUSIONS = frozenset({"failure", "startup_failure"})
 _CI_LOG_EMBED_MAX_CHARS = 20_000
 
 
+_CI_TITLE_PREFIX_RE = re.compile(r"^\s*CI failure:\s*", re.IGNORECASE)
+
+
+def _title_names_workflow(title: str, wf_name: str, target: str) -> bool:
+    """True when *title* names *wf_name* and *target* as whole words.
+
+    The monitor's own ``CI failure:`` prefix is stripped first so a workflow
+    literally named ``CI`` does not match every CI-failure ticket's title.
+    Word boundaries treat ``-``/``_``/alphanumerics as word characters, so
+    ``CI`` matches ``CI on main`` and ``Fix CI lint on main`` but not
+    ``CodeQL on main`` or ``ci-lint on main``.
+    """
+    core = _CI_TITLE_PREFIX_RE.sub("", title)
+
+    def _word(needle: str) -> bool:
+        return re.search(rf"(?<![\w-]){re.escape(needle)}(?![\w-])", core) is not None
+
+    return _word(wf_name) and _word(target)
+
+
 def _ci_log_body_parts(logs: str, ansi_re: re.Pattern[str]) -> list[str]:
     """Markdown body parts embedding a bounded, ANSI-stripped log tail."""
     stripped = ansi_re.sub("", logs)
@@ -754,9 +774,15 @@ class PollLoopsMixin(_WorkerBase):
             else:
                 # Title-based fallback: when the predecessor's body has been
                 # overwritten by refinement, the workflow name and branch
-                # typically survive in the (refined) title.
-                title = t.title or ""
-                if wf_name not in title or target not in title:
+                # typically survive in the (refined) title. Match them as
+                # whole words after stripping the monitor's own
+                # ``CI failure:`` prefix — a plain substring test folded
+                # every workflow literally named ``CI`` into ANY open
+                # ``CI failure: <other workflow> on main`` ticket
+                # (robotsix-board 2026-10-06: the red ``CI`` workflow
+                # became a comment on the blocked CodeQL ticket d370 and
+                # stayed invisible for a week).
+                if not _title_names_workflow(t.title or "", wf_name, target):
                     continue
             last_activity = self._ticket_last_activity(service, t)
             if canonical_activity is None or last_activity > canonical_activity:
