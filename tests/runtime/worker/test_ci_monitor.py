@@ -796,6 +796,76 @@ def test_consolidates_recurrence_into_renamed_canonical(tmp_path, monkeypatch):
     assert "300:newsha" in state["seen"]
 
 
+def test_ci_workflow_does_not_consolidate_into_other_ci_failure_ticket(
+    tmp_path, monkeypatch
+):
+    """A workflow literally named ``CI`` must not fold into an open ticket for
+    a DIFFERENT workflow just because that ticket's title starts with the
+    monitor's ``CI failure:`` prefix (robotsix-board 2026-10-06: the red ``CI``
+    run 37460807750 became a comment on the blocked CodeQL ticket d370)."""
+    ctx = _ctx(
+        tmp_path,
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    target = target_branch_for(ctx.settings, ctx.repo_config)
+    canonical = _make_canonical_ci_ticket(
+        ctx,
+        wf_name="CodeQL",
+        target=target,
+        title=f"CI failure: CodeQL on {target}",
+        created_minutes_ago=10,
+    )
+
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 37460807750,
+                "name": "CI",
+                "workflow_id": 289759803,
+                "head_sha": "80ab5a1a",
+                "conclusion": "failure",
+                "html_url": "http://run/37460807750",
+                "created_at": "2026-10-06T12:05:00Z",
+            },
+        ],
+        logs="Found 14 known vulnerabilities\n",
+    )
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+    _run_one_cycle(worker, monkeypatch)
+
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 2, [t.title for t in ci_tickets]
+    new = next(t for t in ci_tickets if t.id != canonical.id)
+    assert new.title == f"CI failure: CI on {target}"
+    # No consolidation comment landed on the CodeQL ticket.
+    assert not any(
+        "37460807750" in c.body for c in ctx.service.list_comments(canonical.id)
+    )
+
+
+def test_title_names_workflow_word_boundaries():
+    from robotsix_mill.runtime.worker.poll_loops import _title_names_workflow
+
+    assert _title_names_workflow("CI failure: CI on main", "CI", "main")
+    assert _title_names_workflow("Fix CI lint on main", "CI", "main")
+    assert _title_names_workflow(
+        "Root-cause recurring Docs failures on main", "Docs", "main"
+    )
+    assert not _title_names_workflow("CI failure: CodeQL on main", "CI", "main")
+    assert not _title_names_workflow("CI failure: ci-lint on main", "CI", "main")
+    assert not _title_names_workflow("CI failure: CI on develop", "CI", "main")
+
+
 def test_aged_canonical_still_consolidates(tmp_path, monkeypatch):
     """A canonical whose last activity is 60+ min old still consolidates the
     recurrence — there is no freshness window, only the terminal-state
