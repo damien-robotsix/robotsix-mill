@@ -612,6 +612,235 @@ class TestFetchRunLogsWithDeferral:
 
 
 # ---------------------------------------------------------------------------
+# _maybe_redispatch_cancelled
+# ---------------------------------------------------------------------------
+
+
+class _RedispatchForge:
+    """Fake forge exposing just the three re-dispatch seams."""
+
+    def __init__(self, *, jobs=None, online=True, dispatched=True, jobs_exc=None):
+        self._jobs = [] if jobs is None else jobs
+        self._online = online
+        self._dispatched = dispatched
+        self._jobs_exc = jobs_exc
+        self.dispatch_calls = []
+        self.jobs_calls = 0
+
+    def list_workflow_run_jobs(self, *, run_id):
+        self.jobs_calls += 1
+        if self._jobs_exc is not None:
+            raise self._jobs_exc
+        return self._jobs
+
+    def has_online_runner(self):
+        return self._online
+
+    def dispatch_workflow(self, *, workflow_id, ref):
+        self.dispatch_calls.append((workflow_id, ref))
+        if self._dispatched:
+            return {"dispatched": True}
+        return {"dispatched": False, "reason": "no workflow_dispatch trigger"}
+
+
+def _cancelled_run():
+    """A latest run mirroring the real queue-timeout shape: cancelled, no jobs."""
+    return {
+        "id": 37633996466,
+        "name": "Publish Image",
+        "workflow_id": 99,
+        "head_sha": "deadbeef",
+        "conclusion": "cancelled",
+        "html_url": "https://github.com/o/r/actions/runs/37633996466",
+        "path": ".github/workflows/publish-image.yml",
+    }
+
+
+class TestMaybeRedispatchCancelled:
+    def test_queue_timeout_redispatches_when_runner_online(self):
+        forge = _RedispatchForge(jobs=[], online=True, dispatched=True)
+        mixin = _make_mixin()
+        redispatch = {}
+        now = time.time()
+        terminal = mixin._maybe_redispatch_cancelled(
+            forge,
+            _cancelled_run(),
+            99,
+            "99:deadbeef",
+            redispatch,
+            now,
+            "invest",
+            "main",
+        )
+        # Not terminal: keep unseen so a later cycle can retry if needed.
+        assert terminal is False
+        assert forge.dispatch_calls == [(99, "main")]
+        assert redispatch["99:deadbeef"]["n"] == 1
+        assert redispatch["99:deadbeef"]["ts"] == now
+
+    def test_no_online_runner_defers_without_dispatch(self):
+        forge = _RedispatchForge(jobs=[], online=False)
+        mixin = _make_mixin()
+        redispatch = {}
+        terminal = mixin._maybe_redispatch_cancelled(
+            forge,
+            _cancelled_run(),
+            99,
+            "99:deadbeef",
+            redispatch,
+            time.time(),
+            "invest",
+            "main",
+        )
+        assert terminal is False
+        assert forge.dispatch_calls == []
+        assert redispatch == {}
+
+    def test_started_jobs_is_terminal_no_dispatch(self):
+        # A concurrency-cancelled run DID start a job → not a queue timeout.
+        forge = _RedispatchForge(jobs=[{"id": 1, "conclusion": "cancelled"}])
+        mixin = _make_mixin()
+        redispatch = {}
+        terminal = mixin._maybe_redispatch_cancelled(
+            forge,
+            _cancelled_run(),
+            99,
+            "99:deadbeef",
+            redispatch,
+            time.time(),
+            "invest",
+            "main",
+        )
+        assert terminal is True
+        assert forge.dispatch_calls == []
+
+    def test_within_interval_waits(self):
+        forge = _RedispatchForge(jobs=[])
+        mixin = _make_mixin()
+        now = time.time()
+        redispatch = {"99:deadbeef": {"n": 1, "ts": now - 60}}
+        terminal = mixin._maybe_redispatch_cancelled(
+            forge,
+            _cancelled_run(),
+            99,
+            "99:deadbeef",
+            redispatch,
+            now,
+            "invest",
+            "main",
+        )
+        assert terminal is False
+        assert forge.dispatch_calls == []
+        # Untouched: still waiting out the 6 h interval.
+        assert redispatch["99:deadbeef"] == {"n": 1, "ts": now - 60}
+
+    def test_interval_elapsed_redispatches_again(self):
+        forge = _RedispatchForge(jobs=[], online=True)
+        mixin = _make_mixin()
+        now = time.time()
+        redispatch = {"99:deadbeef": {"n": 1, "ts": now - 7 * 3600}}
+        terminal = mixin._maybe_redispatch_cancelled(
+            forge,
+            _cancelled_run(),
+            99,
+            "99:deadbeef",
+            redispatch,
+            now,
+            "invest",
+            "main",
+        )
+        assert terminal is False
+        assert forge.dispatch_calls == [(99, "main")]
+        assert redispatch["99:deadbeef"]["n"] == 2
+
+    def test_budget_exhausted_is_terminal(self):
+        forge = _RedispatchForge(jobs=[])
+        mixin = _make_mixin()
+        now = time.time()
+        redispatch = {"99:deadbeef": {"n": 3, "ts": now - 7 * 3600}}
+        terminal = mixin._maybe_redispatch_cancelled(
+            forge,
+            _cancelled_run(),
+            99,
+            "99:deadbeef",
+            redispatch,
+            now,
+            "invest",
+            "main",
+        )
+        assert terminal is True
+        assert forge.dispatch_calls == []
+
+    def test_dispatch_failure_still_records_attempt(self):
+        forge = _RedispatchForge(jobs=[], online=True, dispatched=False)
+        mixin = _make_mixin()
+        now = time.time()
+        redispatch = {}
+        terminal = mixin._maybe_redispatch_cancelled(
+            forge,
+            _cancelled_run(),
+            99,
+            "99:deadbeef",
+            redispatch,
+            now,
+            "invest",
+            "main",
+        )
+        # Attempt consumed so the 6 h interval throttles a workflow without a
+        # workflow_dispatch trigger; leave unseen so a real one can retry.
+        assert terminal is False
+        assert forge.dispatch_calls == [(99, "main")]
+        assert redispatch["99:deadbeef"]["n"] == 1
+
+    def test_jobs_fetch_error_is_terminal(self):
+        forge = _RedispatchForge(jobs_exc=ConnectionError("boom"))
+        mixin = _make_mixin()
+        redispatch = {}
+        terminal = mixin._maybe_redispatch_cancelled(
+            forge,
+            _cancelled_run(),
+            99,
+            "99:deadbeef",
+            redispatch,
+            time.time(),
+            "invest",
+            "main",
+        )
+        assert terminal is True
+        assert forge.dispatch_calls == []
+
+
+# ---------------------------------------------------------------------------
+# _prune_ci_state — redispatch records
+# ---------------------------------------------------------------------------
+
+
+class TestPruneCiStateRedispatch:
+    def test_redispatch_key_in_seen_removed(self):
+        now = 100000.0
+        ttl = 1000
+        seen = {"resolved": now - 100}
+        redispatch = {"resolved": {"n": 1, "ts": now - 200}}
+        PollLoopsMixin._prune_ci_state(seen, {}, now, ttl, redispatch)
+        assert "resolved" not in redispatch
+
+    def test_redispatch_old_entries_removed(self):
+        now = 100000.0
+        ttl = 1000
+        redispatch = {
+            "old": {"n": 1, "ts": now - 2000},
+            "fresh": {"n": 2, "ts": now - 500},
+        }
+        PollLoopsMixin._prune_ci_state({}, {}, now, ttl, redispatch)
+        assert "old" not in redispatch
+        assert "fresh" in redispatch
+
+    def test_redispatch_omitted_is_noop(self):
+        # Backwards-compatible: the 4-arg call must still work.
+        PollLoopsMixin._prune_ci_state({}, {}, 100000.0, 1000)
+
+
+# ---------------------------------------------------------------------------
 # _dependabot_title
 # ---------------------------------------------------------------------------
 

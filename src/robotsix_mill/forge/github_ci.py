@@ -486,6 +486,43 @@ class GitHubForgeCIMixin:
         except Exception as e:
             return {"approved": False, "reason": str(e)}
 
+    def list_workflow_run_jobs(self, *, run_id: int) -> list[dict[str, Any]]:
+        """List the jobs of workflow run *run_id*.
+
+        Returns a list of ``{"id", "name", "status", "conclusion"}`` dicts
+        (empty when the run never started a job — the queue-timeout
+        signature).  May raise on transport error so a caller can tell
+        "no jobs" apart from "could not tell".
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        return self._list_workflow_run_jobs(owner=owner, repo=repo, run_id=run_id)
+
+    def has_online_runner(self) -> bool:
+        """True when any self-hosted runner for the repo is online.
+
+        Best-effort: any lookup error returns ``False``.  Must NEVER raise.
+        """
+        try:
+            owner, repo = self._owner_repo  # type: ignore[attr-defined]
+            return self._has_online_runner(owner=owner, repo=repo)
+        except Exception:
+            return False
+
+    def dispatch_workflow(self, *, workflow_id: int, ref: str) -> dict[str, Any]:
+        """Trigger a ``workflow_dispatch`` for *workflow_id* on *ref*.
+
+        Returns ``{"dispatched": True}`` on success, ``{"dispatched":
+        False, "reason": ...}`` on any failure (including HTTP 422 when the
+        workflow has no ``workflow_dispatch`` trigger).  Must NEVER raise.
+        """
+        try:
+            owner, repo = self._owner_repo  # type: ignore[attr-defined]
+            return self._dispatch_workflow(
+                owner=owner, repo=repo, workflow_id=workflow_id, ref=ref
+            )
+        except Exception as e:
+            return {"dispatched": False, "reason": str(e)}
+
     # --- HTTP seams (monkeypatched in tests) ---
 
     def _check_status(
@@ -830,3 +867,57 @@ class GitHubForgeCIMixin:
             r.raise_for_status()
             return {"approved": True}
         return {"approved": False, "reason": "max retries exhausted (401 loop)"}
+
+    def _list_workflow_run_jobs(
+        self, *, owner: str, repo: str, run_id: int
+    ) -> list[dict[str, Any]]:
+        """GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs."""
+        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
+            r = c.get(
+                f"{api}/repos/{owner}/{repo}/actions/runs/{run_id}/jobs",
+                headers=headers,
+            )
+            if r.status_code == 401:
+                continue
+            r.raise_for_status()
+            jobs = r.json().get("jobs", [])
+            return [
+                {
+                    "id": j.get("id"),
+                    "name": j.get("name", ""),
+                    "status": j.get("status"),
+                    "conclusion": j.get("conclusion"),
+                }
+                for j in jobs
+            ]
+        raise RuntimeError("max retries exhausted (401 loop)")
+
+    def _has_online_runner(self, *, owner: str, repo: str) -> bool:
+        """GET /repos/{owner}/{repo}/actions/runners → any status==online."""
+        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
+            r = c.get(
+                f"{api}/repos/{owner}/{repo}/actions/runners",
+                headers=headers,
+            )
+            if r.status_code == 401:
+                continue
+            r.raise_for_status()
+            runners = r.json().get("runners", [])
+            return any(runner.get("status") == "online" for runner in runners)
+        return False
+
+    def _dispatch_workflow(
+        self, *, owner: str, repo: str, workflow_id: int, ref: str
+    ) -> dict[str, Any]:
+        """POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches."""
+        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
+            r = c.post(
+                f"{api}/repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches",
+                headers=headers,
+                json={"ref": ref},
+            )
+            if r.status_code == 401:
+                continue
+            r.raise_for_status()
+            return {"dispatched": True}
+        return {"dispatched": False, "reason": "max retries exhausted (401 loop)"}
