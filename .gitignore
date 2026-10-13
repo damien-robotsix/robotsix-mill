@@ -42,6 +42,10 @@ actionlint
 # Stray full-suite pytest output file accidentally committed (see
 # investigation-ticket capability-removal ticket): `pytest > pyt_full.out`.
 pyt_full.out
+# Stray pytest output dumps accidentally committed (see review 1841):
+# `pytest > pytest_full_output.log` / `pytest > test_output.txt`.
+pytest_full_output.log
+test_output.txt
 # Stray doc-agent scratch artifacts — the real ledger is runtime-managed
 # via settings.memory_file_for("doc", board_id). These are one-off commits.
 /doc_agent_output.json
