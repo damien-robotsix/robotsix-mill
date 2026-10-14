@@ -397,6 +397,9 @@ def enrich_ticket_read(
         last_transient_error=ticket.last_transient_error,
         next_retry_at=ticket.next_retry_at,
         priority=bool(getattr(ticket, "priority", False)),
+        coordinator_max_tool_calls_override=getattr(
+            ticket, "coordinator_max_tool_calls_override", None
+        ),
         board_id=getattr(ticket, "board_id", "") or "",
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,

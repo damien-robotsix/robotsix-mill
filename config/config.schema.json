@@ -1080,6 +1080,13 @@
           "title": "Coordinator Max Tool Calls",
           "type": "integer"
         },
+        "coordinator_max_tool_calls_hard_cap": {
+          "default": 1000,
+          "description": "Absolute ceiling on the effective coordinator tool-call cap, including per-ticket overrides (runaway-loop backstop).",
+          "minimum": 1,
+          "title": "Coordinator Max Tool Calls Hard Cap",
+          "type": "integer"
+        },
         "coordinator_request_limit": {
           "default": 500,
           "description": "Per-pass request budget for the implement (coordinator) agent. Default 500.",

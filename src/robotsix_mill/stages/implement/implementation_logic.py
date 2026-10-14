@@ -368,6 +368,13 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         # checkpointing (tiny cap), the object is inert — no file is
         # written and pydantic-ai's plain ``UsageLimitExceeded`` still
         # pauses the pass.
+        # Effective tool-call cap: the default coordinator_max_tool_calls
+        # unless this ticket carries a per-ticket override, in which case it
+        # is min(override, hard_cap). Computed here so the budget-cap handler
+        # below can surface it even when checkpointing is disabled.
+        from .._coordinator_cap import effective_coordinator_max_tool_calls
+
+        max_tool_calls = effective_coordinator_max_tool_calls(settings, ticket)
         checkpoint: ImplementCheckpoint | None = None
         if ws is not None:
             clear_implement_checkpoint(ws)
@@ -379,7 +386,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                 memory=ic.memory_text,
                 reference_files=ic.reference_files,
                 previous_attempt_summary=ic.previous_attempt_summary,
-                max_tool_calls=getattr(settings, "coordinator_max_tool_calls", 300),
+                max_tool_calls=max_tool_calls,
             )
         try:
             result = coding.run_implement_agent(
@@ -438,12 +445,19 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                 ok=False,
                 extra_roots=extra_roots,
             )
+            # Surface the effective cap (and any per-ticket override) in the
+            # block note so operators can see why the ticket ran to its cap.
+            override = getattr(ticket, "coordinator_max_tool_calls_override", None)
+            cap_note = f" (effective tool-call cap {max_tool_calls}"
+            cap_note += (
+                f", per-ticket override {override})" if override is not None else ")"
+            )
             return _AgentRunOutcome(
                 failure=_SinglePassResult(
                     next_action="return",
                     outcome=Outcome(
                         State.BLOCKED,
-                        f"agent budget cap — resumable (move to READY): {e}",
+                        f"agent budget cap — resumable (move to READY): {e}{cap_note}",
                     ),
                 )
             )

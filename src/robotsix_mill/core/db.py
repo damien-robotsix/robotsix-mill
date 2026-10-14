@@ -307,6 +307,7 @@ def _run_alembic_migrations(settings: Settings, board_id: str, engine: Engine) -
                     "refine_passes INTEGER NOT NULL DEFAULT 0",
                     "refine_output_hash TEXT NOT NULL DEFAULT ''",
                     "block_reason TEXT",
+                    "coordinator_max_tool_calls_override INTEGER",
                 ],
             )
             _legacy_migrate(
@@ -374,6 +375,7 @@ def _run_alembic_migrations(settings: Settings, board_id: str, engine: Engine) -
                     "refine_passes INTEGER NOT NULL DEFAULT 0",
                     "refine_output_hash TEXT NOT NULL DEFAULT ''",
                     "block_reason TEXT",
+                    "coordinator_max_tool_calls_override INTEGER",
                 ],
             )
             _legacy_migrate(

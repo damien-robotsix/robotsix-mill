@@ -43,6 +43,7 @@ from ._ci_fix_checkpoint import (
     clear_ci_fix_checkpoint,
     load_ci_fix_checkpoint,
 )
+from ._coordinator_cap import effective_coordinator_max_tool_calls
 from .base import Outcome, Stage, StageContext
 from .ci_failure_buckets import (
     classify_ci_failure,
@@ -1067,12 +1068,18 @@ class CIFixStage(Stage):
         # agent that never converges.
         if result is None and self._last_agent_budget_capped:
             check_names = _extract_check_names(failing_summary)
+            cap = effective_coordinator_max_tool_calls(s, ticket)
+            override = getattr(ticket, "coordinator_max_tool_calls_override", None)
+            cap_note = f" (effective tool-call cap {cap}"
+            cap_note += (
+                f", per-ticket override {override})" if override is not None else ")"
+            )
             return Outcome(
                 State.BLOCKED,
                 "ci-fix agent budget cap — resumable (move to READY): the "
                 f"agent exhausted its tool-call budget while working on: "
-                f"{check_names}. A checkpoint of completed steps was saved; "
-                "the next pass resumes from there rather than restarting.",
+                f"{check_names}.{cap_note} A checkpoint of completed steps was "
+                "saved; the next pass resumes from there rather than restarting.",
             )
 
         if result is None and self._last_agent_timed_out:
@@ -1478,7 +1485,7 @@ class CIFixStage(Stage):
                     failing_summary=failing_summary,
                     memory=memory_text,
                     previous_attempts=_load_ci_fix_history(ctx, ticket),
-                    max_tool_calls=getattr(s, "coordinator_max_tool_calls", 300),
+                    max_tool_calls=effective_coordinator_max_tool_calls(s, ticket),
                 )
 
                 # Pass the per-repo remote_url and token so the agent's

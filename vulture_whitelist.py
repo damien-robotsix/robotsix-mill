@@ -218,6 +218,10 @@ ci_fix_wait_timeout_s
 ci_fix_max_consecutive_pending
 
 # -- core --------------------------------------------------------------------
+# set_coordinator_max_tool_calls_override — public TicketService setter for the
+# per-ticket coordinator tool-call budget override; exercised by
+# tests/stages/test_coordinator_cap.py (vulture only scans src/, 60%).
+set_coordinator_max_tool_calls_override
 # resolve_under_src — called from tests only; vulture cannot trace test calls.
 resolve_under_src
 # notify_sync — EventNotifier method used only in tests; vulture (60%) cannot

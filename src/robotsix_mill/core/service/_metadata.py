@@ -117,6 +117,38 @@ class _MetadataMixin(_ServiceBase):
                     self._on_transition(d, old_state)
         return changed
 
+    def set_coordinator_max_tool_calls_override(
+        self, ticket_id: str, value: int | None
+    ) -> Ticket:
+        """Set (or clear) the per-ticket coordinator tool-call budget override.
+
+        When *value* is a positive int, the effective cap for this ticket's
+        implement and ci_fix coordinator passes becomes
+        ``min(value, coordinator_max_tool_calls_hard_cap)`` — letting a
+        known-large ticket run above the default while the global hard
+        backstop still catches runaway loops. ``None`` clears the override so
+        the ticket falls back to the default ``coordinator_max_tool_calls``.
+        The stored value is not itself clamped; the clamp against the hard
+        backstop is applied when the effective cap is computed per pass.
+
+        Returns the updated ticket; raises ``KeyError`` if unknown or
+        ``ValueError`` if *value* is a non-positive int.
+        """
+        if value is not None:
+            value = int(value)
+            if value < 1:
+                raise ValueError(
+                    "coordinator_max_tool_calls_override must be >= 1 or None"
+                )
+        with retry_on_db_full(self.settings, self._board_for(ticket_id)) as s:
+            ticket = _get_ticket(s, ticket_id)
+            ticket.coordinator_max_tool_calls_override = value
+            ticket.updated_at = datetime.now(UTC)
+            s.add(ticket)
+            s.commit()
+            s.refresh(ticket)
+            return ticket
+
     def set_branch(self, ticket_id: str, branch: str) -> None:
         """Record the git branch name for a ticket.
 
