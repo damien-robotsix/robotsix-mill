@@ -550,3 +550,13 @@ retrospect_memory_path
 # one-shot. Retained and covered by tests/stages/test_ci_fix.py
 # (test_make_ci_status_fn_*); vulture only scans src/.
 _make_ci_status_fn
+
+# -- forge -------------------------------------------------------------------
+# observed_epoch — RateLimitSnapshot field recording when the quota headers
+# were observed; populated on every record() but read only by future/health
+# tooling, so vulture (60%) flags the frozen-dataclass field as unused.
+observed_epoch
+# _reset_for_tests — clears process-wide rate-limit snapshot state; called
+# only from tests/forge/test_http.py and tests/forge/test_rate_limit.py, and
+# vulture only scans src/.
+_reset_for_tests
