@@ -27,7 +27,7 @@ from ..pause import (
     save_conversation_state,
 )
 from ._base import _ImplementStageBase
-from ._checkpoint import ImplementCheckpoint
+from ._checkpoint import ImplementCheckpoint, clear_implement_checkpoint
 from ._no_change import _run_no_change_contradiction_check
 from ._shared import (
     _AgentRunOutcome,
@@ -370,7 +370,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         # pauses the pass.
         checkpoint: ImplementCheckpoint | None = None
         if ws is not None:
-            ImplementCheckpoint.clear(ws)
+            clear_implement_checkpoint(ws)
             checkpoint = ImplementCheckpoint(
                 ws=ws,
                 ticket_id=ticket.id,
@@ -510,7 +510,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         # so a later re-implement doesn't mistake the stale file for a
         # budget-cap resume.  (On a cap the AgentBudgetError path returns
         # before this method runs, so the finalized checkpoint survives.)
-        ImplementCheckpoint.clear(ws)
+        clear_implement_checkpoint(ws)
         if updated_memory:
             persist_memory(
                 settings.memory_file_for("implement", memory_board_id),
