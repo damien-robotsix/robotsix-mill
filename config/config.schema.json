@@ -1066,6 +1066,13 @@
           "title": "Consult Request Limit",
           "type": "integer"
         },
+        "coordinator_budget_cap_autosplit_threshold": {
+          "default": 3,
+          "description": "Number of budget-cap pauses on a single implement ticket before it is auto-split into epic children. 0 disables the fallback.",
+          "minimum": 0,
+          "title": "Coordinator Budget Cap Autosplit Threshold",
+          "type": "integer"
+        },
         "coordinator_max_tool_calls": {
           "default": 300,
           "description": "Hard cap on total tool calls per coordinator (implement) trace.",

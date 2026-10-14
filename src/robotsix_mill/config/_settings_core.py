@@ -177,6 +177,22 @@ class _CoreSettings(BaseModel):
         ge=1,
         description="Hard cap on total tool calls per coordinator (implement) trace.",
     )
+    # Budget-cap auto-split fallback: after this many budget-cap pauses on a
+    # single ticket without it completing, the implement stage splits the
+    # oversized ticket into independently-shippable epic children (reusing the
+    # epic-breakdown scope-split logic) instead of blocking + resuming the same
+    # oversized pass forever. 0 disables the fallback (the ticket keeps
+    # resuming until a human intervenes). Genuine no-progress loops are caught
+    # by the stall guard — which blocks with a different note — and by the
+    # progress gate, so they stay capped rather than being split indefinitely.
+    coordinator_budget_cap_autosplit_threshold: int = Field(
+        default=3,
+        ge=0,
+        description=(
+            "Number of budget-cap pauses on a single implement ticket before it "
+            "is auto-split into epic children. 0 disables the fallback."
+        ),
+    )
     # Wall-clock timeout (seconds) for a single implement agent pass.
     # When the agent exceeds this duration the pass is terminated and
     # the stage can retry (with a fresh budget) or escalate.  Default
