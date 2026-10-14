@@ -325,6 +325,7 @@ modules:
       - tests/stages/test_classify.py
       - tests/stages/implement/test_checkpoint.py
       - tests/stages/implement/test_budget_cap_autosplit.py
+      - tests/stages/implement/test_budget_cap_convergence.py
       - tests/stages/implement/test_implement.py
       - tests/stages/implement/test_implement_scope_guardrail.py
       - tests/stages/implement/test_implement_preflight.py
