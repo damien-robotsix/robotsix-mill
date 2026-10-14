@@ -306,6 +306,7 @@ modules:
       - src/robotsix_mill/stages/ci_failure_buckets.py
       - src/robotsix_mill/stages/ci_fix.py
       - src/robotsix_mill/stages/_ci_fix_checkpoint.py
+      - src/robotsix_mill/stages/_checkpoint_base.py
       - src/robotsix_mill/stages/_coordinator_cap.py
       - src/robotsix_mill/stages/ci_fix_analysis.py
       - src/robotsix_mill/stages/ci_fix_helpers.py
