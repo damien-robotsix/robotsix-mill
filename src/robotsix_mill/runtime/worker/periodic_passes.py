@@ -780,7 +780,8 @@ class PeriodicPassesMixin(_WorkerBase):
                         log.info(
                             "orphaned-pr-check: repo %s — scanned=%d closed=%d "
                             "filed=%d skipped=%d disposed=%d foreign_filed=%d "
-                            "foreign_skipped=%d foreign_ignored=%d dry_run=%s",
+                            "foreign_skipped=%d foreign_ignored=%d "
+                            "foreign_merged=%d dry_run=%s",
                             repo_config.repo_id,
                             result.total_scanned,
                             result.closed,
@@ -790,6 +791,7 @@ class PeriodicPassesMixin(_WorkerBase):
                             result.foreign_filed,
                             result.foreign_skipped,
                             result.foreign_ignored,
+                            result.foreign_merged,
                             result.dry_run,
                         )
                     except Exception:
