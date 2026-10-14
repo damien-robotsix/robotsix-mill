@@ -104,7 +104,7 @@ def _comments_section(comments) -> list[str]:
     return lines
 
 
-def make_read_ticket_tool(settings: Settings):
+def make_read_ticket_tool(settings: Settings, board_id: str = ""):
     """Return the ``read_ticket`` closure bound to *settings*.
 
     Lazily constructs a ``TicketService`` per call so this stays cheap
@@ -112,6 +112,9 @@ def make_read_ticket_tool(settings: Settings):
 
     Args:
         settings: The application settings instance.
+        board_id: The board (repo) whose ticket DB to read from.  When
+            empty the service fans out across every configured board,
+            matching the ``<recent_proposals>`` block's cross-repo view.
     """
 
     def read_ticket(ticket_id: str) -> str:
@@ -137,7 +140,7 @@ def make_read_ticket_tool(settings: Settings):
         try:
             from ..core.service import TicketService
 
-            service = TicketService(settings)
+            service = TicketService(settings, board_id=board_id)
             ticket = service.get(ticket_id)
             if ticket is None:
                 return f"read_ticket: no ticket found with id '{ticket_id}'"
@@ -172,7 +175,9 @@ def make_read_ticket_tool(settings: Settings):
     return read_ticket
 
 
-def make_list_recent_tickets_tool(settings: Settings) -> Callable[..., str]:
+def make_list_recent_tickets_tool(
+    settings: Settings, board_id: str = ""
+) -> Callable[..., str]:
     """Return the ``list_recent_tickets`` closure bound to *settings*.
 
     Lazily constructs a ``TicketService`` per call.  Returns the same
@@ -182,6 +187,9 @@ def make_list_recent_tickets_tool(settings: Settings) -> Callable[..., str]:
 
     Args:
         settings: The application settings instance.
+        board_id: The board (repo) whose ticket DB to enumerate.  When
+            empty the service falls back to the default repo, matching
+            the ``<recent_proposals>`` block's cross-repo view.
     """
 
     def list_recent_tickets(source: str = "", limit: int = 100) -> str:
@@ -201,7 +209,7 @@ def make_list_recent_tickets_tool(settings: Settings) -> Callable[..., str]:
             from ..core.models import SourceKind
             from ..core.service import TicketService
 
-            service = TicketService(settings)
+            service = TicketService(settings, board_id=board_id)
 
             if source:
                 # Match case-insensitively against SourceKind members.

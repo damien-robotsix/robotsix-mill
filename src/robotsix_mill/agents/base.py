@@ -665,8 +665,8 @@ def build_agent(
         # requested.
         from .read_ticket import make_list_recent_tickets_tool, make_read_ticket_tool
 
-        all_tools.append(make_read_ticket_tool(settings))
-        all_tools.append(make_list_recent_tickets_tool(settings))
+        all_tools.append(make_read_ticket_tool(settings, board_id=board_id))
+        all_tools.append(make_list_recent_tickets_tool(settings, board_id=board_id))
     if list_epic_children and current_ticket_id:
         # Read-only tool so an agent can enumerate its sibling epic
         # children (children of its parent epic) when it needs the

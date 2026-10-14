@@ -193,7 +193,7 @@ def test_no_write_paths_reachable(settings, monkeypatch):
     mock_workspace.read_description.return_value = "desc content"
 
     class SpyService:
-        def __init__(self, _settings):
+        def __init__(self, _settings, board_id=""):
             pass
 
         def get(self, ticket_id):
@@ -370,9 +370,52 @@ def test_never_raises_on_failure(settings, monkeypatch):
     # Make TicketService construction itself fail
     monkeypatch.setattr(
         "robotsix_mill.core.service.TicketService",
-        lambda _s: (_ for _ in ()).throw(RuntimeError("db down")),
+        lambda _s, board_id="": (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
     result = tool("20250331T142315Z-any-test-id-3a1f")
     assert result.startswith("read_ticket: error reading ticket")
     assert "db down" in result.lower() or "RuntimeError" in result
+
+
+# ---------------------------------------------------------------------------
+# AC 8 — board_id is threaded into TicketService (Finding 1: tool_error)
+# ---------------------------------------------------------------------------
+
+
+def test_read_ticket_uses_bound_board(settings, service, monkeypatch):
+    """The tool builds a TicketService bound to the passed board_id, so a
+    board-less probe cannot raise ``db._db_path: board_id is required``."""
+    captured = {}
+
+    def fake_ticket_service(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return service
+
+    monkeypatch.setattr("robotsix_mill.core.service.TicketService", fake_ticket_service)
+    tool = make_read_ticket_tool(settings, board_id="test-board")
+    t = service.create("Board ticket")
+    tool(t.id)
+    assert captured["kwargs"].get("board_id") == "test-board"
+
+
+def test_list_recent_tickets_uses_bound_board(settings, service, monkeypatch):
+    """``list_recent_tickets`` builds a TicketService bound to the passed
+    board_id, so it lists tickets from that board instead of raising the
+    board-less ``_db_path`` ValueError."""
+    captured = {}
+
+    def fake_ticket_service(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return service
+
+    monkeypatch.setattr("robotsix_mill.core.service.TicketService", fake_ticket_service)
+    from robotsix_mill.agents.read_ticket import make_list_recent_tickets_tool
+
+    tool = make_list_recent_tickets_tool(settings, board_id="test-board")
+    service.create("Recent ticket")
+    result = tool()
+    assert captured["kwargs"].get("board_id") == "test-board"
+    assert "Recent ticket" in result
