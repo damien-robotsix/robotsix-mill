@@ -8,11 +8,13 @@ bump stale pins.  No LLM call — pure graph computation.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 from robotsix_mill.config.repos import (
     RepoConfig,
@@ -55,6 +57,18 @@ _last_pass_started_monotonic: float | None = None
 # per-repo loops (which drift against each other) still produce one pass per
 # interval instead of occasionally skipping a whole interval.
 _PASS_GUARD_FRACTION = 0.9
+
+# Latest ls-remote SHAs (``dep git_url → HEAD sha``) observed by the previous
+# actuator pass.  When a new pass computes the identical mapping, nothing has
+# moved upstream and there is no new bump to open, so the pass short-circuits
+# instead of re-cloning every consumer and re-logging the same skips every
+# interval (the "burns a pass every 5 min logging the same skips" symptom).
+_last_latest_map: dict[str, str | None] | None = None
+
+# A pin-bump PR title ends with ``pin to <rev>`` where ``<rev>`` is the
+# 7–40 char hex prefix of the target dependency SHA.  Parsed to tell an
+# already-current open PR (target == latest) from a stale one (target moved).
+_PR_TARGET_REV_RE = re.compile(r"pin to ([0-9a-f]{7,40})\b")
 
 
 def _pass_recently_ran(interval_seconds: float, now: float) -> bool:
@@ -316,19 +330,71 @@ def run_pin_bump_pr_actuator(
         log.warning("pin_bump: no forge token for ls-remote — skipping (%s)", exc)
         return
 
-    prs_created, skipped = _bump_pins_for_repos(
+    # Resolve every dependency's latest HEAD SHA once (deduped across the
+    # consumers that share a pin). When the mapping is identical to the
+    # previous pass, nothing moved upstream — skip the whole actuator rather
+    # than re-clone every repo and re-log the same skips every interval.
+    global _last_latest_map
+    latest_map = _resolve_latest_shas(graph, ls_token)
+    if _last_latest_map is not None and latest_map == _last_latest_map:
+        log.info("pin_bump: upstream SHAs unchanged since last pass — nothing to bump")
+        return
+    _last_latest_map = dict(latest_map)
+
+    prs_created, superseded, skipped = _bump_pins_for_repos(
         settings=settings,
         registry=registry,
         graph=graph,
-        ls_token=ls_token,
+        latest_map=latest_map,
     )
+    _log_pass_summary(prs_created, superseded, skipped)
 
+
+def _log_pass_summary(
+    prs_created: list[str], superseded: list[str], skipped: list[str]
+) -> None:
+    """Emit the per-pass detail lines plus one terse summary line."""
     if prs_created:
         log.info("pin_bump: PRs created: %s", prs_created)
+    if superseded:
+        log.info("pin_bump: superseded stale PRs: %s", superseded)
     if skipped:
         log.info("pin_bump: skipped (already at latest): %s", skipped)
-    if not prs_created and not skipped:
+    if not prs_created and not skipped and not superseded:
         log.info("pin_bump: no internal pins to bump")
+    log.info(
+        "pin_bump: pass summary — created=%d superseded=%d already-latest=%d",
+        len(prs_created),
+        len(superseded),
+        len(skipped),
+    )
+
+
+def _resolve_latest_shas(
+    graph: InternalDepGraph, ls_token: str
+) -> dict[str, str | None]:
+    """Resolve the latest HEAD SHA for every distinct pinned dependency.
+
+    Deduped by ``git_url`` so a dependency pinned by several consumers is
+    looked up once.  A value of ``None`` means the ls-remote lookup failed.
+    """
+    latest: dict[str, str | None] = {}
+    for repo_id in graph.topo_order:
+        for pin in graph.pins.get(repo_id, {}).values():
+            if pin.git_url not in latest:
+                latest[pin.git_url] = git_ops.ls_remote_sha(
+                    pin.git_url, ref="HEAD", token=ls_token
+                )
+    return latest
+
+
+def _consumer_counts(graph: InternalDepGraph) -> dict[str, int]:
+    """Count how many repos pin each dependency (its waiting-consumer count)."""
+    counts: dict[str, int] = {}
+    for repo_pins in graph.pins.values():
+        for dep_name in repo_pins:
+            counts[dep_name] = counts.get(dep_name, 0) + 1
+    return counts
 
 
 def _bump_pins_for_repos(
@@ -336,14 +402,20 @@ def _bump_pins_for_repos(
     settings: Settings,
     registry: ReposRegistry,
     graph: InternalDepGraph,
-    ls_token: str,
-) -> tuple[list[str], list[str]]:
+    latest_map: dict[str, str | None],
+) -> tuple[list[str], list[str], list[str]]:
     """Iterate *graph* topo-order and bump every stale pin.
 
-    Returns ``(prs_created, skipped)`` summary lists.
+    Returns ``(prs_created, superseded, skipped)`` summary lists.
     """
     prs_created: list[str] = []
     skipped: list[str] = []
+    superseded: list[str] = []
+
+    # When the in-flight cap binds, spend the free slots on the dependencies
+    # with the most waiting consumers first (e.g. a shared library blocking
+    # several repos outranks a single-consumer bump).
+    consumer_count = _consumer_counts(graph)
 
     for repo_id in graph.topo_order:
         pins = graph.pins.get(repo_id, {})
@@ -363,21 +435,26 @@ def _bump_pins_for_repos(
         target_branch = target_branch_for(settings, rc)
         forge = get_forge(settings, repo_config=rc)
 
-        for dep_name, pin in sorted(pins.items()):
+        ordered = sorted(
+            pins.items(),
+            key=lambda kv: (-consumer_count.get(kv[0], 0), kv[0]),
+        )
+        for dep_name, pin in ordered:
             _bump_one_pin(
                 repo_id=repo_id,
                 rc=rc,
                 dep_name=dep_name,
                 pin=pin,
-                ls_token=ls_token,
+                latest_sha=latest_map.get(pin.git_url),
                 push_token=push_token,
                 target_branch=target_branch,
                 forge=forge,
                 prs_created=prs_created,
                 skipped=skipped,
+                superseded=superseded,
             )
 
-    return prs_created, skipped
+    return prs_created, superseded, skipped
 
 
 def _bump_one_pin(
@@ -386,15 +463,15 @@ def _bump_one_pin(
     rc: RepoConfig,
     dep_name: str,
     pin: GitPin,
-    ls_token: str,
+    latest_sha: str | None,
     push_token: str,
     target_branch: str,
     forge: Forge,
     prs_created: list[str],
     skipped: list[str],
+    superseded: list[str],
 ) -> None:
-    """Resolve the latest SHA for *pin* and apply the bump if stale."""
-    latest_sha = git_ops.ls_remote_sha(pin.git_url, ref="HEAD", token=ls_token)
+    """Apply the bump for *pin* when its target is stale (latest resolved upfront)."""
     if latest_sha is None:
         log.warning(
             "pin_bump: cannot resolve latest SHA for %s → %s (%s)",
@@ -426,21 +503,118 @@ def _bump_one_pin(
         target_branch=target_branch,
         forge=forge,
         prs_created=prs_created,
+        superseded=superseded,
     )
 
 
-def _pr_guards_ok(
+def _parse_pr_target_rev(title: str | None) -> str | None:
+    """Return the target-SHA prefix embedded in a pin-bump PR *title*, or ``None``."""
+    m = _PR_TARGET_REV_RE.search(title or "")
+    return m.group(1) if m else None
+
+
+def _open_pr_title(forge: Forge, branch_name: str) -> str | None:
+    """Best-effort title of the open PR whose head is *branch_name*.
+
+    Returns ``None`` when the forge cannot enumerate open PRs (the title is
+    then simply unknown — callers treat an unparseable target as "unknown").
+    """
+    try:
+        for pr in forge.list_open_prs() or []:
+            if pr.get("branch") == branch_name:
+                return pr.get("title") or ""
+    except Exception:
+        return None
+    return None
+
+
+def _existing_pr_is_current(
+    *, existing: dict[str, Any], title: str | None, latest_sha: str
+) -> bool:
+    """Return ``True`` when the open PR already delivers the latest bump.
+
+    A PR is *current* when it targets ``latest_sha`` AND is not conflicting.
+    A PR targeting an older SHA, or one that conflicts with the consumer's
+    default branch (dirty ``uv.lock``), is stale and must be superseded.
+    """
+    target = _parse_pr_target_rev(title)
+    if target is not None and not latest_sha.startswith(target):
+        return False  # targets an older/different rev than the latest
+    # Otherwise current iff not conflicting (a dirty uv.lock needs a fresh PR).
+    return existing.get("mergeable") is not False
+
+
+def _supersede_pr(
+    *,
+    repo_id: str,
+    dep_name: str,
+    branch_name: str,
+    existing: dict[str, Any],
+    new_rev: str,
+    forge: Forge,
+    superseded: list[str],
+) -> None:
+    """Close + delete a stale own pin-bump PR so its cap slot frees immediately."""
+    url = existing.get("url", "no url")
+    note = (
+        f"Superseded by a fresh pin-bump of `{dep_name}` to `{new_rev[:7]}`: "
+        "closing this stale PR and re-opening from the current default branch "
+        "with a regenerated `uv.lock`."
+    )
+    # Best-effort remote mutations — never block the supersede on any of them.
+    with contextlib.suppress(Exception):
+        forge.post_pr_comment(source_branch=branch_name, body=note)
+    with contextlib.suppress(Exception):
+        forge.close_pr(source_branch=branch_name)
+    with contextlib.suppress(Exception):
+        forge.delete_branch(branch=branch_name)
+    log.info(
+        "pin_bump: superseded stale PR for %s → %s (%s)",
+        repo_id,
+        dep_name,
+        url,
+    )
+    superseded.append(f"{repo_id} → {dep_name} ({url})")
+
+
+def _inflight_current_count(forge: Forge) -> int:
+    """Count open pin-bump PRs that still count toward the in-flight cap.
+
+    Only *current* PRs (open and not conflicting) are counted — a stale,
+    conflicting PR no longer holds a slot, so it can never saturate the cap
+    and block a newer bump.
+    """
+    count = 0
+    for branch in forge.list_open_pr_branches():
+        if not branch.startswith(f"mill/{PIN_BUMP_BRANCH_SEGMENT}"):
+            continue
+        try:
+            st = forge.pr_status(source_branch=branch)
+        except Exception:
+            # Lookup failed — count it conservatively rather than risk
+            # over-opening past the cap.
+            count += 1
+            continue
+        if st and st.get("state") == "open" and st.get("mergeable") is not False:
+            count += 1
+    return count
+
+
+def _reconcile_and_check_cap(
     *,
     repo_id: str,
     rc: RepoConfig,
     dep_name: str,
     branch_name: str,
+    new_rev: str,
     forge: Forge,
+    superseded: list[str],
 ) -> bool:
-    """Return ``True`` when it's safe to proceed with a PR for *branch_name*.
+    """Reconcile this dep's own PR and check the in-flight cap.
 
-    Returns ``False`` (with an appropriate log message) when an open
-    PR already exists or the in-flight cap has been reached.
+    Returns ``True`` when it is safe to open a fresh PR, ``False`` to skip
+    (a current PR already exists, the lookup failed, or the cap binds).  A
+    *stale* own PR is superseded here so its slot frees before the cap check.
     """
     try:
         existing = forge.pr_status(source_branch=branch_name)
@@ -459,25 +633,34 @@ def _pr_guards_ok(
             exc,
         )
         return False
+
     if existing is not None and existing.get("state") == "open":
-        log.info(
-            "pin_bump: PR for %s → %s already open (%s) — skipping",
-            repo_id,
-            dep_name,
-            existing.get("url", "no url"),
+        title = _open_pr_title(forge, branch_name)
+        if _existing_pr_is_current(existing=existing, title=title, latest_sha=new_rev):
+            log.info(
+                "pin_bump: PR for %s → %s already open (%s) — skipping",
+                repo_id,
+                dep_name,
+                existing.get("url", "no url"),
+            )
+            return False
+        _supersede_pr(
+            repo_id=repo_id,
+            dep_name=dep_name,
+            branch_name=branch_name,
+            existing=existing,
+            new_rev=new_rev,
+            forge=forge,
+            superseded=superseded,
         )
-        return False
 
     if rc.max_inflight_prs > 0:
-        open_branches = forge.list_open_pr_branches()
-        mill_bump_count = sum(
-            1 for b in open_branches if b.startswith(f"mill/{PIN_BUMP_BRANCH_SEGMENT}")
-        )
-        if mill_bump_count >= rc.max_inflight_prs:
+        inflight = _inflight_current_count(forge)
+        if inflight >= rc.max_inflight_prs:
             log.info(
                 "pin_bump: %s at pin-bump in-flight cap (%d/%d) — skipping %s",
                 repo_id,
-                mill_bump_count,
+                inflight,
                 rc.max_inflight_prs,
                 dep_name,
             )
@@ -497,16 +680,25 @@ def _apply_one_bump(
     target_branch: str,
     forge: Forge,
     prs_created: list[str],
+    superseded: list[str],
 ) -> None:
-    """Clone *rc*, update the pin rev, regenerate uv.lock, push, and open a PR."""
+    """Clone *rc*, update the pin rev, regenerate uv.lock, push, and open a PR.
+
+    Before touching the clone, reconcile this dep's own open PR: a *current*
+    one (targets ``new_rev``, mergeable) means there is nothing to do; a
+    *stale* one (targets an older rev, or conflicts) is superseded so a fresh
+    bump can replace it rather than letting the dead PR hold a cap slot.
+    """
     branch_name = f"mill/{PIN_BUMP_BRANCH_SEGMENT}{dep_name}"
 
-    if not _pr_guards_ok(
+    if not _reconcile_and_check_cap(
         repo_id=repo_id,
         rc=rc,
         dep_name=dep_name,
         branch_name=branch_name,
+        new_rev=new_rev,
         forge=forge,
+        superseded=superseded,
     ):
         return
 

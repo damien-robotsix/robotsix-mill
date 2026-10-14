@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -66,8 +67,10 @@ def _fresh_pass_guard():
     import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
 
     runner_mod._last_pass_started_monotonic = None
+    runner_mod._last_latest_map = None
     yield
     runner_mod._last_pass_started_monotonic = None
+    runner_mod._last_latest_map = None
 
 
 class TestPassGuard:
@@ -897,8 +900,15 @@ class TestActuator:
         )
 
         mock_forge = MagicMock()
-        # No duplicate PR, but in-flight cap reached.
-        mock_forge.pr_status.return_value = None
+
+        # No duplicate PR for the dep branch, but two OTHER current (open +
+        # mergeable) pin-bump PRs already hold the single available slot.
+        def _pr_status(*, source_branch):
+            if source_branch in ("mill/pin-bump/x", "mill/pin-bump/y"):
+                return {"state": "open", "mergeable": True, "url": source_branch}
+            return None
+
+        mock_forge.pr_status.side_effect = _pr_status
         mock_forge.list_open_pr_branches.return_value = {
             "mill/pin-bump/x",
             "mill/pin-bump/y",
@@ -1016,6 +1026,356 @@ class TestActuator:
         # check reported conflicts.
         mock_forge.open_merge_request.assert_not_called()
         assert "coherence check" in caplog.text
+
+
+_OLD_SHA = "0123456789abcdef0123456789abcdef01234567"
+_NEW_SHA = "fedcba9876543210fedcba9876543210fedcba98"
+
+
+def _graph_a_pins_b(rev=_OLD_SHA):
+    from robotsix_mill.deps.internal_graph import GitPin, InternalDepGraph
+
+    return InternalDepGraph(
+        pins={
+            "a": {"b": GitPin(git_url=f"https://{INTERNAL_GIT_HOST}b", rev=rev)},
+            "b": {},
+        },
+        topo_order=["b", "a"],
+    )
+
+
+def _actuator_patches(runner_mod, registry, mock_forge, latest_sha):
+    """Common patch context for an end-to-end actuator run."""
+    return (
+        patch.object(
+            runner_mod,
+            "Settings",
+            return_value=MagicMock(pin_bump_interval_seconds=86400),
+        ),
+        patch.object(runner_mod, "get_repos_config", return_value=registry),
+        patch.object(runner_mod, "github_token", return_value="fake-token"),
+        patch.object(runner_mod, "github_push_token", return_value="fake-token"),
+        patch.object(runner_mod, "target_branch_for", return_value="main"),
+        patch.object(runner_mod, "get_forge", return_value=mock_forge),
+        patch.object(runner_mod.git_ops, "ls_remote_sha", return_value=latest_sha),
+    )
+
+
+class TestSupersede:
+    """A stale own PR is closed + re-opened instead of holding a cap slot."""
+
+    def _registry(self, tmp_path):
+        from robotsix_mill.config.repos import load_repos_config
+
+        repos_yaml_path = tmp_path / "repos.yaml"
+        repos_yaml_path.write_text(_repos_yaml_str("a", "b"))
+        return load_repos_config(str(repos_yaml_path))
+
+    def test_conflicting_pr_is_superseded_and_recreated(self, tmp_path, caplog):
+        import logging
+
+        from robotsix_mill.agents.runners.pin_bump_runner import (
+            run_pin_bump_pr_actuator,
+        )
+
+        registry = self._registry(tmp_path)
+        graph = _graph_a_pins_b()
+
+        mock_forge = MagicMock()
+        # Own PR exists for the dep branch but conflicts on uv.lock.
+        mock_forge.pr_status.return_value = {
+            "state": "open",
+            "mergeable": False,
+            "url": "https://github.com/damien-robotsix/a/pull/1",
+        }
+        mock_forge.list_open_prs.return_value = []
+        # After the supersede closes it, no pin-bump PR is open → cap free.
+        mock_forge.list_open_pr_branches.return_value = set()
+        mock_forge.open_merge_request.return_value = (
+            "https://github.com/damien-robotsix/a/pull/2"
+        )
+
+        import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
+
+        def _fake_clone(remote_url, dest, branch, token=None):
+            dest_path = Path(str(dest))
+            dest_path.mkdir(parents=True, exist_ok=True)
+            (dest_path / "pyproject.toml").write_text(
+                _pyproject({"b": _internal_pin("b", _OLD_SHA)}), encoding="utf-8"
+            )
+
+        with contextlib.ExitStack() as es:
+            for cm in _actuator_patches(runner_mod, registry, mock_forge, _NEW_SHA):
+                es.enter_context(cm)
+            es.enter_context(
+                patch.object(runner_mod.git_ops, "clone", side_effect=_fake_clone)
+            )
+            es.enter_context(patch.object(runner_mod.git_ops, "create_branch"))
+            es.enter_context(patch.object(runner_mod.git_ops, "commit_all"))
+            es.enter_context(patch.object(runner_mod.git_ops, "push"))
+            es.enter_context(
+                patch.object(runner_mod, "run_coherence_check", return_value=[])
+            )
+            es.enter_context(
+                caplog.at_level(
+                    logging.INFO,
+                    logger="robotsix_mill.agents.runners.pin_bump_runner",
+                )
+            )
+            run_pin_bump_pr_actuator(
+                session_id="s1", repo_config=registry.repos["a"], graph=graph
+            )
+
+        mock_forge.close_pr.assert_called_once_with(source_branch="mill/pin-bump/b")
+        mock_forge.delete_branch.assert_called_once_with(branch="mill/pin-bump/b")
+        mock_forge.post_pr_comment.assert_called_once()
+        mock_forge.open_merge_request.assert_called_once()
+        assert "superseded stale PRs" in caplog.text
+
+    def test_outdated_target_pr_is_superseded(self, tmp_path, caplog):
+        import logging
+
+        from robotsix_mill.agents.runners.pin_bump_runner import (
+            run_pin_bump_pr_actuator,
+        )
+
+        registry = self._registry(tmp_path)
+        graph = _graph_a_pins_b()
+
+        mock_forge = MagicMock()
+        # Mergeable but targets an older rev than the latest.
+        mock_forge.pr_status.return_value = {
+            "state": "open",
+            "mergeable": True,
+            "url": "https://github.com/damien-robotsix/a/pull/1",
+        }
+        mock_forge.list_open_prs.return_value = [
+            {
+                "branch": "mill/pin-bump/b",
+                "title": f"chore(deps): bump b pin to {_OLD_SHA[:7]}",
+            }
+        ]
+        mock_forge.list_open_pr_branches.return_value = set()
+        mock_forge.open_merge_request.return_value = (
+            "https://github.com/damien-robotsix/a/pull/2"
+        )
+
+        import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
+
+        def _fake_clone(remote_url, dest, branch, token=None):
+            dest_path = Path(str(dest))
+            dest_path.mkdir(parents=True, exist_ok=True)
+            (dest_path / "pyproject.toml").write_text(
+                _pyproject({"b": _internal_pin("b", _OLD_SHA)}), encoding="utf-8"
+            )
+
+        with contextlib.ExitStack() as es:
+            for cm in _actuator_patches(runner_mod, registry, mock_forge, _NEW_SHA):
+                es.enter_context(cm)
+            es.enter_context(
+                patch.object(runner_mod.git_ops, "clone", side_effect=_fake_clone)
+            )
+            es.enter_context(patch.object(runner_mod.git_ops, "create_branch"))
+            es.enter_context(patch.object(runner_mod.git_ops, "commit_all"))
+            es.enter_context(patch.object(runner_mod.git_ops, "push"))
+            es.enter_context(
+                patch.object(runner_mod, "run_coherence_check", return_value=[])
+            )
+            es.enter_context(
+                caplog.at_level(
+                    logging.INFO,
+                    logger="robotsix_mill.agents.runners.pin_bump_runner",
+                )
+            )
+            run_pin_bump_pr_actuator(
+                session_id="s1", repo_config=registry.repos["a"], graph=graph
+            )
+
+        mock_forge.close_pr.assert_called_once()
+        mock_forge.open_merge_request.assert_called_once()
+
+    def test_current_pr_is_kept_not_superseded(self, tmp_path, caplog):
+        import logging
+
+        from robotsix_mill.agents.runners.pin_bump_runner import (
+            run_pin_bump_pr_actuator,
+        )
+
+        registry = self._registry(tmp_path)
+        graph = _graph_a_pins_b()
+
+        mock_forge = MagicMock()
+        # Mergeable AND already targets the latest rev → nothing to do.
+        mock_forge.pr_status.return_value = {
+            "state": "open",
+            "mergeable": True,
+            "url": "https://github.com/damien-robotsix/a/pull/1",
+        }
+        mock_forge.list_open_prs.return_value = [
+            {
+                "branch": "mill/pin-bump/b",
+                "title": f"chore(deps): bump b pin to {_NEW_SHA[:7]}",
+            }
+        ]
+
+        import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
+
+        with contextlib.ExitStack() as es:
+            for cm in _actuator_patches(runner_mod, registry, mock_forge, _NEW_SHA):
+                es.enter_context(cm)
+            mock_clone = es.enter_context(patch.object(runner_mod.git_ops, "clone"))
+            es.enter_context(
+                caplog.at_level(
+                    logging.INFO,
+                    logger="robotsix_mill.agents.runners.pin_bump_runner",
+                )
+            )
+            run_pin_bump_pr_actuator(
+                session_id="s1", repo_config=registry.repos["a"], graph=graph
+            )
+
+        mock_forge.close_pr.assert_not_called()
+        mock_forge.open_merge_request.assert_not_called()
+        mock_clone.assert_not_called()
+        assert "already open" in caplog.text
+
+
+class TestInflightAccounting:
+    def test_inflight_current_count_excludes_conflicting(self):
+        from robotsix_mill.agents.runners.pin_bump_runner import (
+            _inflight_current_count,
+        )
+
+        forge = MagicMock()
+        forge.list_open_pr_branches.return_value = {
+            "mill/pin-bump/a",
+            "mill/pin-bump/b",
+            "some/other-branch",
+        }
+
+        def _pr_status(*, source_branch):
+            if source_branch == "mill/pin-bump/a":
+                return {"state": "open", "mergeable": True}
+            if source_branch == "mill/pin-bump/b":
+                return {"state": "open", "mergeable": False}  # conflicting
+            return None
+
+        forge.pr_status.side_effect = _pr_status
+        # Only the mergeable pin-bump PR counts; the conflicting one does not.
+        assert _inflight_current_count(forge) == 1
+
+    def test_existing_pr_is_current_classification(self):
+        from robotsix_mill.agents.runners.pin_bump_runner import (
+            _existing_pr_is_current,
+        )
+
+        current_title = f"chore(deps): bump b pin to {_NEW_SHA[:7]}"
+        old_title = f"chore(deps): bump b pin to {_OLD_SHA[:7]}"
+        # Targets latest + mergeable → current.
+        assert _existing_pr_is_current(
+            existing={"mergeable": True}, title=current_title, latest_sha=_NEW_SHA
+        )
+        # Targets an older rev → stale.
+        assert not _existing_pr_is_current(
+            existing={"mergeable": True}, title=old_title, latest_sha=_NEW_SHA
+        )
+        # Targets latest but conflicting → stale.
+        assert not _existing_pr_is_current(
+            existing={"mergeable": False}, title=current_title, latest_sha=_NEW_SHA
+        )
+        # Unknown title + mergeable → treated as current (conservative).
+        assert _existing_pr_is_current(
+            existing={"mergeable": None}, title=None, latest_sha=_NEW_SHA
+        )
+
+
+class TestOrderingAndCache:
+    def test_bumps_highest_consumer_dep_first(self):
+        import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
+        from robotsix_mill.deps.internal_graph import GitPin, InternalDepGraph
+
+        url_lib = f"https://{INTERNAL_GIT_HOST}lib"
+        url_tool = f"https://{INTERNAL_GIT_HOST}tool"
+        graph = InternalDepGraph(
+            pins={
+                "a": {
+                    "lib": GitPin(git_url=url_lib, rev=_OLD_SHA),
+                    "tool": GitPin(git_url=url_tool, rev=_OLD_SHA),
+                },
+                "b": {"lib": GitPin(git_url=url_lib, rev=_OLD_SHA)},
+            },
+            topo_order=["a", "b"],
+        )
+        latest_map = {url_lib: _NEW_SHA, url_tool: _NEW_SHA}
+
+        registry = MagicMock()
+        rc = _make_repo_config(f"https://{INTERNAL_GIT_HOST}a")
+        registry.repos = {
+            "a": rc,
+            "b": _make_repo_config(f"https://{INTERNAL_GIT_HOST}b"),
+        }
+
+        order: list[str] = []
+
+        def _record(*, repo_id, dep_name, **kwargs):
+            order.append(dep_name)
+
+        with (
+            patch.object(runner_mod, "github_push_token", return_value="t"),
+            patch.object(runner_mod, "target_branch_for", return_value="main"),
+            patch.object(runner_mod, "get_forge", return_value=MagicMock()),
+            patch.object(runner_mod, "_apply_one_bump", side_effect=_record),
+        ):
+            runner_mod._bump_pins_for_repos(
+                settings=MagicMock(),
+                registry=registry,
+                graph=graph,
+                latest_map=latest_map,
+            )
+
+        # lib (2 consumers) is attempted before tool (1 consumer) within repo a.
+        assert order[0] == "lib"
+        assert order.index("lib") < order.index("tool")
+
+    def test_pass_skipped_when_upstream_unchanged(self, tmp_path, caplog):
+        import logging
+
+        from robotsix_mill.agents.runners.pin_bump_runner import (
+            run_pin_bump_pr_actuator,
+        )
+        from robotsix_mill.config.repos import load_repos_config
+
+        repos_yaml_path = tmp_path / "repos.yaml"
+        repos_yaml_path.write_text(_repos_yaml_str("a", "b"))
+        registry = load_repos_config(str(repos_yaml_path))
+        graph = _graph_a_pins_b(rev=_NEW_SHA)  # already at latest
+
+        mock_forge = MagicMock()
+
+        import robotsix_mill.agents.runners.pin_bump_runner as runner_mod
+
+        with contextlib.ExitStack() as es:
+            for cm in _actuator_patches(runner_mod, registry, mock_forge, _NEW_SHA):
+                es.enter_context(cm)
+            mock_clone = es.enter_context(patch.object(runner_mod.git_ops, "clone"))
+            es.enter_context(
+                caplog.at_level(
+                    logging.INFO,
+                    logger="robotsix_mill.agents.runners.pin_bump_runner",
+                )
+            )
+            # First pass primes the cache (pin already at latest → no PR).
+            run_pin_bump_pr_actuator(
+                session_id="s1", repo_config=registry.repos["a"], graph=graph
+            )
+            caplog.clear()
+            # Second pass: identical ls-remote SHAs → short-circuit.
+            run_pin_bump_pr_actuator(
+                session_id="s2", repo_config=registry.repos["a"], graph=graph
+            )
+
+        mock_clone.assert_not_called()
+        assert "upstream SHAs unchanged" in caplog.text
 
 
 class TestDispatchWiring:
