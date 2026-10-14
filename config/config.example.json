@@ -101,6 +101,7 @@
         "consult_request_limit": 15,
         "coordinator_budget_cap_autosplit_threshold": 3,
         "coordinator_max_tool_calls": 300,
+        "coordinator_max_tool_calls_hard_cap": 1000,
         "coordinator_request_limit": 500,
         "coordinator_timeout_overrides": {},
         "coordinator_timeout_seconds": 600,

@@ -177,6 +177,24 @@ class _CoreSettings(BaseModel):
         ge=1,
         description="Hard cap on total tool calls per coordinator (implement) trace.",
     )
+    # Absolute ceiling on the *effective* coordinator tool-call cap,
+    # including any per-ticket override.  A known-large ticket may carry a
+    # ``coordinator_max_tool_calls_override`` (ticket metadata) to raise its
+    # budget above the ``coordinator_max_tool_calls`` default, but the
+    # effective cap is always ``min(override, coordinator_max_tool_calls_hard_cap)``
+    # so an accidental sky-high override can never disable the runaway-loop
+    # backstop.  Default 1000 — ~3× the default cap, generous enough for a
+    # genuinely large ticket while still terminating the 1000+-call runaway
+    # loops that produced incomplete_trace + cost_outlier flags.  Applies to
+    # both implement and ci_fix coordinator passes.
+    coordinator_max_tool_calls_hard_cap: int = Field(
+        default=1000,
+        ge=1,
+        description=(
+            "Absolute ceiling on the effective coordinator tool-call cap, "
+            "including per-ticket overrides (runaway-loop backstop)."
+        ),
+    )
     # Budget-cap auto-split fallback: after this many budget-cap pauses on a
     # single ticket without it completing, the implement stage splits the
     # oversized ticket into independently-shippable epic children (reusing the

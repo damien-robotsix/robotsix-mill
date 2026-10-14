@@ -232,6 +232,13 @@ class Ticket(SQLModel, table=True):
     unblocks: str | None = Field(default=None)
     # optional JSON list of free-form label strings applied to the ticket.
     labels: str | None = Field(default=None)
+    # optional per-ticket override of the coordinator tool-call budget cap
+    # (``coordinator_max_tool_calls``, default 300). When set, the effective
+    # cap for implement and ci_fix coordinator passes becomes
+    # ``min(override, coordinator_max_tool_calls_hard_cap)`` so a known-large
+    # ticket can run above the default while the global hard backstop still
+    # catches runaway loops. None = use the default cap (ordinary tickets).
+    coordinator_max_tool_calls_override: int | None = Field(default=None)
     # board_id from RepoConfig — stamped at creation so every ticket
     # is tagged with its repository.  Empty string for legacy rows.
     board_id: str = Field(default="", index=True)
@@ -356,6 +363,9 @@ class TicketRead(SQLModel):
     last_transient_error: str | None
     next_retry_at: datetime | None
     priority: bool = False
+    # per-ticket override of the coordinator tool-call budget cap; None when
+    # the ticket uses the default cap.
+    coordinator_max_tool_calls_override: int | None = None
     board_id: str = ""
     created_at: datetime
     updated_at: datetime

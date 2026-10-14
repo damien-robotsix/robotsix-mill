@@ -306,6 +306,7 @@ modules:
       - src/robotsix_mill/stages/ci_failure_buckets.py
       - src/robotsix_mill/stages/ci_fix.py
       - src/robotsix_mill/stages/_ci_fix_checkpoint.py
+      - src/robotsix_mill/stages/_coordinator_cap.py
       - src/robotsix_mill/stages/ci_fix_analysis.py
       - src/robotsix_mill/stages/ci_fix_helpers.py
       - src/robotsix_mill/stages/ci_fix_codeql.py
@@ -318,6 +319,7 @@ modules:
       - src/robotsix_mill/stages/_stage_cache.py
       - src/robotsix_mill/stages/dependency_fix.py
       - tests/stages/test_hooks.py
+      - tests/stages/test_coordinator_cap.py
       - tests/stages/test_dependency_fix.py
       - tests/stages/test_registry.py
       - tests/stages/test_classify.py
