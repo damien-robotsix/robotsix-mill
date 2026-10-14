@@ -349,6 +349,7 @@ modules:
       - tests/stages/refine/test_drift.py
       - tests/stages/refine/test_result_paths.py
       - tests/stages/refine/test_triage.py
+      - tests/stages/refine/test_triage_incident_guards.py
       - tests/stages/refine/test_impl_ready.py
       - tests/stages/refine/test_scanner_disposition.py
       - tests/stages/refine/__init__.py
