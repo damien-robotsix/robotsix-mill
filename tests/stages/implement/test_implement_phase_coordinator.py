@@ -563,6 +563,122 @@ def test_loop_budget_exhaustion_resume_loads_state(ctx_factory, tmp_path, monkey
     assert len(captured_resume_history[0]) == 1
 
 
+def test_loop_budget_cap_checkpoint_resume_loads_history(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When no conversation state exists but a finalized budget-cap
+    checkpoint does (the tool-call cap leaves no transcript behind), the
+    resume path passes a compact resume history built from the checkpoint's
+    completed steps to the first pass."""
+    from robotsix_mill.stages.implement._checkpoint import ImplementCheckpoint
+
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    settings = SimpleNamespace(max_fix_iterations=3)
+
+    # Write a finalized budget-cap checkpoint (5 recorded steps).
+    ws = ctx.service.workspace(t)
+    ckpt = ImplementCheckpoint(
+        ws=ws,
+        ticket_id=t.id,
+        goal="Add feature X",
+        max_tool_calls=300,
+    )
+    for i in range(5):
+        ckpt.record_step("explore", f'question="step {i}"', f"answer {i}")
+    ckpt.finalize(repo_dir=tmp_path)
+
+    captured_resume_history = []
+
+    def _capturing_pass(
+        cls,
+        ctx,
+        ticket,
+        repo_dir,
+        branch,
+        settings,
+        ic,
+        attempt,
+        max_iters,
+        resume_history,
+        resuming,
+        extra_roots=None,
+    ):
+        captured_resume_history.append(resume_history)
+        return _SinglePassResult(
+            next_action="return",
+            outcome=Outcome(State.DOCUMENTING, "done"),
+        )
+
+    monkeypatch.setattr(
+        ImplementStage, "_run_single_implement_pass", classmethod(_capturing_pass)
+    )
+    monkeypatch.setattr(
+        ImplementStage, "_load_implement_context", lambda ctx, t, s: _ic()
+    )
+
+    out = ImplementStage._implement_loop(ctx, t, tmp_path, "mill/x", False, settings)
+
+    assert out.next_state is State.DOCUMENTING
+    assert len(captured_resume_history) == 1
+    assert isinstance(captured_resume_history[0], list)
+    # The resume history is the 3-message compact history, not a full
+    # transcript replay — and it tells the agent about the completed steps.
+    assert len(captured_resume_history[0]) == 3
+    assert "5 tool call(s)" in str(captured_resume_history[0])
+
+
+def test_loop_ignores_unfinalized_checkpoint(ctx_factory, tmp_path, monkeypatch):
+    """A scratch checkpoint from a pass torn down without reaching the cap
+    boundary is not a resume point — the first pass gets no resume history."""
+    from robotsix_mill.stages.implement._checkpoint import ImplementCheckpoint
+
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    settings = SimpleNamespace(max_fix_iterations=3)
+
+    ws = ctx.service.workspace(t)
+    ckpt = ImplementCheckpoint(
+        ws=ws, ticket_id=t.id, goal="Add feature X", max_tool_calls=300
+    )
+    ckpt.record_step("explore", "q", "a")  # persisted but NOT finalized
+
+    captured_resume_history = []
+
+    def _capturing_pass(
+        cls,
+        ctx,
+        ticket,
+        repo_dir,
+        branch,
+        settings,
+        ic,
+        attempt,
+        max_iters,
+        resume_history,
+        resuming,
+        extra_roots=None,
+    ):
+        captured_resume_history.append(resume_history)
+        return _SinglePassResult(
+            next_action="return",
+            outcome=Outcome(State.DOCUMENTING, "done"),
+        )
+
+    monkeypatch.setattr(
+        ImplementStage, "_run_single_implement_pass", classmethod(_capturing_pass)
+    )
+    monkeypatch.setattr(
+        ImplementStage, "_load_implement_context", lambda ctx, t, s: _ic()
+    )
+
+    out = ImplementStage._implement_loop(ctx, t, tmp_path, "mill/x", False, settings)
+
+    assert out.next_state is State.DOCUMENTING
+    assert len(captured_resume_history) == 1
+    assert captured_resume_history[0] is None
+
+
 # --- 2. _load_implement_context: artifact/context loading -----------------
 
 

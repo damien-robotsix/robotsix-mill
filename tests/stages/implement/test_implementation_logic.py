@@ -438,6 +438,98 @@ class TestInvokeImplementAgent:
         assert outcome.failure.next_action == "return"
         assert len(finalize_calls) == 1
 
+    def test_constructs_and_forwards_checkpoint(self, monkeypatch, tmp_path):
+        """``_invoke_implement_agent`` builds a fresh budget-cap checkpoint
+        (workspace, ticket id, goal, cap) and forwards it to
+        ``run_implement_agent`` so the coordinator can persist steps."""
+        from robotsix_mill.stages.implement._checkpoint import ImplementCheckpoint
+
+        captured_kwargs: dict = {}
+
+        def _capture_run(**kw):
+            captured_kwargs.update(kw)
+            return (
+                "summary",
+                [],
+                "",
+                None,
+                None,
+                False,
+                "",
+            )
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents.coding.run_implement_agent",
+            _capture_run,
+        )
+
+        # ws must be a real Workspace so the checkpoint can compute paths.
+        from robotsix_mill.core.workspace import Workspace
+
+        ws = Workspace(tmp_path, FakeTicket.id)
+
+        outcome = _Stage._invoke_implement_agent(
+            ctx=_stage_ctx(),
+            ticket=FakeTicket(),
+            repo_dir=_DUMMY_PATH,
+            branch="main",
+            settings=_simple_namespace(coordinator_max_tool_calls=300),
+            ic=_ic(spec="Add feature X", feedback="fix test_x"),
+            language_instructions="",
+            agent_level=None,
+            resume_history=None,
+            extra_roots=None,
+            memory_board_id="mb",
+            ws=ws,
+        )
+        assert outcome.success is not None
+
+        checkpoint = captured_kwargs.get("checkpoint")
+        assert isinstance(checkpoint, ImplementCheckpoint)
+        assert checkpoint.ws is ws
+        assert checkpoint.ticket_id == FakeTicket.id
+        assert checkpoint.goal == "Add feature X"
+        assert checkpoint.feedback == "fix test_x"
+        assert checkpoint.boundary == 295
+        assert checkpoint.enabled is True
+
+    def test_no_checkpoint_without_ws(self, monkeypatch):
+        """With ``ws=None`` no checkpoint is constructed (must not crash)."""
+        captured_kwargs: dict = {}
+
+        def _capture_run(**kw):
+            captured_kwargs.update(kw)
+            return (
+                "summary",
+                [],
+                "",
+                None,
+                None,
+                False,
+                "",
+            )
+
+        monkeypatch.setattr(
+            "robotsix_mill.agents.coding.run_implement_agent",
+            _capture_run,
+        )
+
+        outcome = _Stage._invoke_implement_agent(
+            ctx=_stage_ctx(),
+            ticket=FakeTicket(),
+            repo_dir=_DUMMY_PATH,
+            branch="main",
+            settings=_simple_namespace(coordinator_max_tool_calls=300),
+            ic=_ic(),
+            language_instructions="",
+            agent_level=None,
+            resume_history=None,
+            extra_roots=None,
+            memory_board_id="mb",
+        )
+        assert outcome.success is not None
+        assert captured_kwargs.get("checkpoint") is None
+
     def test_agent_error_non_transient(self, monkeypatch):
         """AgentRunError with non-transient cause → failure BLOCKED, no re-raise."""
         monkeypatch.setattr(

@@ -27,6 +27,7 @@ from ..pause import (
     save_conversation_state,
 )
 from ._base import _ImplementStageBase
+from ._checkpoint import ImplementCheckpoint, clear_implement_checkpoint
 from ._no_change import _run_no_change_contradiction_check
 from ._shared import (
     _AgentRunOutcome,
@@ -357,6 +358,29 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         ``run_implement_agent``; ``failure`` holds the
         ``_SinglePassResult`` already finalized for return.
         """
+        # --- budget-cap checkpoint --------------------------------------
+        # Persist completed tool-call steps as the pass runs so a resume
+        # after the tool-call cap skips already-done work instead of
+        # restarting from scratch.  One fresh checkpoint per pass: clear any
+        # prior one (the ``_implement_loop`` resume detection already read
+        # it at ``attempt == 1`` before this method runs) and build a new
+        # one for this pass.  When the coordinator is disabled from
+        # checkpointing (tiny cap), the object is inert — no file is
+        # written and pydantic-ai's plain ``UsageLimitExceeded`` still
+        # pauses the pass.
+        checkpoint: ImplementCheckpoint | None = None
+        if ws is not None:
+            clear_implement_checkpoint(ws)
+            checkpoint = ImplementCheckpoint(
+                ws=ws,
+                ticket_id=ticket.id,
+                goal=ic.spec,
+                feedback=ic.feedback,
+                memory=ic.memory_text,
+                reference_files=ic.reference_files,
+                previous_attempt_summary=ic.previous_attempt_summary,
+                max_tool_calls=getattr(settings, "coordinator_max_tool_calls", 300),
+            )
         try:
             result = coding.run_implement_agent(
                 settings=settings,
@@ -377,6 +401,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                 else None,
                 target_branch=target_branch,
                 ci_log_fetch_fn=cls._make_ci_log_fetch_fn(ctx),
+                checkpoint=checkpoint,
             )
         except AgentBudgetError as e:
             if e.conversation_state is not None and ws is not None:
@@ -480,6 +505,12 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         memory_board_id: str,
     ) -> tuple[list[Any] | None, str | None]:
         """Persist memory, ``reference_files.json`` and ``implement_summary.md``."""
+        # The agent pass completed without hitting the tool-call cap — the
+        # per-pass budget checkpoint is no longer a resume point.  Clear it
+        # so a later re-implement doesn't mistake the stale file for a
+        # budget-cap resume.  (On a cap the AgentBudgetError path returns
+        # before this method runs, so the finalized checkpoint survives.)
+        clear_implement_checkpoint(ws)
         if updated_memory:
             persist_memory(
                 settings.memory_file_for("implement", memory_board_id),
