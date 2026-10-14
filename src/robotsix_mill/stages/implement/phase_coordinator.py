@@ -1299,7 +1299,14 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         )
 
         zd_threshold = getattr(ctx.settings, "implement_zero_diff_abort_threshold", 2)
-        if zd_threshold > 0:
+        # A transient / provider failure (ModelHTTPError 402/429/5xx, or any
+        # abort raised before the agent produced output) is NOT a zero-diff
+        # pass: the agent never ran to completion, so it must not bump — or
+        # reset — the counter.  Leave the counter and pause marker untouched,
+        # exactly as the stall counter does above.  Counting these as zero-diff
+        # passes let two consecutive OpenRouter 402 attempts trip guard 4.7 on
+        # resume before any agent ran.
+        if zd_threshold > 0 and not transient:
             try:
                 _has_changes = git_ops.has_changes(repo_dir)
                 _branch_ahead = git_ops.branch_is_ahead_of_main(repo_dir)

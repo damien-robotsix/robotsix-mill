@@ -441,6 +441,48 @@ def test_resume_blocked_spawn_limit_reset_recorded_in_history(service):
     assert "spawn counter reset via resume-blocked" in last_note
 
 
+def test_resume_blocked_resets_zero_diff_counter_at_threshold(service):
+    """A resume-blocked from a provider-failure block must reset the
+    zero-diff early-abort counter (and clear the pause marker) when it is
+    at/above the threshold — otherwise preflight guard 4.7 re-blocks the
+    ticket before any agent runs.  Mirrors the spawn-counter reset."""
+    t = service.create("zero-diff resume test")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="agent error: status_code: 402")
+
+    ws = service.workspace(t)
+    zd_counter = ws.artifacts_dir / "implement_zero_diff_count"
+    zd_counter.write_text("2", encoding="utf-8")  # at default threshold
+    pause_marker = ws.artifacts_dir / "implement_zero_diff_paused"
+    pause_marker.touch()
+
+    resumed = service.resume_blocked(t.id)
+    assert resumed.state is State.READY
+    assert zd_counter.read_text(encoding="utf-8").strip() == "0"
+    assert not pause_marker.exists()
+
+    hist = service.history(t.id)
+    assert "zero-diff counter reset via resume-blocked" in (hist[-1].note or "")
+
+
+def test_resume_blocked_below_zero_diff_threshold_preserves_counter(service):
+    """resume_blocked does NOT reset the zero-diff counter when it's below
+    the threshold — the ticket was blocked for another reason."""
+    t = service.create("zero-diff below threshold resume")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.BLOCKED, note="transient OOM in sandbox")
+
+    ws = service.workspace(t)
+    zd_counter = ws.artifacts_dir / "implement_zero_diff_count"
+    zd_counter.write_text("1", encoding="utf-8")  # < default threshold of 2
+
+    resumed = service.resume_blocked(t.id)
+    assert resumed.state is State.READY
+    assert zd_counter.read_text(encoding="utf-8").strip() == "1"
+    hist = service.history(t.id)
+    assert "zero-diff counter reset" not in (hist[-1].note or "")
+
+
 def test_resume_blocked_recurring_spawn_no_reset_without_note(service):
     """A ticket that has exhausted its spawn budget at least twice on
     the same spec fingerprint and is resumed WITHOUT a note does NOT

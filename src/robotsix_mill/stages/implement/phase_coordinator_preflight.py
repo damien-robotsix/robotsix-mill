@@ -23,7 +23,7 @@ from ...agents.runners.diagnostic_events import emit_diagnostic_event
 from ...agents.yaml_loader import load_agent_definition
 from ...core.constants import EXTERNAL_SCOPE_PREFIX
 from ...core.models import Comment, Ticket, TicketKind
-from ...core.states import State
+from ...core.states import ASK_USER_MARKER, State
 from ...core.workspace import (
     Workspace,
     read_spawn_exhaustion_marker,
@@ -1023,6 +1023,23 @@ def run_preflight_checks(
                     "then reply to resume (the reply grants one "
                     "fresh implement attempt with a reset counter)."
                 )
+                # Open an [ASK_USER] comment thread so `POST
+                # /tickets/{id}/answer` has a thread to answer — without
+                # it the documented "reply to resume" path returns 409
+                # (no open [ASK_USER] thread).  `transition ready` also
+                # works as a fallback (it consumes the pause marker).
+                try:
+                    ctx.service.add_comment(
+                        ticket.id,
+                        f"{ASK_USER_MARKER}\n\n{_note}",
+                        author="implement",
+                    )
+                except Exception:
+                    log.warning(
+                        "%s: failed to open zero-diff ask_user thread",
+                        ticket.id,
+                        exc_info=True,
+                    )
                 # Write the pause marker so the operator's reply is
                 # recognised on the next preflight.
                 try:

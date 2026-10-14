@@ -738,6 +738,33 @@ class _TransitionMixin(_ServiceBase):
             ci_guards_reset = _reset_tripped_ci_fix_guards(
                 self.workspace(ticket), self.settings
             )
+            # Same rule for the zero-diff early-abort counter: when it is
+            # at/above its threshold the implement preflight (guard 4.7)
+            # re-blocks the ticket before any agent runs, so a resume is a
+            # silent no-op without clearing it.  Reset it here so a
+            # resume-blocked from a provider-failure block (whose two 402
+            # attempts may have left the counter tripped) grants one fresh
+            # implement attempt — mirroring the spawn counter reset.
+            zero_diff_reset = False
+            if dst is State.READY:
+                zd_threshold = getattr(
+                    self.settings, "implement_zero_diff_abort_threshold", 2
+                )
+                if zd_threshold > 0:
+                    from ...stages.implement._shared import (
+                        ZERO_DIFF_PAUSE_FILENAME,
+                        read_zero_diff_count,
+                        write_zero_diff_count,
+                    )
+
+                    zd_ws = self.workspace(ticket)
+                    if read_zero_diff_count(zd_ws.artifacts_dir) >= zd_threshold:
+                        write_zero_diff_count(zd_ws.artifacts_dir, 0)
+                        with contextlib.suppress(OSError):
+                            (zd_ws.artifacts_dir / ZERO_DIFF_PAUSE_FILENAME).unlink(
+                                missing_ok=True
+                            )
+                        zero_diff_reset = True
             if cycles_reset:
                 ticket.implement_cycles = 0
                 s.add(ticket)
@@ -763,6 +790,8 @@ class _TransitionMixin(_ServiceBase):
                     f"; ci_fix guard(s) reset via resume-blocked: "
                     f"{', '.join(ci_guards_reset)}"
                 )
+            if zero_diff_reset:
+                event_note += "; zero-diff counter reset via resume-blocked"
             s.add(_make_event(s, ticket_id=ticket_id, state=dst, note=event_note))
             s.commit()
             s.refresh(ticket)
