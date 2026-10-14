@@ -2312,3 +2312,98 @@ def test_ruff_autofix_is_best_effort_on_toolchain_error(tmp_path, monkeypatch):
 
     # Must not raise.
     pc._ruff_autofix_changed(tmp_path, ["a.py"])
+
+
+# --- zero-diff counter: provider errors must not count --------------------
+
+
+class _NoDiffGitOps(_FakeGitOps):
+    """``_FakeGitOps`` plus ``branch_is_ahead_of_main`` so the zero-diff
+    block in ``_finalize`` can resolve a genuine no-diff pass (both
+    ``has_changes`` and ``branch_is_ahead_of_main`` return False) instead
+    of falling into the conservative ``_has_diff = True`` fallback."""
+
+    def branch_is_ahead_of_main(self, repo):
+        return str(repo) in self.changed
+
+
+def test_finalize_provider_error_does_not_count_as_zero_diff(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A transient provider/model failure (402/429/5xx) finalizes with
+    ``transient=True``; it must NOT bump the consecutive-zero-diff
+    counter, because the agent never ran to completion.  A genuine
+    no-diff pass afterwards still increments it."""
+    from robotsix_mill.stages.implement._shared import read_zero_diff_count
+
+    ctx = ctx_factory(implement_zero_diff_abort_threshold="2")
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    fake = _NoDiffGitOps(changed=set())  # no working-tree diff
+    monkeypatch.setattr(pc, "git_ops", fake)
+
+    # Two consecutive provider-error finalizations (original + auto-resume).
+    for _ in range(2):
+        ImplementStage._finalize(
+            ctx,
+            t,
+            repo_dir,
+            "mill/x",
+            "agent error: status_code: 402",
+            ok=False,
+            transient=True,
+        )
+
+    assert read_zero_diff_count(ws.artifacts_dir) == 0, (
+        "provider errors must not be counted as zero-diff passes"
+    )
+
+    # A genuine no-diff pass (agent ran, produced nothing) DOES count.
+    ImplementStage._finalize(
+        ctx,
+        t,
+        repo_dir,
+        "mill/x",
+        "nothing left to change",
+        ok=False,
+        transient=False,
+    )
+    assert read_zero_diff_count(ws.artifacts_dir) == 1
+
+
+def test_finalize_genuine_no_diff_increments_zero_diff_count(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Two genuine no-diff passes (agent completed, no file change) bump
+    the counter to the abort threshold so preflight guard 4.7 fires."""
+    from robotsix_mill.stages.implement._shared import read_zero_diff_count
+
+    ctx = ctx_factory(implement_zero_diff_abort_threshold="2")
+    t = _ticket(ctx)
+    ws = ctx.service.workspace(t)
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    fake = _NoDiffGitOps(changed=set())
+    monkeypatch.setattr(pc, "git_ops", fake)
+
+    for _ in range(2):
+        ImplementStage._finalize(
+            ctx,
+            t,
+            repo_dir,
+            "mill/x",
+            "nothing to do",
+            ok=False,
+            transient=False,
+        )
+
+    assert read_zero_diff_count(ws.artifacts_dir) == 2
+
+    # A productive pass resets the counter.
+    fake.changed = {str(repo_dir)}
+    ImplementStage._finalize(
+        ctx, t, repo_dir, "mill/x", "did work", ok=True, transient=False
+    )
+    assert read_zero_diff_count(ws.artifacts_dir) == 0

@@ -1857,6 +1857,63 @@ def test_zero_diff_abort_guard_disabled_by_zero_threshold(
     assert out is None, "must proceed when threshold is 0 (disabled)"
 
 
+def test_zero_diff_abort_guard_opens_ask_user_thread(
+    ctx_factory,
+    tmp_path,
+    monkeypatch,
+):
+    """The zero-diff pause must open an ``[ASK_USER]`` comment thread so
+    ``POST /tickets/{id}/answer`` has a thread to answer — without it the
+    documented 'reply to resume' path returns 409."""
+    from robotsix_mill.core.states import ASK_USER_MARKER
+
+    remote = make_bare_repo(tmp_path)
+
+    ctx = ctx_factory(
+        forge_remote_url=remote,
+        test_command="true",
+        review_enabled="false",
+        implement_max_spawns_per_ticket="5",
+        implement_zero_diff_abort_threshold="2",
+    )
+    t = _ticket(ctx, title="Zero-diff answerable", body="Add a file")
+    _write_file_map(ctx, t, "feature.txt")
+
+    ws = ctx.service.workspace(t)
+    (ws.artifacts_dir / "implement_zero_diff_count").write_text("2", encoding="utf-8")
+    (ws.artifacts_dir / "implement_spawn_count").write_text("1", encoding="utf-8")
+
+    monkeypatch.setattr(ImplementStage, "_run_prerequisite_gate", lambda *a, **kw: None)
+    monkeypatch.setattr(ImplementStage, "_run_baseline_check", lambda *a, **kw: None)
+
+    out = ImplementStage().preflight(t, ctx)
+
+    assert out is not None
+    assert out.next_state is State.AWAITING_USER_REPLY
+
+    # An open [ASK_USER] thread must now exist.
+    comments = ctx.service.list_comments(t.id)
+    ask = [
+        c
+        for c in comments
+        if c.parent_id is None
+        and c.body.startswith(ASK_USER_MARKER)
+        and c.closed_at is None
+    ]
+    assert len(ask) == 1, "guard must open exactly one [ASK_USER] thread"
+    ask_id = ask[0].id
+    assert "zero-diff early-abort" in ask[0].body
+
+    # /answer must succeed (no 'no open [ASK_USER] thread' error) and
+    # auto-resume the ticket to its paused_from state.
+    ctx.service.answer_pending_question(
+        t.id, "Here is the missing data.", author="operator"
+    )
+    assert ctx.service.get(t.id).state is State.READY
+    replies = [c for c in ctx.service.list_comments(t.id) if c.parent_id == ask_id]
+    assert any(c.body == "Here is the missing data." for c in replies)
+
+
 # --- external scope gate ------------------------------------------------
 
 
