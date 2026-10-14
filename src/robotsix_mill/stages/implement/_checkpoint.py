@@ -13,18 +13,20 @@ next pass the checkpoint is loaded and distilled into a compact resume
 history so the agent skips already-completed steps instead of re-running
 them.  The checkpoint lifecycle is one pass: it is created fresh at the
 start of every LLM implement pass and cleared when the pass completes.
+
+The cap/boundary and persistence machinery is shared with the ci_fix
+checkpoint via :class:`robotsix_mill.stages._checkpoint_base._CheckpointBase`;
+only the task-specific fields (goal / feedback / reference files) and the
+load/resume helpers live here.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import threading
 from collections import Counter
-from dataclasses import dataclass, field
-from datetime import UTC
-from pathlib import Path
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, ClassVar
 
 from pydantic_ai.messages import (
     ModelRequest,
@@ -34,63 +36,21 @@ from pydantic_ai.messages import (
 )
 
 from ...core.workspace import Workspace
+from .._checkpoint_base import _CheckpointBase
 
 log = logging.getLogger(__name__)
 
 # Filename of the checkpoint artifact, under ``ws.artifacts_dir``.
 _CHECKPOINT_FILENAME = "implement_checkpoint.json"
 
-# Tool-call budget reserved at the tail of a pass for checkpoint
-# finalization.  The effective tool-call cap becomes
-# ``coordinator_max_tool_calls - _CHECKPOINT_TOOL_CALL_RESERVE``: when the
-# coordinator reaches that boundary the checkpoint is written (diff stat +
-# finalized marker) and the pass is stopped as budget-capped.  The reserve
-# guarantees the checkpoint is always persisted BEFORE the run tears down,
-# which pydantic-ai's own hard ``tool_calls_limit`` (which discards the
-# partial state) cannot do.  Default 5 keeps the effective cap within a
-# rounding error of ``coordinator_max_tool_calls`` (300 → 295).
-_CHECKPOINT_TOOL_CALL_RESERVE = 5
-
 # Only the last N completed steps are expanded in detail in the resume
 # history; earlier steps are summarized by tool-name counts so the resume
 # prompt stays compact regardless of how many calls the prior pass made.
 _CHECKPOINT_RESUME_DETAIL_STEPS = 15
 
-# Per-step arg/output summary caps written to the checkpoint file (a
-# ``write_file``/``edit_file`` input can be a whole file — never persist
-# more than a digest).
-_CHECKPOINT_INPUT_MAX_CHARS = 200
-_CHECKPOINT_OUTPUT_MAX_CHARS = 800
 
-
-def _truncate(text: str, max_chars: int) -> str:
-    text = text.strip()
-    if len(text) <= max_chars:
-        return text
-    return text[:max_chars] + f"…[{len(text) - max_chars} chars elided]"
-
-
-def _diff_stat(repo_dir: Path) -> str | None:
-    """Return ``git diff --stat HEAD`` for *repo_dir*, or ``None`` when the
-    diff cannot be computed (best-effort — never fatal to the pass).
-    """
-    import subprocess
-
-    try:
-        out = subprocess.run(
-            ["git", "diff", "--stat", "HEAD"],
-            cwd=str(repo_dir),
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except Exception:
-        return None
-    return out.stdout.strip() or None
-
-
-@dataclass
-class ImplementCheckpoint:
+@dataclass(kw_only=True)
+class ImplementCheckpoint(_CheckpointBase):
     """Minimal per-pass state needed to resume an implement pass after the
     tool-call budget cap.
 
@@ -100,112 +60,21 @@ class ImplementCheckpoint:
     boundary or is otherwise torn down at the cap.
     """
 
-    ws: Workspace
-    ticket_id: str
+    _checkpoint_filename: ClassVar[str] = _CHECKPOINT_FILENAME
+    _checkpoint_label: ClassVar[str] = "implement checkpoint"
+
     goal: str
     feedback: str | None = None
-    memory: str = ""
     reference_files: list[Any] | None = None
     previous_attempt_summary: str | None = None
-    max_tool_calls: int = 300
-    steps: list[dict[str, Any]] = field(default_factory=list)
-    diff_stat: str | None = None
-    finalized: bool = False
-    finalized_at: str | None = None
-    saved_at: str | None = None
-    # Serializes concurrent tool-call writes (pydantic-ai executes function
-    # tool calls of one step in parallel, possibly across threads).
-    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
-    # ------------------------------------------------------------------
-    # cap / boundary
-    # ------------------------------------------------------------------
-
-    @property
-    def enabled(self) -> bool:
-        """Checkpointing is only armed when the cap is large enough to
-        reserve a tail of tool calls for finalization.  A tiny cap (e.g. a
-        test config) falls back to the plain pydantic-ai hard limit.
-        """
-        return self.max_tool_calls > _CHECKPOINT_TOOL_CALL_RESERVE
-
-    @property
-    def boundary(self) -> int | None:
-        """Tool-call count at which the pass is checkpoint-finalized and
-        stopped as budget-capped, or ``None`` when checkpointing is
-        disabled.
-        """
-        if not self.enabled:
-            return None
-        return self.max_tool_calls - _CHECKPOINT_TOOL_CALL_RESERVE
-
-    # ------------------------------------------------------------------
-    # persistence
-    # ------------------------------------------------------------------
-
-    @property
-    def path(self) -> Path:
-        return self.ws.artifacts_dir / _CHECKPOINT_FILENAME
-
-    def record_step(
-        self,
-        tool: str,
-        input_summary: str,
-        output_summary: str,
-    ) -> None:
-        """Append one completed tool call and persist the checkpoint."""
-        with self._lock:
-            self.steps.append(
-                {
-                    "seq": len(self.steps) + 1,
-                    "tool": tool,
-                    "input": _truncate(input_summary, _CHECKPOINT_INPUT_MAX_CHARS),
-                    "output": _truncate(output_summary, _CHECKPOINT_OUTPUT_MAX_CHARS),
-                }
-            )
-            self.saved_at = _now_iso()
-            self._write_unlocked()
-
-    def finalize(self, repo_dir: Path) -> None:
-        """Write the final checkpoint at the cap boundary: capture the
-        working-tree diff so the resume pass knows what is already on disk,
-        and mark the checkpoint as finalized (a valid resume point).
-        """
-        with self._lock:
-            self.diff_stat = _diff_stat(repo_dir)
-            self.finalized = True
-            self.finalized_at = _now_iso()
-            self.saved_at = self.finalized_at
-            self._write_unlocked()
-
-    def _write_unlocked(self) -> None:
-        data: dict[str, Any] = {
-            "ticket_id": self.ticket_id,
+    def _payload_extra(self) -> dict[str, Any]:
+        return {
             "goal": self.goal,
             "feedback": self.feedback,
-            "memory": self.memory,
             "reference_files": self.reference_files or [],
             "previous_attempt_summary": self.previous_attempt_summary,
-            "max_tool_calls": self.max_tool_calls,
-            "boundary": self.boundary,
-            "steps": self.steps,
-            "diff_stat": self.diff_stat,
-            "finalized": self.finalized,
-            "finalized_at": self.finalized_at,
-            "saved_at": self.saved_at,
         }
-        try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        except OSError:
-            # A checkpoint write failure must never break a tool call — the
-            # pass just continues without a resume point.
-            log.warning(
-                "%s: failed to write implement checkpoint (%s)",
-                self.ticket_id,
-                self.path,
-                exc_info=True,
-            )
 
     # ------------------------------------------------------------------
     # load / clear
@@ -267,12 +136,6 @@ class ImplementCheckpoint:
             log.warning(
                 "failed to clear implement checkpoint (%s)", path, exc_info=True
             )
-
-
-def _now_iso() -> str:
-    from datetime import datetime
-
-    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def load_implement_checkpoint(ws: Workspace) -> ImplementCheckpoint | None:
