@@ -31,7 +31,7 @@ from ..sandbox._slots import sandbox_abandon, sandbox_lane
 # the public entry point and the tool factories.  Re-export the budget
 # sentinel and attempt helpers so existing importers (``coding.py``) and the
 # test monkeypatch seams keep resolving them via ``...agents.explore``.
-from .explore_retry import (  # noqa: F401
+from .explore_retry import (
     _EXPLORE_BACKOFF_CAP,
     _EXPLORE_MAX_ATTEMPTS,
     _attempt_timeout,
@@ -40,6 +40,24 @@ from .explore_retry import (  # noqa: F401
     mark_explore_budget_exhausted,
     reset_explore_budget_exhausted,
 )
+
+# Public API — listing the re-exported retry primitives here marks them as
+# intentional re-exports (consumed by ``coding.py`` and the test monkeypatch
+# seams), which also satisfies CodeQL's ``py/unused-import`` for the sentinel
+# helpers that this module only forwards.
+__all__ = [
+    "_EXPLORE_BACKOFF_CAP",
+    "_EXPLORE_MAX_ATTEMPTS",
+    "_attempt_timeout",
+    "_run_single_explore_attempt",
+    "is_explore_budget_exhausted",
+    "make_explore_tool",
+    "make_parallel_explore_tool",
+    "make_repo_scoped_explore_tool",
+    "mark_explore_budget_exhausted",
+    "reset_explore_budget_exhausted",
+    "run_explore",
+]
 
 log = logging.getLogger(__name__)
 

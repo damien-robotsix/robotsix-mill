@@ -21,6 +21,20 @@ from typing import Any
 from ..config import Settings
 from ..runtime.tracing import trace_stage
 
+# Public API — ``explore.py`` re-exports these. Listing the tuning constants
+# here marks them as intentionally exported so CodeQL's
+# ``py/unused-global-variable`` does not flag them (they are consumed by the
+# outer retry loop in ``explore.py``, not within this module).
+__all__ = [
+    "_EXPLORE_BACKOFF_CAP",
+    "_EXPLORE_MAX_ATTEMPTS",
+    "_attempt_timeout",
+    "_run_single_explore_attempt",
+    "is_explore_budget_exhausted",
+    "mark_explore_budget_exhausted",
+    "reset_explore_budget_exhausted",
+]
+
 # --------------------------------------------------------------------------
 # Budget-exhausted sentinel — set when the explore sub-agent exceeds its
 # UsageLimits.request_limit even after a bounded retry.  ``coding.py``
