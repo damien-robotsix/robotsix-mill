@@ -12,7 +12,7 @@ from typing import Any
 from ...config import ConfigError, get_repo_config, target_branch_for
 from ...core.models import Ticket
 from ...core.states import State
-from ...forge import get_forge
+from ...forge import get_forge, rate_limit
 
 # _resolve_remote_url, github_token, load_memory, persist_memory
 # are accessed through the _facade import inside method bodies
@@ -69,6 +69,15 @@ class MultiRepoMixin(_MergeStageBase):
         * Otherwise (mix of green / pending) -> same-state no-op, re-poll.
         """
         s = ctx.settings
+
+        # Back off when the GitHub quota is nearly exhausted: a multi-repo
+        # ticket polls every repo's pr_status/check_status each cycle, so a
+        # rate-limited window otherwise means a 403 per repo per poll. Return
+        # a same-state re-poll (no forge calls) and log once per hour.
+        skip = rate_limit.should_skip(s)
+        if skip is not None:
+            rate_limit.log_skip(log, f"{ticket.id}: merge", skip)
+            return Outcome(ticket.state)
 
         statuses: list[dict[str, Any]] = []
         for entry in pr_entries:

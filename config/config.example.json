@@ -177,6 +177,7 @@
         "freshness_gate_enabled": false,
         "frontend_sync_interval_seconds": 604800,
         "github_api_url": "https://api.github.com",
+        "github_rate_limit_reserve": 200,
         "gitlab_api_url": "https://gitlab.com/api/v4",
         "health_interval_seconds": 604800,
         "health_request_limit": 80,

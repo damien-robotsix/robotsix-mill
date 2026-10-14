@@ -14,6 +14,7 @@ import httpx
 from robotsix_http import RetryConfig, call_with_retry
 
 from ..config import RepoConfig, Settings
+from . import rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,12 @@ class _ApiClient:
                 # carry their payload pre-populated and don't need it.
                 if hasattr(r, "read"):
                     r.read()
+            # Snapshot GitHub rate-limit headers (per installation/token) so
+            # non-urgent callers can back off before the quota is exhausted.
+            # A no-op for GitLab (differently-named headers).
+            rate_limit.record(
+                getattr(r, "headers", None), key=rate_limit.token_key(headers)
+            )
             return r
 
         r = call_with_retry(attempt, config=_FORGE_RETRY_CONFIG, what="forge-http")

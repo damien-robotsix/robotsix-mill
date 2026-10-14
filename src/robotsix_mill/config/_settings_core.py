@@ -857,6 +857,17 @@ class _CoreSettings(BaseModel):
         pattern=r"^https?://",
         description="GitLab API base URL. Override for self-hosted GitLab instances.",
     )
+    # Reserve floor for the GitHub primary rate limit. When the observed
+    # ``x-ratelimit-remaining`` drops below this, non-urgent callers (CI
+    # monitor poll, orphaned-pr-check, pin_bump, upstream_ci_recovery,
+    # blocked-auto-resume, stale-branch cleanup) skip their pass until the
+    # reset instead of hammering a 403 wall, and stage callers (merge,
+    # ci_fix) wait for the reset rather than re-polling.
+    github_rate_limit_reserve: int = Field(
+        default=200,
+        ge=0,
+        description="Skip non-urgent GitHub calls when x-ratelimit-remaining drops below this floor.",
+    )
 
     # --- implement stage ---
     # Command run to verify the implementation; empty string skips the

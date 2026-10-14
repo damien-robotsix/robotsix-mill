@@ -61,6 +61,15 @@ async def health(request: Request) -> dict[str, Any]:
 
     settings: Settings = request.app.state.settings
     payload["disk_usage"] = _get_disk_usage(settings.data_dir)
+    # Surface the GitHub rate-limit budget (per installation/token snapshot,
+    # most-constrained) so chat and the monitor can read how close the fleet
+    # is to the quota wall without minting a token. Empty until the first
+    # GitHub call of the process records headers.
+    from ...forge import rate_limit as _rate_limit
+
+    budget = _rate_limit.health_payload()
+    if budget:
+        payload["github_rate_limit"] = budget
     # Drain (update-pending) status so the caretaker can deploy at the
     # first drained tick without hitting the /system/drain endpoint.
     worker = getattr(request.app.state, "worker", None)

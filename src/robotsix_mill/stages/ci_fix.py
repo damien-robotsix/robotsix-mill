@@ -27,7 +27,7 @@ from ..agents.runners.pass_runner import load_memory, persist_memory
 from ..config import target_branch_for
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
-from ..forge import get_forge
+from ..forge import get_forge, rate_limit
 from ..forge.auth import (
     _resolve_remote_url,
     github_push_token,
@@ -309,6 +309,13 @@ class CIFixStage(Stage):
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Process a FIXING_CI ticket: poll forge CI status on the ticket branch and, on failure, run the automated CI-fix agent to push corrective commits."""
+        # Back off when the GitHub quota is nearly exhausted: wait for the
+        # reset (same-state re-poll, one log line per hour) rather than
+        # re-polling check_status every cycle against a 403 wall.
+        skip = rate_limit.should_skip(ctx.settings)
+        if skip is not None:
+            rate_limit.log_skip(log, f"{ticket.id}: ci_fix", skip)
+            return Outcome(ticket.state)
         # Clone phase: guards, branch resolution, and CI status routing.
         resolved = self._resolve_clone_and_status(ticket, ctx)
         if isinstance(resolved, Outcome):

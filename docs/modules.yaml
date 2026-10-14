@@ -165,6 +165,7 @@ modules:
       - src/robotsix_mill/forge/gitlab/_pagination.py
       - src/robotsix_mill/forge/_http.py
       - src/robotsix_mill/forge/_log_utils.py
+      - src/robotsix_mill/forge/rate_limit.py
       - tests/forge/test_forge_auth.py
       - tests/forge/test_forge_base.py
       - tests/forge/test_github.py
@@ -177,6 +178,7 @@ modules:
       - tests/forge/test_gitlab.py
       - tests/forge/test_gitlab_pagination.py
       - tests/forge/test_http.py
+      - tests/forge/test_rate_limit.py
       - docs/forge/**/*
     dependencies: [config, vcs]
 
