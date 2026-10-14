@@ -304,6 +304,7 @@ modules:
       - src/robotsix_mill/stages/merge/review_revision.py
       - src/robotsix_mill/stages/ci_failure_buckets.py
       - src/robotsix_mill/stages/ci_fix.py
+      - src/robotsix_mill/stages/_ci_fix_checkpoint.py
       - src/robotsix_mill/stages/ci_fix_analysis.py
       - src/robotsix_mill/stages/ci_fix_helpers.py
       - src/robotsix_mill/stages/ci_fix_codeql.py
@@ -360,6 +361,7 @@ modules:
       - tests/stages/merge/conftest.py
       - tests/stages/test_ci_failure_buckets.py
       - tests/stages/test_ci_fix.py
+      - tests/stages/test_ci_fix_checkpoint.py
       - tests/stages/test_ci_fix_parsing.py
       - tests/stages/test_ci_fix_guards.py
       - tests/stages/test_ci_fix_out_of_scope.py

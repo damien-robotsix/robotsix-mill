@@ -37,6 +37,12 @@ from ..forge.auth import (
 from ..runtime import tracing
 from ..vcs import git_ops
 from . import dependency_fix
+from ._ci_fix_checkpoint import (
+    CiFixCheckpoint,
+    build_ci_fix_checkpoint_resume_history,
+    clear_ci_fix_checkpoint,
+    load_ci_fix_checkpoint,
+)
 from .base import Outcome, Stage, StageContext
 from .ci_failure_buckets import (
     classify_ci_failure,
@@ -96,6 +102,30 @@ _CI_FIX_HISTORY_MAX_ENTRIES = 20
 # agent's fix is still only local, so it is replayed on the freshest remote
 # state. Only after the budget is exhausted does the stage block for a human.
 _CI_PUSH_RETRY_BUDGET = 3
+
+
+def _is_budget_cap_error(exc: BaseException) -> bool:
+    """Whether *exc* is an operationally-resumable agent budget cap.
+
+    Covers pydantic-ai's ``UsageLimitExceeded`` (raised both by the
+    request-limit cap and by the ci_fix tool-call checkpoint boundary) and
+    the mill ``AgentBudgetError`` wrapper, plus a message fallback so a
+    re-wrapped cause still matches.
+    """
+    from ..agents.coding import AgentBudgetError
+
+    budget_types: tuple[type[BaseException], ...] = (AgentBudgetError,)
+    try:
+        from pydantic_ai.exceptions import UsageLimitExceeded
+
+        budget_types = (AgentBudgetError, UsageLimitExceeded)
+    except Exception:  # pragma: no cover - import guard
+        pass
+
+    if isinstance(exc, budget_types):
+        return True
+    msg = str(exc).lower()
+    return "usagelimit" in msg or "resumable (move to ready)" in msg
 
 
 def _trim_ci_fix_history(path: Path, max_entries: int) -> None:
@@ -306,6 +336,7 @@ class CIFixStage(Stage):
         self._last_agent_timed_out = False
         self._last_agent_timeout_elapsed: float = 0.0
         self._last_agent_crash_detail: str | None = None
+        self._last_agent_budget_capped = False
 
     def run(self, ticket: Ticket, ctx: StageContext) -> Outcome:
         """Process a FIXING_CI ticket: poll forge CI status on the ticket branch and, on failure, run the automated CI-fix agent to push corrective commits."""
@@ -1026,6 +1057,24 @@ class CIFixStage(Stage):
         # with the failing check(s) and elapsed time so the operator can
         # understand what CI check was being worked on, rather than a bare
         # "timed out after 2400s" from the worker.
+        # The agent exhausted its tool-call budget mid-investigation. A
+        # finalized checkpoint was written, so a resume continues from the
+        # last completed step instead of restarting. Block-as-resumable: the
+        # note matches ``blocked_auto_resume_patterns`` ("— resumable") so
+        # the ticket returns to READY and the next ci_fix pass picks up the
+        # checkpoint. The per-ticket total-attempt cap
+        # (``_check_total_attempt_cap``) still backstops a genuinely looping
+        # agent that never converges.
+        if result is None and self._last_agent_budget_capped:
+            check_names = _extract_check_names(failing_summary)
+            return Outcome(
+                State.BLOCKED,
+                "ci-fix agent budget cap — resumable (move to READY): the "
+                f"agent exhausted its tool-call budget while working on: "
+                f"{check_names}. A checkpoint of completed steps was saved; "
+                "the next pass resumes from there rather than restarting.",
+            )
+
         if result is None and self._last_agent_timed_out:
             check_names = _extract_check_names(failing_summary)
             timeout_log_url = failing_run_urls[0] if failing_run_urls else None
@@ -1380,9 +1429,15 @@ class CIFixStage(Stage):
         self._last_agent_timed_out = False
         self._last_agent_timeout_elapsed = 0.0
         self._last_agent_crash_detail = None
+        self._last_agent_budget_capped = False
         # The agent is one-shot (no CI waiting), so the timeout covers
         # only the LLM/edit/push work.
         timeout_s = s.ci_fix_agent_timeout_effective
+        # Budget-cap checkpoint handles persisted across the try so the
+        # exception path can finalize it (resumable) and the success path
+        # can clear it.
+        ws = None
+        checkpoint: CiFixCheckpoint | None = None
         try:
             # ci_fix is traced=False, so wrap the LLM agent in the
             # ticket's Langfuse session (session.id = ticket.id) — same
@@ -1394,6 +1449,36 @@ class CIFixStage(Stage):
                 )
                 memory_text = load_memory(
                     ci_fix_memory_path, max_chars=s.max_memory_chars
+                )
+
+                # --- budget-cap checkpoint ------------------------------
+                # Resume from a prior pass's finalized checkpoint (if any)
+                # so broad CI investigations continue from the last
+                # completed step instead of restarting; then start a fresh
+                # checkpoint for this pass.  A resume note matching
+                # ``agent budget cap — resumable (move to READY)`` is what
+                # brought the ticket back to READY.
+                ws = ctx.service.workspace(ticket)
+                resume_history: list[Any] | None = None
+                prior_checkpoint = load_ci_fix_checkpoint(ws)
+                if prior_checkpoint is not None:
+                    resume_history = build_ci_fix_checkpoint_resume_history(
+                        prior_checkpoint
+                    )
+                    log.info(
+                        "%s: resuming ci_fix from budget-cap checkpoint "
+                        "(%d prior step(s))",
+                        ticket.id,
+                        len(prior_checkpoint.steps),
+                    )
+                clear_ci_fix_checkpoint(ws)
+                checkpoint = CiFixCheckpoint(
+                    ws=ws,
+                    ticket_id=ticket.id,
+                    failing_summary=failing_summary,
+                    memory=memory_text,
+                    previous_attempts=_load_ci_fix_history(ctx, ticket),
+                    max_tool_calls=getattr(s, "coordinator_max_tool_calls", 300),
                 )
 
                 # Pass the per-repo remote_url and token so the agent's
@@ -1430,6 +1515,8 @@ class CIFixStage(Stage):
                         sandbox_image=ctx.repo_config.sandbox_image
                         if ctx.repo_config
                         else None,
+                        checkpoint=checkpoint,
+                        resume_history=resume_history,
                     )
 
                 if timeout_s > 0:
@@ -1461,7 +1548,34 @@ class CIFixStage(Stage):
 
                 if result.updated_memory:
                     persist_memory(ci_fix_memory_path, result.updated_memory)
+            # The pass completed within budget — the per-pass checkpoint is
+            # no longer a resume point.  (On a budget cap the exception path
+            # below keeps the finalized checkpoint.)
+            if ws is not None:
+                clear_ci_fix_checkpoint(ws)
         except Exception as e:
+            # A tool-call / request budget cap is operationally resumable:
+            # finalize the checkpoint (if not already finalized at the
+            # boundary) so the next pass continues from the last completed
+            # step, and flag it so the caller emits a resumable BLOCKED note.
+            if _is_budget_cap_error(e):
+                self._last_agent_budget_capped = True
+                if checkpoint is not None:
+                    try:
+                        checkpoint.finalize(Path(repo_dir))
+                    except Exception:
+                        log.warning(
+                            "%s: failed to finalize ci_fix checkpoint on budget cap",
+                            ticket.id,
+                            exc_info=True,
+                        )
+                log.warning(
+                    "%s: ci-fix agent hit the tool-call budget cap — "
+                    "checkpointed, resumable: %s",
+                    ticket.id,
+                    e,
+                )
+                return None
             # Record the crash type + message so the history entry written by
             # ``_write_ci_fix_artifact`` can surface *why* the prior attempt
             # died — the next ci_fix run needs that signal.
