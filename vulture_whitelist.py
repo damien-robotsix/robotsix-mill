@@ -545,13 +545,6 @@ implement_memory_path
 refine_memory_path
 retrospect_memory_path
 
-# triage_skip — legacy refine gate entry point kept during the
-# gate-chain collapse (stan-2619): the tested legacy composition of the
-# extracted pre-check/decision helpers; scheduled for removal together
-# with its direct tests in a follow-up cleanup.
-from robotsix_mill.stages.refine._triage import triage_skip
-
-triage_skip
 # _make_ci_status_fn — built the wait_for_ci status closure; its src caller
 # (_invoke_agent) was removed when the single-repo ci_fix agent became
 # one-shot. Retained and covered by tests/stages/test_ci_fix.py
