@@ -2009,6 +2009,12 @@
           "description": "OpenRouter management API key for credit-balance polling (https://openrouter.ai/keys).",
           "title": "Openrouter Management Key"
         },
+        "orphaned_pr_auto_dispose_foreign_prs": {
+          "default": false,
+          "description": "When true, auto-dispose foreign (non-mill) open PRs: merge green conflict-free ones directly and consolidate the rest into a single daily per-board digest ticket instead of one human-gate shell per PR.",
+          "title": "Orphaned Pr Auto Dispose Foreign Prs",
+          "type": "boolean"
+        },
         "orphaned_pr_bot_logins": {
           "description": "Bot author logins trusted for orphaned-PR actions. Empty = auto-resolve from forge.",
           "items": {

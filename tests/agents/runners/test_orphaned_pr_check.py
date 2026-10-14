@@ -1693,3 +1693,201 @@ class TestReconcileClosedTrackers:
         run_orphaned_pr_check_pass(repo_config=repo)
 
         svc.close_tracker.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Auto-disposition of foreign PRs (no human-gate flood)
+# ---------------------------------------------------------------------------
+
+
+class TestForeignPrAutoDispose:
+    def _green_forge(self, open_prs):
+        forge = _mock_forge(open_prs=open_prs)
+        forge.pr_status.return_value = {"state": "open", "mergeable": True}
+        forge.check_status.return_value = {"conclusion": "success"}
+        forge.merge_pr.return_value = {"merged": True}
+        return forge
+
+    def test_green_foreign_pr_merged_no_shell(self, monkeypatch):
+        """Green + conflict-free foreign PR → merged directly, no ticket."""
+        s = _settings(
+            orphaned_pr_dry_run=False,
+            orphaned_pr_auto_dispose_foreign_prs=True,
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = self._green_forge([_foreign_pr(101)])
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.foreign_merged == 1
+        assert result.foreign_filed == 0
+        forge.merge_pr.assert_called_once_with(source_branch="feature/human-change")
+        # no human-gate shell and no digest when everything merges green
+        svc.create.assert_not_called()
+        forge.close_pr.assert_not_called()
+        assert any(
+            "action=MERGE" in a and "classification=foreign_green" in a
+            for a in result.actions
+        )
+
+    def test_red_foreign_prs_consolidated_into_one_digest(self, monkeypatch):
+        """Several red foreign PRs → exactly one per-board digest ticket."""
+        s = _settings(
+            orphaned_pr_dry_run=False,
+            orphaned_pr_auto_dispose_foreign_prs=True,
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(
+            open_prs=[
+                _foreign_pr(201, branch="feature/a"),
+                _foreign_pr(202, branch="feature/b"),
+            ]
+        )
+        forge.pr_status.return_value = {"state": "open", "mergeable": True}
+        forge.check_status.return_value = {"conclusion": "failure"}
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.foreign_merged == 0
+        assert result.foreign_filed == 1
+        assert svc.create.call_count == 1
+        title = svc.create.call_args.kwargs["title"]
+        assert title.startswith("External PR review digest: test-owner/test-repo ")
+        body = svc.create.call_args.kwargs["description"]
+        assert "#201" in body and "#202" in body
+        assert "CI is failing" in body
+        forge.merge_pr.assert_not_called()
+        forge.close_pr.assert_not_called()
+
+    def test_conflicted_foreign_pr_into_digest(self, monkeypatch):
+        """A conflicted foreign PR is never merged — it lands in the digest."""
+        s = _settings(
+            orphaned_pr_dry_run=False,
+            orphaned_pr_auto_dispose_foreign_prs=True,
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(open_prs=[_foreign_pr(303)])
+        forge.pr_status.return_value = {"state": "open", "mergeable": False}
+        forge.check_status.return_value = {"conclusion": "success"}
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.foreign_merged == 0
+        assert result.foreign_filed == 1
+        body = svc.create.call_args.kwargs["description"]
+        assert "merge conflicts" in body
+        forge.merge_pr.assert_not_called()
+
+    def test_dry_run_no_merge_no_ticket(self, monkeypatch):
+        """Dry-run: green merge + digest intent logged, no mutations."""
+        s = _settings(
+            orphaned_pr_dry_run=True,
+            orphaned_pr_auto_dispose_foreign_prs=True,
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = self._green_forge([_foreign_pr(404)])
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.foreign_merged == 0
+        forge.merge_pr.assert_not_called()
+        svc.create.assert_not_called()
+        assert any("action=MERGE" in a and "dry_run=True" in a for a in result.actions)
+
+    def test_collapses_legacy_per_pr_shell(self, monkeypatch):
+        """A still-open legacy per-PR shell is auto-collapsed into the digest."""
+        s = _settings(
+            orphaned_pr_dry_run=False,
+            orphaned_pr_auto_dispose_foreign_prs=True,
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(open_prs=[_foreign_pr(201)])
+        forge.pr_status.return_value = {"state": "open", "mergeable": True}
+        forge.check_status.return_value = {"conclusion": "failure"}
+        _install_seams(monkeypatch, s, forge, svc)
+        legacy = _ticket(
+            ticket_id="20250101T000000Z-legacy-a1b2",
+            title="Track external PR: test-owner/test-repo#201",
+            state=State.READY,
+            source=SourceKind.ORPHANED_PR_CHECK,
+        )
+        svc.recent_proposals_for.return_value = [legacy]
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        # reconcile leaves it (PR #201 still open); collapse closes it.
+        assert svc.close_tracker.call_count == 1
+        assert svc.close_tracker.call_args.args[0] == legacy.id
+        assert result.foreign_filed == 1  # the digest
+        assert any("COLLAPSE_TRACKER" in a for a in result.actions)
+
+    def test_digest_deduped_same_day(self, monkeypatch):
+        """A digest already filed today → dedup skip, no second create."""
+        s = _settings(
+            orphaned_pr_dry_run=False,
+            orphaned_pr_auto_dispose_foreign_prs=True,
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = _mock_forge(open_prs=[_foreign_pr(505)])
+        forge.pr_status.return_value = {"state": "open", "mergeable": True}
+        forge.check_status.return_value = {"conclusion": "failure"}
+        _install_seams(monkeypatch, s, forge, svc)
+        today = datetime.now(UTC).date().isoformat()
+        existing = _ticket(
+            ticket_id="20250101T000000Z-digest-a1b2",
+            title=f"External PR review digest: test-owner/test-repo {today}",
+            state=State.READY,
+            source=SourceKind.ORPHANED_PR_CHECK,
+        )
+        svc.recent_proposals_for.return_value = [existing]
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        svc.create.assert_not_called()
+        assert result.foreign_filed == 0
+        assert result.foreign_skipped >= 1
+        assert any("DEDUP_SKIP" in a and "foreign_digest" in a for a in result.actions)
+
+    def test_green_merge_respects_action_cap(self, monkeypatch):
+        """Green merges are capped by max_actions_per_pass; the overflow
+        green PR is deferred into the digest."""
+        s = _settings(
+            orphaned_pr_dry_run=False,
+            orphaned_pr_auto_dispose_foreign_prs=True,
+            orphaned_pr_max_actions_per_pass=1,
+        )
+        repo = _repo()
+        svc = MagicMock()
+        svc.get.return_value = None
+        forge = self._green_forge(
+            [
+                _foreign_pr(601, branch="feature/a"),
+                _foreign_pr(602, branch="feature/b"),
+            ]
+        )
+        _install_seams(monkeypatch, s, forge, svc)
+
+        result = run_orphaned_pr_check_pass(repo_config=repo)
+
+        assert result.foreign_merged == 1
+        assert forge.merge_pr.call_count == 1
+        # the deferred green PR is folded into a digest
+        assert result.foreign_filed == 1
+        body = svc.create.call_args.kwargs["description"]
+        assert "deferred" in body

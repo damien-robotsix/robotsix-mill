@@ -89,6 +89,42 @@ whose head branch does *not* start with the branch prefix (e.g. a human
   forges that fall back to `list_open_pr_branches` (no metadata) do not
   process foreign PRs.
 
+## Auto-disposition of foreign PRs
+
+Set `orphaned_pr_check.auto_dispose_foreign_prs` to `true` (default
+`false`, opt-in) to stop filing one human-gate tracking shell per
+external PR. When enabled, the foreign-PR phase (which also runs when
+`track_foreign_prs` is on) **disposes** each candidate PR instead of
+filing a per-PR ticket:
+
+- **Green → merge.** The pass reads the PR's live CI conclusion
+  (`forge.check_status`) and mergeability (`forge.pr_status`). A PR that
+  is open, conflict-free (`mergeable is True`) and whose CI concluded
+  `success` is **merged directly** via the standard merge path
+  (`forge.merge_pr`) — no human-gate shell is created. Green merges count
+  against the combined `max_actions_per_pass` cap; a green PR deferred by
+  the cap is folded into the digest instead.
+- **Red / conflicted / ambiguous → one daily digest.** Every PR that is
+  not confirmed green (failing/pending/absent CI, merge conflicts,
+  mergeability not yet computed, or a merge that failed) is consolidated
+  into a **single digest ticket per board per day**, titled
+  `External PR review digest: <repo_id> <YYYY-MM-DD>` and routed via
+  `SourceKind.ORPHANED_PR_CHECK`. The body lists each PR with its number,
+  URL, author, branch and the reason it needs review. The deterministic
+  per-day title de-dupes against all `ORPHANED_PR_CHECK` tickets, so a
+  second pass the same day is a no-op. The human gate therefore sees at
+  most one external-PR tracking ticket per board.
+- **Legacy shells collapsed.** Any still-open per-PR
+  `Track external PR: <repo_id>#<n>` shell from the pre-auto-dispose
+  behaviour is auto-closed (`service.close_tracker`) and folded into the
+  digest, draining the existing backlog on the next run. Shells whose PR
+  has already merged or closed on the forge are also auto-closed by the
+  existing reconcile pass.
+- **Dry-run safe.** Under `dry_run` the pass logs `action=MERGE`,
+  `action=DIGEST`, `action=FILE_DIGEST` and `action=DRY_RUN_COLLAPSE`
+  intent lines but performs no merges, ticket creation, or tracker
+  closes.
+
 ## Idempotency
 
 A second pass is a no-op: PRs already closed on the forge are skipped

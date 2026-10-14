@@ -224,6 +224,7 @@
         "network_probe_host": "github.com",
         "obsolescence_gate_enabled": false,
         "obsolescence_request_limit": 6,
+        "orphaned_pr_auto_dispose_foreign_prs": false,
         "orphaned_pr_bot_logins": [],
         "orphaned_pr_check_interval_seconds": 0,
         "orphaned_pr_dry_run": true,
