@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -41,6 +41,42 @@ class CiFixResult(BaseModel):
     required_change_area: str = ""
 
 
+def _apply_ci_fix_checkpoint(
+    tools: list[Any],
+    checkpoint: Any | None,
+    resume_history: list[Any] | None,
+    repo_dir: Path,
+    *,
+    request_limit: int,
+) -> tuple[list[Any], dict[str, Any]]:
+    """Wire budget-cap checkpointing into the ci_fix agent run.
+
+    Wraps every tool so completed steps are persisted and the pass is
+    stopped (checkpoint finalized) a few tool calls before the coordinator
+    tool-call cap — a resume then continues from the last completed step
+    instead of re-exhausting the cap.  The wrapper is the same duck-typed
+    helper the implement coordinator uses.  On resume, the prior pass's
+    compact history is seeded via ``message_history`` so the agent does not
+    restart from scratch.
+
+    Returns the (possibly wrapped) tool list and the ``run_kwargs`` dict for
+    ``load_and_run_agent``.
+    """
+    from pydantic_ai.usage import UsageLimits
+
+    if checkpoint is not None and getattr(checkpoint, "enabled", False):
+        from .coordinating import _wrap_tools_with_checkpoint
+
+        tools = _wrap_tools_with_checkpoint(tools, checkpoint, repo_dir)
+
+    run_kwargs: dict[str, Any] = {
+        "usage_limits": UsageLimits(request_limit=request_limit)
+    }
+    if resume_history:
+        run_kwargs["message_history"] = resume_history
+    return tools, run_kwargs
+
+
 def run_ci_fix_agent(
     *,
     settings: Settings,
@@ -59,6 +95,8 @@ def run_ci_fix_agent(
     ci_status_fn: Callable[[int], tuple[str, str]] | None = None,
     ci_log_fetch_fn: Callable[[int, bool], str] | None = None,
     sandbox_image: str | None = None,
+    checkpoint: Any | None = None,
+    resume_history: list[Any] | None = None,
 ) -> CiFixResult:
     """Run the CI-fix agent, which OWNS the fix→push→verify loop.
 
@@ -84,8 +122,6 @@ def run_ci_fix_agent(
     """
     if not get_secrets().openrouter_api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
-
-    from pydantic_ai.usage import UsageLimits
 
     # --- load structured pattern memory ---
     from .ci_patterns import (
@@ -170,6 +206,17 @@ def run_ci_fix_agent(
     user_prompt_parts.append("Follow the system prompt exactly.")
     user_prompt = "\n\n".join(user_prompt_parts)
 
+    # Budget-cap checkpointing: wrap the tools and seed resume history so a
+    # capped pass can continue from its last completed step (see
+    # ``_apply_ci_fix_checkpoint``).
+    tools, run_kwargs = _apply_ci_fix_checkpoint(
+        tools,
+        checkpoint,
+        resume_history,
+        Path(repo_dir),
+        request_limit=settings.ci_fix_request_limit,
+    )
+
     result = load_and_run_agent(
         settings=settings,
         definition_name="ci_fix",
@@ -183,9 +230,7 @@ def run_ci_fix_agent(
             "branch": branch,
             "target": target,
         },
-        run_kwargs={
-            "usage_limits": UsageLimits(request_limit=settings.ci_fix_request_limit)
-        },
+        run_kwargs=run_kwargs,
     )
 
     # --- persist structured pattern entry ---
