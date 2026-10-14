@@ -99,6 +99,7 @@
         "config_sync_interval_seconds": 86400,
         "config_sync_request_limit": 80,
         "consult_request_limit": 15,
+        "coordinator_budget_cap_autosplit_threshold": 3,
         "coordinator_max_tool_calls": 300,
         "coordinator_request_limit": 500,
         "coordinator_timeout_overrides": {},

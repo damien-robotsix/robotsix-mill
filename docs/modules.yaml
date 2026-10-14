@@ -269,6 +269,7 @@ modules:
       - src/robotsix_mill/stages/implement/validation.py
       - src/robotsix_mill/stages/implement/validation_cleanup.py
       - src/robotsix_mill/stages/implement/implementation_logic.py
+      - src/robotsix_mill/stages/implement/budget_cap_autosplit.py
       - src/robotsix_mill/stages/implement/_no_change.py
       - src/robotsix_mill/stages/implement/implementation_editing.py
       - src/robotsix_mill/stages/implement/file_operations.py
@@ -321,6 +322,7 @@ modules:
       - tests/stages/test_registry.py
       - tests/stages/test_classify.py
       - tests/stages/implement/test_checkpoint.py
+      - tests/stages/implement/test_budget_cap_autosplit.py
       - tests/stages/implement/test_implement.py
       - tests/stages/implement/test_implement_scope_guardrail.py
       - tests/stages/implement/test_implement_preflight.py

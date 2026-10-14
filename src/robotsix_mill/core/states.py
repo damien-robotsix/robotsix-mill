@@ -148,6 +148,14 @@ TRANSITIONS: dict[State, set[State]] = {
         # straight to DONE. Mirrors the DELIVERABLE→DONE edge for the
         # downstream-empty-branch case.
         State.DONE,
+        # implement-stage budget-cap auto-split outcome: a ticket that keeps
+        # exhausting the coordinator tool-call budget (resume→cap→block loop)
+        # is genuinely too large for one pass. After the configured number of
+        # budget-cap pauses implement promotes it to an epic and spawns
+        # independently-shippable children (same ``promote_to_epic`` path as
+        # the CLASSIFYING/DRAFT→EPIC_OPEN edges), emitting this transition so
+        # the worker writes the canonical state event.
+        State.EPIC_OPEN,
     },
     # review APPROVE -> documenting; REQUEST_CHANGES -> back to ready
     # (the implement<->review loop never touches documenting).

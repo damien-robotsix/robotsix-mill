@@ -404,6 +404,29 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                 checkpoint=checkpoint,
             )
         except AgentBudgetError as e:
+            # Auto-split fallback: a ticket that keeps exhausting the
+            # tool-call budget despite checkpoint/resume is genuinely too
+            # large for one pass. After the configured number of budget-cap
+            # pauses, split it into independently-shippable epic children
+            # (reusing epic-breakdown) and retire the parent as an epic
+            # instead of looping resume→cap→block forever.
+            from .budget_cap_autosplit import maybe_autosplit_on_budget_cap
+
+            split_outcome = maybe_autosplit_on_budget_cap(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                target_branch,
+                ic.spec,
+            )
+            if split_outcome is not None:
+                return _AgentRunOutcome(
+                    failure=_SinglePassResult(
+                        next_action="return",
+                        outcome=split_outcome,
+                    )
+                )
             if e.conversation_state is not None and ws is not None:
                 save_conversation_state(ws, e.conversation_state, "implement")
             cls._finalize(
