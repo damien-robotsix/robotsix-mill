@@ -682,13 +682,24 @@ class PeriodicPassesMixin(_WorkerBase):
         """
         from datetime import datetime
 
-        from ...forge import get_forge
+        from ...forge import get_forge, rate_limit
 
         settings = self.ctx.settings
         interval = max(3600, settings.stale_branch_cleanup_interval_seconds)
         initial = self._initial_delay("stale-branch-cleanup", interval)
         await asyncio.sleep(initial)
         while True:
+            skip = rate_limit.should_skip(settings)
+            if skip is not None:
+                log.info(
+                    "stale-branch cleanup: skipping pass — GitHub rate-limit "
+                    "reserve reached (%d/%d remaining), reset %s",
+                    skip.remaining,
+                    skip.limit,
+                    skip.reset_hhmm(),
+                )
+                await asyncio.sleep(interval)
+                continue
             repos = get_repos_config()
             for repo_config in list(repos.repos.values()):
                 repo_label = repo_config.repo_id
@@ -749,11 +760,24 @@ class PeriodicPassesMixin(_WorkerBase):
             run_orphaned_pr_check_pass,
         )
 
+        from ...forge import rate_limit
+
         settings = self.ctx.settings
         interval = max(3600, settings.orphaned_pr_check_interval_seconds)
         initial = self._initial_delay("orphaned-pr-check", interval)
         await asyncio.sleep(initial)
         while True:
+            skip = rate_limit.should_skip(settings)
+            if skip is not None:
+                log.info(
+                    "orphaned-pr-check: skipping pass — GitHub rate-limit "
+                    "reserve reached (%d/%d remaining), reset %s",
+                    skip.remaining,
+                    skip.limit,
+                    skip.reset_hhmm(),
+                )
+                await asyncio.sleep(interval)
+                continue
             # Record each pass in the run registry so the daily interval
             # anchor survives a worker restart — without this, _initial_delay
             # finds no prior run and fires again ~immediately, causing a

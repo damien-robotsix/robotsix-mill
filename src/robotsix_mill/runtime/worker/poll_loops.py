@@ -23,6 +23,7 @@ from ...config import RepoConfig, get_repos_config, target_branch_for
 from ...core.dedup import _ci_draft_fingerprint, find_prior_matching_ticket
 from ...core.models import Comment, SourceKind, Ticket
 from ...core.states import State
+from ...forge import rate_limit
 from ..run_registry import RunRegistry
 from ..transient_errors import _TRANSIENT_HTTPX_EXCEPTIONS, is_network_down_error
 
@@ -1432,6 +1433,14 @@ class PollLoopsMixin(_WorkerBase):
 
         await asyncio.sleep(self._initial_delay("ci_monitor", min_interval))
         while True:
+            # Back off the whole tick when the GitHub quota is nearly
+            # exhausted — CI monitoring is non-urgent and would otherwise add
+            # a burst of actions/runs 403s each cycle.
+            skip = rate_limit.should_skip(settings)
+            if skip is not None:
+                rate_limit.log_skip(log, "ci-monitor poll", skip)
+                await asyncio.sleep(min_interval)
+                continue
             for rc in repo_configs:
                 # Skip repos that opt out of forge-CI gating.
                 from ...config.repo_settings import load_repo_skip_ci

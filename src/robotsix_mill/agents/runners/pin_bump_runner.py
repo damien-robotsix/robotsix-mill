@@ -28,7 +28,7 @@ from robotsix_mill.deps.internal_graph import (
     InternalDepGraph,
     build_internal_dep_graph,
 )
-from robotsix_mill.forge import Forge, get_forge
+from robotsix_mill.forge import Forge, get_forge, rate_limit
 from robotsix_mill.forge.auth import github_push_token, github_token
 from robotsix_mill.vcs import git_ops
 
@@ -141,7 +141,7 @@ def _fetch_one_pyproject(
             return None
 
 
-def run_pin_bump_pass(
+def run_pin_bump_pass(  # noqa: C901 — rate-limit guard + detection/actuator pipeline, each step with its own handling
     *,
     session_id: str,
     repo_config: RepoConfig | None = None,
@@ -163,6 +163,17 @@ def run_pin_bump_pass(
 
     settings = Settings()
     if not _claim_pass_slot(settings.pin_bump_interval_seconds, repo_config.repo_id):
+        return
+
+    skip = rate_limit.should_skip(settings)
+    if skip is not None:
+        log.info(
+            "pin_bump: skipping pass — GitHub rate-limit reserve reached "
+            "(%d/%d remaining), reset %s",
+            skip.remaining,
+            skip.limit,
+            skip.reset_hhmm(),
+        )
         return
 
     registry = get_repos_config()

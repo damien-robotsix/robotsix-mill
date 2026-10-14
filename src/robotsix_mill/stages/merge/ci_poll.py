@@ -27,7 +27,7 @@ from ...config import target_branch_for
 from ...core.block_reason import TARGET_BRANCH_RED, encode
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
-from ...forge import Forge, get_forge
+from ...forge import Forge, get_forge, rate_limit
 from ...stages.ci_transient import is_transient_ci_failure
 from ..base import Outcome, StageContext
 from ._base import _MergeStageBase
@@ -409,6 +409,13 @@ class CIPollMixin(_MergeStageBase):
         - PR closed → BLOCKED.
         """
         s = ctx.settings
+        # When the GitHub quota is nearly exhausted, do not poll — return a
+        # same-state re-poll and log one line per hour (the reset time)
+        # instead of a per-poll burst of 403s against pulls/check-runs.
+        skip = rate_limit.should_skip(s)
+        if skip is not None:
+            rate_limit.log_skip(log, f"{ticket.id}: merge", skip)
+            return Outcome(State.IMPLEMENT_COMPLETE)
         branch = ticket.branch or f"{s.branch_prefix}{ticket.id}"
         pr, early = self._check_pr_baseline(
             ticket, ctx, branch, State.IMPLEMENT_COMPLETE

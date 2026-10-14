@@ -145,7 +145,7 @@ def _refresh_pr_branch(forge: Any, ticket: Ticket) -> str:
     return f"PR branch not updated ({result.get('reason', 'unknown')})"
 
 
-def run_upstream_ci_recovery(settings: Settings) -> dict[str, Any]:
+def run_upstream_ci_recovery(settings: Settings) -> dict[str, Any]:  # noqa: C901 — rate-limit guard + per-board scan/status/resume pipeline
     """Execute one upstream-CI recovery pass across every known board.
 
     Returns ``{"resumed": n, "still_parked": n, "skipped": n}`` where
@@ -153,11 +153,22 @@ def run_upstream_ci_recovery(settings: Settings) -> dict[str, Any]:
     whose forge lookup failed (they stay parked and are retried next pass).
     """
     from ...config import target_branch_for
-    from ...forge import get_forge
+    from ...forge import get_forge, rate_limit
 
     resumed = 0
     still_parked = 0
     skipped = 0
+
+    skip = rate_limit.should_skip(settings)
+    if skip is not None:
+        log.info(
+            "upstream_ci_recovery: skipping pass — GitHub rate-limit reserve "
+            "reached (%d/%d remaining), reset %s",
+            skip.remaining,
+            skip.limit,
+            skip.reset_hhmm(),
+        )
+        return {"resumed": 0, "still_parked": 0, "skipped": 0}
 
     for board_id in _boards_to_scan(settings):
         service = TicketService(settings, board_id=board_id)

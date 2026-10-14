@@ -265,3 +265,31 @@ def test_transient_transport_error_is_retried(monkeypatch):
     resp = client.get("/x")
 
     assert resp.status_code == 200  # second attempt succeeded
+
+
+def test_do_records_github_rate_limit_snapshot(monkeypatch):
+    """A GitHub response's ``x-ratelimit-*`` headers are snapshotted by ``_do``."""
+    from robotsix_mill.forge import rate_limit
+
+    rate_limit._reset_for_tests()
+
+    class _HeaderResponse(_FakeResponse):
+        def __init__(self, status_code, headers):
+            super().__init__(status_code)
+            self.headers = headers
+
+    headers = {
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "42",
+        "x-ratelimit-reset": "9999999999",
+    }
+    _mock_httpx(monkeypatch, [_HeaderResponse(200, headers)])
+    client = _client()
+
+    client.get("/repos/o/r")
+
+    snap = rate_limit.most_constrained()
+    assert snap is not None
+    assert snap.remaining == 42
+    assert snap.limit == 5000
+    rate_limit._reset_for_tests()
