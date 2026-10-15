@@ -1544,6 +1544,77 @@ def test_list_review_comments_no_mr_returns_empty(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# list_pr_comments
+# ---------------------------------------------------------------------------
+
+
+def test_list_pr_comments_maps_non_system_notes(tmp_path, monkeypatch):
+    """Non-system notes → conversation comment dicts; system notes dropped."""
+    project_json = {"id": 42}
+    mr = {"iid": 7, "web_url": "http://x"}
+    notes = [
+        {
+            "id": 1,
+            "system": False,
+            "author": {"username": "alice"},
+            "created_at": "2026-01-01T00:00:00Z",
+            "body": "disposition: merged",
+        },
+        # system note (state change / label edit) → dropped
+        {"id": 2, "system": True, "author": {"username": "gitlab"}, "body": "merged"},
+        # inline note (has position) is still a conversation comment here —
+        # list_pr_comments filters only on `system`, mirroring GitHub.
+        {
+            "id": 3,
+            "system": False,
+            "author": {"username": "bob"},
+            "created_at": "2026-01-02T00:00:00Z",
+            "body": "nit",
+            "position": {"new_path": "a.py", "new_line": 5},
+        },
+        # note with null body → "" not None; missing author → ""
+        {"id": 4, "system": False, "author": None, "body": None},
+    ]
+    get_map = {
+        "merge_requests/7/notes": _make_response(200, notes),
+        "merge_requests": _make_response(200, [mr]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    comments = forge.list_pr_comments(source_branch="feature/x")
+    assert comments == [
+        {
+            "id": 1,
+            "author": "alice",
+            "created_at": "2026-01-01T00:00:00Z",
+            "body": "disposition: merged",
+        },
+        {
+            "id": 3,
+            "author": "bob",
+            "created_at": "2026-01-02T00:00:00Z",
+            "body": "nit",
+        },
+        {"id": 4, "author": "", "created_at": "", "body": ""},
+    ]
+
+
+def test_list_pr_comments_no_mr_returns_empty(tmp_path, monkeypatch):
+    """No MR → []."""
+    project_json = {"id": 42}
+    get_map = {
+        "merge_requests": _make_response(200, []),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.list_pr_comments(source_branch="feature/x") == []
+
+
+# ---------------------------------------------------------------------------
 # pr_review_status
 # ---------------------------------------------------------------------------
 
