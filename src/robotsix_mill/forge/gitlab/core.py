@@ -358,6 +358,33 @@ class GitLabForge(
             )
         return result
 
+    def list_pr_comments(self, *, source_branch: str) -> list[dict[str, Any]]:
+        """List plain conversation comments on the MR for *source_branch*.
+
+        Each comment dict has ``id``, ``author``, ``created_at``, and
+        ``body`` keys.  Returns an empty list when the MR is not found.
+        These are the conversation-level notes posted by
+        :meth:`post_pr_comment` (GitLab MR notes), with ``system: true``
+        notes (state changes, label edits, etc.) filtered out so only
+        human/bot conversation comments are surfaced — mirroring GitHub's
+        issue-comments endpoint.
+        """
+        project_path = _parse_gitlab_project_path(self._remote_url)
+        mr = self._find_mr(project_path=project_path, source_branch=source_branch)
+        if mr is None:
+            return []
+        notes = self._mr_notes(project_path=project_path, mr_iid=mr["iid"])
+        return [
+            {
+                "id": n["id"],
+                "author": (n.get("author") or {}).get("username", ""),
+                "created_at": n.get("created_at", ""),
+                "body": n.get("body") or "",
+            }
+            for n in notes
+            if not n.get("system")
+        ]
+
     def pr_review_status(self, *, source_branch: str) -> dict[str, Any] | None:
         """Aggregate review state from MR approvals and notes.
 
