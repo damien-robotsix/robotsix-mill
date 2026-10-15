@@ -1,15 +1,14 @@
-"""GitHub PR / branch-operations mixin — PR creation, status, reviews, merge.
+"""GitHub PR lifecycle mixin — PR creation, merge, close, reopen, comment.
 
-Split from ``github.py``.  Defines ``GitHubForgePRMixin`` that
-``GitHubForge`` inherits from.
+Split from the former monolithic ``github_pr.py``.  Defines
+``GitHubForgePRMixin`` that ``GitHubForge`` inherits from.  PR status
+queries live in ``github_pr_status.py`` and branch operations in
+``github_branch.py``.
 """
 
 from __future__ import annotations
 
 from typing import Any
-
-from ._github_pagination import _paginated_get
-from .base import BranchInfo, _parse_iso_utc
 
 
 def _api_message(response: Any) -> str:
@@ -37,35 +36,8 @@ def _existing_pr_lookup_unavailable(response: Any) -> bool:
     return getattr(response, "status_code", None) in (401, 403, 429)
 
 
-def _parse_pr_detail(pr: dict[str, Any]) -> dict[str, Any]:
-    """Normalize a GitHub PR detail dict into the standard status shape
-    (the same dict ``_get_pr`` / ``pr_status`` return).
-
-    GitHub computes mergeable asynchronously after every force-push.
-    Until the computation finishes, mergeable_state is "unknown" and
-    ``mergeable`` carries the STALE pre-push value — which the merge
-    stage previously treated as a real conflict and bounced into
-    REBASING. Surface "still computing" as ``None`` so the caller
-    waits the next poll instead.
-    """
-    mergeable_state = pr.get("mergeable_state")
-    mergeable = pr.get("mergeable")
-    if mergeable_state in (None, "unknown"):
-        mergeable = None
-    return {
-        "merged": bool(pr.get("merged")),
-        "state": pr.get("state", "open"),
-        "url": pr.get("html_url", ""),
-        "mergeable": mergeable,  # True/False/None
-        "mergeable_state": mergeable_state,
-        "sha": (pr.get("head") or {}).get("sha", ""),
-        "number": pr["number"],
-        "author": (pr.get("user") or {}).get("login", ""),
-    }
-
-
 class GitHubForgePRMixin:
-    """PR / branch operations for GitHub — mixed into ``GitHubForge``.
+    """PR lifecycle operations for GitHub — mixed into ``GitHubForge``.
 
     Expects ``self._http``, ``self._owner_repo``, ``self._head_owner``,
     ``self.settings``, ``self._repo_config`` to exist on the final class.
@@ -117,6 +89,7 @@ class GitHubForgePRMixin:
         )
 
     # --- HTTP seam (monkeypatched in tests) ---
+
     def _create_pr(
         self,
         *,
@@ -206,50 +179,6 @@ class GitHubForgePRMixin:
             break  # success or non-401 failure
         raise RuntimeError(f"GitHub PR create failed: {r.status_code} {r.text[:300]}")
 
-    def pr_status(self, *, source_branch: str) -> dict[str, Any] | None:
-        """Return the PR status for the PR whose head is *source_branch*.
-
-        Looks the PR up by head branch and returns the normalized status
-        ``dict`` (``merged``, ``state``, ``url``, ``mergeable``,
-        ``mergeable_state``, ``sha``, ``number``), or ``None`` when no PR
-        exists for the branch.
-        """
-        owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        return self._get_pr(owner=owner, repo=repo, head=source_branch)
-
-    def pr_status_by_url(self, *, url: str) -> dict[str, Any] | None:
-        """Return the PR status resolved directly from a PR *url*.
-
-        Parses the ``/pull/<number>`` segment out of *url* and fetches the
-        PR by number, returning the same status ``dict`` shape as
-        :meth:`pr_status`. Returns ``None`` when *url* has no PR number.
-        Unlike :meth:`pr_status` this still resolves a merged PR whose head
-        branch was auto-deleted on merge.
-        """
-        import re
-
-        m = re.search(r"/pull/(\d+)", url or "")
-        if not m:
-            return None
-        owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        return self._get_pr_by_number(owner=owner, repo=repo, number=int(m.group(1)))
-
-    def pr_files(self, *, source_branch: str) -> list[dict[str, Any]]:
-        """Return the list of files changed in *source_branch*'s PR.
-
-        Each entry is a ``dict`` with ``path``, ``status``, ``additions``,
-        and ``deletions``. Returns ``[]`` when no PR exists for the branch.
-        """
-        owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
-        if pr is None:
-            return []
-        return self._pr_files(
-            owner=owner,
-            repo=repo,
-            pull_number=pr["number"],
-        )
-
     def merge_pr(self, *, source_branch: str) -> dict[str, Any]:
         """Merge (squash) the PR whose head is *source_branch*.
 
@@ -259,259 +188,15 @@ class GitHubForgePRMixin:
         exists for the branch.
         """
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
+        pr = self._get_pr(  # type: ignore[attr-defined]
+            owner=owner, repo=repo, head=source_branch
+        )
         if pr is None:
             return {"merged": False, "reason": "PR not found"}
         return self._merge_pr(
             owner=owner,
             repo=repo,
             pull_number=pr["number"],
-        )
-
-    def close_pr(self, *, source_branch: str) -> bool:
-        """Close/decline the open PR for *source_branch* without merging.
-
-        Returns ``True`` on success, ``False`` when the PR is not found
-        or already closed.  Never raises.
-        """
-        owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
-        if pr is None:
-            return False
-        return self._close_pr(
-            owner=owner,
-            repo=repo,
-            pull_number=pr["number"],
-        )
-
-    def reopen_pr(self, *, source_branch: str) -> bool:
-        """Reopen a closed PR for *source_branch*.
-
-        Returns ``True`` on success, ``False`` when the PR is not found
-        or already open.  Never raises.
-        """
-        owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
-        if pr is None:
-            return False
-        return self._reopen_pr(
-            owner=owner,
-            repo=repo,
-            pull_number=pr["number"],
-        )
-
-    def post_pr_comment(self, *, source_branch: str, body: str) -> bool:
-        """Post a plain comment on the open PR for *source_branch*.
-
-        Returns ``True`` on success, ``False`` when the PR is not found.
-        Never raises.
-        """
-        owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
-        if pr is None:
-            return False
-        return self._post_pr_comment(
-            owner=owner,
-            repo=repo,
-            pull_number=pr["number"],
-            body=body,
-        )
-
-    def update_branch(self, *, source_branch: str) -> dict[str, Any]:
-        """Update *source_branch*'s PR head with the latest base branch.
-
-        Calls the GitHub ``update-branch`` API (merges the base into the PR
-        head), mutating remote state. Returns a ``dict`` with ``updated``
-        (bool) and a ``reason`` string — ``False``/"already up to date" when
-        there is nothing to merge, ``False``/"PR not found" when no PR
-        exists for the branch.
-        """
-        owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        pr = self._get_pr(owner=owner, repo=repo, head=source_branch)
-        if pr is None:
-            return {"updated": False, "reason": "PR not found"}
-        try:
-            r = self._http.put(  # type: ignore[attr-defined]
-                f"/repos/{owner}/{repo}/pulls/{pr['number']}/update-branch"
-            )
-            if r.status_code == 202:
-                return {"updated": True, "reason": "update-branch accepted"}
-            if r.status_code == 422:
-                # branch already up to date — nothing to do
-                return {"updated": False, "reason": "already up to date"}
-            return {"updated": False, "reason": f"HTTP {r.status_code}: {r.text[:200]}"}
-        except Exception as e:
-            return {"updated": False, "reason": str(e)}
-
-    def delete_branch(self, *, branch: str) -> bool:
-        """Delete remote *branch*, returning ``True`` once it is gone.
-
-        :param branch: branch name to delete.
-        Mutates remote state: issues a DELETE on the branch ref (resolved to
-        the fork for cross-repo targets). Returns ``True`` when the branch is
-        deleted or already absent, ``False`` on any other failure.
-        """
-        # For cross-repo targets the head branch lives on the fork,
-        # not the upstream repo.  Resolve the fork owner/repo so the
-        # DELETE goes to the right place instead of 404'ing on
-        # upstream.
-        if self._repo_config is not None:  # type: ignore[attr-defined]
-            cct = getattr(self._repo_config, "cross_repo_target", None)  # type: ignore[attr-defined]
-            if cct is not None and cct.fork_remote_url:
-                from .github import _parse_owner_repo
-
-                fork_owner, fork_repo = _parse_owner_repo(cct.fork_remote_url)
-                return self._delete_branch(
-                    owner=fork_owner, repo=fork_repo, branch=branch
-                )
-        owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        return self._delete_branch(owner=owner, repo=repo, branch=branch)
-
-    def list_branches(self) -> list[BranchInfo]:
-        """Return all branches of the repo as :class:`BranchInfo` entries.
-
-        Paginates the GitHub branches API and returns a ``list[BranchInfo]``
-        (``name``, ``last_commit_at``, ``is_protected``). Returns ``[]`` on
-        any API failure.
-        """
-        owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        return self._list_branches(owner=owner, repo=repo)
-
-    def list_open_pr_branches(self) -> set[str]:
-        """Return the set of head branch names that have an open PR.
-
-        Paginates the open-PRs API and collects each PR's head ref. Returns
-        a ``set[str]`` of branch names (empty on any API failure).
-        """
-        owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        return self._list_open_pr_branches(owner=owner, repo=repo)
-
-    def list_open_prs(self) -> list[dict[str, Any]]:
-        """Return [{branch, author_login}, ...] for all open PRs. Returns [] on failure."""
-        owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        return self._list_open_prs(owner=owner, repo=repo)
-
-    def _required_status_contexts(
-        self, *, owner: str, repo: str, branch: str
-    ) -> list[str]:
-        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
-            resp = c.get(
-                f"{api}/repos/{owner}/{repo}/branches/{branch}/protection"
-                "/required_status_checks",
-                headers=headers,
-            )
-            if resp.status_code == 401:
-                continue
-            # 404 = unprotected branch or no required checks configured;
-            # 403 = token cannot read protection. Both mean "unknown".
-            if resp.status_code in (403, 404):
-                return []
-            resp.raise_for_status()
-            body = resp.json()
-            checks = body.get("checks")
-            if isinstance(checks, list):
-                return [
-                    ctx
-                    for ctx in (chk.get("context") for chk in checks)
-                    if isinstance(ctx, str)
-                ]
-            return [ctx for ctx in body.get("contexts", []) if isinstance(ctx, str)]
-        return []
-
-    def required_status_contexts(self, *, target_branch: str) -> list[str]:
-        """Return the status contexts branch protection requires on *target_branch*.
-
-        Returns ``[]`` when the branch is unprotected, when the token lacks
-        ``administration: read`` (403), or on any other API failure — callers
-        must read ``[]`` as "unknown", never as "nothing is required".
-        """
-        owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        try:
-            return self._required_status_contexts(
-                owner=owner, repo=repo, branch=target_branch
-            )
-        except Exception:
-            return []
-
-    def get_authenticated_user_login(self) -> str:
-        """Return the login of the GitHub user/app associated with the current token.
-
-        Calls GET /user. For GitHub Apps installations the login appears as
-        '<app-slug>[bot]'. Caches the result on the instance after the first call.
-        Returns '' on any failure (MUST NOT raise).
-        """
-        cached = getattr(self, "_cached_bot_login", None)
-        if cached is not None:
-            return cached
-        try:
-            login = self._get_authenticated_user_login()
-        except Exception:
-            login = ""
-        self._cached_bot_login = login
-        return login
-
-    # --- HTTP seams (monkeypatched in tests) ---
-
-    def _get_pr(self, *, owner: str, repo: str, head: str) -> dict[str, Any] | None:
-        # For cross-repo targets the head branch lives on the fork,
-        # so the head filter must use the fork owner (not the upstream
-        # owner passed in *owner*).  _head_owner resolves accordingly.
-        head_owner = self._head_owner  # type: ignore[attr-defined]
-        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
-            lst = c.get(
-                f"{api}/repos/{owner}/{repo}/pulls",
-                headers=headers,
-                params={"head": f"{head_owner}:{head}", "state": "all"},
-            )
-            if lst.status_code == 401:
-                continue
-            lst.raise_for_status()
-            items = lst.json()
-            if not items:
-                return None
-            num = items[0]["number"]
-            d = c.get(f"{api}/repos/{owner}/{repo}/pulls/{num}", headers=headers)
-            if d.status_code == 401:
-                continue
-            d.raise_for_status()
-            pr = d.json()
-            return _parse_pr_detail(pr)
-        return None
-
-    def _get_pr_by_number(
-        self, *, owner: str, repo: str, number: int
-    ) -> dict[str, Any] | None:
-        """Fetch a PR's status directly by number via a single
-        ``GET /repos/{owner}/{repo}/pulls/{number}``.
-
-        Returns the same dict shape as ``_get_pr`` (including the
-        ``mergeable_state`` → ``mergeable`` normalization). Used by
-        ``pr_status_by_url`` to resolve a recorded PR url even after the
-        head branch was auto-deleted on merge (which makes the
-        branch-keyed ``_get_pr`` list come back empty).
-        """
-        r = self._http.get(f"/repos/{owner}/{repo}/pulls/{number}")  # type: ignore[attr-defined]
-        r.raise_for_status()
-        pr = r.json()
-        return _parse_pr_detail(pr)
-
-    def _pr_files(
-        self,
-        *,
-        owner: str,
-        repo: str,
-        pull_number: int,
-    ) -> list[dict[str, Any]]:
-        return _paginated_get(
-            self._http,  # type: ignore[attr-defined]
-            f"/repos/{owner}/{repo}/pulls/{pull_number}/files",
-            item_fn=lambda item: {
-                "path": item["filename"],
-                "status": item.get("status", "modified"),
-                "additions": item.get("additions", 0),
-                "deletions": item.get("deletions", 0),
-            },
-            fallback=[],
         )
 
     def _merge_pr(
@@ -580,6 +265,24 @@ class GitHubForgePRMixin:
                 result["retryable"] = True
             return result
 
+    def close_pr(self, *, source_branch: str) -> bool:
+        """Close/decline the open PR for *source_branch* without merging.
+
+        Returns ``True`` on success, ``False`` when the PR is not found
+        or already closed.  Never raises.
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        pr = self._get_pr(  # type: ignore[attr-defined]
+            owner=owner, repo=repo, head=source_branch
+        )
+        if pr is None:
+            return False
+        return self._close_pr(
+            owner=owner,
+            repo=repo,
+            pull_number=pr["number"],
+        )
+
     def _close_pr(
         self,
         *,
@@ -614,6 +317,24 @@ class GitHubForgePRMixin:
                 pull_number,
             )
             return False
+
+    def reopen_pr(self, *, source_branch: str) -> bool:
+        """Reopen a closed PR for *source_branch*.
+
+        Returns ``True`` on success, ``False`` when the PR is not found
+        or already open.  Never raises.
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        pr = self._get_pr(  # type: ignore[attr-defined]
+            owner=owner, repo=repo, head=source_branch
+        )
+        if pr is None:
+            return False
+        return self._reopen_pr(
+            owner=owner,
+            repo=repo,
+            pull_number=pr["number"],
+        )
 
     def _reopen_pr(
         self,
@@ -650,6 +371,25 @@ class GitHubForgePRMixin:
             )
             return False
 
+    def post_pr_comment(self, *, source_branch: str, body: str) -> bool:
+        """Post a plain comment on the open PR for *source_branch*.
+
+        Returns ``True`` on success, ``False`` when the PR is not found.
+        Never raises.
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        pr = self._get_pr(  # type: ignore[attr-defined]
+            owner=owner, repo=repo, head=source_branch
+        )
+        if pr is None:
+            return False
+        return self._post_pr_comment(
+            owner=owner,
+            repo=repo,
+            pull_number=pr["number"],
+            body=body,
+        )
+
     def _post_pr_comment(
         self,
         *,
@@ -685,83 +425,3 @@ class GitHubForgePRMixin:
                 pull_number,
             )
             return False
-
-    def _delete_branch(self, *, owner: str, repo: str, branch: str) -> bool:
-        try:
-            r = self._http.delete(  # type: ignore[attr-defined]
-                f"/repos/{owner}/{repo}/git/refs/heads/{branch}"
-            )
-            # 204 = deleted; 404/422 = ref does not exist (already gone,
-            # e.g. by GitHub auto-delete) — the branch is gone either way,
-            # which is the desired end state.
-            return r.status_code in (204, 404, 422)
-        except Exception:
-            return False
-
-    def _list_branches(self, *, owner: str, repo: str) -> list[BranchInfo]:
-        return _paginated_get(
-            self._http,  # type: ignore[attr-defined]
-            f"/repos/{owner}/{repo}/branches",
-            item_fn=lambda b: BranchInfo(
-                name=b["name"],
-                last_commit_at=_parse_iso_utc(
-                    (
-                        ((b.get("commit") or {}).get("commit") or {}).get("committer")
-                        or {}
-                    ).get("date")
-                ),
-                is_protected=bool(b.get("protected")),
-            ),
-            fallback=[],
-        )
-
-    def _list_open_pr_branches(self, *, owner: str, repo: str) -> set[str]:
-        result = _paginated_get(
-            self._http,  # type: ignore[attr-defined]
-            f"/repos/{owner}/{repo}/pulls",
-            params={"state": "open"},
-            item_fn=lambda pr: (pr.get("head") or {}).get("ref", ""),
-            fallback=[],
-        )
-        return {ref for ref in result if ref}
-
-    def _list_open_prs(self, *, owner: str, repo: str) -> list[dict[str, Any]]:
-        """Return per-PR metadata dicts for all open PRs.
-
-        Each dict carries: ``branch`` (head ref), ``author_login``,
-        ``number`` (PR number), ``url`` (html_url), and ``title``.
-
-        Uses :func:`_paginated_get` for pagination and 401-retry.
-        Returns [] on any failure (MUST NOT raise).
-        """
-        result = _paginated_get(
-            self._http,  # type: ignore[attr-defined]
-            f"/repos/{owner}/{repo}/pulls",
-            params={"state": "open"},
-            item_fn=lambda pr: (
-                (pr.get("head") or {}).get("ref"),
-                (pr.get("user") or {}).get("login", ""),
-                pr.get("number"),
-                pr.get("html_url", ""),
-                pr.get("title", ""),
-            ),
-            fallback=[],
-        )
-        return [
-            {
-                "branch": ref,
-                "author_login": author,
-                "number": number,
-                "url": url,
-                "title": title,
-            }
-            for ref, author, number, url, title in result
-            if ref
-        ]
-
-    def _get_authenticated_user_login(self) -> str:
-        with self._http.client() as (c, api, headers):  # type: ignore[attr-defined]
-            r = c.get(f"{api}/user", headers=headers)
-            if r.status_code == 200:
-                return r.json().get("login", "")
-        return ""
