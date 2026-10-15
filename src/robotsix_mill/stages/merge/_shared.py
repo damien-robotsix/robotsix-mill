@@ -14,6 +14,7 @@ keep capturing through the package split.
 
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import subprocess
@@ -30,6 +31,29 @@ from ...core.workspace import (
 )
 from ...vcs import git_ops
 from ..base import Outcome
+
+
+def _within_rebase_cooldown(artifacts_dir: Path, cooldown_hours: int) -> bool:
+    """Return True when the last successful rebase is still within the cooldown window.
+
+    Used by ``_handle_human_mr_approval`` to avoid continuously re-rebasing
+    PRs parked for human approval, and by the IMPLEMENT_COMPLETE empty-rollup
+    self-heal to avoid closing a PR whose head was just force-pushed by a
+    rebase (its CI has not fired yet).  When *cooldown_hours* is 0 the feature
+    is disabled and this always returns False.  Missing or unparseable
+    timestamps are treated as "no throttle" (the timestamp may not exist
+    yet, e.g. before the first rebase).
+    """
+    if cooldown_hours <= 0:
+        return False
+    ts_path = artifacts_dir / _REBASE_LAST_TS
+    try:
+        ts_text = ts_path.read_text(encoding="utf-8").strip()
+        last = datetime.datetime.fromisoformat(ts_text)
+        age = datetime.datetime.now(datetime.UTC) - last
+        return age.total_seconds() < cooldown_hours * 3600
+    except OSError, ValueError:
+        return False
 
 
 def _reconcile_with_remote_pr(
@@ -151,6 +175,7 @@ __all__ = [
     "_refresh_branch_for_ci",
     "_reset_consecutive",
     "_verify_merge_ancestor",
+    "_within_rebase_cooldown",
     "_workspace_repo_dir",
     "_write_counter",
     "_write_dropped_files",

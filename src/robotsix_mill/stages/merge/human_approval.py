@@ -15,10 +15,8 @@ the type checker on :class:`~._base._MergeStageBase`.
 
 from __future__ import annotations
 
-import datetime
 import hashlib
 import json
-from pathlib import Path
 from typing import Any, cast
 
 from ...config import target_branch_for
@@ -31,34 +29,13 @@ from ._shared import (
     _APPROVED_DIFF_HASH,
     _REBASE_COUNTER,
     _REBASE_FROM_STATE,
-    _REBASE_LAST_TS,
     _ci_truly_green,
     _merge_rejection_outcome,
     _verify_merge_ancestor,
+    _within_rebase_cooldown,
     _write_counter,
     log,
 )
-
-
-def _within_rebase_cooldown(artifacts_dir: Path, cooldown_hours: int) -> bool:
-    """Return True when the last successful rebase is still within the cooldown window.
-
-    Used by ``_handle_human_mr_approval`` to avoid continuously re-rebasing
-    PRs parked for human approval.  When *cooldown_hours* is 0 the feature
-    is disabled and this always returns False.  Missing or unparseable
-    timestamps are treated as "no throttle" (the timestamp may not exist
-    yet, e.g. before the first rebase).
-    """
-    if cooldown_hours <= 0:
-        return False
-    ts_path = artifacts_dir / _REBASE_LAST_TS
-    try:
-        ts_text = ts_path.read_text(encoding="utf-8").strip()
-        last = datetime.datetime.fromisoformat(ts_text)
-        age = datetime.datetime.now(datetime.UTC) - last
-        return age.total_seconds() < cooldown_hours * 3600
-    except OSError, ValueError:
-        return False
 
 
 class HumanApprovalMixin(_MergeStageBase):
