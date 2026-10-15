@@ -77,6 +77,8 @@ modules:
       - tests/core/test_states.py
       - tests/core/test_service.py
       - tests/core/test_service_epic.py
+      - tests/core/test_service_migrate.py
+      - tests/core/test_service_db_maintenance.py
       - tests/core/test_resume_blocked_ci_guards.py
       - tests/core/test_resume_blocked_implement_cycles.py
       - tests/core/test_sqlite_utils.py
@@ -152,6 +154,7 @@ modules:
       - src/robotsix_mill/forge/auth.py
       - src/robotsix_mill/forge/github.py
       - src/robotsix_mill/forge/github_pr.py
+      - src/robotsix_mill/forge/github_pr_reviews.py
       - src/robotsix_mill/forge/github_ci.py
       - src/robotsix_mill/forge/github_code_scanning.py
       - src/robotsix_mill/forge/github_dependabot.py
