@@ -3,7 +3,8 @@ branch via the GitHub REST API. The branch push is done by the deliver
 stage (it owns the repo dir); this only does the API call.
 
 Split from a monolithic file into domain-specific mixins:
-``github_pr.py`` (PR/branch ops), ``github_ci.py`` (CI/workflow),
+``github_pr.py`` (PR/branch ops), ``github_pr_reviews.py`` (PR review &
+comment handling), ``github_ci.py`` (CI/workflow),
 ``github_code_scanning.py`` (code scanning alerts).
 
 This module keeps the main ``GitHubForge`` class (which inherits from
@@ -22,6 +23,7 @@ from .github_ci import GitHubForgeCIMixin
 from .github_code_scanning import GitHubForgeCodeScanningMixin
 from .github_dependabot import GitHubForgeDependabotMixin
 from .github_pr import GitHubForgePRMixin
+from .github_pr_reviews import GitHubForgePRReviewsMixin
 from .github_security import GitHubForgeSecurityMixin
 
 # ---------------------------------------------------------------------------
@@ -81,6 +83,7 @@ def _parse_repo_info(r: dict[str, Any]) -> RepoInfo:
 
 class GitHubForge(
     GitHubForgePRMixin,
+    GitHubForgePRReviewsMixin,
     GitHubForgeCIMixin,
     GitHubForgeCodeScanningMixin,
     GitHubForgeDependabotMixin,

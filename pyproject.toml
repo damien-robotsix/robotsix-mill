@@ -329,6 +329,7 @@ convention = "google"
 "src/robotsix_mill/agents/dedup.py" = ["C901"]
 "src/robotsix_mill/agents/web_research.py" = ["C901"]
 "src/robotsix_mill/agents/runners/trace_review_runner.py" = ["C901"]
+"src/robotsix_mill/agents/runners/trace_review_classifier.py" = ["C901"]
 "src/robotsix_mill/agents/runners/trace_health_runner.py" = ["C901"]
 "src/robotsix_mill/agents/runners/verify_runner.py" = ["C901", "S110"]
 "src/robotsix_mill/runtime/tracing.py" = ["C901"]

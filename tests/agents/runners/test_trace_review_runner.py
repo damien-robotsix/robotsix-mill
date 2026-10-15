@@ -12,12 +12,14 @@ from pathlib import Path
 
 import pytest
 
-from robotsix_mill.agents.runners.trace_review_runner import (
+from robotsix_mill.agents.runners.trace_review_classifier import (
     _Baselines,
     _classify_trace,
     _compute_baselines,
-    _load_watermark,
     _median,
+)
+from robotsix_mill.agents.runners.trace_review_runner import (
+    _load_watermark,
     _save_watermark,
     run_trace_review_pass,
 )
