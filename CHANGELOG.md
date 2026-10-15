@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.17.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.16.0...v0.17.0) (2026-10-15)
+
+
+### Features
+
+* After merging a fix for a red scheduled workflow, dispatch that workflow on main so ci-auto-close can verify it (don't wait for the next cron) (20261013T074212Z-after-merging-a-fix-for-a-red-scheduled-4883) ([#3366](https://github.com/damien-robotsix/robotsix-mill/issues/3366)) ([e1e4ba4](https://github.com/damien-robotsix/robotsix-mill/commit/e1e4ba415699233f522529e2dc52c560295cf38b))
+* forge parity: GitLab missing CI workflow introspection/dispatch overrides (ci-auto-close + cancelled-run redispatch silently no-op on GitLab) (20261015T063801Z-forge-parity-gitlab-missing-ci-workflow-8e10) ([#3387](https://github.com/damien-robotsix/robotsix-mill/issues/3387)) ([3e96be0](https://github.com/damien-robotsix/robotsix-mill/commit/3e96be0319bfa55b38ee8e9a888343def17a0692))
+* Give code-quality scanner fan-out a bulk auto-disposition policy (stop flooding the human gate) (20261013T101256Z-give-code-quality-scanner-fan-out-a-bulk-4db7) ([#3362](https://github.com/damien-robotsix/robotsix-mill/issues/3362)) ([ea9d10d](https://github.com/damien-robotsix/robotsix-mill/commit/ea9d10db67b26a515a74df367b2151b7046e02a6))
+
+
+### Bug Fixes
+
+* forge parity: GitLab missing list_pr_comments override causes duplicate disposition comments (20261015T063801Z-forge-parity-gitlab-missing-list-pr-comm-723f) ([#3386](https://github.com/damien-robotsix/robotsix-mill/issues/3386)) ([2536a53](https://github.com/damien-robotsix/robotsix-mill/commit/2536a5329b12150a22f71baff5ef9edeb5156ebc))
+* pin_bump runner: stale own PRs saturate the in-flight cap and block every newer library bump (20260907T201805Z-pin-bump-runner-stale-own-prs-saturate-t-3e08) ([#3373](https://github.com/damien-robotsix/robotsix-mill/issues/3373)) ([550fa7e](https://github.com/damien-robotsix/robotsix-mill/commit/550fa7e2f4f32cb321a3be32b5b11b6530f5e58a))
+
 ## [0.16.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.15.12...v0.16.0) (2026-10-13)
 
 
