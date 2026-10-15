@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 import httpx
+import yaml
 
 from .._log_utils import _capture_failure_window, _strip_runner_noise
 from ..github_ci import _ANSI_RE, _MAX_FAILED_JOBS
@@ -56,6 +57,89 @@ def _map_pipeline_status(status: str) -> str | None:
     ):
         return "pending"
     return None
+
+
+def _gitlab_ci_triggers(ci_text: str, *, has_active_schedule: bool) -> list[str] | None:
+    """Derive GitHub-style trigger event names from a GitLab CI config.
+
+    GitLab has no per-workflow ``on:`` block — a single ``.gitlab-ci.yml``
+    plus zero or more pipeline schedules governs when a pipeline runs.  We
+    normalise that into the same event vocabulary the forge-agnostic
+    ci-auto-close runner expects (``schedule``, ``workflow_dispatch``,
+    ``push``, ``pull_request``), so :func:`_is_cron_only` can detect a
+    GitLab pipeline that only ever runs on a schedule.
+
+    Mapping, derived from the top-level ``workflow:rules`` block (GitLab's
+    ``$CI_PIPELINE_SOURCE`` discriminator):
+
+    - ``schedule`` → ``schedule`` (also added when an active pipeline
+      schedule exists)
+    - ``web`` / ``api`` / ``trigger`` → ``workflow_dispatch`` (GitLab also
+      always permits an API-triggered pipeline, so this is always present)
+    - ``push`` / ``$CI_COMMIT_BRANCH`` / ``$CI_COMMIT_TAG`` → ``push``
+    - ``merge_request_event`` / ``external_pull_request_event`` →
+      ``pull_request``
+
+    When there is no ``workflow:rules`` block, GitLab runs on every push by
+    default, so ``push`` is reported.  Returns ``None`` only when nothing
+    could be derived.
+    """
+    events: set[str] = {"workflow_dispatch"}
+    if has_active_schedule:
+        events.add("schedule")
+
+    data: Any = None
+    if ci_text:
+        try:
+            data = yaml.safe_load(ci_text)
+        except yaml.YAMLError:
+            data = None
+
+    rules: Any = None
+    if isinstance(data, dict):
+        workflow = data.get("workflow")
+        if isinstance(workflow, dict):
+            rules = workflow.get("rules")
+
+    if isinstance(rules, list):
+        for rule in rules:
+            cond = str(rule.get("if", "")) if isinstance(rule, dict) else str(rule)
+            events.update(_rule_events(cond))
+    else:
+        # No workflow:rules → GitLab runs on every push by default.
+        events.add("push")
+
+    return sorted(events) if events else None
+
+
+def _rule_events(cond: str) -> set[str]:
+    """Map a single GitLab ``workflow:rules`` ``if:`` condition to event names.
+
+    Helper for :func:`_gitlab_ci_triggers` — keeps the per-rule source-match
+    logic out of the loop so the caller stays within complexity limits.
+    """
+    events: set[str] = set()
+    if '"schedule"' in cond or "'schedule'" in cond:
+        events.add("schedule")
+    if (
+        '"push"' in cond
+        or "'push'" in cond
+        or "CI_COMMIT_BRANCH" in cond
+        or "CI_COMMIT_TAG" in cond
+    ):
+        events.add("push")
+    if "merge_request" in cond or "external_pull_request" in cond:
+        events.add("pull_request")
+    if (
+        '"web"' in cond
+        or "'web'" in cond
+        or '"api"' in cond
+        or "'api'" in cond
+        or '"trigger"' in cond
+        or "'trigger'" in cond
+    ):
+        events.add("workflow_dispatch")
+    return events
 
 
 class GitLabForgeCIMixin:
@@ -148,6 +232,92 @@ class GitLabForgeCIMixin:
             return self._rerun_workflow(project_path=project_path, run_id=run_id)
         except Exception as e:
             return {"rerun": False, "reason": str(e)}
+
+    def get_workflow_run(self, *, run_id: int) -> dict[str, Any] | None:
+        """Return a single GitLab pipeline by *run_id* (a pipeline id).
+
+        Best-effort: returns a dict with ``id``, ``name`` (the pipeline
+        ref — GitLab pipelines have no name), ``path`` (always ``""`` —
+        GitLab has no per-workflow file), ``head_branch``, ``head_sha``,
+        ``conclusion``, ``run_attempt`` (always ``None``), ``html_url``,
+        and ``created_at``, or ``None`` on any error.  Lets the
+        ci-auto-close runner recover anchors from a pipeline URL.
+        """
+        try:
+            from .core import _parse_gitlab_project_path
+
+            project_path = _parse_gitlab_project_path(self._remote_url)  # type: ignore[attr-defined]
+            return self._get_workflow_run(project_path=project_path, run_id=run_id)
+        except Exception:
+            return None
+
+    def list_workflow_run_jobs(self, *, run_id: int) -> list[dict[str, Any]]:
+        """List the jobs of pipeline *run_id*.
+
+        Returns a list of ``{"id", "name", "status", "conclusion"}`` dicts
+        (empty when the pipeline started no job — the queue-timeout
+        signature).  May raise on transport error so a caller can tell
+        "no jobs" apart from "could not tell" (mirrors the GitHub seam).
+        """
+        from .core import _parse_gitlab_project_path
+
+        project_path = _parse_gitlab_project_path(self._remote_url)  # type: ignore[attr-defined]
+        return self._list_workflow_run_jobs(project_path=project_path, run_id=run_id)
+
+    def has_online_runner(self) -> bool:
+        """True when any runner available to the project is online.
+
+        Best-effort: any lookup error returns ``False``.  Must NEVER raise.
+        """
+        try:
+            from .core import _parse_gitlab_project_path
+
+            project_path = _parse_gitlab_project_path(self._remote_url)  # type: ignore[attr-defined]
+            return self._has_online_runner(project_path=project_path)
+        except Exception:
+            return False
+
+    def get_workflow_triggers(self, *, path: str) -> list[str] | None:
+        """Return the trigger event names governing the project's pipeline.
+
+        GitLab has no per-workflow file, so *path* is accepted for ABC
+        parity but ignored — triggers are derived from the project's
+        pipeline schedules and the top-level ``workflow:rules`` block of
+        ``.gitlab-ci.yml`` (see :func:`_gitlab_ci_triggers`).  Returns a
+        list such as ``["schedule", "workflow_dispatch"]``, or ``None`` on
+        any error.  Must NEVER raise.
+        """
+        try:
+            from .core import _parse_gitlab_project_path
+
+            project_path = _parse_gitlab_project_path(self._remote_url)  # type: ignore[attr-defined]
+            return self._get_workflow_triggers(project_path=project_path, path=path)
+        except Exception:
+            return None
+
+    def dispatch_workflow(
+        self,
+        *,
+        workflow_id: int | None = None,
+        workflow_file: str | None = None,
+        ref: str = "main",
+    ) -> dict[str, Any]:
+        """Trigger a new pipeline on *ref*.
+
+        GitLab has a single ``.gitlab-ci.yml`` rather than selectable
+        workflows, so *workflow_id* / *workflow_file* are accepted for ABC
+        parity but ignored — every dispatch creates a fresh pipeline via
+        ``POST /projects/:id/pipeline``.  Returns ``{"dispatched": True}``
+        on success, ``{"dispatched": False, "reason": ...}`` otherwise.
+        Must NEVER raise.
+        """
+        try:
+            from .core import _parse_gitlab_project_path
+
+            project_path = _parse_gitlab_project_path(self._remote_url)  # type: ignore[attr-defined]
+            return self._dispatch_workflow(project_path=project_path, ref=ref)
+        except Exception as e:
+            return {"dispatched": False, "reason": str(e)}
 
     # -- HTTP seams (monkeypatched in tests) -------------------------------
 
@@ -365,3 +535,106 @@ class GitLabForgeCIMixin:
             }
         except Exception as e:
             return {"rerun": False, "reason": str(e)}
+
+    def _get_workflow_run(
+        self, *, project_path: str, run_id: int
+    ) -> dict[str, Any] | None:
+        """GET /projects/:id/pipelines/:pipeline_id → canonical run dict."""
+        pid = self._resolve_project_id(project_path)  # type: ignore[attr-defined]
+        r = self._http.get(f"/projects/{pid}/pipelines/{run_id}")  # type: ignore[attr-defined]
+        r.raise_for_status()
+        p = r.json()
+        return {
+            "id": p.get("id"),
+            # GitLab pipelines have no name; surface the ref instead.
+            "name": p.get("ref", ""),
+            # GitLab has no per-workflow file path.
+            "path": "",
+            "head_branch": p.get("ref"),
+            "head_sha": p.get("sha", ""),
+            "conclusion": _PIPELINE_CONCLUSION_MAP.get(p.get("status", "")),
+            # A GitLab retry yields a fresh pipeline id, not an attempt count.
+            "run_attempt": None,
+            "html_url": p.get("web_url", ""),
+            "created_at": p.get("created_at", ""),
+        }
+
+    def _list_workflow_run_jobs(
+        self, *, project_path: str, run_id: int
+    ) -> list[dict[str, Any]]:
+        """GET /projects/:id/pipelines/:pipeline_id/jobs."""
+        pid = self._resolve_project_id(project_path)  # type: ignore[attr-defined]
+        r = self._http.get(  # type: ignore[attr-defined]
+            f"/projects/{pid}/pipelines/{run_id}/jobs",
+            params={"per_page": 100},
+        )
+        r.raise_for_status()
+        jobs = r.json()
+        return [
+            {
+                "id": j.get("id"),
+                "name": j.get("name", ""),
+                "status": j.get("status"),
+                "conclusion": _PIPELINE_CONCLUSION_MAP.get(j.get("status", "")),
+            }
+            for j in jobs
+        ]
+
+    def _has_online_runner(self, *, project_path: str) -> bool:
+        """GET /projects/:id/runners?status=online → any runner returned."""
+        pid = self._resolve_project_id(project_path)  # type: ignore[attr-defined]
+        r = self._http.get(  # type: ignore[attr-defined]
+            f"/projects/{pid}/runners",
+            params={"status": "online"},
+        )
+        r.raise_for_status()
+        return bool(r.json())
+
+    def _dispatch_workflow(self, *, project_path: str, ref: str) -> dict[str, Any]:
+        """POST /projects/:id/pipeline → create (dispatch) a pipeline on *ref*."""
+        pid = self._resolve_project_id(project_path)  # type: ignore[attr-defined]
+        r = self._http.post(  # type: ignore[attr-defined]
+            f"/projects/{pid}/pipeline",
+            json={"ref": ref},
+        )
+        if r.status_code in (200, 201):
+            return {"dispatched": True}
+        return {
+            "dispatched": False,
+            "reason": f"pipeline endpoint returned HTTP {r.status_code}",
+        }
+
+    def _get_workflow_triggers(
+        self, *, project_path: str, path: str
+    ) -> list[str] | None:
+        """Derive trigger event names from schedules + ``.gitlab-ci.yml``.
+
+        *path* is ignored (GitLab has no per-workflow file). Fetches the
+        project's active pipeline schedules and the raw ``.gitlab-ci.yml``
+        on the configured target branch, then normalises them via
+        :func:`_gitlab_ci_triggers`.
+        """
+        from urllib.parse import quote
+
+        from ...config import target_branch_for
+
+        pid = self._resolve_project_id(project_path)  # type: ignore[attr-defined]
+        ref = target_branch_for(self.settings, self._repo_config)  # type: ignore[attr-defined]
+
+        sched = self._http.get(  # type: ignore[attr-defined]
+            f"/projects/{pid}/pipeline_schedules",
+            params={"scope": "active"},
+        )
+        sched.raise_for_status()
+        has_active_schedule = bool(sched.json())
+
+        ci_text = ""
+        encoded = quote(".gitlab-ci.yml", safe="")
+        f = self._http.get(  # type: ignore[attr-defined]
+            f"/projects/{pid}/repository/files/{encoded}/raw",
+            params={"ref": ref},
+        )
+        if f.status_code == 200:
+            ci_text = f.text
+
+        return _gitlab_ci_triggers(ci_text, has_active_schedule=has_active_schedule)

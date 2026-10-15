@@ -2518,3 +2518,290 @@ def test_required_status_contexts_returns_empty_list_matching_github_contract(
     assert all(isinstance(c, str) for c in result)
     # No API reachable / no protection configured → still [] for any target.
     assert forge.required_status_contexts(target_branch="release/1.0") == []
+
+
+# ---------------------------------------------------------------------------
+# get_workflow_run — single-pipeline lookup (ci-auto-close anchor recovery)
+# ---------------------------------------------------------------------------
+
+
+def test_get_workflow_run_maps_pipeline(tmp_path, monkeypatch):
+    """GET /projects/:id/pipelines/:id → canonical run dict."""
+    project_json = {"id": 42}
+    pipeline = {
+        "id": 100,
+        "ref": "feature/x",
+        "sha": "abc123",
+        "status": "failed",
+        "web_url": "http://gl/pipelines/100",
+        "created_at": "2026-03-03T00:00:00Z",
+    }
+    get_map = {
+        "pipelines/100": _make_response(200, pipeline),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    run = forge.get_workflow_run(run_id=100)
+    assert run == {
+        "id": 100,
+        "name": "feature/x",
+        "path": "",
+        "head_branch": "feature/x",
+        "head_sha": "abc123",
+        "conclusion": "failure",
+        "run_attempt": None,
+        "html_url": "http://gl/pipelines/100",
+        "created_at": "2026-03-03T00:00:00Z",
+    }
+
+
+def test_get_workflow_run_error_returns_none(tmp_path, monkeypatch):
+    """Any error (missing pipeline / transport) → None, never raises."""
+    project_json = {"id": 42}
+    get_map = {
+        "pipelines/100": _make_response(404, {}, "not found"),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.get_workflow_run(run_id=100) is None
+
+
+# ---------------------------------------------------------------------------
+# list_workflow_run_jobs — pipeline jobs (cancelled-pipeline redispatch guard)
+# ---------------------------------------------------------------------------
+
+
+def test_list_workflow_run_jobs_maps_jobs(tmp_path, monkeypatch):
+    """GET /projects/:id/pipelines/:id/jobs → id/name/status/conclusion dicts."""
+    project_json = {"id": 42}
+    jobs = [
+        {"id": 11, "name": "build", "status": "failed"},
+        {"id": 12, "name": "test", "status": "success"},
+    ]
+    get_map = {
+        "pipelines/100/jobs": _make_response(200, jobs),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_workflow_run_jobs(run_id=100)
+    assert result == [
+        {"id": 11, "name": "build", "status": "failed", "conclusion": "failure"},
+        {"id": 12, "name": "test", "status": "success", "conclusion": "success"},
+    ]
+
+
+def test_list_workflow_run_jobs_empty_when_no_jobs(tmp_path, monkeypatch):
+    """A pipeline that started no job → [] (the queue-timeout signature)."""
+    project_json = {"id": 42}
+    get_map = {
+        "pipelines/100/jobs": _make_response(200, []),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.list_workflow_run_jobs(run_id=100) == []
+
+
+def test_list_workflow_run_jobs_raises_on_transport_error(tmp_path, monkeypatch):
+    """Transport error propagates so the caller can tell 'no jobs' from
+    'could not tell' (mirrors the GitHub seam)."""
+    project_json = {"id": 42}
+    get_map = {
+        "pipelines/100/jobs": _make_response(500, {}, "boom"),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    with pytest.raises(real_httpx.HTTPStatusError):
+        forge.list_workflow_run_jobs(run_id=100)
+
+
+# ---------------------------------------------------------------------------
+# has_online_runner
+# ---------------------------------------------------------------------------
+
+
+def test_has_online_runner_true_when_runner_returned(tmp_path, monkeypatch):
+    """GET /projects/:id/runners?status=online returns a runner → True."""
+    project_json = {"id": 42}
+    get_map = {
+        "projects/42/runners": _make_response(200, [{"id": 5, "status": "online"}]),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.has_online_runner() is True
+
+
+def test_has_online_runner_false_when_empty(tmp_path, monkeypatch):
+    """No online runners → False."""
+    project_json = {"id": 42}
+    get_map = {
+        "projects/42/runners": _make_response(200, []),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.has_online_runner() is False
+
+
+def test_has_online_runner_error_returns_false(tmp_path, monkeypatch):
+    """Any lookup error → False, never raises."""
+    project_json = {"id": 42}
+    get_map = {
+        "projects/42/runners": _make_response(500, {}, "boom"),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.has_online_runner() is False
+
+
+# ---------------------------------------------------------------------------
+# dispatch_workflow — create a pipeline on a ref
+# ---------------------------------------------------------------------------
+
+
+def test_dispatch_workflow_201_returns_dispatched_true(tmp_path, monkeypatch):
+    """POST /projects/:id/pipeline → 201 → {"dispatched": True}."""
+    project_json = {"id": 42}
+    get_map = {"projects/ns%2Fproject": _make_response(200, project_json)}
+    captured = _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=_make_response(201, {"id": 100}),
+    )
+
+    forge = _forge(tmp_path)
+    result = forge.dispatch_workflow(workflow_file="ci.yml", ref="main")
+    assert result == {"dispatched": True}
+    assert "/projects/42/pipeline" in captured["post_url"]
+    assert captured["post_payload"] == {"ref": "main"}
+
+
+def test_dispatch_workflow_non_success_returns_dispatched_false(tmp_path, monkeypatch):
+    """A non-2xx response → {"dispatched": False, "reason": ...}."""
+    project_json = {"id": 42}
+    get_map = {"projects/ns%2Fproject": _make_response(200, project_json)}
+    _mock_httpx(
+        monkeypatch,
+        get_map=get_map,
+        post_response=_make_response(400, {"message": "bad ref"}),
+    )
+
+    forge = _forge(tmp_path)
+    result = forge.dispatch_workflow(workflow_id=7, ref="main")
+    assert result["dispatched"] is False
+    assert "HTTP 400" in result["reason"]
+
+
+def test_dispatch_workflow_resolve_failure_returns_dispatched_false(
+    tmp_path, monkeypatch
+):
+    """Project-resolution failure is caught → {"dispatched": False}."""
+    _mock_httpx(monkeypatch, get_map={})
+
+    forge = _forge(tmp_path)
+    result = forge.dispatch_workflow(ref="main")
+    assert result["dispatched"] is False
+    assert result["reason"]
+
+
+# ---------------------------------------------------------------------------
+# get_workflow_triggers — schedule + .gitlab-ci.yml workflow:rules
+# ---------------------------------------------------------------------------
+
+
+def test_get_workflow_triggers_cron_only(tmp_path, monkeypatch):
+    """Active schedule + workflow:rules restricted to schedule → cron-only
+    trigger set (schedule + workflow_dispatch, no push/pull_request)."""
+    project_json = {"id": 42}
+    ci_yaml = (
+        "workflow:\n"
+        "  rules:\n"
+        "    - if: '$CI_PIPELINE_SOURCE == \"schedule\"'\n"
+        "    - if: '$CI_PIPELINE_SOURCE == \"web\"'\n"
+    )
+    get_map = {
+        "pipeline_schedules": _make_response(200, [{"id": 1, "active": True}]),
+        ".gitlab-ci.yml": _make_response(200, {}, ci_yaml),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    from robotsix_mill.agents.runners.ci_auto_close_runner import _is_cron_only
+
+    forge = _forge(tmp_path)
+    triggers = forge.get_workflow_triggers(path="ignored")
+    assert triggers is not None
+    assert set(triggers) == {"schedule", "workflow_dispatch"}
+    assert _is_cron_only(triggers) is True
+
+
+def test_get_workflow_triggers_push_disqualifies_cron_only(tmp_path, monkeypatch):
+    """A push rule → push trigger present → not cron-only."""
+    project_json = {"id": 42}
+    ci_yaml = (
+        "workflow:\n"
+        "  rules:\n"
+        "    - if: '$CI_PIPELINE_SOURCE == \"schedule\"'\n"
+        "    - if: '$CI_PIPELINE_SOURCE == \"push\"'\n"
+    )
+    get_map = {
+        "pipeline_schedules": _make_response(200, [{"id": 1}]),
+        ".gitlab-ci.yml": _make_response(200, {}, ci_yaml),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    from robotsix_mill.agents.runners.ci_auto_close_runner import _is_cron_only
+
+    forge = _forge(tmp_path)
+    triggers = forge.get_workflow_triggers(path="ignored")
+    assert "push" in (triggers or [])
+    assert _is_cron_only(triggers) is False
+
+
+def test_get_workflow_triggers_no_rules_defaults_to_push(tmp_path, monkeypatch):
+    """No workflow:rules and no schedule → push (GitLab's default)."""
+    project_json = {"id": 42}
+    get_map = {
+        "pipeline_schedules": _make_response(200, []),
+        ".gitlab-ci.yml": _make_response(200, {}, "stages:\n  - build\n"),
+        "projects/ns%2Fproject": _make_response(200, project_json),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    triggers = forge.get_workflow_triggers(path="ignored")
+    assert "push" in (triggers or [])
+
+
+def test_get_workflow_triggers_error_returns_none(tmp_path, monkeypatch):
+    """Project-resolution failure → None, never raises."""
+    _mock_httpx(monkeypatch, get_map={})
+
+    forge = _forge(tmp_path)
+    assert forge.get_workflow_triggers(path="ignored") is None
+
+
+def test_gitlab_ci_triggers_helper_schedule_from_active_flag():
+    """The helper adds 'schedule' when an active schedule exists even with
+    no workflow:rules block."""
+    from robotsix_mill.forge.gitlab.ci import _gitlab_ci_triggers
+
+    triggers = _gitlab_ci_triggers("", has_active_schedule=True)
+    assert triggers is not None
+    assert "schedule" in triggers
+    assert "workflow_dispatch" in triggers
