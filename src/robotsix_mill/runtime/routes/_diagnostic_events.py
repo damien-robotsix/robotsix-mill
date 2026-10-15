@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...agents.runners.diagnostic_events import (
     DiagnosticEvent,
@@ -26,8 +26,12 @@ router = APIRouter(tags=["DiagnosticEvents"])
 class DiagnosticEventsResponse(BaseModel):
     """Response body for ``GET /diagnostic-events``."""
 
-    events: list[dict[str, Any]]
-    category_counts: dict[str, int]
+    events: list[dict[str, Any]] = Field(
+        description="Diagnostic event records, each a JSON object from the event store."
+    )
+    category_counts: dict[str, int] = Field(
+        description="Count of events per category across the returned events."
+    )
 
 
 def _resolve_board_ids(

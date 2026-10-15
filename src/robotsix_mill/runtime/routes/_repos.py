@@ -17,7 +17,7 @@ from pathlib import Path
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from ...config import RepoConfig, ReposRegistry, Settings
 from ...config.repos import _reset_repos_config, load_repos_config
@@ -71,10 +71,16 @@ class RepoRegistration(BaseModel):
 class RepoRegistrationResult(BaseModel):
     """Response body for POST /repos."""
 
-    repo_id: str
-    board_id: str
-    forge_remote_url: str | None
-    registered: bool  # True = newly written, False = already existed
+    repo_id: str = Field(description="ID of the registered repo.")
+    board_id: str = Field(
+        description="Board ID associated with the repo (defaults to repo_id)."
+    )
+    forge_remote_url: str | None = Field(
+        description="Forge remote URL for the repo; None when not provided."
+    )
+    registered: bool = Field(
+        description="True when the repo was newly written; False when it already existed."
+    )
 
 
 @router.post(

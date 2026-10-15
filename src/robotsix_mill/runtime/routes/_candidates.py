@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...agents.candidates import (
     Candidate,
@@ -36,15 +36,25 @@ router = APIRouter(tags=["Candidates"])
 class CandidateRead(BaseModel):
     """JSON shape returned to the board UI."""
 
-    candidate_id: str
-    section: str
-    rule: str
-    rationale: str
-    proposed_at: str
-    source_ticket: str
-    status: str
-    filed_ticket: str | None
-    repo_id: str
+    candidate_id: str = Field(
+        description="Stable identifier for the AGENT.md candidate entry."
+    )
+    section: str = Field(description="AGENT.md section the proposed rule belongs to.")
+    rule: str = Field(description="The proposed AGENT.md rule text.")
+    rationale: str = Field(description="Why the rule was proposed.")
+    proposed_at: str = Field(
+        description="ISO timestamp when the candidate was proposed."
+    )
+    source_ticket: str = Field(
+        description="ID of the ticket whose retrospect produced this candidate."
+    )
+    status: str = Field(
+        description="Candidate lifecycle status (e.g. pending, validated, rejected)."
+    )
+    filed_ticket: str | None = Field(
+        description="ID of the ticket filed when the candidate was validated; None otherwise."
+    )
+    repo_id: str = Field(description="ID of the board/repo this candidate belongs to.")
 
 
 def _to_read(c: Candidate, repo_id: str) -> CandidateRead:
