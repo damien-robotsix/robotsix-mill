@@ -12,11 +12,24 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 from ...config import Settings
+
+# Public API consumed by ``trace_review_runner`` (phase-2 orchestration).
+# Declared here so the module constants read by the runner are recognized
+# as exports rather than flagged as unused globals.
+__all__ = [
+    "_CONFIDENCE_RANK",
+    "_PER_OBS_COST_RE",
+    "_SELF_REFERENTIAL_TRACE_NAMES",
+    "_TraceFlags",
+    "_classify_trace",
+    "_compute_baselines",
+]
 
 # ---------------------------------------------------------------------------
 # Phase 1 — deterministic classifier
@@ -59,7 +72,7 @@ class _Baselines:
     obs_median: float | None
 
 
-def _median(values: list[float]) -> float:
+def _median(values: Sequence[float]) -> float:
     sorted_v = sorted(values)
     n = len(sorted_v)
     if n == 0:
