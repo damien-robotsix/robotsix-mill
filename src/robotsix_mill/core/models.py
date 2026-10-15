@@ -296,102 +296,190 @@ class Comment(SQLModel, table=True):
 class TicketCreate(SQLModel):
     """API request shape for creating a new ticket."""
 
-    title: str
-    description: str = ""
-    depends_on: str | None = None
+    title: str = Field(description="User-provided ticket title.")
+    description: str = Field(
+        default="", description="Ticket spec body (Markdown); empty for a stub."
+    )
+    depends_on: str | None = Field(
+        default=None,
+        description="JSON array of ticket IDs this ticket depends on; None for none.",
+    )
     # Ticket IDs to auto-unblock (BLOCKED -> DRAFT) when this ticket
     # completes. Accepts a JSON array of IDs.
-    unblocks: list[str] | None = None
-    source: str = SourceKind.USER
-    kind: TicketKind = TicketKind.TASK
-    parent_id: str | None = None
-    repo_id: str | None = None
+    unblocks: list[str] | None = Field(
+        default=None,
+        description=(
+            "Ticket IDs to auto-unblock (BLOCKED -> DRAFT) when this ticket completes."
+        ),
+    )
+    source: str = Field(
+        default=SourceKind.USER,
+        description="Origin of the ticket (e.g. 'user', 'retrospect', 'audit').",
+    )
+    kind: TicketKind = Field(
+        default=TicketKind.TASK, description="Ticket kind: task, inquiry, or epic."
+    )
+    parent_id: str | None = Field(
+        default=None, description="ID of the parent epic ticket, if any."
+    )
+    repo_id: str | None = Field(
+        default=None,
+        description="Target board/repo ID; defaults to the current board when None.",
+    )
 
 
 class TicketTransition(SQLModel):
     """API request shape for transitioning a ticket to a new state."""
 
-    state: State
-    note: str | None = None
+    state: State = Field(description="Target state to transition the ticket into.")
+    note: str | None = Field(
+        default=None,
+        description="Optional human-readable note recorded with the transition.",
+    )
 
 
 class TicketMigrate(SQLModel):
     """API request shape for migrating a ticket to another board."""
 
-    repo_id: str
-    note: str | None = None
+    repo_id: str = Field(
+        description="Destination board/repo ID to migrate the ticket to."
+    )
+    note: str | None = Field(
+        default=None, description="Optional note recorded with the migration."
+    )
 
 
 class TicketDescriptionUpdate(SQLModel):
     """API request shape for updating a ticket's spec description."""
 
-    description: str
-    reset_fingerprint_guard: bool = False
-    author: str = "operator"
+    description: str = Field(description="New ticket spec body (Markdown).")
+    reset_fingerprint_guard: bool = Field(
+        default=False,
+        description="When True, reset the content-fingerprint guard that skips no-op redrafts.",
+    )
+    author: str = Field(
+        default="operator", description="Who authored the description update."
+    )
 
 
 class TicketRead(SQLModel):
     """API response shape for reading a ticket, including computed fields like unmet_deps and PR URL."""
 
-    id: str
-    title: str
-    state: State
-    kind: str
-    branch: str | None
-    parent_id: str | None
-    parent_title: str | None = None
-    source: str
-    origin_session: str | None
-    origin_session_url: str | None
-    cost_usd: float
-    pre_redraft_cost_usd: float = 0.0
-    pre_redraft_trace_count: int = 0
-    cumulative_cost: float | None = None
-    depends_on: str | None
-    unmet_deps: list[str]
+    id: str = Field(description="Unique ticket identifier.")
+    title: str = Field(description="User-provided ticket title.")
+    state: State = Field(description="Current state in the pipeline state machine.")
+    kind: str = Field(description="Ticket kind: task, inquiry, or epic.")
+    branch: str | None = Field(
+        description="Git branch created by the implement stage; None before implementation."
+    )
+    parent_id: str | None = Field(description="ID of the parent epic ticket, if any.")
+    parent_title: str | None = Field(
+        default=None, description="Title of the parent epic ticket, if any."
+    )
+    source: str = Field(description="Origin of the ticket (e.g. 'user', 'retrospect').")
+    origin_session: str | None = Field(
+        description="Langfuse session ID that produced this ticket; None for human/API-created."
+    )
+    origin_session_url: str | None = Field(
+        description="Langfuse UI URL for the originating session; None when unavailable."
+    )
+    cost_usd: float = Field(
+        description="Cumulative LLM spend in USD, synced from Langfuse session totals."
+    )
+    pre_redraft_cost_usd: float = Field(
+        default=0.0,
+        description="Session cost snapshot at the last redraft; subtracted to yield per-attempt cost.",
+    )
+    pre_redraft_trace_count: int = Field(
+        default=0,
+        description="Session trace-count snapshot at the last trace-breaker resume; -1 sentinel when unset.",
+    )
+    cumulative_cost: float | None = Field(
+        default=None,
+        description="Total spend including child tickets for an epic; None for leaf tickets.",
+    )
+    depends_on: str | None = Field(
+        description="Legacy JSON string of dependency ticket IDs; see 'dependencies' for resolved status."
+    )
+    unmet_deps: list[str] = Field(
+        description="Ticket IDs this ticket depends on that are not yet CLOSED/DONE."
+    )
     # Ticket IDs this ticket auto-unblocks on completion (parsed list).
-    unblocks: list[str] = []
+    unblocks: list[str] = Field(
+        default=[],
+        description="Ticket IDs this ticket auto-unblocks (BLOCKED -> DRAFT) on completion.",
+    )
     # Resolved per-dependency status for drawer display. Each entry is
     # ``{id, title, state}``; populated by ``enrich_ticket_read`` from
     # the parsed ``depends_on`` list. Empty list when the ticket has
     # no dependencies. The legacy ``depends_on`` JSON string and
     # ``unmet_deps`` ID list are kept for back-compat (the worker
     # gate keys off ``unmet_deps``).
-    dependencies: list[dict[str, Any]] = []
-    pr_url: str | None = None
-    retry_attempt: int
-    last_transient_error: str | None
-    next_retry_at: datetime | None
-    priority: bool = False
+    dependencies: list[dict[str, Any]] = Field(
+        default=[],
+        description="Resolved per-dependency status; each entry is {id, title, state}.",
+    )
+    pr_url: str | None = Field(
+        default=None,
+        description="URL of the pull request opened for this ticket; None if none.",
+    )
+    retry_attempt: int = Field(
+        description="Number of transient-failure retry attempts made for the current stage."
+    )
+    last_transient_error: str | None = Field(
+        description="Message of the most recent transient error; None when no retry pending."
+    )
+    next_retry_at: datetime | None = Field(
+        description="Scheduled time of the next retry; None when no retry is pending."
+    )
+    priority: bool = Field(
+        default=False,
+        description="When True, the worker dequeues this ticket ahead of others.",
+    )
     # per-ticket override of the coordinator tool-call budget cap; None when
     # the ticket uses the default cap.
-    coordinator_max_tool_calls_override: int | None = None
-    board_id: str = ""
-    created_at: datetime
-    updated_at: datetime
+    coordinator_max_tool_calls_override: int | None = Field(
+        default=None,
+        description="Per-ticket override of the coordinator tool-call budget cap; None uses the default.",
+    )
+    board_id: str = Field(
+        default="", description="ID of the board/repo this ticket belongs to."
+    )
+    created_at: datetime = Field(description="Timestamp when the ticket was created.")
+    updated_at: datetime = Field(description="Timestamp of the last modification.")
     # verbatim clarifying question from the latest open [ASK_USER]
     # comment when paused; None otherwise
-    pending_question: str | None = None
+    pending_question: str | None = Field(
+        default=None,
+        description="Clarifying question from the latest open [ASK_USER] comment when paused; None otherwise.",
+    )
 
 
 class CommentCreate(SQLModel):
     """API request shape for creating a comment (optionally threaded via parent_id)."""
 
-    body: str
-    author: str = "user"
-    parent_id: int | None = None
+    body: str = Field(description="Comment text body.")
+    author: str = Field(default="user", description="Who authored the comment.")
+    parent_id: int | None = Field(
+        default=None,
+        description="ID of the comment this one replies to; None for a top-level comment.",
+    )
 
 
 class CommentRead(SQLModel):
     """API response shape for reading a comment."""
 
-    id: int
-    ticket_id: str
-    body: str
-    author: str
-    parent_id: int | None
-    closed_at: datetime | None
-    created_at: datetime
+    id: int = Field(description="Unique comment identifier.")
+    ticket_id: str = Field(description="ID of the ticket this comment belongs to.")
+    body: str = Field(description="Comment text body.")
+    author: str = Field(description="Who authored the comment.")
+    parent_id: int | None = Field(
+        description="ID of the parent comment in a thread; None for a top-level comment."
+    )
+    closed_at: datetime | None = Field(
+        description="Timestamp when the comment thread was closed/resolved; None if open."
+    )
+    created_at: datetime = Field(description="Timestamp when the comment was created.")
 
 
 # --- Agent memory ledger (DB-backed, with retention) ---
