@@ -47,6 +47,7 @@ from ._shared import (
     _read_counter,
     _refresh_branch_for_ci,
     _verify_merge_ancestor,
+    _within_rebase_cooldown,
     _workspace_repo_dir,
     _write_counter,
     log,
@@ -607,6 +608,25 @@ class CIPollMixin(_MergeStageBase):
                 # consume the green-unpromotable budget.
                 return None
 
+            # A rebase recently force-pushed a fresh head to THIS PR's
+            # branch.  GitHub fires a `synchronize` event for that push, so
+            # CI is expected to start shortly — the empty rollup here is the
+            # fresh head's checks not having run yet, NOT a `pull_request`
+            # event that never fired.  The close/reopen self-heal must NOT
+            # run in this window: closing the ticket's own PR (and failing to
+            # reopen it) is exactly how rebased PRs were orphaned as "PR
+            # closed without merge".  Keep polling until CI fires or the
+            # rebase cooldown lapses.
+            if _within_rebase_cooldown(artifacts_dir, s.parked_rebase_cooldown_hours):
+                log.warning(
+                    "%s: empty CI rollup within the rebase cooldown — NOT "
+                    "closing the ticket's own PR (%s); CI from the rebase "
+                    "push has not fired yet, re-polling",
+                    ticket.id,
+                    pr.get("url") or branch,
+                )
+                return None
+
             # At the threshold — the empty rollup has persisted long enough
             # to attempt the self-heal.
             if heal_path.exists():
@@ -637,11 +657,12 @@ class CIPollMixin(_MergeStageBase):
                 encoding="utf-8",
             )
             forge = get_forge(s, repo_config=ctx.repo_config)
-            log.info(
-                "%s: empty rollup detected (%d polls) — attempting "
-                "close/reopen self-heal",
+            log.warning(
+                "%s: empty rollup persisted (%d polls) — closing PR %s for a "
+                "close/reopen self-heal to trigger the pull_request event",
                 ticket.id,
                 er_polls,
+                pr.get("url") or branch,
             )
             closed = forge.close_pr(source_branch=branch)
             reopened = False

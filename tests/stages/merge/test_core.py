@@ -3245,6 +3245,108 @@ def test_empty_rollup_resets_when_jobs_appear(tmp_path, monkeypatch):
         assert out.next_state is State.IMPLEMENT_COMPLETE
 
 
+def test_empty_rollup_self_heal_suppressed_within_rebase_cooldown(
+    tmp_path, monkeypatch
+):
+    """A fresh rebase push shows a transient empty rollup (its CI has not fired
+    yet).  The close/reopen self-heal must NOT fire in the rebase-cooldown
+    window — closing the ticket's own PR (and failing to reopen it) is how
+    rebased PRs were orphaned as "PR closed without merge"."""
+    import datetime
+
+    from robotsix_mill.stages.merge._shared import _REBASE_LAST_TS
+
+    ctx = _empty_rollup_ctx(tmp_path, monkeypatch)
+    t = _implement_complete(ctx)
+
+    # Simulate what _handle_rebase_success records right after a rebase
+    # force-push: a recent rebase timestamp.
+    artifacts_dir = ctx.service.workspace(t).artifacts_dir
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    (artifacts_dir / _REBASE_LAST_TS).write_text(
+        datetime.datetime.now(datetime.UTC).isoformat(), encoding="utf-8"
+    )
+
+    closed_branches: list[str] = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "close_pr",
+        lambda self, *, source_branch: closed_branches.append(source_branch) or True,
+    )
+
+    stage = MergeStage()
+    # Poll well past the self-heal threshold — the PR must stay open.
+    for _ in range(ctx.settings.empty_rollup_max_polls + 3):
+        out = stage.run(t, ctx)
+        assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert closed_branches == []
+
+
+def test_rebase_on_conflict_does_not_close_own_pr(tmp_path, monkeypatch):
+    """Acceptance: a conflicting PR goes rebase → IMPLEMENT_COMPLETE and the
+    merge stage never closes the ticket's own PR, even once the freshly-pushed
+    head reports a transient empty CI rollup."""
+    ctx = _empty_rollup_ctx(tmp_path, monkeypatch)
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent",
+        lambda **kwargs: RebaseResult(
+            status="DONE", summary="resolved docs/modules.yaml"
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.reconcile_with_remote_pr",
+        lambda *a, **k: ReconcileResult.SYNCED,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.changed_source_files",
+        lambda *a, **k: [],
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.file_blobs", lambda *a, **k: {}
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.try_mechanical_rebase",
+        lambda *a, **k: False,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
+    )
+
+    close_calls: list[str] = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "close_pr",
+        lambda self, *, source_branch: close_calls.append(source_branch) or True,
+    )
+
+    t = _in_rebasing(ctx)
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    stage = MergeStage()
+    # Rebase poll: conflict resolved → back to IMPLEMENT_COMPLETE, same PR.
+    # The success path records the rebase timestamp (_REBASE_LAST_TS).
+    out = stage.run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+
+    # Apply the transition the runtime would make and keep polling.
+    ctx.service.transition(t.id, State.IMPLEMENT_COMPLETE)
+    t = ctx.service.get(t.id)
+
+    # Subsequent IMPLEMENT_COMPLETE polls see the fresh head's empty rollup —
+    # the self-heal stays suppressed; the PR is never closed.
+    for _ in range(ctx.settings.empty_rollup_max_polls + 3):
+        out = stage.run(t, ctx)
+        assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert close_calls == []
+
+
 def test_empty_rollup_close_fails_parks_with_explicit_note(tmp_path, monkeypatch):
     """close_pr failing parks BLOCKED with a note naming the failed attempt."""
     ctx = _empty_rollup_ctx(tmp_path, monkeypatch)
