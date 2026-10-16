@@ -1720,8 +1720,8 @@ dependencies = [
 
 [[package]]
 name = "robotsix-llmio"
-version = "0.7.9"
-source = { git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=9f51396bde2701716d2b36c0659a283de49e314f#9f51396bde2701716d2b36c0659a283de49e314f" }
+version = "0.9.0"
+source = { git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=d10ce1479ab4f96d07f23d554f0b4ae68a63bb49#d10ce1479ab4f96d07f23d554f0b4ae68a63bb49" }
 dependencies = [
     { name = "anyio" },
     { name = "httpx" },
@@ -1813,7 +1813,7 @@ requires-dist = [
     { name = "robotsix-config", git = "https://github.com/damien-robotsix/robotsix-config?rev=0f2e484b59eb306b54ba25fc8bddb5a3e3ad2535" },
     { name = "robotsix-github-auth", git = "https://github.com/damien-robotsix/robotsix-github-auth.git?rev=22c61e5e0e090b56d4af990c871711aae18ab2be" },
     { name = "robotsix-http", git = "https://github.com/damien-robotsix/robotsix-http.git?rev=cdfd4d1c42679fef73081439562872792e202dc4" },
-    { name = "robotsix-llmio", extras = ["openrouter", "claude-sdk"], git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=9f51396bde2701716d2b36c0659a283de49e314f" },
+    { name = "robotsix-llmio", extras = ["openrouter", "claude-sdk"], git = "https://github.com/damien-robotsix/robotsix-llmio.git?rev=d10ce1479ab4f96d07f23d554f0b4ae68a63bb49" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
