@@ -973,6 +973,20 @@
           "title": "Ci Prevention Rules Max Events",
           "type": "integer"
         },
+        "ci_tooling_proposal_default": {
+          "default": "escalate",
+          "description": "Route for a CI/dev-tooling proposal whose class is not in ci_tooling_proposal_policy: \"escalate\" (human gate \u2014 default) or \"auto-decline\" (auto-close).",
+          "title": "Ci Tooling Proposal Default",
+          "type": "string"
+        },
+        "ci_tooling_proposal_policy": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Per-class routing override for auto-proposed CI/dev-tooling additions, mapping a tool-class id (e.g. \"coverage\", \"scorecard\", \"secret-scanner\") to one of \"auto-ready\" (allowlist), \"auto-decline\" (denylist), or \"escalate\". Unlisted classes follow ci_tooling_proposal_default.",
+          "title": "Ci Tooling Proposal Policy",
+          "type": "object"
+        },
         "ci_transient_max_retries": {
           "default": 3,
           "description": "Maximum automatic CI re-runs for transient failures before escalating. 0 disables.",
