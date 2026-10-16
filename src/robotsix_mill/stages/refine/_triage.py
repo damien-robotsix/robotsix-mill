@@ -21,6 +21,11 @@ from ...core.text_noop import is_degenerate_body, is_placeholder_ticket
 from ...core.workspace import Workspace
 from ..base import Outcome, StageContext
 from . import _reconcile, _result_paths
+from .ci_tooling_policy import (
+    CIToolingRoute,
+    classify_ci_tooling_proposal,
+    resolve_ci_tooling_route,
+)
 from .helpers import (
     _AUTO_APPROVE_SOURCES,
     _NOT_DOC_ONLY_TERMS_RE,
@@ -433,6 +438,94 @@ def split_child_fast_path(
 # phase: triage skip
 # ---------------------------------------------------------------------------
 
+#: Sources whose drafts are checked against the CI/dev-tooling proposal
+#: routing policy.  Survey/audit are the periodic agents observed filing
+#: recurring standing-gate proposals; other scanner sources fall through
+#: to the per-source scanner disposition instead.
+_CI_TOOLING_PROPOSAL_SOURCES: frozenset[str] = frozenset(
+    {
+        SourceKind.SURVEY,
+        SourceKind.AUDIT,
+    }
+)
+
+
+def _ci_tooling_auto_disposition(
+    ctx: StageContext,
+    ticket: Ticket,
+    draft: str,
+    ws: Workspace,
+    s: Settings,
+) -> Outcome | None:
+    """Route an auto-proposed CI/dev-tooling addition per the class policy.
+
+    Survey/audit file recurring "add a standing CI gate / dev-tooling
+    standard" proposals (coverage gate, OpenSSF Scorecard, secret
+    scanner, …) that each otherwise land in ``HUMAN_ISSUE_APPROVAL`` as a
+    separate workflow-policy escalation.  This classifies the proposal
+    into a canonical tool-class and routes it per
+    ``settings.ci_tooling_proposal_policy``: an allowlisted class
+    (``auto-ready``) routes straight to implement, a denylisted class
+    (``auto-decline``) auto-closes with a note, and an unlisted class
+    follows ``settings.ci_tooling_proposal_default`` (``escalate`` — the
+    human gate — or ``auto-decline``).
+
+    Returns an :class:`Outcome` to short-circuit, or ``None`` when the
+    source is not a CI-tooling proposal source, the draft is not a
+    recognised CI-tooling proposal, or the resolved route is
+    ``escalate`` (fall through to the normal human-gate path).
+    """
+    if ticket.source not in _CI_TOOLING_PROPOSAL_SOURCES:
+        return None
+
+    class_id = classify_ci_tooling_proposal(ticket.title, draft)
+    if class_id is None:
+        return None
+
+    route = resolve_ci_tooling_route(class_id, s)
+
+    if route == CIToolingRoute.AUTO_READY:
+        log.info(
+            "%s: CI-tooling proposal — auto-ready (class %r, allowlisted)",
+            ticket.id,
+            class_id,
+        )
+        return _triage_outcome(
+            ctx,
+            ws,
+            draft,
+            ticket.id,
+            f"CI-tooling proposal policy: auto-ready (class {class_id!r}) "
+            "— allowlisted, routed to implement without a human gate",
+            extract_paths_from_draft=True,
+            state=State.READY,
+        )
+
+    if route == CIToolingRoute.AUTO_DECLINE:
+        log.info(
+            "%s: CI-tooling proposal — auto-decline (class %r, denylisted)",
+            ticket.id,
+            class_id,
+        )
+        return _triage_outcome(
+            ctx,
+            ws,
+            draft,
+            ticket.id,
+            f"CI-tooling proposal policy: auto-decline (class {class_id!r}) "
+            "— denylisted fleet-wide, closed without a human gate per policy",
+            state=State.CLOSED,
+        )
+
+    # ESCALATE: fall through so the proposal reaches the human gate via
+    # its normal triage path (today's behaviour for unlisted classes).
+    log.info(
+        "%s: CI-tooling proposal — escalate (class %r, unlisted)",
+        ticket.id,
+        class_id,
+    )
+    return None
+
 
 def _scanner_auto_disposition(
     ctx: StageContext,
@@ -537,7 +630,16 @@ def deterministic_triage_pre_checks(
 
     Returns an :class:`Outcome` to short-circuit, or ``None``.
     """
-    # Scanner bulk auto-disposition runs first: a covered scanner source
+    # CI/dev-tooling proposal routing runs first: a survey/audit draft
+    # proposing a standing CI gate / dev-tooling standard is routed by
+    # its tool-class (allowlist → ready, denylist → close) per the
+    # configured policy, before it can reach the human gate.  No-op
+    # (returns None) for non-CI-tooling drafts or an escalate route.
+    ci_tooling_outcome = _ci_tooling_auto_disposition(ctx, ticket, draft, ws, s)
+    if ci_tooling_outcome is not None:
+        return ci_tooling_outcome
+
+    # Scanner bulk auto-disposition runs next: a covered scanner source
     # under an enforced policy is dispositioned here, before any other
     # pre-check or the refine LLM, keeping scanner findings out of the
     # human gate.  No-op (returns None) for non-scanner sources or in
