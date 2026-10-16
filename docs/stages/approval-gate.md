@@ -43,6 +43,38 @@ Auto-approved tickets record `"auto-approved: <reason>"` in their
 event trail so operators can audit which tickets were auto-approved
 and why.
 
+## Policy-addition classification
+
+The survey and audit periodic agents repeatedly propose a new standing
+CI workflow, a new fleet-wide standard, or a new required check
+(complexity gates, secret scanners, OpenSSF Scorecard, coverage
+standardization, Conventional Commits, …). Each such proposal is a
+**workflow-policy change** — a genuine operator decision, never a
+routine auto-approvable code-quality follow-up — so it lands in
+`human_issue_approval` and costs a separate escalation panel. In bulk
+these saturate the operator's escalation capacity.
+
+To make the class tractable, the pass runner classifies each
+survey/audit draft with `is_policy_addition()` (a conservative
+title + body keyword match) and stamps matching drafts with the
+free-form **`policy-addition`** label at creation time
+(`src/robotsix_mill/agents/runners/pass_runner.py`). The label is pure
+metadata — it never suppresses or re-routes a draft — so a false
+positive is cheap and a false negative just preserves the per-ticket
+behaviour.
+
+The label exists so policy additions can be **batched into a single
+review decision** instead of one panel each: the chat-drain agent
+recognises `policy-addition`-labelled tickets and groups them into one
+policy-review digest rather than opening a panel per ticket. Tagging is
+the foundation; the digest-aggregation step (collapsing N labelled
+additions into one approvable unit, plus the approval-fanout semantics
+that releases the approved items back into the pipeline) is tracked
+separately because it is a pipeline-state-machine change — approving a
+single digest ticket today would send it straight to `ready` →
+implement, so fanning an approved digest back out into individual work
+tickets needs its own design.
+
 ## MR approval (before merge)
 
 After the deliver stage opens a PR, the ticket enters
