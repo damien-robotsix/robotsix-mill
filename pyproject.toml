@@ -83,7 +83,13 @@ exclude-newer = "7d"
 # The per-package override lets exactly this one package escape the rolling
 # 7-day window; the cutoff must post-date the release itself (uv resolves
 # 6.19.0).
-exclude-newer-package = { pypdf = "2026-10-05T00:00:00Z" }
+#
+# certifi 2026.10.19 removes the emSign root CAs whose intermediate keys
+# were compromised (GHSA-6q48-6c7w-9gw2). The fix (uploaded 2026-10-20)
+# falls inside the rolling 7-day window, so uv would otherwise cap certifi
+# at 2026.10.18 (still vulnerable). The per-package cutoff post-dates the
+# upload so uv resolves 2026.10.19.
+exclude-newer-package = { pypdf = "2026-10-05T00:00:00Z", certifi = "2026-10-21T00:00:00Z" }
 # robotsix-github-auth pins robotsix-http to an older rev (4cf79993) while
 # robotsix-llmio pins ba90d55ea.  The two transitive exact-rev pins are
 # otherwise irreconcilable; both are ancestors of the rev below, so
