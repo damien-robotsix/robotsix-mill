@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.17.0...v0.17.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **ci:** grant the deps-bump caller job the permissions bump.yml needs ([#3408](https://github.com/damien-robotsix/robotsix-mill/issues/3408)) ([5378cf8](https://github.com/damien-robotsix/robotsix-mill/commit/5378cf8ccf2c7f4c2f79e92d1cb9af73244e2c1d))
+
 ## [0.17.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.16.0...v0.17.0) (2026-10-15)
 
 
