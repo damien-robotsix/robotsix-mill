@@ -2037,6 +2037,39 @@ def test_list_code_scanning_alerts_parses(tmp_path, monkeypatch):
     assert "bad url substring" in a["message"]
 
 
+def test_list_code_scanning_alerts_skips_non_codeql_tools(tmp_path, monkeypatch):
+    """Container-image / dependency CVEs (Trivy, grype, …) upload to the same
+    code-scanning API but are not fixable by a source edit — they must be
+    dropped so ci_fix never presents them as "CodeQL alerts to fix"."""
+    raw = [
+        {
+            "rule": {"id": "py/x", "security_severity_level": "high"},
+            "html_url": "u1",
+            "tool": {"name": "CodeQL"},
+            "most_recent_instance": {
+                "location": {"path": "src/a.py", "start_line": 3},
+                "message": {"text": "codeql finding"},
+            },
+        },
+        {
+            "rule": {"id": "CVE-2026-78410", "security_severity_level": "high"},
+            "html_url": "u2",
+            "tool": {"name": "Trivy"},
+            "most_recent_instance": {
+                "location": {
+                    "path": "library/robotsix-central-deploy:1",
+                    "start_line": 1,
+                },
+                "message": {"text": "base-image CVE"},
+            },
+        },
+    ]
+    _mock_httpx(monkeypatch, get_map={"code-scanning/alerts": _make_response(200, raw)})
+    forge = _forge(tmp_path)
+    out = forge.list_code_scanning_alerts(source_branch="feature/x")
+    assert [a["rule"] for a in out] == ["py/x"]
+
+
 def test_list_code_scanning_alerts_404_returns_empty(tmp_path, monkeypatch):
     """404 (code-scanning off) → [] (not an error)."""
     _mock_httpx(
