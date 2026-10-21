@@ -45,7 +45,7 @@ jobs:
   publish-mill:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: lint
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@863acf24c9463f88ecf6f7f9bb1e478624a42d84  # main 2026-10-21
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@c4f63528d93456e4497b4af60023956cd803abc4  # main 2026-10-21
     permissions:
       contents: read
       packages: write
@@ -58,7 +58,7 @@ jobs:
   publish-sandbox:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: lint
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@863acf24c9463f88ecf6f7f9bb1e478624a42d84  # main 2026-10-21
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@c4f63528d93456e4497b4af60023956cd803abc4  # main 2026-10-21
     permissions:
       contents: read
       packages: write
@@ -72,7 +72,7 @@ jobs:
   publish-proxy:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: lint
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@863acf24c9463f88ecf6f7f9bb1e478624a42d84  # main 2026-10-21
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@c4f63528d93456e4497b4af60023956cd803abc4  # main 2026-10-21
     permissions:
       contents: read
       packages: write
