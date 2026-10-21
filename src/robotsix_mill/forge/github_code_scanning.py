@@ -195,6 +195,18 @@ class GitHubForgeCodeScanningMixin:
 
         out: list[dict[str, Any]] = []
         for a in raw_alerts:
+            # Trivy / grype / osv-scanner and similar image- and dependency
+            # scanners upload their CVE findings to the SAME code-scanning
+            # API as CodeQL (e.g. a base-image CVE on a published container
+            # image). Those are not fixable by any source edit in this PR, so
+            # the ci_fix stage must not present them as "CodeQL alerts to fix".
+            # This method is documented as CodeQL-only — enforce it with an
+            # allow-list on the alert's producing tool. A missing/blank tool
+            # name is passed through (backward-compatible: CodeQL always sets
+            # it, and we only drop alerts explicitly tagged as another tool).
+            tool_name = ((a.get("tool") or {}).get("name") or "").strip().lower()
+            if tool_name and tool_name != "codeql":
+                continue
             rule = a.get("rule") or {}
             inst = a.get("most_recent_instance") or {}
             loc = inst.get("location") or {}
