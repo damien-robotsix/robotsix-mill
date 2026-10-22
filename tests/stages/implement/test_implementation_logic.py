@@ -1026,6 +1026,76 @@ class TestEvaluateTestResults:
         assert result.outcome.next_state is State.DONE
         assert result.outcome.note.startswith("no change needed")
 
+    @pytest.mark.parametrize(
+        ("source", "title"),
+        [
+            ("ci", "Release image red"),
+            ("user", "CI failure: Release image on main"),
+        ],
+        ids=["source-ci", "title-shape"],
+    )
+    def test_no_change_needed_on_ci_failure_ticket_blocks(
+        self, monkeypatch, source, title
+    ):
+        """no_change_needed + empty diff on a CI-failure ticket → BLOCKED.
+
+        Live shape (2026-10-22): central-deploy ``…-1003`` ("uv.lock already
+        pins the fixed certifi") and website ``…-c425`` both closed DONE with
+        an empty diff while their workflows stayed red on main.
+        """
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+        finalize_calls: list[dict] = []
+
+        def _fake_finalize(cls, ctx, ticket, repo_dir, branch, summary, *, ok, **kw):
+            finalize_calls.append({"ok": ok, "summary": summary})
+
+        monkeypatch.setattr(_Stage, "_finalize", classmethod(_fake_finalize))
+
+        class _CiTicket(FakeTicket):
+            pass
+
+        _CiTicket.source = source
+        _CiTicket.title = title
+
+        result = self._call(
+            monkeypatch,
+            ticket=_CiTicket(),
+            no_change_needed=True,
+            no_change_rationale="uv.lock already pins the fixed certifi",
+        )
+        assert result.next_action == "return"
+        assert result.outcome.next_state is State.BLOCKED
+        assert "CI-failure ticket" in result.outcome.note
+        assert finalize_calls and finalize_calls[0]["ok"] is False
+        assert "uv.lock already pins" in finalize_calls[0]["summary"]
+        assert "[Diagnostic]" in finalize_calls[0]["summary"]
+
+    def test_no_change_needed_non_ci_ticket_still_done(self, monkeypatch):
+        """A non-CI ticket whose title merely mentions CI keeps the DONE path."""
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+
+        class _UserTicket(FakeTicket):
+            source = "user"
+            title = "Speed up CI failure triage docs"
+
+        result = self._call(
+            monkeypatch,
+            ticket=_UserTicket(),
+            no_change_needed=True,
+            no_change_rationale="already satisfied",
+        )
+        assert result.outcome.next_state is State.DONE
+
     def test_no_change_needed_with_open_review_directives_blocks(self, monkeypatch):
         """no_change_needed + empty diff while a review directive is open → BLOCKED.
 
