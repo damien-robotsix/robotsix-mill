@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.3](https://github.com/damien-robotsix/robotsix-mill/compare/v0.17.2...v0.17.3) (2026-10-22)
+
+
+### Bug Fixes
+
+* CI failure: CI on main (20261022T091907Z-ci-failure-ci-on-main-79e5) ([#3419](https://github.com/damien-robotsix/robotsix-mill/issues/3419)) ([8d25bd2](https://github.com/damien-robotsix/robotsix-mill/commit/8d25bd28dba97d9f8745d0f57748fdac81c00974))
+* CI failure: Security Audit on main (20261022T091903Z-ci-failure-security-audit-on-main-b1c2) ([#3420](https://github.com/damien-robotsix/robotsix-mill/issues/3420)) ([921470a](https://github.com/damien-robotsix/robotsix-mill/commit/921470ab2ad34e5ff955fc42cae9c7c103d06d9b))
+* ci_fix: out-of-scope CI failure — ci / Tests, audit (20261022T193524Z-ci-fix-out-of-scope-ci-failure-ci-tests-7e30) ([#3428](https://github.com/damien-robotsix/robotsix-mill/issues/3428)) ([63a3f31](https://github.com/damien-robotsix/robotsix-mill/commit/63a3f31cf29d8f21da045193bc6cbe727a0ea71d))
+* **implement:** never close a CI-failure ticket DONE on a no_change_needed empty diff ([#3422](https://github.com/damien-robotsix/robotsix-mill/issues/3422)) ([151bda7](https://github.com/damien-robotsix/robotsix-mill/commit/151bda7fe8fd98a2091f1f7167880361302dc2fe))
+* **periodic:** thread the board into periodic agents' ticket tools ([#3426](https://github.com/damien-robotsix/robotsix-mill/issues/3426)) ([7e49116](https://github.com/damien-robotsix/robotsix-mill/commit/7e4911642cb8731de1546ebee060286d664dc0ae))
+* repo_description_sync: forge description update fails on every board ('update failed (API returned False)', ~16x across 15 boards) (20261022T185806Z-repo-description-sync-forge-description-749b) ([#3427](https://github.com/damien-robotsix/robotsix-mill/issues/3427)) ([cf9527a](https://github.com/damien-robotsix/robotsix-mill/commit/cf9527a8d4ba8cd1f9e6849d61f444f532a39816))
+
 ## [0.17.2](https://github.com/damien-robotsix/robotsix-mill/compare/v0.17.1...v0.17.2) (2026-10-21)
 
 
