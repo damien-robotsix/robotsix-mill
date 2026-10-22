@@ -235,6 +235,7 @@ def run_periodic_agent(
     usage_limits: Any = None,
     definition_override: Any = None,
     max_errors: int = 0,
+    board_id: str = "",
 ) -> Any:
     """Run a periodic agent through the standard 7-step pipeline.
 
@@ -291,6 +292,12 @@ def run_periodic_agent(
         raises ``UsageLimitExceeded`` after *max_errors* tool-call
         errors — terminating runaway agent loops.  Defaults to 0
         (no error limit).
+    board_id:
+        The board the pass runs for. Threaded into the agent's
+        ``read_ticket`` / ``list_recent_tickets`` / ``report_issue``
+        tools; without it they fail at call time with
+        ``db._db_path: board_id is required`` (2026-10-22: every
+        ``list_recent_tickets`` call of a triage_boilerplate pass).
 
     Returns:
     -------
@@ -379,6 +386,7 @@ def run_periodic_agent(
         definition,
         tools=tools,
         system_prompt=system_prompt,
+        board_id=board_id,
     )
 
     # ------------------------------------------------------------------
@@ -473,7 +481,8 @@ def make_agent_runner(
     signature.
 
     The returned callable accepts ``(*, settings, memory, recent_proposals,
-    verified_proposals, repo_dir=None, definition_override=None)`` and
+    verified_proposals, repo_dir=None, definition_override=None,
+    board_id="")`` and
     delegates to :func:`run_periodic_agent` with the parameters captured
     at factory time.  The model is resolved from the definition's ``level``.
 
@@ -495,6 +504,7 @@ def make_agent_runner(
         verified_proposals: str = "",
         repo_dir: Path | None = None,
         definition_override: Any = None,
+        board_id: str = "",
     ) -> PeriodicAgentResult:
         kwargs: dict[str, Any] = dict(extra_kwargs) if extra_kwargs else {}
         if dynamic_kwargs_fn is not None:
@@ -509,6 +519,7 @@ def make_agent_runner(
                 settings=settings,
                 definition_name=definition_name,
                 definition_override=definition_override,
+                board_id=board_id,
                 max_gaps=max_gaps,
                 repo_dir=repo_dir,
                 memory=memory,

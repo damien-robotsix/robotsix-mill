@@ -814,3 +814,45 @@ def test_non_degenerate_exception_propagates(settings, monkeypatch, tmp_path):
 
     # Agent cleanup still runs (finally block).
     mocks["_safe_close"].assert_called_once()
+
+
+def test_board_id_reaches_the_agent_build(settings, monkeypatch, tmp_path):
+    """The pass's board is threaded into build_agent_from_definition.
+
+    2026-10-22: periodic agents were built with ``board_id=""``, so every
+    ``list_recent_tickets`` call of a triage_boilerplate pass failed with
+    ``db._db_path: board_id is required``.
+    """
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="audit",
+        max_gaps=3,
+        repo_dir=tmp_path,
+        memory="",
+        recent_proposals="",
+        prompt_tail="Do the thing.",
+        board_id="robotsix-linkedin",
+    )
+
+    _, build_kwargs = mocks["build_agent_from_definition"].call_args
+    assert build_kwargs["board_id"] == "robotsix-linkedin"
+
+
+def test_make_agent_runner_forwards_board_id(monkeypatch):
+    """The factory-built runner passes ``board_id`` to run_periodic_agent."""
+    from robotsix_mill.agents import periodic_base
+
+    seen = {}
+
+    def fake_run_periodic_agent(**kwargs):
+        seen.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(periodic_base, "run_periodic_agent", fake_run_periodic_agent)
+    runner = periodic_base.make_agent_runner(definition_name="audit", prompt_tail="x")
+
+    runner(settings=object(), board_id="robotsix-chat")
+
+    assert seen["board_id"] == "robotsix-chat"

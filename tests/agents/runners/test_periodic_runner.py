@@ -785,3 +785,43 @@ class TestResolveMaxDrafts:
             _resolve_max_drafts(_FakeConfig(), Settings(periodic_max_drafts_per_run=0))
             == 0
         )
+
+
+def test_run_periodic_pass_threads_board_id_into_agent_fn(tmp_path, monkeypatch):
+    """The repo's board reaches the agent fn (its read_ticket/report_issue
+    tools need it — 2026-10-22 ``board_id is required`` on every
+    triage_boilerplate list_recent_tickets call)."""
+    settings = _make_settings(tmp_path)
+    captured = {}
+
+    def fake_run_agent_pass(agent_fn, **kwargs):
+        captured["keywords"] = agent_fn.keywords
+        return _fake_agent_pass_result()
+
+    monkeypatch.setattr(
+        "robotsix_mill.agents.runners.periodic_runner.run_agent_pass",
+        fake_run_agent_pass,
+    )
+
+    run_periodic_pass(
+        session_id="test-sid",
+        repo_config=_test_repo_config(),
+        config=PERIODIC_PASS_CONFIGS["audit"],
+        settings=settings,
+    )
+
+    assert captured["keywords"]["board_id"] == "test-board"
+
+
+def test_accepts_kwarg_only_for_explicit_parameters():
+    """Agent fns without a ``board_id`` parameter are not handed one."""
+    from robotsix_mill.agents.runners.periodic_runner import _accepts_kwarg
+
+    def with_board(*, settings, board_id=""):
+        return None
+
+    def legacy(*, settings, **kwargs):
+        return None
+
+    assert _accepts_kwarg(with_board, "board_id")
+    assert not _accepts_kwarg(legacy, "board_id")
