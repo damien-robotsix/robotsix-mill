@@ -195,6 +195,16 @@ def _resolve_max_drafts(config: Any, settings: Settings) -> int:
     return int(settings.periodic_max_drafts_per_run)
 
 
+def _accepts_kwarg(fn: Callable[..., Any], name: str) -> bool:
+    """True when *fn* declares a parameter called *name* explicitly."""
+    import inspect
+
+    try:
+        return name in inspect.signature(fn).parameters
+    except TypeError, ValueError:
+        return False
+
+
 def run_periodic_pass(
     session_id: str,
     repo_config: RepoConfig | None,
@@ -321,6 +331,11 @@ def run_periodic_pass(
     # when present; agent fns ignore it when None (legacy built-in path).
     if definition_override is not None:
         extra_kwargs["definition_override"] = definition_override
+    # Thread the board into agents whose tools need it (read_ticket,
+    # list_recent_tickets, report_issue); legacy agent fns without the
+    # parameter are left alone.
+    if _accepts_kwarg(agent_fn_callable, "board_id"):
+        extra_kwargs["board_id"] = repo_config.board_id
     agent_fn = partial(agent_fn_callable, repo_dir=repo_dir, **extra_kwargs)
     result = run_agent_pass(
         agent_fn=agent_fn,
