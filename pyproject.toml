@@ -39,7 +39,7 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "httpx>=0.27",
     "cryptography",
-    "pypdf>=6.16.1",
+    "pypdf>=6.21.1",
     # Shared kanban-board frontend library: column-per-status board chrome
     # parameterized by a BoardAdapter Protocol and a render-mode switch.
     # Consumed via git dependency — see robotsix-board README for API docs.
@@ -73,7 +73,10 @@ docs = ["mkdocs-material>=9", "mkdocstrings[python]>=0.27", "pymdown-extensions>
 # an explicit `--group dev` on every sync.
 default-groups = ["dev"]
 exclude-newer = "7d"
-# pypdf 6.19.0 fixes the Oct-2026 batch of PDF-parsing DoS advisories
+# pypdf 6.21.1 fixes GHSA-39mj-jf6j-2qj3, GHSA-7mh2-4gg2-979f (6.20.0),
+# GHSA-9mx8-4j7g-633p, GHSA-qfv9-64jg-mh7p (6.20.1) and GHSA-5hx5-vpf9-5wcv
+# (6.21.1; uploaded 2026-10-17, so the cutoff below is 2026-10-18).
+# pypdf 6.19.0 fixed the Oct-2026 batch of PDF-parsing DoS advisories
 # (CVE-2026-102993..103000 / their GHSA/PYSEC aliases: unbounded memory and
 # long runtimes on malformed font data, /ToUnicode streams, FlateDecode
 # streams, indirect objects, embedded files and page labels). It supersedes
@@ -82,14 +85,14 @@ exclude-newer = "7d"
 # GHSA-fp3f-mc75-235c / GHSA-fwg2-594c-jp42 fixes.
 # The per-package override lets exactly this one package escape the rolling
 # 7-day window; the cutoff must post-date the release itself (uv resolves
-# 6.19.0).
+# 6.21.1).
 #
 # certifi 2026.10.19 removes the emSign root CAs whose intermediate keys
 # were compromised (GHSA-6q48-6c7w-9gw2). The fix (uploaded 2026-10-20)
 # falls inside the rolling 7-day window, so uv would otherwise cap certifi
 # at 2026.10.18 (still vulnerable). The per-package cutoff post-dates the
 # upload so uv resolves 2026.10.19.
-exclude-newer-package = { pypdf = "2026-10-05T00:00:00Z", certifi = "2026-10-21T00:00:00Z" }
+exclude-newer-package = { pypdf = "2026-10-18T00:00:00Z", certifi = "2026-10-21T00:00:00Z" }
 # robotsix-github-auth pins robotsix-http to an older rev (4cf79993) while
 # robotsix-llmio pins ba90d55ea.  The two transitive exact-rev pins are
 # otherwise irreconcilable; both are ancestors of the rev below, so
