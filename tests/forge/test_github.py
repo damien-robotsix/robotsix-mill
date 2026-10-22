@@ -1986,6 +1986,21 @@ def test_update_repo_non_200_returns_false(tmp_path, monkeypatch):
     assert result is False
 
 
+def test_update_repo_non_200_logs_status_and_body(tmp_path, monkeypatch, caplog):
+    """A failed PATCH logs the HTTP status and body, not just a bare False."""
+    _mock_httpx(
+        monkeypatch,
+        patch_response=_make_response(
+            403, {}, '{"message":"Resource not accessible by integration"}'
+        ),
+    )
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    with caplog.at_level("WARNING", logger="robotsix_mill.forge.github"):
+        assert forge.update_repo(owner="o", repo="r", description="desc") is False
+    assert "HTTP 403" in caplog.text
+    assert "Resource not accessible by integration" in caplog.text
+
+
 def test_update_repo_flag_disabled(tmp_path, monkeypatch):
     """enable_repo_creation=False (default) → NotConfiguredError."""
     forge = _forge(tmp_path)  # no enable_repo_creation

@@ -17,6 +17,7 @@ all the mixins), shared helpers, and repo-CRUD operations
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
@@ -30,6 +31,8 @@ from .github_pr import GitHubForgePRMixin
 from .github_pr_reviews import GitHubForgePRReviewsMixin
 from .github_pr_status import GitHubForgePRStatusMixin
 from .github_security import GitHubForgeSecurityMixin
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Shared module-level helpers
@@ -460,4 +463,15 @@ class GitHubForge(
                 headers=custom_headers,
                 json=payload,
             )
-        return r.status_code == 200
+        if r.status_code != 200:
+            # Surface the real cause (403 = token lacks Administration:write,
+            # 404 = repo not visible to the token, ...) instead of a bare False.
+            log.warning(
+                "update_repo PATCH repos/%s/%s failed: HTTP %s: %s",
+                owner,
+                repo,
+                r.status_code,
+                (r.text or "")[:500],
+            )
+            return False
+        return True
