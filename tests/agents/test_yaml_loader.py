@@ -1005,7 +1005,10 @@ def test_every_agent_max_tokens_yields_a_valid_task_budget():
             ad = load_agent_definition(path)
         except Exception:
             continue  # definitions needing runtime env are covered elsewhere
-        budget = build_task_budget(ad.max_tokens, path.stem)
+        # robotsix-llmio >= 0.9 (llmio #702) takes the model so a known
+        # task_budget rejecter yields None; any model not marked unsupported
+        # exercises the floor contract this test is about.
+        budget = build_task_budget(ad.max_tokens, path.stem, "claude-opus")
         assert budget is None or budget["total"] >= TASK_BUDGET_MIN_TOTAL, (
             f"{path}: max_tokens={ad.max_tokens} produces {budget}, which the "
             f"API rejects (floor {TASK_BUDGET_MIN_TOTAL})"
