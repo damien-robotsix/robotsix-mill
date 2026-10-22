@@ -474,7 +474,17 @@ class GitLabForge(
             headers=headers,
             json={"description": description[:2000]},
         )
-        return r.status_code == 200
+        if r.status_code != 200:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "update_repo PUT projects/%s failed: HTTP %s: %s",
+                encoded,
+                r.status_code,
+                (r.text or "")[:500],
+            )
+            return False
+        return True
 
     def delete_branch(self, *, branch: str) -> bool:
         """Delete *branch* from the project.

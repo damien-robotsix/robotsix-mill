@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from ...config import RepoConfig, Settings, target_branch_for
-from ...forge.base import get_forge
+from ...forge.base import NotConfiguredError, get_forge
 from ...vcs import git_ops
 from .periodic_runner import _clone_token
 
@@ -243,6 +243,7 @@ def run_repo_description_sync_pass(  # noqa: C901 — sequential I/O pipeline: c
     # 5. Update forge description if needed
     # ------------------------------------------------------------------
     description_updated = False
+    update_failed = False
     if should_update and new_description and new_description != current_description:
         try:
             ok = forge.update_repo(
@@ -263,7 +264,16 @@ def run_repo_description_sync_pass(  # noqa: C901 — sequential I/O pipeline: c
                     owner,
                     repo_name,
                 )
-                summary = f"update failed (API returned False): {summary}"
+                summary = (
+                    "update failed (API returned False — see forge log for "
+                    f"HTTP status/body): {summary}"
+                )
+                update_failed = True
+        except NotConfiguredError as e:
+            # Operator disabled metadata updates — a deliberate choice, not a
+            # failure; keep the run ``ok``.
+            log.info("repo_description_sync: %s", e)
+            summary = f"skipped: repo metadata updates disabled: {summary}"
         except Exception as e:
             log.exception(
                 "repo_description_sync: update_repo raised for %s/%s",
@@ -271,8 +281,14 @@ def run_repo_description_sync_pass(  # noqa: C901 — sequential I/O pipeline: c
                 repo_name,
             )
             summary = f"update failed ({e}): {summary}"
+            update_failed = True
     else:
         log.info("repo_description_sync: no update needed for %s/%s", owner, repo_name)
+
+    if update_failed:
+        # Raise so the periodic registry records the run as ``error``
+        # instead of a silent ``ok`` (every board failed this way unnoticed).
+        raise RuntimeError(f"repo_description_sync {owner}/{repo_name}: {summary}")
 
     return RepoDescriptionSyncPassResult(
         session_id=session_id,
