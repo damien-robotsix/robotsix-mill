@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.17.2](https://github.com/damien-robotsix/robotsix-mill/compare/v0.17.1...v0.17.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* **ci:** bump docker-release past the ghwf assert-image-user inner pin move ([#3416](https://github.com/damien-robotsix/robotsix-mill/issues/3416)) ([ca1e4cc](https://github.com/damien-robotsix/robotsix-mill/commit/ca1e4cce8d3afac2e5556aae94f4babb332ccd4e))
+* **ci:** bump docker-release past the ghwf docker-smoke re-pin ([#3414](https://github.com/damien-robotsix/robotsix-mill/issues/3414)) ([02067bc](https://github.com/damien-robotsix/robotsix-mill/commit/02067bc0a378691bce87158056adc56aed945e02))
+* **ci:** bump docker-release past the ghwf root-user gate fix ([#3415](https://github.com/damien-robotsix/robotsix-mill/issues/3415)) ([3fbe956](https://github.com/damien-robotsix/robotsix-mill/commit/3fbe956bdd3e047f942da412320b20e1a56ec8d5))
+* **ci:** bump docker-release to the ghwf fix for the assert-image-user pin ([#3412](https://github.com/damien-robotsix/robotsix-mill/issues/3412)) ([d3037bb](https://github.com/damien-robotsix/robotsix-mill/commit/d3037bbc3f607d5ba28669c96c42375eeac9453b))
+
+## [0.17.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.17.0...v0.17.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **ci:** grant the deps-bump caller job the permissions bump.yml needs ([#3408](https://github.com/damien-robotsix/robotsix-mill/issues/3408)) ([5378cf8](https://github.com/damien-robotsix/robotsix-mill/commit/5378cf8ccf2c7f4c2f79e92d1cb9af73244e2c1d))
+
 ## [0.17.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.16.0...v0.17.0) (2026-10-15)
 
 

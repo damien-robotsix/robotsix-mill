@@ -61,6 +61,82 @@ _SCANNER_SOURCES: frozenset[SourceKind] = frozenset(
 
 _ROLLUP_EPIC_TITLE_PREFIX = "Rollup: "
 
+# Free-form label stamped on survey/audit drafts that propose a new
+# standing CI workflow, a new fleet-wide standard, or a new required
+# check. These are workflow-policy changes — a genuine operator
+# decision, never a routine auto-approvable code-quality follow-up — so
+# they each land in ``human_issue_approval`` and cost a separate operator
+# escalation panel. Tagging them makes the class discoverable so they can
+# be batched into a single policy-review decision (the chat-drain agent
+# recognises the tag; see docs/stages/approval-gate.md).
+_POLICY_ADDITION_LABEL = "policy-addition"
+
+# Substrings (matched case-insensitively against title + body) that
+# identify a policy-addition. Two buckets: concrete tooling/gate names
+# observed in the recurring escalations, and generic "add a standing
+# gate / standardize X fleet-wide" phrasing. Kept deliberately narrow so
+# ordinary code-quality drafts (a missing test, a refactor) are NOT
+# mislabelled.
+_POLICY_ADDITION_TOOLING_TERMS: tuple[str, ...] = (
+    "ci workflow",
+    "github actions workflow",
+    "pre-commit hook",
+    "pre-commit gate",
+    "secret scanner",
+    "secret scanning",
+    "gitleaks",
+    "trivy",
+    "codeql",
+    "openssf scorecard",
+    "scorecard workflow",
+    "visual regression",
+    "chromatic",
+    "radon",
+    "xenon",
+    "cyclomatic complexity",
+    "complexity gate",
+    "coverage gate",
+    "code coverage measurement",
+    "conventional commits",
+    "prometheus metrics",
+    "dependabot",
+    "required status check",
+    "required check",
+    "quality gate",
+    "guardrail policy",
+)
+_POLICY_ADDITION_STANDARD_TERMS: tuple[str, ...] = (
+    "standardize",
+    "fleet-wide standard",
+    "fleet standard",
+    "new ci gate",
+    "add a ci gate",
+    "add ci gate",
+    "new standing gate",
+    "new required gate",
+)
+
+
+def is_policy_addition(title: str, body: str) -> bool:
+    """Return ``True`` when a draft proposes a *policy addition*.
+
+    A policy addition introduces a standing CI workflow, a fleet-wide
+    standard, or a new required check — a workflow-policy change that
+    always needs an operator decision. Survey/audit file these
+    repeatedly (complexity gates, secret scanners, Scorecard, coverage
+    standardization, …); each lands in ``human_issue_approval`` and burns
+    a separate escalation panel. Detecting the class lets the runner tag
+    them (``_POLICY_ADDITION_LABEL``) so they can be batched for review.
+
+    The check is a conservative keyword match over *title* + *body*; it
+    only tags, never suppresses, so a false positive is cheap and a false
+    negative just preserves today's per-ticket behaviour.
+    """
+    hay = f"{title}\n{body}".lower()
+    return any(term in hay for term in _POLICY_ADDITION_TOOLING_TERMS) or any(
+        term in hay for term in _POLICY_ADDITION_STANDARD_TERMS
+    )
+
 
 def _find_or_create_scanner_epic(
     service: TicketService,
@@ -1004,6 +1080,24 @@ def _create_one_draft(
             target_board_id,
             title,
         )
+        # Tag survey/audit CI-tooling / fleet-standard proposals so the
+        # policy-addition class is discoverable and can be batched into a
+        # single policy-review decision instead of one escalation panel
+        # each (see docs/stages/approval-gate.md). Best-effort — a label
+        # failure must never abort draft creation.
+        if source_label in (
+            SourceKind.AUDIT,
+            SourceKind.SURVEY,
+        ) and is_policy_addition(title, body):
+            try:
+                target_service.set_labels(ticket.id, [_POLICY_ADDITION_LABEL])
+            except Exception:
+                log.exception(
+                    "%s: failed to apply %s label to draft %s",
+                    source_label,
+                    _POLICY_ADDITION_LABEL,
+                    ticket.id,
+                )
         return {"id": ticket.id, "title": ticket.title}, gap_id
     except Exception:
         log.exception("failed to create draft ticket: %s", title)

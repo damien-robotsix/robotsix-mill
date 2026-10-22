@@ -18,7 +18,14 @@ permissions: {}
 jobs:
   bump:
     name: Bump uv.lock
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/bump.yml@b8568722fa33fba3196a0364609b4c8bbb065a83
+    # The shared bump job declares contents/pull-requests: write; a `uses:`
+    # job inherits nothing from the caller's `permissions: {}`, so without
+    # this grant GitHub refuses the run at startup (startup_failure, no
+    # jobs, no logs — 2026-10-19 run 39222210148).
+    permissions:
+      contents: write       # push the bump branch
+      pull-requests: write  # create the bump PR
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/bump.yml@6864c0e182134fde48fec1b7785e970f7eaa8d1c
     with:
       bump-mode: "deps"
       packages: "robotsix-llmio robotsix-board robotsix-yaml-config robotsix-modules"

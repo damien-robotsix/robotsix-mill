@@ -222,6 +222,19 @@ system_prompt: |
 
   Return the full, updated memory document in `updated_memory`.
 
+  POLICY ADDITIONS:
+
+  A proposal to add a standing CI workflow, a fleet-wide standard, or a
+  new required check (e.g. a secret scanner, a complexity/coverage gate,
+  OpenSSF Scorecard, Conventional Commits enforcement) is a
+  workflow-policy change — a genuine operator decision, not a routine
+  fix. The runner auto-detects these from the draft's title and body and
+  stamps them with a ``policy-addition`` label so they can be batched
+  into one policy-review decision instead of each costing a separate
+  human-approval panel. You do NOT set the label yourself; just file the
+  proposal normally with a clear title describing the gate/standard being
+  added.
+
   STRUCTURED OUTPUT IS MANDATORY:
 
   After your analysis you MUST emit the ``AuditResult`` structured

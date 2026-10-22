@@ -5,6 +5,7 @@ from pathlib import Path
 
 from robotsix_mill.agents.runners.pass_runner import (
     _GAP_ID_RE,
+    _POLICY_ADDITION_LABEL,
     _create_one_draft,
     _format_recent_proposals,
     _module_curator_premise_check,
@@ -13,6 +14,7 @@ from robotsix_mill.agents.runners.pass_runner import (
     _strip_unverified_filed_annotations,
     _test_file_exists_for_gap,
     _verify_prior_proposals,
+    is_policy_addition,
     load_memory,
     persist_memory,
     run_agent_pass,
@@ -25,7 +27,7 @@ from robotsix_mill.core.models import (
     TicketEvent,
     TicketKind,
 )
-from robotsix_mill.core.service import TicketService
+from robotsix_mill.core.service import TicketService, _parse_labels
 from robotsix_mill.core.states import State
 from robotsix_mill.core.workspace import Workspace
 
@@ -3180,5 +3182,101 @@ def test_same_board_title_fingerprint_dedup_no_gap_id(tmp_path, monkeypatch):
     # Still only one ticket in the DB.
     tickets = service.list()
     assert len(tickets) == 1
+
+    db.reset_engine()
+
+
+# ------------------------------------------------------------------ policy-addition classification
+
+
+def test_is_policy_addition_detects_ci_tooling_proposals():
+    """The observed recurring CI/standards-gate escalations classify as
+    policy additions."""
+    cases = [
+        ("Add cyclomatic complexity analysis with radon/xenon", "body"),
+        ("Add visual regression testing with Chromatic", "body"),
+        ("Add a secret scanner (gitleaks) to pre-commit", "body"),
+        ("Add an OpenSSF Scorecard workflow for container repos", "body"),
+        ("Standardize code coverage measurement across the fleet", "body"),
+        ("title", "Introduce a new CI workflow enforcing Conventional Commits."),
+        ("title", "Propose a quality gate that fails on coverage regressions."),
+    ]
+    for title, body in cases:
+        assert is_policy_addition(title, body), f"should classify: {title!r}"
+
+
+def test_is_policy_addition_ignores_routine_code_quality():
+    """Ordinary code-quality / refactor drafts are NOT policy additions."""
+    cases = [
+        ("Add unit tests for agents/coding.py", "Cover the untested branch."),
+        ("Refactor the pass runner to reduce complexity", "Extract a helper."),
+        ("Fix a typo in the README", "s/teh/the/"),
+        ("Classify src/robotsix_mill/newthing.py: assign to a module", "body"),
+    ]
+    for title, body in cases:
+        assert not is_policy_addition(title, body), f"should NOT classify: {title!r}"
+
+
+def test_policy_addition_draft_is_labelled(tmp_path):
+    """A survey CI-tooling proposal carries the policy-addition label in
+    its ticket data (AC1)."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    title = "Add a secret scanner (gitleaks) to pre-commit"
+    body = "Introduce a gitleaks pre-commit hook and a CI workflow."
+    res = _FakeAgentResult(
+        updated_memory="mem",
+        draft_titles=[title],
+        draft_bodies=[body],
+    )
+
+    ticket_info, _ = _create_one_draft(
+        i=0,
+        res=res,
+        gap_ids=[],
+        draft_target_repo_ids=[""],
+        source_label=SourceKind.SURVEY,
+        service=service,
+        settings=settings,
+        origin_session="test-session",
+        repo_dir=None,
+    )
+    assert ticket_info is not None
+    ticket = service.get(ticket_info["id"])
+    assert _parse_labels(ticket.labels) == [_POLICY_ADDITION_LABEL]
+
+    db.reset_engine()
+
+
+def test_non_policy_addition_draft_is_not_labelled(tmp_path):
+    """A routine audit code-quality draft is not tagged policy-addition."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    res = _FakeAgentResult(
+        updated_memory="mem",
+        draft_titles=["Add unit tests for agents/coding.py"],
+        draft_bodies=["Cover the untested error branch."],
+    )
+
+    ticket_info, _ = _create_one_draft(
+        i=0,
+        res=res,
+        gap_ids=[],
+        draft_target_repo_ids=[""],
+        source_label=SourceKind.AUDIT,
+        service=service,
+        settings=settings,
+        origin_session="test-session",
+        repo_dir=None,
+    )
+    assert ticket_info is not None
+    ticket = service.get(ticket_info["id"])
+    assert _parse_labels(ticket.labels) == []
 
     db.reset_engine()

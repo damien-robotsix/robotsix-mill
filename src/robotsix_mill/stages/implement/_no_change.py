@@ -17,6 +17,7 @@ mixin helpers it depends on (``cls._finalize``,
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -133,6 +134,25 @@ def _has_outstanding_review_directives(new_ic: _ImplementContext | None) -> bool
         return False
     feedback = getattr(new_ic, "feedback", None) or ""
     return "[REVIEW " in feedback
+
+
+# Matches the CI-monitor draft title "CI failure: <workflow> on <branch>"
+# (same shape ``ci_auto_close_runner._TITLE_RE`` anchors on).
+_CI_FAILURE_TITLE_RE = re.compile(r"^CI failure: .+? on \S+$", re.IGNORECASE)
+
+
+def _is_ci_failure_ticket(ticket: Any) -> bool:
+    """True for tickets the CI monitor filed for a red workflow run.
+
+    ``source == "ci"`` is authoritative; the title shape is the fallback for
+    tickets whose source was rewritten (dedup/refile) but that still carry
+    the monitor's title.
+    """
+    source = str(getattr(ticket, "source", "") or "").strip().lower()
+    if source == "ci":
+        return True
+    title = str(getattr(ticket, "title", "") or "").strip()
+    return bool(_CI_FAILURE_TITLE_RE.match(title))
 
 
 def _run_no_change_contradiction_check(
@@ -317,6 +337,51 @@ def _run_no_change_contradiction_check(
                     outcome=Outcome(
                         State.BLOCKED,
                         "no_change_needed with empty diff but open review directives",
+                    ),
+                )
+            # Guard: a CI-failure ticket (filed by the CI monitor for a red
+            # workflow) is only ever legitimately closed by ci-auto-close,
+            # which observes a GREEN run of that workflow on the target
+            # branch. An implement pass concluding ``no_change_needed`` on
+            # one proves at most that the agent found nothing to edit — the
+            # workflow is still red, so DONE would be a false close that
+            # hides the breakage (2026-10-22: central-deploy
+            # 20261022T112405Z-…-1003 "lock already pins the fixed certifi"
+            # while the Trivy gate failed on the base image's pip, and
+            # website 20261016T093647Z-…-c425 whose re-invocation read two
+            # operator escalation comments as the test-failure block — both
+            # closed DONE within 12 minutes, both workflows still red).
+            # BLOCK with the rationale so a human (or the drain session)
+            # diagnoses it; ci-auto-close still closes it once green.
+            if _is_ci_failure_ticket(ticket):
+                diag = (
+                    f"{no_change_rationale.strip() or summary}\n\n"
+                    "[Diagnostic] implement concluded ``no_change_needed`` with "
+                    "an empty diff on a CI-failure ticket. The failing workflow "
+                    "is not known to be green again, so closing DONE would hide "
+                    "a live red run. The ticket stays open until ci-auto-close "
+                    "observes a green run on the target branch, or a human "
+                    "diagnoses the failure (the cause usually sits outside the "
+                    "ticket's log tail — read the full failing step)."
+                )
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    diag,
+                    ok=False,
+                    reference_files=ref_files,
+                    extra_roots=extra_roots,
+                )
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(
+                        State.BLOCKED,
+                        "CI-failure ticket: no_change_needed with an empty diff "
+                        "while the workflow is not known to be green — "
+                        "needs a human diagnosis (ci-auto-close closes it "
+                        "once the workflow is green)",
                     ),
                 )
             # No contradiction — close DONE.

@@ -23,7 +23,7 @@ jobs:
     env:
       UV_MALWARE_CHECK: "1"
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
@@ -45,7 +45,7 @@ jobs:
   publish-mill:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: lint
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@c4caf23ade98668434145f5b1abd3bc42cec63e7  # main 2026-09-11
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@13e54ef2c331bfb3eb6daac295f49ff310b3d572  # main 2026-10-21
     permissions:
       contents: read
       packages: write
@@ -58,7 +58,7 @@ jobs:
   publish-sandbox:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: lint
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@c4caf23ade98668434145f5b1abd3bc42cec63e7  # main 2026-09-11
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@13e54ef2c331bfb3eb6daac295f49ff310b3d572  # main 2026-10-21
     permissions:
       contents: read
       packages: write
@@ -72,7 +72,7 @@ jobs:
   publish-proxy:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: lint
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@c4caf23ade98668434145f5b1abd3bc42cec63e7  # main 2026-09-11
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@13e54ef2c331bfb3eb6daac295f49ff310b3d572  # main 2026-10-21
     permissions:
       contents: read
       packages: write
