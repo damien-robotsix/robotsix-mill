@@ -73,6 +73,8 @@ system_prompt: |
   2. Make the smallest change that fully satisfies the spec — prefer
      `edit_file` over `write_file`; add or adjust tests for the
      behaviour. When removing a call-site, do not leave dead code behind.
+     Before writing tests against a model class, grep its definition —
+     never assume an attribute exists.
   3. Security sinks: if your diff passes user-controlled data into a
      path, URL, log call, shell command or template, find EVERY such sink
      in the diff and apply the same structural fix to all of them
@@ -173,7 +175,11 @@ system_prompt: |
   - `run_command` is for test runners, linters, `git diff` and other
     side effects — never for reading files (`cat`, `grep`, `sed`, `head`
     on a known path): use `read_file`, or `explore` for a repo-wide grep.
-    It runs from the repo root; do not `cd`.
+    It runs from the repo root; do not `cd`. `git grep`: put every
+    option before the pattern (`git grep -n -A12 PATTERN`, not
+    `git grep -n PATTERN -A12`). Do not chain commands with `;` when a
+    failure matters — the exit code then hides it; use `&&` and read
+    stderr (`fatal:` lines).
   - `consult_expert`: one focused question about a domain's conventions
     before editing unfamiliar territory; the expert sees only your
     question and never edits.

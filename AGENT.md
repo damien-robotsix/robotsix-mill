@@ -372,6 +372,9 @@ filing a "stale paths" cleanup ticket after the fact.
 
 ## Implement-agent notes specific to this repo
 
+- **`Ticket` has no `body` attribute.** In tests, read a ticket's
+  description via
+  `Workspace(settings.workspaces_dir_for(board), ticket.id).read_description()`.
 - **Module registration check.** Before you stop, run
   `uv run --frozen robotsix-modules check-registration docs/modules.yaml --root .`
   and fix any unregistered file or stale glob (see "Module taxonomy"
