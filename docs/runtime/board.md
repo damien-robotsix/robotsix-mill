@@ -53,6 +53,15 @@ The board is served as a static page via FastAPI's `StaticFiles` mount
 at `/board/`, with the skeleton HTML delivered by a dedicated route
 handler.
 
+## Settings Panel
+
+The header **⚙ Settings** button opens the component-owned config panel
+in the board drawer. Dismiss it with the panel's **×** control, the
+**Escape** key, or a click outside the drawer (the Settings button and
+any open modal are excluded). Opening a ticket, the Runs view, or the
+AGENT.md candidates view closes the Settings panel and restores the
+normal drawer content.
+
 ## Learning More
 
 See [docs/agents/index.md](../agents/index.md) for the complete agent
