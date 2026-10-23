@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+from datetime import UTC, datetime
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -119,6 +121,53 @@ def _ruff_autofix_changed(repo_dir: Path, changed: list[str]) -> None:
             log.warning(
                 "_ruff_autofix_changed: `%s` failed", " ".join(cmd[:4]), exc_info=True
             )
+
+
+def _drop_gate_era_comments(
+    comments: list[Any],
+    events: list[Any],
+    ticket_id: str,
+) -> list[Any]:
+    """Drop comments that predate the ticket's latest human-gate approval.
+
+    A comment posted while the ticket sat at ``human_issue_approval`` is
+    gate-era discussion — typically a chat drain session's "ESCALATED to
+    operator … do NOT approve until …" hold — and the operator's later
+    approval (the ``human_issue_approval → ready`` transition) supersedes
+    it.  Feeding such a hold to implement as review feedback taught the
+    agent that "the reported failure is an operator escalation, not a
+    test failure" and to conclude ``no_change_needed`` without touching
+    the tree: six feature tickets (standards 1951, meta 8647, linkedin
+    fbe8/1f6e, website 4cd3, rs_isaac_uav_sim d1a9) closed DONE with
+    empty diffs within 25 minutes of their approval on 2026-10-23
+    (15:29–15:51Z).  Review comments are unaffected: they are posted
+    after the approval, while the ticket is in ``code_review``.
+    """
+    if not comments or not events:
+        return comments
+    ordered = sorted(events, key=lambda e: _aware(e.at))
+    cutoff = None
+    for prev, cur in pairwise(ordered):
+        if cur.state == State.READY and prev.state == State.HUMAN_ISSUE_APPROVAL:
+            cutoff = _aware(cur.at)
+    if cutoff is None:
+        return comments
+    kept = [c for c in comments if _aware(c.created_at) > cutoff]
+    dropped = len(comments) - len(kept)
+    if dropped:
+        log.info(
+            "%s: dropped %d gate-era comment(s) posted before the "
+            "human_issue_approval → ready approval at %s — not implement feedback",
+            ticket_id,
+            dropped,
+            cutoff.isoformat(),
+        )
+    return kept
+
+
+def _aware(dt: datetime) -> datetime:
+    """SQLite round-trips can hand back naive datetimes; compare in UTC."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 class PhaseCoordinatorMixin(_ImplementStageBase):
@@ -464,6 +513,9 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         # resume-blocked justification, not a gap to close.
         comments = ctx.service.list_comments(ticket.id)
         comments = [c for c in comments if c.author not in NON_FEEDBACK_AUTHORS]
+        comments = _drop_gate_era_comments(
+            comments, ctx.service.history(ticket.id), ticket.id
+        )
         if comments:
             open_threads = [
                 c for c in comments if c.parent_id is None and c.closed_at is None
