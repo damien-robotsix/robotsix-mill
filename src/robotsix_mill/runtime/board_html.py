@@ -125,7 +125,7 @@ background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer;
 margin-left:4px">
   Show closed
 </button>
-<button onclick="openSettings()" style="font-size:11px;padding:3px 10px;
+<button id="settings-btn" onclick="openSettings()" style="font-size:11px;padding:3px 10px;
 background:#374151;color:#cfd3db;border:1px solid #4b5563;border-radius:4px;cursor:pointer;
 margin-left:4px" title="Component-owned config (Settings panel)">
   ⚙ Settings
@@ -137,7 +137,8 @@ margin-left:4px" title="Component-owned config (Settings panel)">
 <div id="provider-status" style="display:none;background:#1d2a3a;border-bottom:1px solid #2a4a6b;color:#8ab8e8;padding:6px 12px;font-size:12px"></div>
 {BOARD_SKELETON}
 <div id="drawer"><div id="d"><div class="drawer-close-row"><span class="x" onclick="close_()" title="Cancel">&times;</span></div></div>
-<div id="settings-panel" style="display:none"></div></div>
+<div id="settings-wrap" style="display:none"><div class="drawer-close-row"><span class="x" onclick="closeSettings()" title="Close settings">&times;</span></div>
+<div id="settings-panel"></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/lib/marked.umd.js"></script>
 {CONFIG_SCRIPT}
 <script type="module">
