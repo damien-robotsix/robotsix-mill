@@ -170,6 +170,29 @@ def _aware(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
+def _normalize_reference_files(raw: Any) -> list[dict[str, str]]:
+    """Coerce any reference_files shape to the paths-only ``[{"path": str}]`` list.
+
+    ``_finalize_impl`` receives either the agent's fresh ``list[str]`` or,
+    on every error/blocked/advance path, ``ic.reference_files`` — the
+    ``[{"path": …}]`` list it loaded from the artifact. Wrapping the latter
+    again wrote ``{"path": {"path": "…"}}`` to ``reference_files.json``, and
+    the NEXT implement spawn crashed in ``run_coordinator`` with
+    ``TypeError: unsupported operand type(s) for /: 'PosixPath' and 'dict'``
+    (robotsix-mill f611, 2026-10-23 15:49Z, trace 968f1327). Accept str,
+    ``{"path": str}`` and the nested shape; drop anything else.
+    """
+    out: list[dict[str, str]] = []
+    for entry in raw or []:
+        seen = 0
+        while isinstance(entry, dict) and seen < 8:
+            entry = entry.get("path")
+            seen += 1
+        if isinstance(entry, str) and entry:
+            out.append({"path": entry})
+    return out
+
+
 class PhaseCoordinatorMixin(_ImplementStageBase):
     """Run-loop orchestration for :class:`ImplementStage`."""
 
@@ -473,7 +496,9 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         ref_files_path = ws.artifacts_dir / "reference_files.json"
         if ref_files_path.exists():
             try:
-                reference_files = json.loads(ref_files_path.read_text(encoding="utf-8"))
+                reference_files = _normalize_reference_files(
+                    json.loads(ref_files_path.read_text(encoding="utf-8"))
+                )
             except json.JSONDecodeError:
                 log.warning(
                     "%s: reference_files.json corrupted — treating as empty",
@@ -1444,7 +1469,7 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             ref_path = ws.artifacts_dir / "reference_files.json"
             ref_path.write_text(
                 json.dumps(
-                    [{"path": p} for p in (reference_files or [])],
+                    _normalize_reference_files(reference_files),
                     indent=2,
                 ),
                 encoding="utf-8",
