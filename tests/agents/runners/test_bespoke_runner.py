@@ -277,3 +277,105 @@ class TestPeriodicDraftCap:
     def test_a_pass_under_the_cap_is_unaffected(self, tmp_path, monkeypatch):
         tickets = self._run_with_n_findings(tmp_path, monkeypatch, 2)
         assert len(tickets) == 2
+
+
+class TestDraftRouting:
+    """``draft_repo_ids`` routes each bespoke draft to its target board."""
+
+    def _run(self, tmp_path, monkeypatch, result):
+        import robotsix_mill.config as _cfg
+        from robotsix_mill.config import RepoConfig, ReposRegistry
+
+        def _repo(repo_id, board_id):
+            return RepoConfig(
+                repo_id=repo_id,
+                board_id=board_id,
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+            )
+
+        monkeypatch.setattr(
+            _cfg,
+            "_repos_config",
+            ReposRegistry(
+                repos={
+                    "test-repo": _repo("test-repo", "test-board"),
+                    "repo-a": _repo("repo-a", "board-a"),
+                    "repo-b": _repo("repo-b", "board-b"),
+                }
+            ),
+        )
+        s = _settings(tmp_path)
+        db.init_db(s, board_id="board-a")
+        db.init_db(s, board_id="board-b")
+        monkeypatch.setattr(
+            "robotsix_mill.agents.runners.bespoke_runner.Settings",
+            lambda: s,
+        )
+        monkeypatch.setattr(_bespoke, "run_bespoke_agent", lambda **kw: result)
+        run_bespoke_pass(
+            session_id="sess-route",
+            definition=_definition(name="fleet-audit"),
+            repo_config=_test_repo_config(),
+            repo_dir=None,
+        )
+        self.settings = s
+        return {
+            b: TicketService(s, board_id=b).list()
+            for b in ("test-board", "board-a", "board-b")
+        }
+
+    def _desc(self, board_id, ticket):
+        from robotsix_mill.core.workspace import Workspace
+
+        return Workspace(
+            self.settings.workspaces_dir_for(board_id), ticket.id
+        ).read_description()
+
+    def test_drafts_land_on_their_target_boards(self, tmp_path, monkeypatch):
+        boards = self._run(
+            tmp_path,
+            monkeypatch,
+            BespokeResult(
+                draft_titles=["Gap in repo-a", "Gap in repo-b"],
+                draft_bodies=["Body a", "Body b"],
+                draft_repo_ids=["repo-a", "repo-b"],
+            ),
+        )
+        assert boards["test-board"] == []
+        assert [t.title for t in boards["board-a"]] == ["Gap in repo-a"]
+        assert [t.title for t in boards["board-b"]] == ["Gap in repo-b"]
+        assert "Audited from: test-repo / fleet-audit" in self._desc(
+            "board-a", boards["board-a"][0]
+        )
+
+    def test_unknown_repo_id_falls_back_to_host_board(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        with caplog.at_level("WARNING", logger="robotsix_mill.bespoke"):
+            boards = self._run(
+                tmp_path,
+                monkeypatch,
+                BespokeResult(
+                    draft_titles=["Gap in nowhere"],
+                    draft_bodies=["Body"],
+                    draft_repo_ids=["no-such-repo"],
+                ),
+            )
+        assert [t.title for t in boards["test-board"]] == ["Gap in nowhere"]
+        assert boards["board-a"] == [] and boards["board-b"] == []
+        assert (
+            "periodic drafts: unknown target repo 'no-such-repo' for "
+            "'Gap in nowhere' — filing on host board"
+        ) in caplog.text
+
+    def test_missing_list_files_on_host_board(self, tmp_path, monkeypatch):
+        boards = self._run(
+            tmp_path,
+            monkeypatch,
+            BespokeResult(draft_titles=["Local gap"], draft_bodies=["Body"]),
+        )
+        assert [t.title for t in boards["test-board"]] == ["Local gap"]
+        assert "Audited from" not in self._desc("test-board", boards["test-board"][0])
+        assert boards["board-a"] == [] and boards["board-b"] == []

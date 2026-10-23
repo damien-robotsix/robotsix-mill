@@ -39,12 +39,31 @@ class BespokeResult(BaseModel):
     shared :func:`~..pass_runner.run_agent_pass` boilerplate (memory
     persist + draft-ticket creation + dedup) accepts it without
     branching.
+
+    Prompt contract: ``draft_titles`` / ``draft_bodies`` are parallel
+    lists, one entry per draft. By default every draft lands on the
+    host repo's board. An audit that inspects *other* fleet repos must
+    also set ``draft_repo_ids`` (parallel list, one registered repo_id
+    per draft, ``""`` for the host board) so each draft is filed on the
+    audited repo's board; the runner stamps such drafts with
+    ``Audited from: <host repo> / <agent name>``.
     """
 
     updated_memory: str = ""
     draft_titles: list[str] = Field(default_factory=list)
     draft_bodies: list[str] = Field(default_factory=list)
     gap_ids: list[str] = Field(default_factory=list)
+    draft_repo_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional, one entry per draft (parallels draft_titles/"
+            "draft_bodies). Empty string or missing entry files the draft "
+            "on the host repo's board. A registered repo_id (e.g. "
+            "'robotsix-mill') files it on that repo's board instead — set "
+            "it when auditing another repo. Unknown ids fall back to the "
+            "host board."
+        ),
+    )
 
 
 def run_bespoke_agent(
@@ -128,4 +147,5 @@ def run_bespoke_agent(
     out.draft_titles = out.draft_titles[:MAX_DRAFTS]
     out.draft_bodies = out.draft_bodies[:MAX_DRAFTS]
     out.gap_ids = out.gap_ids[:MAX_DRAFTS]
+    out.draft_repo_ids = out.draft_repo_ids[:MAX_DRAFTS]
     return out
