@@ -1109,6 +1109,7 @@
   }
 
   async function open_(id) {
+    _hideSettings();
     sel = id;
     runsOpen = false;
     candidatesOpen = false;
@@ -1308,6 +1309,7 @@
     sel = null;
     runsOpen = false;
     candidatesOpen = false;
+    _hideSettings();
     document.getElementById("drawer").classList.remove("open");
   }
 
@@ -1897,7 +1899,7 @@
 
   async function toggleRuns() {
     if (runsOpen) { close_(); return; }
-    if (sel) { close_(); }
+    if (sel || settingsOpen) { close_(); }
     await renderRuns();
     runsOpen = true;
     document.getElementById("drawer").classList.add("open");
@@ -2073,7 +2075,7 @@
 
   async function openCandidates() {
     if (candidatesOpen) { close_(); return; }
-    if (sel || runsOpen) close_();
+    if (sel || runsOpen || settingsOpen) close_();
     candidatesOpen = true;
     document.getElementById("drawer").classList.add("open");
     await renderCandidatesList();
@@ -2352,25 +2354,49 @@
   // Settings panel — delegates to the shared @robotsix/ui ConfigPanel.
   // The panel is mounted once at page load on #settings-panel (via the
   // <script type="module"> in the board HTML shell).  This function just
-  // toggles its visibility inside the drawer.
+  // toggles its visibility inside the drawer.  It is dismissed via its ×
+  // button, Escape, or a click outside the drawer.
   // =========================================================================
   var settingsOpen = false;
+
+  // Restore the drawer's normal content without closing the drawer, so
+  // opening a ticket/runs/candidates view never leaves #d hidden.
+  function _hideSettings() {
+    settingsOpen = false;
+    var wrap = document.getElementById("settings-wrap");
+    if (wrap) wrap.style.display = "none";
+    var d = document.getElementById("d");
+    if (d) d.style.display = "";
+  }
 
   function openSettings() {
     if (settingsOpen) { closeSettings(); return; }
     if (sel || runsOpen || candidatesOpen) close_();
     settingsOpen = true;
     document.getElementById("d").style.display = "none";
-    document.getElementById("settings-panel").style.display = "";
+    document.getElementById("settings-wrap").style.display = "";
     document.getElementById("drawer").classList.add("open");
   }
 
   function closeSettings() {
-    settingsOpen = false;
-    document.getElementById("settings-panel").style.display = "none";
-    document.getElementById("d").style.display = "";
     close_();
   }
+
+  document.addEventListener("keydown", function(ev) {
+    if (ev.key !== "Escape" || !settingsOpen) return;
+    // Let an open modal handle its own Escape first.
+    if (document.querySelector(".modal-backdrop")) return;
+    closeSettings();
+  });
+
+  document.addEventListener("click", function(ev) {
+    if (!settingsOpen) return;
+    var t = ev.target;
+    if (!t || !t.closest || !document.body.contains(t)) return;
+    if (t.closest("#drawer") || t.closest("#settings-btn") ||
+        t.closest(".modal-backdrop")) return;
+    closeSettings();
+  });
 
   window.openSettings = openSettings;
   window.closeSettings = closeSettings;
