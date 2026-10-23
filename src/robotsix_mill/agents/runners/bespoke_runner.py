@@ -60,6 +60,45 @@ def _memory_file_for(
     return base / f"bespoke_{name}_memory.md"
 
 
+def _route_drafts(
+    out: _bespoke_agent.BespokeResult,
+    *,
+    host_repo_id: str,
+    agent_name: str,
+) -> _bespoke_agent.BespokeResult:
+    """Validate ``draft_repo_ids`` and stamp cross-board drafts.
+
+    Unknown repo ids fall back to the host board (empty entry) with a
+    warning. Drafts routed to another repo's board get an
+    ``Audited from: <host> / <agent>`` line so the target board knows
+    which audit filed them.
+    """
+    if not any(out.draft_repo_ids):
+        return out
+    from ...config import get_repos_config
+
+    known = get_repos_config().repos.keys()
+    routed: list[str] = []
+    for i, raw in enumerate(out.draft_repo_ids):
+        target = (raw or "").strip()
+        title = out.draft_titles[i] if i < len(out.draft_titles) else ""
+        if target and target not in known:
+            log.warning(
+                "periodic drafts: unknown target repo '%s' for '%s' — "
+                "filing on host board",
+                target,
+                title,
+            )
+            target = ""
+        if target == host_repo_id:
+            target = ""
+        if target and i < len(out.draft_bodies):
+            out.draft_bodies[i] += f"\n\nAudited from: {host_repo_id} / {agent_name}"
+        routed.append(target)
+    out.draft_repo_ids = routed
+    return out
+
+
 def run_bespoke_pass(
     session_id: str,
     *,
@@ -102,11 +141,19 @@ def run_bespoke_pass(
         session_id,
         board_id,
     )
-    agent_fn = partial(
+    run_agent_fn = partial(
         _bespoke_agent.run_bespoke_agent,
         definition=definition,
         repo_dir=repo_dir,
     )
+
+    def agent_fn(**kwargs: Any) -> _bespoke_agent.BespokeResult:
+        return _route_drafts(
+            run_agent_fn(**kwargs),
+            host_repo_id=repo_config.repo_id,
+            agent_name=definition.name,
+        )
+
     result = run_agent_pass(
         agent_fn=agent_fn,
         memory_file=memory_file,

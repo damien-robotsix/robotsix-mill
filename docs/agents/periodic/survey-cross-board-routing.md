@@ -31,6 +31,18 @@ The agent sets `draft_target_repo_ids[0]` and optionally
    target board for each draft, runs cross-board dedup, and creates the
    ticket on the correct board via `target_service.create(board_id=...)`.
 
+## Bespoke agents: `draft_repo_ids`
+
+Bespoke per-repo agents (`src/robotsix_mill/agents/bespoke.py`) file every
+draft on the host repo's board by default. An audit that inspects *other*
+fleet repos must set `draft_repo_ids` in its structured output — a parallel
+list to `draft_titles`/`draft_bodies`, one registered `repo_id` per draft
+(`""` or a missing entry keeps the draft on the host board). Each non-empty
+entry is checked against the repos registry; an unknown id falls back to the
+host board with a warning. Drafts routed to another board get an
+`Audited from: <host repo> / <agent name>` line appended to their body.
+Dedup runs against the target board.
+
 ## Memory ledger
 
 The agent tracks filed standards proposals in a `## Standards Proposals`

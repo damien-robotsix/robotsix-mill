@@ -1200,7 +1200,10 @@ def run_agent_pass(
 
     # 5. Create draft tickets for each proposal.
     gap_ids: list[str] = getattr(res, "gap_ids", [])
-    draft_target_repo_ids: list[str] = getattr(res, "draft_target_repo_ids", [])
+    # Bespoke results name the same per-draft routing ``draft_repo_ids``.
+    draft_target_repo_ids: list[str] = getattr(
+        res, "draft_target_repo_ids", None
+    ) or getattr(res, "draft_repo_ids", [])
     created: list[dict[str, str]] = []
     verified_gap_ids: list[str] = []
     limit = min(len(res.draft_titles), len(res.draft_bodies))
