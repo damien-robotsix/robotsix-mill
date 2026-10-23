@@ -110,3 +110,53 @@ def test_feedback_injected_after_review_bounce(ctx_factory, tmp_path):
     assert ictx.feedback is not None
     assert "please fix the LICENSE check" in ictx.feedback
     assert ictx.open_thread_ids == {c.id}
+
+
+# --- gate-era comments are not implement feedback -------------------------
+
+
+def test_gate_era_escalation_comment_dropped_after_approval(ctx_factory, tmp_path):
+    """A chat drain's "ESCALATED to operator" hold posted while the ticket
+    sat at human_issue_approval must NOT reach implement as feedback once
+    the operator approves (human_issue_approval → ready) — 2026-10-23 six
+    tickets read that hold as a test failure and closed DONE with empty
+    diffs. A review comment posted after the approval still lands."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = ctx.service.create("Add feature", "Please add feature.txt")
+    ctx.service.transition(t.id, State.HUMAN_ISSUE_APPROVAL)
+    ctx.service.add_comment(
+        t.id,
+        "ESCALATED to operator 2026-10-22T20:07Z: lint class not in the "
+        "allowlist. Do NOT approve until an operator answer is recorded.",
+        author="robotsix-chat",
+    )
+    import time as _time
+
+    _time.sleep(0.01)
+    ctx.service.transition(t.id, State.READY, note="Operator approved Option B")
+    _time.sleep(0.01)
+    c = ctx.service.add_comment(t.id, "please fix the LICENSE check", author="reviewer")
+
+    t = ctx.service.get(t.id)
+    ictx = ImplementStage._load_implement_context(ctx, t, ctx.settings)
+
+    assert ictx.feedback is not None
+    assert "ESCALATED to operator" not in ictx.feedback
+    assert "please fix the LICENSE check" in ictx.feedback
+    assert ictx.open_thread_ids == {c.id}
+
+
+def test_gate_era_comment_kept_without_approval_transition(ctx_factory, tmp_path):
+    """Without a human_issue_approval → ready transition nothing is
+    dropped — an ordinary review→ready bounce keeps every comment."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    ctx.service.add_comment(t.id, "first remark", author="robotsix-chat")
+
+    t = ctx.service.get(t.id)
+    ictx = ImplementStage._load_implement_context(ctx, t, ctx.settings)
+
+    assert ictx.feedback is not None
+    assert "first remark" in ictx.feedback
