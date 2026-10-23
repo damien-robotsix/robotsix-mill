@@ -521,6 +521,23 @@ pre {
 .modal-btn-create { background: #2563eb; color: #fff; }
 .modal-btn-create:hover { background: #3b82f6; }
 .modal-btn-create:disabled { opacity: .5; cursor: default; }
+.modal-btn-danger { background: #b91c1c; }
+.modal-btn-danger:hover { background: #dc2626; }
+.modal-text { font-size: 12px; color: #cfd3db; line-height: 1.5; margin: 0; }
+
+.mill-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: #14532d;
+  color: #dcfce7;
+  border: 1px solid #166534;
+}
+.mill-toast-error { background: #7f1d1d; color: #fee2e2; border-color: #991b1b; }
 
 /* ============================================================
    Ticket-type badges (inquiry, epic, triage, etc.)

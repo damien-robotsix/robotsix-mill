@@ -93,6 +93,11 @@ background:#374151;color:#cfd3db;border:1px solid #4b5563;border-radius:4px;curs
 margin-left:4px" title="Register a new repo">
   + Repo
 </button>
+<button id="remove-repo-btn" onclick="removeRepo()" style="display:none;font-size:11px;padding:3px 10px;
+background:#3b1d1d;color:#fca5a5;border:1px solid #7f1d1d;border-radius:4px;cursor:pointer;
+margin-left:4px" title="Deregister the selected repo from mill">
+  Remove repo from mill
+</button>
 <div class="passes-dropdown">
   <button class="passes-trigger" onclick="togglePassesMenu(event)">⚡ Passes ▾</button>
   <div class="passes-menu" id="passes-menu" onclick="event.stopPropagation()">

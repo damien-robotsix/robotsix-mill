@@ -350,6 +350,7 @@
     else url.searchParams.set("repo", value);
     window.history.replaceState({}, "", url);
     toggleMetaOnlyButtons();
+    toggleRemoveRepoButton();
     updatePassesMenu();
     refresh();
   }
@@ -459,6 +460,83 @@
       if (e.key === "Enter" && e.target === forgeUrlEl) { e.preventDefault(); boardIdEl.focus(); return; }
     });
     repoIdEl.focus();
+  }
+
+  // =========================================================================
+  // Remove repo (deregister) — confirmation modal + DELETE /repos/{id}
+  // =========================================================================
+  function toggleRemoveRepoButton() {
+    var btn = document.getElementById("remove-repo-btn");
+    if (!btn) return;
+    var repoId = getRepoId();
+    btn.style.display = (repoId === "all" || repoId === "meta") ? "none" : "";
+  }
+
+  function showToast(msg, isError) {
+    var el = document.createElement("div");
+    el.className = "mill-toast" + (isError ? " mill-toast-error" : "");
+    el.setAttribute("role", "status");
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 4000);
+  }
+
+  function _errorDetail(text) {
+    try {
+      var j = JSON.parse(text);
+      if (j && typeof j.detail === "string") return j.detail;
+    } catch (_e) { /* not JSON */ }
+    return text;
+  }
+
+  function removeRepo() {
+    var repoId = getRepoId();
+    if (repoId === "all" || repoId === "meta") return;
+    var backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop";
+    var modal = document.createElement("div");
+    modal.className = "modal";
+    modal.innerHTML =
+      '<h2>Remove repo from mill</h2>' +
+      '<p class="modal-text">Deregister <strong>' + esc(repoId) + '</strong> from mill? ' +
+      'Its board will no longer be processed by the worker. Removal is refused while the ' +
+      'repo still has open tickets; existing ticket history on disk is not deleted.</p>' +
+      '<div class="modal-buttons">' +
+       '<span class="modal-submit-error" id="modal-remove-err"></span>' +
+       '<button type="button" class="modal-btn-cancel" id="modal-remove-cancel">Cancel</button>' +
+       '<button type="button" class="modal-btn-create modal-btn-danger" id="modal-remove-confirm">Remove</button>' +
+      '</div>';
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+
+    var errEl = document.getElementById("modal-remove-err");
+    var confirmBtn = document.getElementById("modal-remove-confirm");
+
+    function close() { if (backdrop.parentNode) document.body.removeChild(backdrop); }
+
+    async function doRemove() {
+      errEl.textContent = "";
+      confirmBtn.disabled = true; confirmBtn.textContent = "Removing…";
+      var r = await jdel("/repos/" + encodeURIComponent(repoId));
+      if (!r.ok) {
+        var detail = _errorDetail(await r.text());
+        errEl.textContent = "removal failed (" + r.status + "): " + detail;
+        confirmBtn.disabled = false; confirmBtn.textContent = "Remove";
+        return;
+      }
+      close();
+      reposCache = null;
+      onRepoChange("all");
+      showToast("Repo " + repoId + " removed from mill.");
+    }
+
+    backdrop.addEventListener("click", function(e) { if (e.target === backdrop) close(); });
+    document.getElementById("modal-remove-cancel").addEventListener("click", close);
+    confirmBtn.addEventListener("click", doRemove);
+    modal.addEventListener("keydown", function(e) {
+      if (e.key === "Escape") { e.preventDefault(); close(); }
+    });
+    document.getElementById("modal-remove-cancel").focus();
   }
 
   // =========================================================================
@@ -2181,6 +2259,7 @@
     await fetchRepos();
     var repoId = getRepoId();
     toggleMetaOnlyButtons();
+    toggleRemoveRepoButton();
     updatePassesMenu();
     fetchGates();
     fetchCredentialStatus();
@@ -2344,6 +2423,7 @@
 
   window.onRepoChange = onRepoChange;
   window.addRepo = addRepo;
+  window.removeRepo = removeRepo;
   window.toggleClosed = toggleClosed;
   window.fetchRepos = fetchRepos;
   window.connectWebSocket = connectWebSocket;

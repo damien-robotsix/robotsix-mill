@@ -77,3 +77,13 @@ acknowledge and clear failure entries.
 `GET /repos` lists all configured repositories with their current
 status, supporting per-repo and global views when the process is
 running in multi-repo mode.
+
+`DELETE /repos/{repo_id}` deregisters a runtime-registered repo
+(`source="auto"`, i.e. added via `POST /repos`) and hot-reloads the
+registry. It returns `204` on success, `404` for an unknown `repo_id`,
+`403` for operator-configured repos (remove those from
+`config/config.yaml` instead), and `409` while the repo's board still
+has open (non-terminal) tickets — close or delete them first. Tickets
+and history on disk are not deleted by deregistration. The board UI
+exposes this as the "Remove repo from mill" button, shown when a single
+repo is selected.

@@ -240,3 +240,24 @@ def test_deregister_operator_repo(client, settings):
     r = client.delete("/repos/test-repo")
     assert r.status_code == 403
     assert "operator-configured" in r.json()["detail"]
+
+
+def test_deregister_blocked_by_open_tickets(client, settings):
+    """DELETE /repos/{id} → 409 while the repo's board has open tickets."""
+    from robotsix_mill.core import db
+    from robotsix_mill.core.service import TicketService
+
+    r = client.post(
+        "/repos",
+        json={"repo_id": "busy-repo", "forge_remote_url": "https://github.com/x/y"},
+    )
+    assert r.status_code == 201
+    db.init_db(settings, board_id="busy-repo")
+    TicketService(settings, board_id="busy-repo").create(
+        "still open", board_id="busy-repo"
+    )
+
+    r = client.delete("/repos/busy-repo")
+    assert r.status_code == 409
+    assert "open ticket" in r.json()["detail"]
+    assert "busy-repo" in client.app.state.repos.repos
