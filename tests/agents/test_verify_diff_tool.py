@@ -21,6 +21,26 @@ def _completed_process(
     )
 
 
+def _diff_only(**kwargs):
+    """Fake ``subprocess.run``: ``git diff`` returns *kwargs*, ls-files nothing."""
+
+    def fake_run(args, *a, **k):
+        if "ls-files" in args:
+            return _completed_process(args=args)
+        return _completed_process(**kwargs)
+
+    return fake_run
+
+
+def _diff_and_untracked(stat="", untracked=""):
+    def fake_run(args, *a, **k):
+        if "ls-files" in args:
+            return _completed_process(args=args, stdout=untracked)
+        return _completed_process(args=args, stdout=stat)
+
+    return fake_run
+
+
 # ── _parse_changed_files ───────────────────────────────────────────────
 
 
@@ -80,9 +100,7 @@ def test_run_verify_diff_success(tmp_path, monkeypatch):
     monkeypatch.setattr(
         verify_diff_tool.subprocess,
         "run",
-        lambda *a, **k: _completed_process(
-            stdout=" src/a.py | 3 +++\n src/b.py | 2 --"
-        ),
+        _diff_only(stdout=" src/a.py | 3 +++\n src/b.py | 2 --"),
     )
     result = verify_diff_tool._run_verify_diff(tmp_path)
     assert "git diff --stat:" in result
@@ -112,9 +130,7 @@ def test_run_verify_diff_nonzero_rc(tmp_path, monkeypatch):
     monkeypatch.setattr(
         verify_diff_tool.subprocess,
         "run",
-        lambda *a, **k: _completed_process(
-            returncode=128, stderr="fatal: not a git repository"
-        ),
+        _diff_only(returncode=128, stderr="fatal: not a git repository"),
     )
     result = verify_diff_tool._run_verify_diff(tmp_path)
     assert result.startswith("verify_diff: git diff --stat failed (rc=128)")
@@ -125,7 +141,7 @@ def test_run_verify_diff_clean_tree(tmp_path, monkeypatch):
     monkeypatch.setattr(
         verify_diff_tool.subprocess,
         "run",
-        lambda *a, **k: _completed_process(stdout=""),
+        _diff_only(stdout=""),
     )
     result = verify_diff_tool._run_verify_diff(tmp_path)
     assert result == "verify_diff: working tree is clean — no uncommitted changes"
@@ -138,9 +154,7 @@ def test_run_verify_diff_all_expected_present(tmp_path, monkeypatch):
     monkeypatch.setattr(
         verify_diff_tool.subprocess,
         "run",
-        lambda *a, **k: _completed_process(
-            stdout=" src/a.py | 3 +++\n src/b.py | 2 --"
-        ),
+        _diff_only(stdout=" src/a.py | 3 +++\n src/b.py | 2 --"),
     )
     result = verify_diff_tool._run_verify_diff(
         tmp_path, expected_files=["src/a.py", "src/b.py"]
@@ -152,7 +166,7 @@ def test_run_verify_diff_some_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(
         verify_diff_tool.subprocess,
         "run",
-        lambda *a, **k: _completed_process(stdout=" src/a.py | 3 +++"),
+        _diff_only(stdout=" src/a.py | 3 +++"),
     )
     result = verify_diff_tool._run_verify_diff(
         tmp_path, expected_files=["src/a.py", "src/b.py"]
@@ -165,7 +179,7 @@ def test_run_verify_diff_some_unexpected(tmp_path, monkeypatch):
     monkeypatch.setattr(
         verify_diff_tool.subprocess,
         "run",
-        lambda *a, **k: _completed_process(stdout=" src/a.py | 3 +++\n src/c.py | 1 +"),
+        _diff_only(stdout=" src/a.py | 3 +++\n src/c.py | 1 +"),
     )
     result = verify_diff_tool._run_verify_diff(tmp_path, expected_files=["src/a.py"])
     assert "verify_diff NOTE: in diff but NOT expected" in result
@@ -176,13 +190,62 @@ def test_run_verify_diff_both_missing_and_unexpected(tmp_path, monkeypatch):
     monkeypatch.setattr(
         verify_diff_tool.subprocess,
         "run",
-        lambda *a, **k: _completed_process(stdout=" src/a.py | 3 +++\n src/c.py | 1 +"),
+        _diff_only(stdout=" src/a.py | 3 +++\n src/c.py | 1 +"),
     )
     result = verify_diff_tool._run_verify_diff(
         tmp_path, expected_files=["src/a.py", "src/b.py"]
     )
     assert "verify_diff WARNING: expected but NOT in diff" in result
     assert "verify_diff NOTE: in diff but NOT expected" in result
+
+
+# ── untracked files ────────────────────────────────────────────────────
+
+
+def test_run_verify_diff_lists_untracked_only(tmp_path, monkeypatch):
+    """A tree with only new untracked files is not reported clean."""
+    monkeypatch.setattr(
+        verify_diff_tool.subprocess,
+        "run",
+        _diff_and_untracked(untracked="tests/new_harness.mjs\n"),
+    )
+    result = verify_diff_tool._run_verify_diff(tmp_path)
+    assert "working tree is clean" not in result
+    assert "untracked new files" in result
+    assert "tests/new_harness.mjs" in result
+
+
+def test_run_verify_diff_untracked_counts_as_expected(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        verify_diff_tool.subprocess,
+        "run",
+        _diff_and_untracked(
+            stat=" src/a.py | 3 +++", untracked="tests/new_harness.mjs\n"
+        ),
+    )
+    result = verify_diff_tool._run_verify_diff(
+        tmp_path, expected_files=["src/a.py", "tests/new_harness.mjs"]
+    )
+    assert "NOT in diff" not in result
+    assert "verify_diff: all expected files present in diff" in result
+
+
+def test_run_verify_diff_untracked_listing_failure_is_ignored(tmp_path, monkeypatch):
+    def fake_run(args, *a, **k):
+        if "ls-files" in args:
+            return _completed_process(args=args, returncode=128, stderr="boom")
+        return _completed_process(args=args, stdout=" src/a.py | 3 +++")
+
+    monkeypatch.setattr(verify_diff_tool.subprocess, "run", fake_run)
+    result = verify_diff_tool._run_verify_diff(tmp_path, expected_files=["src/a.py"])
+    assert "verify_diff: all expected files present in diff" in result
+
+
+def test_run_verify_diff_real_repo_untracked(tmp_path):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / "new.txt").write_text("x\n")
+    result = verify_diff_tool._run_verify_diff(tmp_path, expected_files=["new.txt"])
+    assert "verify_diff: all expected files present in diff" in result
 
 
 # ── make_verify_diff_tool ──────────────────────────────────────────────
@@ -192,7 +255,7 @@ def test_make_verify_diff_tool_returns_callable(tmp_path, monkeypatch):
     monkeypatch.setattr(
         verify_diff_tool.subprocess,
         "run",
-        lambda *a, **k: _completed_process(stdout=" src/a.py | 1 +"),
+        _diff_only(stdout=" src/a.py | 1 +"),
     )
     tool = verify_diff_tool.make_verify_diff_tool(tmp_path)
     assert callable(tool)
@@ -222,7 +285,7 @@ def test_make_verify_diff_tool_registers_in_registry(tmp_path, monkeypatch):
     monkeypatch.setattr(
         verify_diff_tool.subprocess,
         "run",
-        lambda *a, **k: _completed_process(),
+        _diff_only(),
     )
 
     verify_diff_tool.make_verify_diff_tool(tmp_path)
@@ -241,7 +304,7 @@ def test_make_verify_diff_tool_no_double_registration(tmp_path, monkeypatch):
     monkeypatch.setattr(
         verify_diff_tool.subprocess,
         "run",
-        lambda *a, **k: _completed_process(),
+        _diff_only(),
     )
 
     verify_diff_tool.make_verify_diff_tool(tmp_path)

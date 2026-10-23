@@ -2,8 +2,10 @@
 3-5 ``run_command`` (grep/awk) calls the implement agent would
 otherwise issue after every ``edit_file``.
 
-The tool runs ``git diff --stat`` once and optionally cross-checks
-that a caller-provided list of expected file paths appear in the diff.
+The tool runs ``git diff --stat`` once, lists untracked new files
+(``git ls-files --others --exclude-standard`` — ``git diff`` omits
+them), and optionally cross-checks that a caller-provided list of
+expected file paths appear in either.
 """
 
 from __future__ import annotations
@@ -38,14 +40,15 @@ def _run_verify_diff(
         return f"verify_diff: git diff --stat failed (rc={result.returncode}): {stderr}"
 
     stat_output = result.stdout.strip()
-    if not stat_output:
+    untracked = _list_untracked_files(repo_dir)
+    if not stat_output and not untracked:
         return "verify_diff: working tree is clean — no uncommitted changes"
 
-    lines = [f"git diff --stat:\n{stat_output}"]
+    lines = _summary_lines(stat_output, untracked)
 
     # Optional: cross-check expected file fingerprints.
     if expected_files:
-        changed = _parse_changed_files(stat_output)
+        changed = _parse_changed_files(stat_output) | set(untracked)
         missing = [f for f in expected_files if f not in changed]
         unexpected = [f for f in changed if f not in expected_files]
         if missing:
@@ -56,6 +59,36 @@ def _run_verify_diff(
             lines.append("verify_diff: all expected files present in diff")
 
     return "\n".join(lines)
+
+
+def _summary_lines(stat_output: str, untracked: list[str]) -> list[str]:
+    """Render the ``git diff --stat`` block and the untracked-files block."""
+    lines: list[str] = []
+    if stat_output:
+        lines.append(f"git diff --stat:\n{stat_output}")
+    if untracked:
+        listing = "\n".join(f" {f}" for f in untracked)
+        lines.append(
+            "untracked new files (exist on disk, not yet in git diff — "
+            f"do not re-create them):\n{listing}"
+        )
+    return lines
+
+
+def _list_untracked_files(repo_dir: Path) -> list[str]:
+    """Return untracked, non-ignored file paths; best-effort (``[]`` on error)."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_dir), "ls-files", "--others", "--exclude-standard"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except FileNotFoundError, subprocess.TimeoutExpired:
+        return []
+    if result.returncode != 0:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
 def _parse_changed_files(stat_output: str) -> set[str]:
