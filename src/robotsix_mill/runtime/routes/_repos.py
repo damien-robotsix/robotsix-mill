@@ -21,7 +21,9 @@ from pydantic import BaseModel, Field, field_validator
 
 from ...config import RepoConfig, ReposRegistry, Settings
 from ...config.repos import _reset_repos_config, load_repos_config
+from ...core.service import TicketService
 from ..deps import get_repos_registry, get_settings
+from ._tickets import _LIST_TERMINAL_STATES
 
 router = APIRouter(tags=["Repos"])
 
@@ -241,6 +243,10 @@ async def deregister_repo(
     deregistered.  Operator-configured repos (``source="config"``)
     are permanent and return 403.  Unknown repos return 404.
 
+    Removal is blocked with 409 while the repo's board still has open
+    (non-terminal) tickets — close or delete them first.  Tickets and
+    history on disk are not deleted by deregistration.
+
     After removal the overlay YAML is updated and the in-process
     :class:`ReposRegistry` is hot-reloaded.
     """
@@ -253,6 +259,16 @@ async def deregister_repo(
             status_code=403,
             detail=f"Repo '{repo_id}' is operator-configured and cannot be "
             "deregistered via API. Remove it from config/config.json instead.",
+        )
+
+    open_tickets = TicketService(settings, board_id=rc.board_id).list(
+        exclude_states=_LIST_TERMINAL_STATES
+    )
+    if open_tickets:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Repo '{repo_id}' still has {len(open_tickets)} open "
+            "ticket(s). Close or delete them before removing the repo.",
         )
 
     # Remove from the overlay YAML file.
