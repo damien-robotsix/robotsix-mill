@@ -340,6 +340,7 @@ modules:
       - tests/stages/implement/test_implement_multi_repo.py
       - tests/stages/implement/test_implement_phase_coordinator.py
       - tests/stages/implement/test_loop_escalation_guards.py
+      - tests/stages/implement/test_reference_files_normalize.py
       - tests/stages/test_implement_package_dag.py
       - tests/stages/implement/test_shared.py
       - tests/stages/implement/__init__.py
