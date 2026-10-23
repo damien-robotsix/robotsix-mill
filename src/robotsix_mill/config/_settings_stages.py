@@ -598,6 +598,40 @@ class _StagesSettings(BaseModel):
             "the built-in defaults."
         ),
     )
+    # Class-based routing policy for auto-proposed CI / dev-tooling
+    # additions (coverage gate, OpenSSF Scorecard, secret scanner, …).
+    # Survey/audit file these repeatedly; each otherwise lands in
+    # HUMAN_ISSUE_APPROVAL as a separate workflow-policy escalation. This
+    # maps a canonical tool-class id (see
+    # ``robotsix_mill.stages.refine.ci_tooling_policy.CI_TOOLING_CLASS_TERMS``)
+    # to a route: "auto-ready" (allowlist — straight to implement),
+    # "auto-decline" (denylist — auto-close with a note), or "escalate"
+    # (the human gate). Adding/removing a class is a config edit, not a
+    # code change. Empty by default, so every CI-tooling proposal follows
+    # ``ci_tooling_proposal_default`` — today's behaviour until the
+    # operator supplies the lists.
+    ci_tooling_proposal_policy: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Per-class routing override for auto-proposed CI/dev-tooling "
+            'additions, mapping a tool-class id (e.g. "coverage", '
+            '"scorecard", "secret-scanner") to one of "auto-ready" '
+            '(allowlist), "auto-decline" (denylist), or "escalate". '
+            "Unlisted classes follow ci_tooling_proposal_default."
+        ),
+    )
+    # Route for a CI/dev-tooling proposal whose class is not listed in
+    # ``ci_tooling_proposal_policy``. "escalate" (the default) preserves
+    # today's behaviour — the proposal reaches the human gate; set to
+    # "auto-decline" to auto-close unlisted classes fleet-wide.
+    ci_tooling_proposal_default: str = Field(
+        default="escalate",
+        description=(
+            "Route for a CI/dev-tooling proposal whose class is not in "
+            'ci_tooling_proposal_policy: "escalate" (human gate — default) '
+            'or "auto-decline" (auto-close).'
+        ),
+    )
     # Hard cap on the total number of drafts a single retrospect pass
     # may file (systemic draft + concrete follow-up).  Default 2 matches
     # the existing two-path ceiling; set lower when the board is
