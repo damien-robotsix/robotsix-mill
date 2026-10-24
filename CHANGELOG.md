@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.18.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.17.3...v0.18.0) (2026-10-24)
+
+
+### Features
+
+* Add a "Remove repo from mill" button (with confirmation) to the repo view (20261023T162555Z-add-a-remove-repo-from-mill-button-with-9d42) ([#3434](https://github.com/damien-robotsix/robotsix-mill/issues/3434)) ([b919c72](https://github.com/damien-robotsix/robotsix-mill/commit/b919c725d22fb8d4c4b7b04cc9c29dec277a9eef))
+
+
+### Bug Fixes
+
+* Bespoke periodic drafts: route each draft to its target repo's board (draft_repo_ids) instead of the host board (20261023T162255Z-bespoke-periodic-drafts-route-each-draft-a0b6) ([#3433](https://github.com/damien-robotsix/robotsix-mill/issues/3433)) ([1752a77](https://github.com/damien-robotsix/robotsix-mill/commit/1752a7781375b88cc8e7b53942eda493ef3f40b1))
+* **implement:** drop gate-era comments from the implement feedback block ([#3429](https://github.com/damien-robotsix/robotsix-mill/issues/3429)) ([141c266](https://github.com/damien-robotsix/robotsix-mill/commit/141c26643d20e4e46c07e061ddac39c7a51938a4))
+* **implement:** keep reference_files.json paths-only on every finalize path ([#3430](https://github.com/damien-robotsix/robotsix-mill/issues/3430)) ([ef57030](https://github.com/damien-robotsix/robotsix-mill/commit/ef57030fad153a1367576c325c9c39f3526ef035))
+* Settings panel cannot be closed in robotsix-mill UI (20261023T162429Z-settings-panel-cannot-be-closed-in-robot-ad10) ([#3432](https://github.com/damien-robotsix/robotsix-mill/issues/3432)) ([1e6acb6](https://github.com/damien-robotsix/robotsix-mill/commit/1e6acb627e4bb478b69f58c3571f01f9008ae4f2))
+* trace-review: 1 finding(s) for trace `4e522846` (session: meta · meta-20261024T002204Z-4de8e2a1) (20261024T032458Z-trace-review-1-finding-s-for-trace-4e522-d107) ([#3440](https://github.com/damien-robotsix/robotsix-mill/issues/3440)) ([fc6c2da](https://github.com/damien-robotsix/robotsix-mill/commit/fc6c2da90299728affbe922ad1e320fb0b5fcf99))
+* trace-review: 2 finding(s) for trace `7a080891` (session: robotsix-mill · 20261023T162555Z-add-a-remove-repo-from-mill-button-with-9d42) (20261023T221755Z-trace-review-2-finding-s-for-trace-7a080-d995) ([#3435](https://github.com/damien-robotsix/robotsix-mill/issues/3435)) ([0a23112](https://github.com/damien-robotsix/robotsix-mill/commit/0a231122d213a5d7b7ec503ee6731d76609bd936))
+
+
+### Documentation
+
+* trace-review: 2 finding(s) for trace `f8a4e18a` (session: robotsix-mill · 20261023T162255Z-bespoke-periodic-drafts-route-each-draft-a0b6) (20261023T221930Z-trace-review-2-finding-s-for-trace-f8a4e-dc3a) ([#3436](https://github.com/damien-robotsix/robotsix-mill/issues/3436)) ([849bf82](https://github.com/damien-robotsix/robotsix-mill/commit/849bf82210ad7ae3546ed43d19bd58cc1d7d3ad8))
+* Triage boilerplate: CI/audit failure caused by a CVE in a transitive dependency (uv lock --upgrade-package) (20261024T081200Z-triage-boilerplate-ci-audit-failure-caus-fc21) ([#3441](https://github.com/damien-robotsix/robotsix-mill/issues/3441)) ([d5583f8](https://github.com/damien-robotsix/robotsix-mill/commit/d5583f815dcb8fa4c82f457550a60792e51a7912))
+
 ## [0.17.3](https://github.com/damien-robotsix/robotsix-mill/compare/v0.17.2...v0.17.3) (2026-10-22)
 
 
