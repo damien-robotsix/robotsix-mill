@@ -8,7 +8,7 @@ from robotsix_mill.core.states import State
 from robotsix_mill.forge import github
 from robotsix_mill.stages.merge import MergeStage
 from robotsix_mill.vcs.git_ops import PostPushResult, ReconcileResult
-from tests.stages.merge.test_core import _gh, _human_mr_approval
+from tests.stages.merge.conftest import _gh, _human_mr_approval
 
 # ============================================================
 # Multi-repo PR aggregation

@@ -9,10 +9,12 @@ from unittest.mock import patch
 
 import pytest
 
-from robotsix_mill.runtime.worker.poll_loops import (
+from robotsix_mill.runtime.worker.poll_loops import PollLoopsMixin
+from robotsix_mill.runtime.worker.poll_loops_ci import (
     _CI_LOG_EMBED_MAX_CHARS,
-    PollLoopsMixin,
     _ci_log_body_parts,
+)
+from robotsix_mill.runtime.worker.poll_loops_dependabot import (
     _dependabot_body,
     _dependabot_title,
 )

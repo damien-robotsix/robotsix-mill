@@ -401,6 +401,7 @@ convention = "google"
 "src/robotsix_mill/deps/coherent_resolver.py" = ["S603", "S607"]
 "src/robotsix_mill/runtime/worker/periodic_passes.py" = ["S311"]
 "src/robotsix_mill/runtime/worker/poll_loops.py" = ["S311"]
+"src/robotsix_mill/runtime/worker/poll_loops_ci.py" = ["S311"]
 "src/robotsix_mill/runtime/routes/_tickets_transitions.py" = ["S101"]
 "src/robotsix_mill/core/repo_layout.py" = ["S110"]
 "src/robotsix_mill/config/loader.py" = ["S105", "C901"]
