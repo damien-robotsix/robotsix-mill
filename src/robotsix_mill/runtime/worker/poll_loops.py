@@ -19,8 +19,29 @@ from typing import Any
 from ...config import RepoConfig, get_repos_config
 from ..run_registry import RunRegistry
 from ._base import _WorkerBase
-from .poll_loops_ci import PollLoopsCiMixin
-from .poll_loops_dependabot import PollLoopsDependabotMixin
+
+# The underscore names are re-exports: these helpers moved to
+# ``poll_loops_ci`` / ``poll_loops_dependabot`` but stay importable from the
+# original ``poll_loops`` path.
+from .poll_loops_ci import (  # noqa: F401
+    _CI_FAILING_CONCLUSIONS,
+    _CI_LOG_EMBED_MAX_CHARS,
+    _CI_LOG_FETCH_ATTEMPTS,
+    _CI_LOG_FETCH_BACKOFF_CAP_SECONDS,
+    _CI_LOG_FETCH_BACKOFF_SECONDS,
+    _CI_LOG_FETCH_MAX_DEFERRALS,
+    _CI_TITLE_PREFIX_RE,
+    _REDISPATCH_MAX_ATTEMPTS,
+    _REDISPATCH_MIN_INTERVAL_SECONDS,
+    PollLoopsCiMixin,
+    _ci_log_body_parts,
+    _title_names_workflow,
+)
+from .poll_loops_dependabot import (  # noqa: F401
+    PollLoopsDependabotMixin,
+    _dependabot_body,
+    _dependabot_title,
+)
 
 log = logging.getLogger("robotsix_mill.worker")
 
