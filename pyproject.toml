@@ -116,7 +116,7 @@ robotsix-github-auth = { git = "https://github.com/damien-robotsix/robotsix-gith
 # Direct dependency pin — must stay in lockstep with the transitive
 # override-dependencies rev above (robotsix-github-auth / robotsix-llmio pin
 # robotsix-http to ancestor revs; the override unifies them on cdfd4d1c).
-robotsix-http = { git = "https://github.com/damien-robotsix/robotsix-http.git", rev = "cdfd4d1c42679fef73081439562872792e202dc4" }
+robotsix-http = { git = "https://github.com/damien-robotsix/robotsix-http.git", rev = "cfc5216c35e94ae635777accbaaf5b9ccb4f63ea" }
 
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"
