@@ -36,7 +36,7 @@ format: install  ## Auto-format Python source files
 lint: install  ## Lint Python source files (check only)
 	uv run ruff check $(SOURCES)
 	uv run ruff format --check $(SOURCES)
-	uv run mypy src/ --strict
+	scripts/mypy_gate.sh
 	$(MAKE) lint-sh
 
 mypy-baseline-shrink: install  ## Regenerate the mypy baseline snapshot
