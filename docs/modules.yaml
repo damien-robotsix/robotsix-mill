@@ -368,7 +368,9 @@ modules:
       - tests/stages/refine/test_scanner_disposition.py
       - tests/stages/refine/test_ci_tooling_policy.py
       - tests/stages/refine/__init__.py
-      - tests/stages/merge/test_core.py
+      - tests/stages/merge/test_core_gate_and_ci.py
+      - tests/stages/merge/test_core_rebase_and_main_debt.py
+      - tests/stages/merge/test_core_auto_merge_and_rollup.py
       - tests/stages/merge/test_core_auto_merge.py
       - tests/stages/merge/test_core_rebasing.py
       - tests/stages/merge/test_core_multi_repo.py

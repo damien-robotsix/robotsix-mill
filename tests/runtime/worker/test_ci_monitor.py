@@ -854,7 +854,7 @@ def test_ci_workflow_does_not_consolidate_into_other_ci_failure_ticket(
 
 
 def test_title_names_workflow_word_boundaries():
-    from robotsix_mill.runtime.worker.poll_loops import _title_names_workflow
+    from robotsix_mill.runtime.worker.poll_loops_ci import _title_names_workflow
 
     assert _title_names_workflow("CI failure: CI on main", "CI", "main")
     assert _title_names_workflow("Fix CI lint on main", "CI", "main")
@@ -1148,7 +1148,7 @@ def test_log_fetch_error_defers_then_files_with_error_note(tmp_path, monkeypatch
     """A fetch that errors every attempt defers across poll cycles instead of
     filing an empty draft, then files with the error surfaced once the
     deferral budget is exhausted."""
-    from robotsix_mill.runtime.worker import poll_loops
+    from robotsix_mill.runtime.worker import poll_loops_ci as poll_loops
 
     ctx = _ctx(
         tmp_path,
@@ -1446,7 +1446,7 @@ def test_transient_log_fetch_does_not_consume_deferral_budget(tmp_path, monkeypa
     budget is never consumed — even after many poll cycles."""
     import httpx
 
-    from robotsix_mill.runtime.worker import poll_loops
+    from robotsix_mill.runtime.worker import poll_loops_ci as poll_loops
 
     ctx = _ctx(
         tmp_path,
@@ -1560,7 +1560,7 @@ def test_recovery_re_verifies_live(tmp_path, monkeypatch):
 def test_backoff_is_jittered_and_capped(tmp_path, monkeypatch):
     """In-poll retry sleeps use jittered exponential backoff capped at
     _CI_LOG_FETCH_BACKOFF_CAP_SECONDS."""
-    from robotsix_mill.runtime.worker import poll_loops
+    from robotsix_mill.runtime.worker import poll_loops_ci as poll_loops
 
     ctx = _ctx(
         tmp_path,
@@ -1644,7 +1644,7 @@ def test_is_network_down_error_called_from_monitor(tmp_path, monkeypatch):
     raises a network-down error (integration-level check)."""
     import httpx
 
-    from robotsix_mill.runtime.worker import poll_loops as pl_mod
+    from robotsix_mill.runtime.worker import poll_loops_ci as pl_mod
 
     ctx = _ctx(
         tmp_path,

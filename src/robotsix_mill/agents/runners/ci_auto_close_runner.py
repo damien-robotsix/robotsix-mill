@@ -56,7 +56,7 @@ log = logging.getLogger("robotsix_mill.ci_auto_close")
 # Matches the CI-monitor draft title: "CI failure: <workflow> on <branch>".
 # The workflow name may contain spaces, so the branch is anchored to the tail.
 _TITLE_RE = re.compile(r"CI failure: (.+?) on (\S+)$", re.IGNORECASE)
-# Body markers written by the CI monitor (``poll_loops._poll_one_repo_ci``).
+# Body markers written by the CI monitor (``poll_loops_ci._poll_one_repo_ci``).
 _BODY_WF_RE = re.compile(r"\*\*Workflow:\*\*\s*(.+)")
 _BODY_COMMIT_RE = re.compile(r"\*\*Commit:\*\*\s*`([0-9a-fA-F]{6,})`")
 _BODY_CREATED_RE = re.compile(r"\*\*Created:\*\*\s*(\d{4}-\d{2}-\d{2}T[0-9:.]+Z?)")
