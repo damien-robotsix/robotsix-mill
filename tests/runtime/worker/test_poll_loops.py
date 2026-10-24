@@ -936,3 +936,30 @@ class TestCiLogBodyParts:
         assert len(embedded) == _CI_LOG_EMBED_MAX_CHARS
         assert embedded.endswith("step output line 4999")
         assert len("\n".join(parts)) < 25_000
+
+
+def test_poll_loops_reexports_moved_helpers():
+    """Helpers split into poll_loops_ci / poll_loops_dependabot stay
+    importable from the original poll_loops path."""
+    from robotsix_mill.runtime.worker import (
+        poll_loops,
+        poll_loops_ci,
+        poll_loops_dependabot,
+    )
+
+    for name in (
+        "_CI_FAILING_CONCLUSIONS",
+        "_CI_LOG_EMBED_MAX_CHARS",
+        "_CI_LOG_FETCH_ATTEMPTS",
+        "_CI_LOG_FETCH_BACKOFF_CAP_SECONDS",
+        "_CI_LOG_FETCH_BACKOFF_SECONDS",
+        "_CI_LOG_FETCH_MAX_DEFERRALS",
+        "_CI_TITLE_PREFIX_RE",
+        "_REDISPATCH_MAX_ATTEMPTS",
+        "_REDISPATCH_MIN_INTERVAL_SECONDS",
+        "_ci_log_body_parts",
+        "_title_names_workflow",
+    ):
+        assert getattr(poll_loops, name) is getattr(poll_loops_ci, name)
+    for name in ("_dependabot_title", "_dependabot_body"):
+        assert getattr(poll_loops, name) is getattr(poll_loops_dependabot, name)
