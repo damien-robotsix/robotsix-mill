@@ -397,7 +397,7 @@ modules:
       - tests/stages/merge/test_review_revision.py
       - src/robotsix_mill/stages/_implemented_repos.py
       - src/robotsix_mill/stages/_conventional.py
-      - tests/test_conventional_subject.py
+      - tests/stages/test_conventional_subject.py
       - tests/stages/test_implemented_repos.py
       - tests/stages/test_smoke_gate_browser.py
       - tests/stages/implement/test_implementation_logic.py
