@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.18.0...v0.19.0) (2026-10-24)
+
+
+### Features
+
+* module_size scan: emit one addressable child per finding with path, line and symbol counts (20261024T120008Z-module-size-scan-emit-one-addressable-ch-6260) ([#3444](https://github.com/damien-robotsix/robotsix-mill/issues/3444)) ([1a97248](https://github.com/damien-robotsix/robotsix-mill/commit/1a97248ee982371a3c2ea055101101ca13d596b9))
+
 ## [0.18.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.17.3...v0.18.0) (2026-10-24)
 
 
