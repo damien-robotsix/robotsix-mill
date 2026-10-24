@@ -548,7 +548,7 @@ class _StagesSettings(BaseModel):
         default=7,
     )
     # When True (default), scanner periodic passes (docstring_coverage,
-    # module_size, test_gap, health, completeness_check) that produce
+    # test_gap, health, completeness_check) that produce
     # multiple findings per run are rolled up into a single rollup
     # ticket listing all findings, instead of filing one ticket per
     # finding.  Estimated ~80% inflow reduction for scanner sources.
