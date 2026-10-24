@@ -97,6 +97,42 @@ def test_module_size_emits_one_child_per_finding_with_measurement(tmp_path):
     db.reset_engine()
 
 
+def test_module_size_report_includes_findings_over_draft_cap(tmp_path):
+    repo, _ = _repo(tmp_path)
+    settings = Settings(data_dir=str(tmp_path / "data"))
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    titles = [
+        "module size: split src/pkg/big.py (1200 lines, 3 top-level symbols)",
+        "module size: split src/pkg/huge.py (1100 lines, 0 top-level symbols)",
+    ]
+    res = _Res(titles, ["Split big.", "Split huge."])
+
+    result = run_agent_pass(
+        lambda **_: res,
+        memory_file=tmp_path / "memory.md",
+        source_label=SourceKind.MODULE_SIZE,
+        service=service,
+        settings=settings,
+        max_drafts=1,
+        repo_dir=repo,
+    )
+
+    # Only one child under the cap, but the report lists both findings.
+    assert len(result.drafts_created) == 1
+    epic = next(t for t in service.list() if t.kind == TicketKind.EPIC)
+    report = service.list_comments(epic.id)[0].body
+    assert "2 finding(s)" in report
+    assert titles[0] in report and titles[1] in report
+    assert "Split huge." in report
+    assert "- **Path:** `src/pkg/huge.py`" in report
+    assert "- **Line count:** 7" in report
+    assert "over the per-run draft cap" in report
+    db.reset_engine()
+
+
 def test_measure_refuses_paths_outside_repo(tmp_path):
     repo, _ = _repo(tmp_path)
     (tmp_path / "outside.py").write_text("x = 1\n", encoding="utf-8")

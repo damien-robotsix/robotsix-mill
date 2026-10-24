@@ -109,6 +109,10 @@ def render_report(
     sections = [f"# module_size scan report: {len(titles)} finding(s)"]
     for i, (title, body) in enumerate(zip(titles, bodies, strict=True), 1):
         child = by_title.get(title)
-        ref = f"child ticket `{child}`" if child else "no child filed (deduped/skipped)"
+        ref = (
+            f"child ticket `{child}`"
+            if child
+            else ("no child filed (deduped, skipped or over the per-run draft cap)")
+        )
         sections.append(f"## {i}. {title}\n\n_{ref}_\n\n{body}")
     return "\n\n".join(sections)

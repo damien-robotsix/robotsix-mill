@@ -1115,6 +1115,8 @@ def _post_module_size_report(
 ) -> None:
     """Post the full untruncated module_size report on the rollup epic.
 
+    *limit* is the total finding count, NOT the per-run draft cap —
+    findings above the cap still appear (marked "no child filed").
     Best-effort: a comment failure must never abort the pass.
     """
     try:
@@ -1239,9 +1241,12 @@ def run_agent_pass(
         res, source_label, gap_ids, limit, settings, max_drafts
     )
 
-    if source_label == SourceKind.MODULE_SIZE and limit:
+    # module_size: measure EVERY finding (not just the ``limit`` that get
+    # a child ticket) so the epic report below stays complete.
+    n_findings = min(len(res.draft_titles), len(res.draft_bodies))
+    if source_label == SourceKind.MODULE_SIZE and n_findings:
         commit_sha = module_size_findings.head_sha(repo_dir)
-        for i in range(limit):
+        for i in range(n_findings):
             res.draft_bodies[i] += "\n\n" + module_size_findings.measurement_block(
                 repo_dir, res.draft_titles[i], res.draft_bodies[i], commit_sha
             )
@@ -1263,8 +1268,8 @@ def run_agent_pass(
         if verified_gap_id:
             verified_gap_ids.append(verified_gap_id)
 
-    if source_label == SourceKind.MODULE_SIZE and limit:
-        _post_module_size_report(service, settings, res, limit, created)
+    if source_label == SourceKind.MODULE_SIZE and n_findings:
+        _post_module_size_report(service, settings, res, n_findings, created)
 
     # 6. Persist the agent's updated memory, stripping any "Filed"
     #    annotations for gap IDs that weren't actually filed this run.
