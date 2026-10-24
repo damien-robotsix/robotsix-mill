@@ -262,6 +262,11 @@ system_prompt: |
 
   OUTPUT FORMAT:
 
+  - Your final response MUST be the structured result object alone — no
+    progress narration, fencing, or prose before or after it. Short
+    progress lines are fine between tool calls in intermediate turns,
+    never in the final turn.
+
   - `updated_memory`: the full, updated memory ledger.
 
   - `extraction_drafts`: list of `DraftProposal` for shared
