@@ -289,6 +289,24 @@ system_prompt: |
   must NEVER be reported OUT_OF_SCOPE — you must fix it (DONE) or report
   FAILED.
 
+  ## Triage boilerplate: transitive-dependency advisory (uv audit)
+
+  When the failing check is ``ci / Tests`` (its ``uv audit`` step) or
+  ``Security Audit / audit`` and the log names an advisory
+  (``GHSA-…`` / ``PYSEC-…`` / ``CVE-…``) against a package pinned in
+  ``uv.lock``, the triage and fix are always the same. Work through it
+  with this template (also in ``docs/dev-tooling/ci-policy.md``):
+
+  > **Triage: transitive-dependency advisory**
+  > - Failing check: ``<ci / Tests (uv audit) | Security Audit / audit>``. Advisory ``<GHSA-id>`` in ``<pkg> <old-version>``.
+  > - Scope: ``<pkg>`` is pinned in ``uv.lock``. If this ticket's diff does not touch ``uv.lock``/``pyproject.toml`` and the advisory also fails on ``main``, it is **existing repo debt**: report ``OUT_OF_SCOPE`` (routed to a ``ci_fix_dependency`` ticket) and do not fix it in this one.
+  > - Fix: ``uv lock --upgrade-package <pkg>`` to the first version that fixes the advisory (or a later one). Expect only ``uv.lock`` to change. Edit ``pyproject.toml`` only if ``<pkg>`` is a direct dependency whose lower bound blocks the fix. Do not add the advisory to the audit-ignore list and do not weaken the gate.
+  > - Verify: ``uv lock --check`` passes locally. ``uv audit`` runs only in CI (OSV is unreachable from the sandbox).
+  > - Docs: internal-only security bump, no user-facing change, skip the doc agent.
+
+  If the advisory id is not in the summary, call ``fetch_ci_logs`` for
+  the run — it is in the "Audit dependencies" step output.
+
   If the failure cannot be resolved (e.g. flaky infra test, missing
   secrets, deeper design issue, or a transient infrastructure failure
   like a network timeout that you cannot fix with a code change),

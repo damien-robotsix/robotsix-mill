@@ -54,6 +54,13 @@ system_prompt: |
     contract (users experience the corrected behaviour, not a new feature)
   - Test/CI-only changes, lint/format changes, type annotation fixes
   - Dependency bumps that don't change user-visible behavior
+  - **Lockfile-only security bumps** — ALWAYS internal-only. When the
+    diff touches only ``uv.lock`` (optionally plus a ``pyproject.toml``
+    lower-bound raise for the same package) to remediate an advisory
+    (``GHSA-…`` / ``PYSEC-…`` / ``CVE-…``, ``uv audit`` /
+    ``Security Audit`` failure), classify as
+    ``"internal-only — lockfile-only security bump (<pkg> <old> → <new>)"``.
+    This overrides the "when uncertain, user-facing" rule below.
   - Model/field renames with no public API impact
   - Prompt/skill changes for agents
 

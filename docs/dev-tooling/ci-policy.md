@@ -80,6 +80,25 @@ is stale relative to `pyproject.toml`. The escape hatch is the automated
 `uv.lock` bump PR ([`deps-bump.yml`](https://github.com/damien-robotsix/robotsix-mill/blob/main/.github/workflows/deps-bump.yml));
 full rationale lives in [`dependencies.md`](../deps/dependencies.md).
 
+## Triage boilerplate: transitive-dependency advisory
+
+`ci / Tests` (its `uv audit` step) and `Security Audit / audit` often
+fail because an advisory hits a package pinned in `uv.lock`. The
+triage and fix are the same every time, so use this template rather
+than working it out again. The same text is in the `ci_fix` agent prompt
+(`agent_definitions/ci_fix.yaml`).
+
+> **Triage: transitive-dependency advisory**
+>
+> - Failing check: `<ci / Tests (uv audit) | Security Audit / audit>`. Advisory `<GHSA-id>` in `<pkg> <old-version>`.
+> - Scope: `<pkg>` is pinned in `uv.lock`. If this ticket's diff does not touch `uv.lock`/`pyproject.toml` and the advisory also fails on `main`, it is **existing repo debt**: route it to a `ci_fix_dependency` ticket and do not fix it in this one.
+> - Fix: `uv lock --upgrade-package <pkg>` to the first version that fixes the advisory (or a later one). Expect only `uv.lock` to change. Edit `pyproject.toml` only if `<pkg>` is a direct dependency whose lower bound blocks the fix. Do not add the advisory to the audit-ignore list and do not weaken the gate.
+> - Verify: `uv lock --check` passes locally. `uv audit` runs only in CI (OSV is unreachable from the sandbox).
+> - Docs: internal-only security bump, no user-facing change, skip the doc agent.
+
+The `doc_classifier` agent always classifies a lockfile-only
+security bump as internal-only.
+
 ## See also
 
 - [`CONTRIBUTING.md`](https://github.com/damien-robotsix/robotsix-mill/blob/main/CONTRIBUTING.md) — "CI overview" section with
