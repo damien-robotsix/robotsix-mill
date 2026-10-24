@@ -29,6 +29,7 @@ from ...core.service import TicketService
 from ...core.states import State
 from ...core.text_utils import tail_keep
 from ...core.workspace import Workspace
+from . import module_size_findings
 
 log = logging.getLogger("robotsix_mill.pass_runner")
 
@@ -211,10 +212,11 @@ _GAP_ID_RE = re.compile(r"<!--\s*(\S+)-gap-id:\s*(\S+)\s*-->")
 # ONE ticket (inflow throttling, #2667). The two landed as concurrent PRs and
 # both named their set ``_SCANNER_SOURCES``, so the second silently shadowed
 # the first — leaving epic parenting applied to 5 sources instead of 19.
+# MODULE_SIZE is deliberately absent: each finding must be an addressable
+# child ticket (see ``module_size_findings``), not a section of a summary.
 _ROLLUP_SOURCES: frozenset[SourceKind] = frozenset(
     {
         SourceKind.DOCSTRING_COVERAGE,
-        SourceKind.MODULE_SIZE,
         SourceKind.TEST_GAP,
         SourceKind.HEALTH,
         SourceKind.COMPLETENESS_CHECK,
@@ -1104,6 +1106,31 @@ def _create_one_draft(
         return None, ""
 
 
+def _post_module_size_report(
+    service: TicketService,
+    settings: Settings,
+    res: Any,
+    limit: int,
+    created: list[dict[str, str]],
+) -> None:
+    """Post the full untruncated module_size report on the rollup epic.
+
+    *limit* is the total finding count, NOT the per-run draft cap —
+    findings above the cap still appear (marked "no child filed").
+    Best-effort: a comment failure must never abort the pass.
+    """
+    try:
+        epic_id = _find_or_create_scanner_epic(
+            service, service.board_id, SourceKind.MODULE_SIZE, settings
+        )
+        report = module_size_findings.render_report(
+            res.draft_titles[:limit], res.draft_bodies[:limit], created
+        )
+        service.add_comment(epic_id, report, author="module_size")
+    except Exception:
+        log.exception("module_size: failed to post scan report on rollup epic")
+
+
 def run_agent_pass(
     agent_fn: Callable[..., Any],
     *,
@@ -1214,6 +1241,16 @@ def run_agent_pass(
         res, source_label, gap_ids, limit, settings, max_drafts
     )
 
+    # module_size: measure EVERY finding (not just the ``limit`` that get
+    # a child ticket) so the epic report below stays complete.
+    n_findings = min(len(res.draft_titles), len(res.draft_bodies))
+    if source_label == SourceKind.MODULE_SIZE and n_findings:
+        commit_sha = module_size_findings.head_sha(repo_dir)
+        for i in range(n_findings):
+            res.draft_bodies[i] += "\n\n" + module_size_findings.measurement_block(
+                repo_dir, res.draft_titles[i], res.draft_bodies[i], commit_sha
+            )
+
     for i in range(limit):
         ticket_info, verified_gap_id = _create_one_draft(
             i,
@@ -1230,6 +1267,9 @@ def run_agent_pass(
             created.append(ticket_info)
         if verified_gap_id:
             verified_gap_ids.append(verified_gap_id)
+
+    if source_label == SourceKind.MODULE_SIZE and n_findings:
+        _post_module_size_report(service, settings, res, n_findings, created)
 
     # 6. Persist the agent's updated memory, stripping any "Filed"
     #    annotations for gap IDs that weren't actually filed this run.
