@@ -33,7 +33,6 @@ from ...core.models import SourceKind, Ticket
 from ...core.service import TicketService
 from ...core.states import State
 from ...forge import get_forge
-from .orphaned_pr_foreign import _process_foreign_prs
 from .pin_bump_runner import PIN_BUMP_BRANCH_SEGMENT
 
 if TYPE_CHECKING:
@@ -402,6 +401,11 @@ def run_orphaned_pr_check_pass(
         settings.orphaned_pr_track_foreign_prs
         or settings.orphaned_pr_auto_dispose_foreign_prs
     ) and open_prs:
+        # Deferred import: orphaned_pr_foreign type-references
+        # OrphanedPrCheckResult from this module, so a module-level import
+        # would form an import cycle (CodeQL py/unsafe-cyclic-import).
+        from .orphaned_pr_foreign import _process_foreign_prs
+
         foreign_prs = [
             pr for pr in open_prs if not pr["branch"].startswith(settings.branch_prefix)
         ]
