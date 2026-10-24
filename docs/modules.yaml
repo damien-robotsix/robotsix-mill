@@ -624,6 +624,7 @@ modules:
       - tests/dev_tooling/test_docs_nav.py
       - tests/dev_tooling/test_emit_config_schema.py
       - tests/dev_tooling/test_modules_yaml_paths.py
+      - tests/dev_tooling/test_mypy_gate_parity.py
       - tests/dev_tooling/test_render_harden_dockerfile.py
       - tests/dev_tooling/test_resolve_docker_digest.py
       - tests/dev_tooling/test_check_wheel_contents.py
