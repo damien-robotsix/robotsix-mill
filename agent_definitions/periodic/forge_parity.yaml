@@ -38,14 +38,14 @@ system_prompt: |
 
   PROCEDURE:
 
-  1. Read `src/robotsix_mill/forge/base.py` to enumerate every public
+  1. Read `src/robotsix_mill/scm/forge/base.py` to enumerate every public
      method declared by the ``Forge`` ABC — both ``@abstractmethod``
      and concrete defaults (e.g. ``list_code_scanning_alerts``,
      ``update_branch``, ``delete_branch``, ``list_branches``,
      ``list_open_pr_branches``).
 
-  2. Read `src/robotsix_mill/forge/github.py` and
-     `src/robotsix_mill/forge/gitlab/core.py`.  For each ABC method from
+  2. Read `src/robotsix_mill/scm/forge/github.py` and
+     `src/robotsix_mill/scm/forge/gitlab/core.py`.  For each ABC method from
      step 1, determine whether each adapter overrides it (i.e. defines
      a method with the same name).
 
