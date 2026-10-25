@@ -2054,6 +2054,7 @@ def test_resume_with_ahead_branch_and_clean_tree_proceeds_to_review(
 def _clone_repo_to(ctx, remote_url, repo_dir):
     """Clone to *repo_dir* without the full stage machinery."""
     from robotsix_mill.forge.auth import github_token
+
     from robotsix_mill.vcs import git_ops
 
     if repo_dir.exists():

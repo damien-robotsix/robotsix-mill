@@ -6,7 +6,7 @@
 
 ## Overview
 
-The forge abstraction layer (`src/robotsix_mill/forge/`) isolates the
+The forge abstraction layer (`src/robotsix_mill/scm/forge/`) isolates the
 deliver, merge, and CI-monitor stages from concrete forge APIs.  Two
 adapters ship today: `GitHubForge` (GitHub REST API) and `GitLabForge`
 (GitLab REST API v4).  A factory function `get_forge()` dispatches on
@@ -40,7 +40,7 @@ class BranchInfo:
 
 ### 1.2 ABC: `Forge`
 
-**Module:** `src/robotsix_mill/forge/base.py`
+**Module:** `src/robotsix_mill/scm/forge/base.py`
 
 The constructor receives `settings: Settings` and stores it as
 `self.settings`.
@@ -119,7 +119,7 @@ Used by `create_repo()` when `enable_repo_creation` is `False`.
 
 ## 2. GitHub implementation
 
-**Module:** `src/robotsix_mill/forge/github.py`  
+**Module:** `src/robotsix_mill/scm/forge/github.py`  
 **Class:** `GitHubForge(Forge)`
 
 ### 2.1 Remote URL resolution
@@ -223,7 +223,7 @@ and reused; a repo with real content raises a `RuntimeError`.
 
 ## 3. GitLab implementation
 
-**Module:** `src/robotsix_mill/forge/gitlab/core.py`  
+**Module:** `src/robotsix_mill/scm/forge/gitlab/core.py`  
 **Class:** `GitLabForge(Forge)`
 
 ### 3.1 Remote URL → project path
@@ -325,7 +325,7 @@ GitLab uses the `PRIVATE-TOKEN` header (not `Authorization: Bearer`).
 
 ## 4. Authentication
 
-**Module:** `src/robotsix_mill/forge/auth.py`
+**Module:** `src/robotsix_mill/scm/forge/auth.py`
 
 ### 4.1 Two modes
 
@@ -393,7 +393,7 @@ back to the normal `github_token()` when not set.
 
 ### 4.6 Push authentication (`github_push_token`)
 
-**Module:** `src/robotsix_mill/forge/auth.py`, function `github_push_token()`
+**Module:** `src/robotsix_mill/scm/forge/auth.py`, function `github_push_token()`
 
 Git push operations (ci-fix, rebase, review-revision) authenticate with a
 separate, freshly-minted token rather than the cached API token.
@@ -628,7 +628,7 @@ Concrete methods:
 
 To add a third forge provider (e.g. Bitbucket, Gitea):
 
-1. **Subclass `Forge`** in a new module under `src/robotsix_mill/forge/`
+1. **Subclass `Forge`** in a new module under `src/robotsix_mill/scm/forge/`
    (e.g. `bitbucket.py`).
 
 2. **Implement all 12 abstract methods** with the forge's API semantics.
@@ -643,7 +643,7 @@ To add a third forge provider (e.g. Bitbucket, Gitea):
    forge_kind: Literal["github", "gitlab", "bitbucket", "none"] = ...
    ```
 
-5. **Register the adapter** in `get_forge()` in `src/robotsix_mill/forge/base.py`:
+5. **Register the adapter** in `get_forge()` in `src/robotsix_mill/scm/forge/base.py`:
    ```python
    if kind == "bitbucket":
        from .bitbucket import BitbucketForge

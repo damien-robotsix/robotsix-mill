@@ -5,8 +5,8 @@ import contextlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from robotsix_mill.forge.base import BranchInfo
+
 from robotsix_mill.runtime.worker import _branch_is_stale
 
 # ---------------------------------------------------------------------------

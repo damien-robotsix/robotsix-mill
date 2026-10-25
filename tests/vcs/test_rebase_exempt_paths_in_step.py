@@ -12,8 +12,9 @@ the cheaper guard.
 
 from __future__ import annotations
 
-from robotsix_mill.config import Settings
 from robotsix_mill.vcs.git_ops import DEFAULT_REBASE_DROP_EXEMPT_PATHS
+
+from robotsix_mill.config import Settings
 
 
 def test_settings_default_matches_the_git_ops_constant() -> None:

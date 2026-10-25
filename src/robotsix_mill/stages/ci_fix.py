@@ -27,15 +27,15 @@ from ..agents.runners.pass_runner import load_memory, persist_memory
 from ..config import target_branch_for
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
-from ..forge import get_forge, rate_limit
-from ..forge.auth import (
+from ..runtime import tracing
+from ..scm.forge import get_forge, rate_limit
+from ..scm.forge.auth import (
     _resolve_remote_url,
     github_push_token,
     github_token,
     invalidate_github_token,
 )
-from ..runtime import tracing
-from ..vcs import git_ops
+from ..scm.vcs import git_ops
 from . import dependency_fix
 from ._ci_fix_checkpoint import (
     CiFixCheckpoint,

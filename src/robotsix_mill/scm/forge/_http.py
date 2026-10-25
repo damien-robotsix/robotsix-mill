@@ -13,7 +13,7 @@ from contextlib import contextmanager
 import httpx
 from robotsix_http import RetryConfig, call_with_retry
 
-from ..config import RepoConfig, Settings
+from ...config import RepoConfig, Settings
 from . import rate_limit
 
 logger = logging.getLogger(__name__)

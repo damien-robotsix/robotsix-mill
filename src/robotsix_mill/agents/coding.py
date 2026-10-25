@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Settings
-from ..vcs.git_ops import _git
+from ..scm.vcs.git_ops import _git
 
 log = logging.getLogger("robotsix_mill.coding")
 

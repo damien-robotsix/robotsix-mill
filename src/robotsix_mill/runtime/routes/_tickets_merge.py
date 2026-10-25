@@ -12,7 +12,7 @@ from ...config.repos import target_branch_for
 from ...core.models import Ticket, TicketRead
 from ...core.service import TicketService
 from ...core.states import State
-from ...forge import get_forge
+from ...scm.forge import get_forge
 from ...stages.merge import (
     _verify_merge_ancestor,
 )

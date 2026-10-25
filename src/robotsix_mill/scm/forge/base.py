@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from ..config import RepoConfig, Settings
+from ...config import RepoConfig, Settings
 
 
 class NotConfiguredError(RuntimeError):

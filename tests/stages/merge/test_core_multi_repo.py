@@ -2,12 +2,12 @@ import contextlib
 import json
 
 import pytest
+from robotsix_mill.vcs.git_ops import PostPushResult, ReconcileResult
 
 from robotsix_mill.agents.rebasing import RebaseResult
 from robotsix_mill.core.states import State
 from robotsix_mill.forge import github
 from robotsix_mill.stages.merge import MergeStage
-from robotsix_mill.vcs.git_ops import PostPushResult, ReconcileResult
 from tests.stages.merge.conftest import _gh, _human_mr_approval
 
 # ============================================================

@@ -65,7 +65,7 @@ async def health(request: Request) -> dict[str, Any]:
     # most-constrained) so chat and the monitor can read how close the fleet
     # is to the quota wall without minting a token. Empty until the first
     # GitHub call of the process records headers.
-    from ...forge import rate_limit as _rate_limit
+    from ...scm.forge import rate_limit as _rate_limit
 
     budget = _rate_limit.health_payload()
     if budget:
@@ -142,8 +142,8 @@ async def _check_push_access(
     if not remote_url:
         return {"name": "push_access", "status": "skipped", "latency_ms": 0}
 
-    from ...forge.auth import github_push_token
-    from ...vcs.git_ops import check_push_access as _git_check_push_access
+    from ...scm.forge.auth import github_push_token
+    from ...scm.vcs.git_ops import check_push_access as _git_check_push_access
 
     try:
         push_token = await asyncio.to_thread(github_push_token, settings)

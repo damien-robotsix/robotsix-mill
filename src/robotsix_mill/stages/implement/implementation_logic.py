@@ -19,7 +19,7 @@ from ...config.repo_settings import load_repo_smoke_command
 from ...core.models import Ticket
 from ...core.states import State
 from ...runtime.tracing import bump_phase_counter, trace_phase
-from ...vcs import git_ops
+from ...scm.vcs import git_ops
 from .. import short_circuit_verify
 from ..base import Outcome, StageContext
 from ..pause import (
@@ -196,7 +196,7 @@ def _collect_changed_files(repo_dir: Path, target_branch: str) -> set[str] | Non
     Returns ``None`` when git diff is not available (no git repo, no HEAD,
     or target branch ref not found).
     """
-    from ...vcs import git_ops
+    from ...scm.vcs import git_ops
 
     try:
         # First check whether origin/{target_branch} ref exists.
@@ -325,7 +325,7 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         """
 
         def fetch_fn(run_id: int, full_log: bool) -> str:
-            from ...forge import get_forge
+            from ...scm.forge import get_forge
 
             forge = get_forge(ctx.settings, repo_config=ctx.repo_config)
             return forge.fetch_workflow_job_logs(run_id=run_id, full_log=full_log)

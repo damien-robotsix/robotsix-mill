@@ -22,7 +22,7 @@ from typing import Any, cast
 from ...config import target_branch_for
 from ...core.models import Ticket
 from ...core.states import State
-from ...forge import Forge, get_forge
+from ...scm.forge import Forge, get_forge
 from ..base import Outcome, StageContext
 from ._base import _MergeStageBase
 from ._shared import (

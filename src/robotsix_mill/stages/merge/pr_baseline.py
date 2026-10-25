@@ -26,7 +26,7 @@ from typing import Any
 from ...config import target_branch_for
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
-from ...forge import Forge, get_forge
+from ...scm.forge import Forge, get_forge
 from ..base import Outcome, StageContext
 from ._base import _MergeStageBase
 from ._shared import (
@@ -224,7 +224,7 @@ class PrBaselineMixin(_MergeStageBase):
         """
         from robotsix_mill.stages import merge as _facade
 
-        from ...vcs import git_ops
+        from ...scm.vcs import git_ops
 
         repo_dir = _facade._workspace_repo_dir(ctx, ticket)
         if repo_dir is None:

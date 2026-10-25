@@ -27,7 +27,7 @@ single-file module name, check whether that directory is already a
 
 ## Example
 
-In `src/robotsix_mill/forge/`:
+In `src/robotsix_mill/scm/forge/`:
 
 - `gitlab/` **is** a package (contains `__init__.py`), so
   `gitlab/_pagination.py` is safe.

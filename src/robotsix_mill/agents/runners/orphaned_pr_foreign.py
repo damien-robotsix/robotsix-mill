@@ -20,7 +20,7 @@ from ...core.service import TicketService
 from ...core.states import State
 
 if TYPE_CHECKING:
-    from ...forge.base import Forge
+    from ...scm.forge.base import Forge
     from .orphaned_pr_check import OrphanedPrCheckResult
 
 log = logging.getLogger("robotsix_mill.agents.runners.orphaned_pr_check")

@@ -9,7 +9,7 @@ from typing import Any
 
 from ..core.models import Ticket
 from ..core.states import State
-from ..forge import get_forge
+from ..scm.forge import get_forge
 from .base import Outcome, StageContext
 from .ci_fix_helpers import (
     _CODQL_CHECK_NAMES,

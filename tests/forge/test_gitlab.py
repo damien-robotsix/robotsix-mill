@@ -6,14 +6,14 @@ _parse_gitlab_project_path, and _build_headers directly with a mocked transport.
 
 import httpx as real_httpx
 import pytest
-
-from robotsix_mill.config import Secrets, Settings, _reset_secrets
 from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
 from robotsix_mill.forge.gitlab import (
     GitLabForge,
     _build_headers,
     _parse_gitlab_project_path,
 )
+
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 # ---------------------------------------------------------------------------
 # Helpers

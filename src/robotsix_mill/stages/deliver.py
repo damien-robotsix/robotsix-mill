@@ -62,10 +62,10 @@ from ..config import ConfigError, get_repo_config, target_branch_for
 from ..core.models import Ticket
 from ..core.states import State
 from ..core.workspace import read_counter, write_counter
-from ..forge import get_forge
-from ..forge.auth import _resolve_remote_url, github_push_token, github_token
-from ..forge.github import _parse_owner_repo
-from ..vcs import git_ops
+from ..scm.forge import get_forge
+from ..scm.forge.auth import _resolve_remote_url, github_push_token, github_token
+from ..scm.forge.github import _parse_owner_repo
+from ..scm.vcs import git_ops
 from ._conventional import conventional_subject
 from .base import Outcome, Stage, StageContext
 

@@ -64,14 +64,14 @@ from ...agents.ci_fixing import run_ci_fix_agent
 from ...agents.rebasing import run_rebase_agent
 from ...agents.review_revision import run_review_revision_agent
 from ...agents.runners.pass_runner import load_memory, persist_memory
-from ...forge.auth import (
+from ...runtime import tracing
+from ...scm.forge.auth import (
     _resolve_remote_url,
     github_push_token,
     github_token,
     invalidate_github_token,
 )
-from ...runtime import tracing
-from ...vcs import git_ops
+from ...scm.vcs import git_ops
 from ._shared import (
     _MERGE_REASON,
     _PR_MISSING_COUNT,

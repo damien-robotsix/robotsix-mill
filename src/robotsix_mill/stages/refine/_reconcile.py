@@ -17,7 +17,7 @@ from ...config.settings import Settings
 from ...core.models import Ticket, TicketKind
 from ...core.states import State
 from ...core.workspace import Workspace
-from ...vcs import git_ops
+from ...scm.vcs import git_ops
 from ..base import Outcome, StageContext
 from . import _result_paths
 from .helpers import (

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import yaml
+from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
 
 from robotsix_mill.config import (
     RepoConfig,
@@ -17,7 +18,6 @@ from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind, Ticket
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
 from robotsix_mill.repo_scaffold import (
     _append_repo_config,
     _python_package_name,
@@ -679,10 +679,11 @@ def test_file_implementation_followup_creates_buildout_ticket(tmp_path, monkeypa
     new repo's own board so the normal pipeline populates it. The spec is
     derived from the scaffold ticket's purpose (description — no marker to
     strip since markers are gone)."""
+    from robotsix_mill.forge.base import RepoInfo
+
     from robotsix_mill.core import db
     from robotsix_mill.core.models import SourceKind
     from robotsix_mill.core.service import TicketService
-    from robotsix_mill.forge.base import RepoInfo
     from robotsix_mill.repo_scaffold import _file_implementation_followup
 
     settings = _make_settings(tmp_path)

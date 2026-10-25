@@ -8,9 +8,9 @@ mocked transport.
 
 import httpx as real_httpx
 import pytest
+from robotsix_mill.forge.github import GitHubForge
 
 from robotsix_mill.config import Secrets, Settings, _reset_secrets
-from robotsix_mill.forge.github import GitHubForge
 
 # ---------------------------------------------------------------------------
 # Helpers

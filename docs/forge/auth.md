@@ -1,6 +1,6 @@
 # Forge authentication
 
-The forge auth layer (`src/robotsix_mill/forge/auth.py`) provides two
+The forge auth layer (`src/robotsix_mill/scm/forge/auth.py`) provides two
 authentication modes for forge API calls.
 
 ## Modes

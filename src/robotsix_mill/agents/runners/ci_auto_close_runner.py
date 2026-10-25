@@ -45,7 +45,7 @@ from ...config import get_repos_config
 from ...core.models import SourceKind, TicketEvent
 from ...core.service import TicketService
 from ...core.states import DONE_OR_CLOSED
-from ...forge import get_forge
+from ...scm.forge import get_forge
 from .timeout_escalation_runner import _boards_to_scan
 
 if TYPE_CHECKING:

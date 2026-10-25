@@ -179,7 +179,7 @@ class GitHubForge(
         if private is None:
             private = self.settings.repo_visibility_default == "private"
 
-        from ..config import get_secrets
+        from ...config import get_secrets
         from .auth import github_token  # lazy: avoid import cycle
 
         s = self.settings
@@ -305,7 +305,7 @@ class GitHubForge(
         source_repo: str,
         target_namespace: str | None = None,
     ) -> RepoInfo:
-        from ..config import get_secrets
+        from ...config import get_secrets
         from .auth import github_token  # lazy: avoid import cycle
 
         s = self.settings
@@ -439,7 +439,7 @@ class GitHubForge(
         — ``repo_description_sync`` was 0/16 for a dead secret while the
         App token would have served both calls.
         """
-        from ..config import get_secrets
+        from ...config import get_secrets
         from .auth import github_token
 
         candidates: list[tuple[str, dict[str, Any]]] = []

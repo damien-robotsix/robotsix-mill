@@ -29,7 +29,7 @@ from ...core.workspace import (
 from ...core.workspace import (
     write_counter as _write_counter,
 )
-from ...vcs import git_ops
+from ...scm.vcs import git_ops
 from ..base import Outcome
 
 

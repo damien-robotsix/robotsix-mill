@@ -11,7 +11,6 @@ from types import SimpleNamespace
 
 import httpx as real_httpx
 import pytest
-
 from robotsix_mill.forge._http import _ApiClient
 
 # ---------------------------------------------------------------------------

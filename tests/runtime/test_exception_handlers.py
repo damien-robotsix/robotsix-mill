@@ -13,9 +13,9 @@ from fastapi import FastAPI, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 from pytest import LogCaptureFixture
+from robotsix_mill.forge.base import NotConfiguredError
 
 from robotsix_mill.core.service import AmbiguousTicketId, TransitionError
-from robotsix_mill.forge.base import NotConfiguredError
 from robotsix_mill.runtime.exception_handlers import (
     ambiguous_ticket_id_handler,
     catchall_handler,

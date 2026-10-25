@@ -467,8 +467,9 @@ def test_cross_repo_pushes_to_fork_and_opens_fork_to_upstream_pr(tmp_path, monke
 
 def test_cross_repo_auto_fork_forks_before_push(tmp_path, monkeypatch):
     """auto_fork=True ensures the fork via Forge.fork_repo() before push."""
-    from robotsix_mill.config import CrossRepoTarget
     from robotsix_mill.forge.base import RepoInfo
+
+    from robotsix_mill.config import CrossRepoTarget
 
     remote, _ = _bare(tmp_path)
     cct = CrossRepoTarget(

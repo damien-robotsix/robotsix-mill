@@ -1,6 +1,6 @@
 # VCS module — git CLI wrappers
 
-**Source:** `src/robotsix_mill/vcs/git_ops.py`
+**Source:** `src/robotsix_mill/scm/vcs/git_ops.py`
 
 The `vcs` module provides thin, synchronous wrappers around the `git`
 CLI via `subprocess`. It is a leaf module with no dependencies on any

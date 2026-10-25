@@ -1,12 +1,12 @@
 # GitLab backend
 
-The GitLab forge adapter (`src/robotsix_mill/forge/gitlab/`) implements
+The GitLab forge adapter (`src/robotsix_mill/scm/forge/gitlab/`) implements
 the `Forge` ABC against the GitLab REST API v4.
 
 ## Module layout
 
 ```
-src/robotsix_mill/forge/gitlab/
+src/robotsix_mill/scm/forge/gitlab/
 ├── __init__.py          # GitLabForge class, factory, exports
 ├── core.py              # MR/merge/review/branch operations
 ├── ci.py                # Pipeline & job-log operations

@@ -15,10 +15,10 @@ from ...config import effective_target_branch
 from ...core.constants import NON_FEEDBACK_AUTHORS
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
-from ...forge import get_forge
-from ...forge.auth import _resolve_remote_url, github_token
 from ...runtime.tracing import trace_phase
-from ...vcs import git_ops
+from ...scm.forge import get_forge
+from ...scm.forge.auth import _resolve_remote_url, github_token
+from ...scm.vcs import git_ops
 from .. import short_circuit_verify
 from .._conventional import (
     conventional_subject,

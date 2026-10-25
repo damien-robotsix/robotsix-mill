@@ -56,7 +56,7 @@ def run_member_sync_pass(
         import shutil
         import subprocess
 
-        from ...vcs import git_ops
+        from ...scm.vcs import git_ops
 
         repo_data_dir = settings.data_dir / repo_config.repo_id
         cand = repo_data_dir / "member_sync_workspace" / "repo"

@@ -20,8 +20,8 @@ from __future__ import annotations
 
 from ...core.models import Ticket
 from ...core.states import State
-from ...forge import get_forge
-from ...forge.auth import github_token
+from ...scm.forge import get_forge
+from ...scm.forge.auth import github_token
 from ..base import Outcome, Stage, StageContext
 from ._shared import (
     _MERGE_REASON,

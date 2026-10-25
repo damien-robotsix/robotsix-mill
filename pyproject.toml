@@ -325,10 +325,10 @@ convention = "google"
 "src/robotsix_mill/stages/document.py" = ["C901"]
 "src/robotsix_mill/stages/deliver.py" = ["C901", "SIM105", "S607", "F821"]
 "src/robotsix_mill/stages/code_reviewing.py" = ["C901"]
-"src/robotsix_mill/forge/github.py" = ["C901", "S110"]
-"src/robotsix_mill/forge/github_pr.py" = ["C901", "S110"]
-"src/robotsix_mill/forge/github_ci.py" = ["C901", "S110"]
-"src/robotsix_mill/forge/github_code_scanning.py" = ["C901", "S110"]
+"src/robotsix_mill/scm/forge/github.py" = ["C901", "S110"]
+"src/robotsix_mill/scm/forge/github_pr.py" = ["C901", "S110"]
+"src/robotsix_mill/scm/forge/github_ci.py" = ["C901", "S110"]
+"src/robotsix_mill/scm/forge/github_code_scanning.py" = ["C901", "S110"]
 "src/robotsix_mill/core/service/*.py" = ["F821", "C901", "S110", "S603", "S607", "RUF012", "SIM102", "SIM105", "E711"]
 "src/robotsix_mill/agents/runners/pass_runner.py" = ["C901", "SIM102", "DTZ011"]
 "src/robotsix_mill/agents/coding.py" = ["C901"]
@@ -363,8 +363,8 @@ convention = "google"
 "src/robotsix_mill/runtime/routes/_misc.py" = ["S110"]
 "src/robotsix_mill/runtime/stage_retry.py" = ["S311"]
 "src/robotsix_mill/sandbox/__init__.py" = ["S108", "S603", "S607", "C901", "PERF402"]
-"src/robotsix_mill/vcs/git_ops.py" = ["S603", "S607", "S105"]
-"src/robotsix_mill/vcs/git_diff.py" = ["S603", "S607"]
+"src/robotsix_mill/scm/vcs/git_ops.py" = ["S603", "S607", "S105"]
+"src/robotsix_mill/scm/vcs/git_diff.py" = ["S603", "S607"]
 "src/robotsix_mill/dev_tooling/autoupdate/__init__.py" = ["S108", "S602", "S603", "S607", "C901", "DTZ005"]
 # Meta's deterministic ground-truth blocks shell out to read-only
 # ``git grep`` over the repo clones (fixed argv, no shell, no untrusted
@@ -380,7 +380,7 @@ convention = "google"
 "src/robotsix_mill/config/settings.py" = ["SIM102"]
 "src/robotsix_mill/core/text_utils.py" = ["SIM108"]
 "src/robotsix_mill/runtime/transient_errors.py" = ["SIM102", "S110"]
-"src/robotsix_mill/vcs/__init__.py" = ["SIM105"]
+"src/robotsix_mill/scm/vcs/__init__.py" = ["SIM105"]
 # RUF012 (mutable-class-default) — pre-existing Pydantic/dataclass
 # patterns where the default is a factory-created instance; not a
 # shared-mutable-state bug in practice.
@@ -435,7 +435,7 @@ convention = "google"
 # TRY004 (prefer-type-error) — ValueError is semantically correct for
 # invalid duration values; TypeError would be misleading.
 "src/robotsix_mill/core/duration.py" = ["TRY004"]
-"src/robotsix_mill/forge/gitlab/core.py" = ["TRY004", "PERF402"]
+"src/robotsix_mill/scm/forge/gitlab/core.py" = ["TRY004", "PERF402"]
 # TRY401 (redundant-log-exc-obj) — pre-existing logging.exception with
 # redundant exception argument.
 "src/robotsix_mill/agents/runners/langfuse_cleanup_runner.py" = ["TRY401"]

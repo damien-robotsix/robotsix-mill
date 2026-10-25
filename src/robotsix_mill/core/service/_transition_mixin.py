@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from ...config import Settings
-from ...vcs import git_ops
+from ...scm.vcs import git_ops
 from ..db import retry_on_db_full
 from ..models import (
     Comment,

@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from ..core.service import AmbiguousTicketId, TransitionError
-from ..forge.base import NotConfiguredError
+from ..scm.forge.base import NotConfiguredError
 from .errors import ProblemDetail
 from .tracing import get_current_trace_id
 

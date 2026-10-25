@@ -16,8 +16,8 @@ from typing import Any
 
 from ..core.models import Ticket
 from ..core.states import State
-from ..forge import get_forge
-from ..forge.github_code_scanning import CodeScanningAlertsUnavailable
+from ..scm.forge import get_forge
+from ..scm.forge.github_code_scanning import CodeScanningAlertsUnavailable
 from .base import Outcome, StageContext
 from .ci_fix_helpers import (
     _bounded_multi_run_log_text,

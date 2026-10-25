@@ -36,9 +36,9 @@ from typing import Any
 from ...config import RepoConfig, Settings, target_branch_for
 from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.service import TicketService
-from ...forge import get_forge
-from ...forge.auth import _resolve_remote_url, github_push_token, github_token
-from ...vcs import git_ops
+from ...scm.forge import get_forge
+from ...scm.forge.auth import _resolve_remote_url, github_push_token, github_token
+from ...scm.vcs import git_ops
 
 log = logging.getLogger("robotsix_mill.roadmap_sync")
 

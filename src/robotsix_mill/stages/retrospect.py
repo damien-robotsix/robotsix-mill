@@ -24,9 +24,9 @@ from ..core.states import DONE_OR_CLOSED, State
 from ..core.text_noop import is_degenerate_body, is_noop_report
 from ..core.text_utils import truncate_at_boundary
 from ..core.workspace import prune_clone
-from ..forge import get_forge
 from ..langfuse import client as langfuse_client
 from ..runtime.tracing import current_session
+from ..scm.forge import get_forge
 from .base import Outcome, Stage, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.retrospect")

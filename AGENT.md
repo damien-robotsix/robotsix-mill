@@ -359,9 +359,9 @@ filing a "stale paths" cleanup ticket after the fact.
 ## Forge adapter conventions
 
 - **Public-method / private-HTTP-seam split.** Every new abstract
-  method added to `Forge` (`src/robotsix_mill/forge/base.py`) must
+  method added to `Forge` (`src/robotsix_mill/scm/forge/base.py`) must
   follow the two-layer pattern established in `GitHubForge`
-  (`src/robotsix_mill/forge/github.py`). The **public method**
+  (`src/robotsix_mill/scm/forge/github.py`). The **public method**
   performs validation and feature-flag checks, raises
   `NotConfiguredError` when the capability is gated, then delegates
   to the **private `_method_name()`**. The private method is the

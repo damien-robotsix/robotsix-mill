@@ -12,7 +12,7 @@ from typing import Any
 from ...config import ConfigError, get_repo_config, target_branch_for
 from ...core.models import Ticket
 from ...core.states import State
-from ...forge import get_forge, rate_limit
+from ...scm.forge import get_forge, rate_limit
 
 # _resolve_remote_url, github_token, load_memory, persist_memory
 # are accessed through the _facade import inside method bodies

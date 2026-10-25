@@ -66,7 +66,7 @@ class GitHubForgePRMixin:
         """
         s = self.settings  # type: ignore[attr-defined]
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
-        from ..config import target_branch_for  # lazy: avoid import cycle
+        from ...config import target_branch_for  # lazy: avoid import cycle
 
         base = target_branch_for(s, self._repo_config)  # type: ignore[attr-defined]
         head = source_branch

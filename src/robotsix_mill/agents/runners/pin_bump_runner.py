@@ -30,9 +30,9 @@ from robotsix_mill.deps.internal_graph import (
     InternalDepGraph,
     build_internal_dep_graph,
 )
-from robotsix_mill.forge import Forge, get_forge, rate_limit
-from robotsix_mill.forge.auth import github_push_token, github_token
-from robotsix_mill.vcs import git_ops
+from robotsix_mill.scm.forge import Forge, get_forge, rate_limit
+from robotsix_mill.scm.forge.auth import github_push_token, github_token
+from robotsix_mill.scm.vcs import git_ops
 
 log = logging.getLogger(__name__)
 

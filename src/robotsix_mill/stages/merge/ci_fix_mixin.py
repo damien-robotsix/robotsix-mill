@@ -13,7 +13,7 @@ from typing import Any
 from ...config import ConfigError, get_repo_config, target_branch_for
 from ...core.models import Ticket
 from ...core.states import State
-from ...forge import get_forge
+from ...scm.forge import get_forge
 from ..base import Outcome, StageContext
 from ..ci_fix_codeql import (
     _CODQL_FP_TRIAGE_SENTINEL,

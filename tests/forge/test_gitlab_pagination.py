@@ -12,7 +12,6 @@ from contextlib import contextmanager
 from typing import Any
 
 import httpx as real_httpx
-
 from robotsix_mill.forge.gitlab._pagination import _paginated_get
 
 # ---------------------------------------------------------------------------

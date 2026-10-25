@@ -21,12 +21,12 @@ from ...config import RepoConfig, get_repos_config, target_branch_for
 from ...core.dedup import _ci_draft_fingerprint, find_prior_matching_ticket
 from ...core.models import Comment, SourceKind, Ticket
 from ...core.states import State
-from ...forge import rate_limit
+from ...scm.forge import rate_limit
 from ..transient_errors import _TRANSIENT_HTTPX_EXCEPTIONS, is_network_down_error
 
 if TYPE_CHECKING:
     from ...core.service import TicketService
-    from ...forge import Forge
+    from ...scm.forge import Forge
 
 from ._base import _WorkerBase
 
@@ -495,7 +495,7 @@ class PollLoopsCiMixin(_WorkerBase):
     ) -> None:
         """Execute one CI monitor poll cycle for a single repo."""
         from ...core.service import TicketService
-        from ...forge import get_forge
+        from ...scm.forge import get_forge
 
         settings = self.ctx.settings
         repo_label = rc.repo_id

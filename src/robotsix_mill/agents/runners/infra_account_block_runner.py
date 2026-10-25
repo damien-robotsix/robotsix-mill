@@ -181,7 +181,7 @@ def _resume_board_if_green(
 ) -> None:
     """Resume *board_id*'s parked tickets once its hosted CI is green again."""
     from ...config import target_branch_for
-    from ...forge import get_forge
+    from ...scm.forge import get_forge
 
     rc = _repo_for_board(settings, board_id)
     if rc is None:

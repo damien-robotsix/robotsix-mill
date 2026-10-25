@@ -21,7 +21,7 @@ from typing import Any
 from ...config import RepoConfig, Settings, get_secrets, target_branch_for
 from ...core.models import SourceKind
 from ...core.service import TicketService
-from ...forge.auth import github_token, gitlab_token
+from ...scm.forge.auth import github_token, gitlab_token
 from .pass_runner import run_agent_pass
 
 log = logging.getLogger("robotsix_mill.periodic_runner")
@@ -59,7 +59,7 @@ def _clone_token(settings, repo_config) -> str | None:
     an auth error / exit 128).  An ambiguous/custom domain falls back to
     the global ``settings.forge_kind``.
     """
-    from ...forge.base import _detect_forge_kind
+    from ...scm.forge.base import _detect_forge_kind
 
     kind = settings.forge_kind
     per_repo_url = repo_config.forge_remote_url if repo_config is not None else None
@@ -262,7 +262,7 @@ def run_periodic_pass(
     agent_module = importlib.import_module(
         f".agents.{config.agent_module_attr}", package="robotsix_mill"
     )
-    from ...vcs import git_ops
+    from ...scm.vcs import git_ops
 
     # Resolve clone token strategy.
     token_fn = (
