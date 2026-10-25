@@ -20,7 +20,7 @@ from ..agents.reviewing import ReviewAsk, ReviewVerdict
 from ..core.models import Comment, Ticket
 from ..core.states import ASK_USER_MARKER, State
 from ..core.workspace import Workspace
-from ..vcs import git_ops
+from ..scm.vcs import git_ops
 from .base import Outcome, StageContext
 from .refine.helpers import verify_claim
 

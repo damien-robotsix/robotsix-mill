@@ -20,8 +20,8 @@ from ..core.workspace import (
 from ..core.workspace import (
     write_counter as _write_counter,
 )
-from ..forge.base import Forge
-from ..vcs import git_ops
+from ..scm.forge.base import Forge
+from ..scm.vcs import git_ops
 
 __all__ = ["_read_counter", "_write_counter"]
 
@@ -764,8 +764,8 @@ def _check_upstream_ci_breakage(
     so that pass can find them.
     """
     from ..config.repos import target_branch_for
-    from ..forge import get_forge
-    from ..vcs import git_ops
+    from ..scm.forge import get_forge
+    from ..scm.vcs import git_ops
 
     # 0. A CI-monitor ticket exists to repair the target branch; the
     #    upstream guard must never turn it away from its own job.

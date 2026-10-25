@@ -25,7 +25,7 @@ from ...core import constants as _constants
 from ...core.constants import BINARY_EXTENSIONS
 from ...core.models import Ticket
 from ...core.states import State
-from ...vcs import git_ops
+from ...scm.vcs import git_ops
 from ..base import StageContext
 
 # Spec-quality validation helpers live in spec_validation.py.

@@ -22,7 +22,7 @@ from ...core.datetime_utils import _as_utc
 from ...core.dedup import _extract_paths, _scope_paths
 from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.states import State
-from ...vcs import git_ops
+from ...scm.vcs import git_ops
 from ..base import Outcome, StageContext
 from .helpers import (
     DEDUP_ALREADY_DONE_PREFIX,

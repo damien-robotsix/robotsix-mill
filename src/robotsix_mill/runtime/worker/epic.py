@@ -20,7 +20,7 @@ from ...core.models import TicketKind
 from ...core.states import State
 
 if TYPE_CHECKING:
-    from ...forge.base import BranchInfo
+    from ...scm.forge.base import BranchInfo
 
 log = logging.getLogger("robotsix_mill.worker")
 

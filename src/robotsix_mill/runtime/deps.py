@@ -14,7 +14,7 @@ from ..config import RepoConfig, ReposRegistry, Settings
 from ..core.models import Ticket, TicketRead
 from ..core.service import TicketService
 from ..core.states import STAGE_FOR_STATE, State
-from ..forge import get_forge
+from ..scm.forge import get_forge
 from .broadcaster import BoardBroadcaster
 from .run_registry import RunRegistry
 from .worker import Worker

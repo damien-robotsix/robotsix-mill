@@ -31,7 +31,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from ..vcs import git_ops
+from ..scm.vcs import git_ops
 
 log = logging.getLogger(__name__)
 

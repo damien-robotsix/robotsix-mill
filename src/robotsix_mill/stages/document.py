@@ -20,7 +20,7 @@ from ..config import target_branch_for
 from ..core.models import Ticket
 from ..core.states import State
 from ..notify import send_notification
-from ..vcs import git_ops
+from ..scm.vcs import git_ops
 from ._implemented_repos import combined_diff, implemented_repos
 from .base import Outcome, Stage, StageContext
 from .pause import check_for_pause
@@ -63,7 +63,7 @@ class DocumentStage(Stage):
             diff = combined_diff(s, ctx.repo_config, repos, target_branch)
         except Exception as e:
             from ..runtime.transient_errors import reraise_if_transient
-            from ..vcs.git_ops import redact_credentials
+            from ..scm.vcs.git_ops import redact_credentials
 
             reraise_if_transient(e)
             # str(CalledProcessError) reprs the full argv — including
@@ -162,7 +162,7 @@ class DocumentStage(Stage):
                 reference_files=preload_paths or None,
             )
         except Exception as e:
-            from ..vcs.git_ops import redact_credentials
+            from ..scm.vcs.git_ops import redact_credentials
 
             redacted = redact_credentials(str(e))
             note = f"doc agent failed (non-blocking): {type(e).__name__}: {redacted}"

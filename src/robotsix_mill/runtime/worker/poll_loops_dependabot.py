@@ -38,7 +38,7 @@ class PollLoopsDependabotMixin(_WorkerBase):
         the dedup state).
         """
         from ...core.service import TicketService
-        from ...forge import get_forge
+        from ...scm.forge import get_forge
 
         settings = self.ctx.settings
         repo_label = rc.repo_id

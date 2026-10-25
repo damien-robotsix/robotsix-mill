@@ -17,8 +17,8 @@ from ...config import (
 )
 from ...core.models import Ticket
 from ...core.states import State
-from ...forge.auth import _resolve_remote_url, github_token
-from ...vcs import git_ops
+from ...scm.forge.auth import _resolve_remote_url, github_token
+from ...scm.vcs import git_ops
 from .. import short_circuit_verify
 from ..base import Outcome, StageContext
 from ._base import _ImplementStageBase

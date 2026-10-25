@@ -27,7 +27,7 @@ from ...config import target_branch_for
 from ...core.block_reason import TARGET_BRANCH_RED, encode
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
-from ...forge import Forge, get_forge, rate_limit
+from ...scm.forge import Forge, get_forge, rate_limit
 from ...stages.ci_transient import is_transient_ci_failure
 from ..base import Outcome, StageContext
 from ._base import _MergeStageBase
@@ -116,7 +116,7 @@ class CIPollMixin(_MergeStageBase):
         _repo_dir = _workspace_repo_dir(ctx, ticket)
         _target = target_branch_for(s, ctx.repo_config)
         try:
-            from ...forge.auth import _resolve_remote_url, github_push_token
+            from ...scm.forge.auth import _resolve_remote_url, github_push_token
 
             _remote_url = _resolve_remote_url(s, ctx.repo_config)
             _token = github_push_token(s, repo_config=ctx.repo_config)

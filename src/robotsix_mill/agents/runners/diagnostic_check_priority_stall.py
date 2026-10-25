@@ -21,7 +21,7 @@ from typing import Any
 from ...config import get_repos_config
 from ...core.service import TicketService
 from ...core.states import State
-from ...forge import get_forge
+from ...scm.forge import get_forge
 from .diagnostic_checks import (
     DiagnosticCheckContext,
     DiagnosticCheckResult,

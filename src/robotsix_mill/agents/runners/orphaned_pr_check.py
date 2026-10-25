@@ -32,11 +32,11 @@ from ...core.datetime_utils import _as_utc
 from ...core.models import SourceKind, Ticket
 from ...core.service import TicketService
 from ...core.states import State
-from ...forge import get_forge
+from ...scm.forge import get_forge
 from .pin_bump_runner import PIN_BUMP_BRANCH_SEGMENT
 
 if TYPE_CHECKING:
-    from ...forge.base import Forge
+    from ...scm.forge.base import Forge
 
 log = logging.getLogger(__name__)
 

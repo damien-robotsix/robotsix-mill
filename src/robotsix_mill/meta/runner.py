@@ -21,7 +21,7 @@ from ..config import Settings, get_repos_config
 from ..core.models import SourceKind
 from ..core.service import TicketService
 from ..runtime.tracing import force_traces_to_mill
-from ..vcs import clone_all_repos
+from ..scm.vcs import clone_all_repos
 from .agent import MetaAgentResult, run_meta_agent
 
 log = logging.getLogger("robotsix_mill.meta.runner")

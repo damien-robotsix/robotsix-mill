@@ -446,7 +446,7 @@ def _collect_implement_diff(repo_dir: Path, target_branch: str) -> str:
     safe to call on every retry pass.  Returns ``""`` when the repo has no
     resolvable target ref or no changes.
     """
-    from ..vcs import git_ops
+    from ..scm.vcs import git_ops
 
     parts: list[str] = []
     try:

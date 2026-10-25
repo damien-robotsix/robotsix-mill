@@ -12,7 +12,7 @@ from pathlib import Path
 
 from ...core.models import Ticket
 from ...core.states import State
-from ...forge import Forge
+from ...scm.forge import Forge
 
 # _resolve_remote_url, github_token, load_memory, persist_memory
 # are accessed through the _facade import inside method bodies

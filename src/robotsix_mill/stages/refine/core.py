@@ -14,8 +14,8 @@ from ...core.constants import NON_IMPLEMENTATION_CLOSE_PREFIXES
 from ...core.models import Ticket, TicketKind
 from ...core.states import State
 from ...core.workspace import Workspace
-from ...forge.auth import github_token
-from ...vcs import git_ops
+from ...scm.forge.auth import github_token
+from ...scm.vcs import git_ops
 from ..base import Outcome, Stage, StageContext
 from .gates import RefineGatesMixin
 from .helpers import log

@@ -18,14 +18,14 @@ import yaml
 
 if TYPE_CHECKING:
     from ..config import Settings
-    from ..forge.base import Forge
+    from ..scm.forge.base import Forge
     from ..stages.base import Outcome, StageContext
 
 from ..config import _reset_repos_config
 from ..core.states import State
-from ..forge.auth import github_token
-from ..forge.base import NotConfiguredError, RepoInfo
-from ..vcs import git_ops
+from ..scm.forge.auth import github_token
+from ..scm.forge.base import NotConfiguredError, RepoInfo
+from ..scm.vcs import git_ops
 
 log = logging.getLogger("robotsix_mill.repo_scaffold")
 

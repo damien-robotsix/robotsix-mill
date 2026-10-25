@@ -26,7 +26,7 @@ from .epic import _branch_is_stale
 
 if TYPE_CHECKING:
     from ...core.service import TicketService
-    from ...forge import Forge
+    from ...scm.forge import Forge
 
 log = logging.getLogger("robotsix_mill.worker")
 
@@ -226,7 +226,7 @@ def _blocked_recheck_pass(
     from ...core.block_reason import TARGET_BRANCH_RED, decode
     from ...core.service import TicketService
     from ...core.states import State
-    from ...forge import get_forge
+    from ...scm.forge import get_forge
 
     svc = TicketService(settings, board_id=repo_config.board_id)
     target = target_branch_for(settings, repo_config)
@@ -682,7 +682,7 @@ class PeriodicPassesMixin(_WorkerBase):
         """
         from datetime import datetime
 
-        from ...forge import get_forge, rate_limit
+        from ...scm.forge import get_forge, rate_limit
 
         settings = self.ctx.settings
         interval = max(3600, settings.stale_branch_cleanup_interval_seconds)
@@ -760,7 +760,7 @@ class PeriodicPassesMixin(_WorkerBase):
             run_orphaned_pr_check_pass,
         )
 
-        from ...forge import rate_limit
+        from ...scm.forge import rate_limit
 
         settings = self.ctx.settings
         interval = max(3600, settings.orphaned_pr_check_interval_seconds)
@@ -1019,7 +1019,7 @@ class PeriodicPassesMixin(_WorkerBase):
         )
         from ...agents.runners.member_sync_runner import run_member_sync_pass
         from ...agents.runners.periodic_runner import _clone_token
-        from ...vcs import git_ops
+        from ...scm.vcs import git_ops
 
         settings = self.ctx.settings
         interval = max(60, settings.bespoke_discovery_interval_seconds)

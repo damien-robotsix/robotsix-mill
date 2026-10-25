@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ..config import ReposRegistry, Settings
 from ..core.service import AmbiguousTicketId, TransitionError
-from ..forge.base import NotConfiguredError
+from ..scm.forge.base import NotConfiguredError
 from . import routes
 from .exception_handlers import (
     ambiguous_ticket_id_handler,

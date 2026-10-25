@@ -24,9 +24,9 @@ from ..config.settings import Settings
 from ..core.models import Ticket
 from ..core.states import State
 from ..core.workspace import Workspace
-from ..forge.auth import github_token
-from ..forge.github import _parse_owner_repo
-from ..vcs import git_ops
+from ..scm.forge.auth import github_token
+from ..scm.forge.github import _parse_owner_repo
+from ..scm.vcs import git_ops
 from ._implemented_repos import ImplementedRepo, combined_diff, implemented_repos
 from ._review_helpers import (
     _SHA_RE,
@@ -241,7 +241,7 @@ class ReviewStage(Stage):
             diff = combined_diff(s, ctx.repo_config, repos, target_branch or "")
         except Exception as e:
             from ..runtime.transient_errors import reraise_if_transient
-            from ..vcs.git_ops import redact_credentials
+            from ..scm.vcs.git_ops import redact_credentials
 
             reraise_if_transient(e)
             # str(CalledProcessError) reprs the full argv — including

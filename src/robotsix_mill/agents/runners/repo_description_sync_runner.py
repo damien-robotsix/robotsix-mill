@@ -22,8 +22,8 @@ from pathlib import Path
 from typing import Any
 
 from ...config import RepoConfig, Settings, target_branch_for
-from ...forge.base import NotConfiguredError, get_forge
-from ...vcs import git_ops
+from ...scm.forge.base import NotConfiguredError, get_forge
+from ...scm.vcs import git_ops
 from .periodic_runner import _clone_token
 
 log = logging.getLogger("robotsix_mill.repo_description_sync_runner")

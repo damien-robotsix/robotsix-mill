@@ -18,8 +18,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..config import Settings, get_repos_config, target_branch_for
-from ..forge.auth import github_token
-from ..vcs import git_ops
+from ..scm.forge.auth import github_token
+from ..scm.vcs import git_ops
 
 if TYPE_CHECKING:
     from ..core.models import Ticket

@@ -16,7 +16,7 @@ from pathlib import Path
 from ...config import ConfigError, Settings, get_repo_config, target_branch_for
 from ...core.models import Ticket
 from ...core.states import State
-from ...vcs import git_ops
+from ...scm.vcs import git_ops
 from .. import short_circuit_verify
 from ..base import Outcome, StageContext
 from ._base import _ImplementStageBase

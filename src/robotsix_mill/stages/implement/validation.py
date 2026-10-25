@@ -16,8 +16,8 @@ from ...agents.testing import (
 from ...config import Settings, target_branch_for
 from ...core.models import SourceKind, Ticket, TicketEvent, TicketKind
 from ...core.states import State
-from ...forge.base import get_forge
-from ...vcs import git_ops
+from ...scm.forge.base import get_forge
+from ...scm.vcs import git_ops
 from .. import dependency_fix
 from ..base import Outcome, StageContext
 from ._base import _ImplementStageBase

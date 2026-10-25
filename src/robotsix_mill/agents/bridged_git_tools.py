@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from ..runtime.tracing import trace_stage
-from ..vcs import git_ops
+from ..scm.vcs import git_ops
 
 log = logging.getLogger(__name__)
 

@@ -153,7 +153,7 @@ def run_upstream_ci_recovery(settings: Settings) -> dict[str, Any]:  # noqa: C90
     whose forge lookup failed (they stay parked and are retried next pass).
     """
     from ...config import target_branch_for
-    from ...forge import get_forge, rate_limit
+    from ...scm.forge import get_forge, rate_limit
 
     resumed = 0
     still_parked = 0
