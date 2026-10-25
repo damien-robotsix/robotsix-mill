@@ -1,14 +1,13 @@
 import json
 import subprocess
 
-from robotsix_mill.vcs.git_ops import PostPushResult
-
 from robotsix_mill.agents.rebasing import RebaseResult
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.forge import github
+from robotsix_mill.scm.forge import github
+from robotsix_mill.scm.vcs.git_ops import PostPushResult
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.merge import MergeStage, _read_counter, _write_counter
 
@@ -822,7 +821,7 @@ def test_rebase_rerun_receives_previously_dropped_files(tmp_path, monkeypatch):
         lambda repo, target_branch="main", ref="HEAD": ["src/mod.py"],
     )
     monkeypatch.setattr(
-        "robotsix_mill.vcs.git_diff.changed_source_files",
+        "robotsix_mill.scm.vcs.git_diff.changed_source_files",
         lambda repo, target_branch="main", ref="HEAD": ["src/mod.py"],
     )
 

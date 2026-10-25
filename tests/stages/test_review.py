@@ -1577,7 +1577,7 @@ def test_extra_roots_passed_when_workflow_ref_matches_repos_config(
     containing the clone path."""
     from robotsix_mill.config import RepoConfig
     from robotsix_mill.config.repos import _reset_repos_config, get_repos_config
-    from robotsix_mill.vcs import git_ops
+    from robotsix_mill.scm.vcs import git_ops
 
     ctx = ctx_factory(
         forge_remote_url="file:///dummy",

@@ -6,8 +6,8 @@ import pytest
 
 from robotsix_mill.agents import coding
 from robotsix_mill.core.states import State
+from robotsix_mill.scm.vcs import git_ops
 from robotsix_mill.stages.implement import ImplementStage
-from robotsix_mill.vcs import git_ops
 from tests.stages.implement.conftest import _ticket, _write_file_map
 from tests.stages.implement.test_implement import (
     _clone_repo_to,
@@ -1375,7 +1375,7 @@ def test_baseline_checks_out_remote_base_sha_not_local_branch(
     a fix that already landed on main was reported as still-failing and
     poisoned the gate. Assert the baseline checks out a 40-hex SHA.
     """
-    from robotsix_mill.vcs import git_ops
+    from robotsix_mill.scm.vcs import git_ops
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(

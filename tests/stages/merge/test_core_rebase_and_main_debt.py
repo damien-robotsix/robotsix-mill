@@ -5,11 +5,10 @@ import contextlib
 import json
 import subprocess
 
-from robotsix_mill.vcs.git_ops import PostPushResult, ReconcileResult
-
 from robotsix_mill.agents.rebasing import RebaseResult
 from robotsix_mill.core.states import State
-from robotsix_mill.forge import github
+from robotsix_mill.scm.forge import github
+from robotsix_mill.scm.vcs.git_ops import PostPushResult, ReconcileResult
 from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.merge import MergeStage
 from tests.stages.merge.conftest import (

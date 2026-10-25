@@ -72,7 +72,7 @@ def _prepare(tmp_path, monkeypatch, forge):
     )
     _cfg._repos_config = ReposRegistry(repos={rc.repo_id: rc})
     monkeypatch.setattr(
-        "robotsix_mill.forge.get_forge", lambda s, repo_config=None: forge
+        "robotsix_mill.scm.forge.get_forge", lambda s, repo_config=None: forge
     )
     return settings, TicketService(settings, board_id=_BOARD)
 

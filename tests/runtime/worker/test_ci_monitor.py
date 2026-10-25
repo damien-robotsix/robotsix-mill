@@ -8,8 +8,6 @@ import re
 import time
 from datetime import UTC, datetime, timedelta
 
-from robotsix_mill.vcs.git_ops import PostPushResult
-
 from robotsix_mill.agents.ci_fixing import CiFixResult
 from robotsix_mill.config import (
     RepoConfig,
@@ -23,6 +21,7 @@ from robotsix_mill.core.models import Comment, SourceKind, Ticket
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.runtime.worker import Worker
+from robotsix_mill.scm.vcs.git_ops import PostPushResult
 from robotsix_mill.stages import StageContext
 
 
@@ -106,7 +105,7 @@ def _make_fake_forge(
         return forge
 
     monkeypatch.setattr(
-        "robotsix_mill.forge.get_forge",
+        "robotsix_mill.scm.forge.get_forge",
         _fake_get_forge,
     )
     return forge
@@ -591,7 +590,7 @@ def test_existing_pr_ci_fix_path_still_works(tmp_path, monkeypatch):
     """The existing test_fix_success_push_success_returns_implement_complete still
     passes after the refactor — i.e., the ci_fix stage still works
     when log fetching fails (the exception path is handled)."""
-    from robotsix_mill.forge import github as gh_mod
+    from robotsix_mill.scm.forge import github as gh_mod
     from robotsix_mill.stages.ci_fix import CIFixStage as CFS
 
     ctx = _ctx(

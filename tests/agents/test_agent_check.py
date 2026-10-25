@@ -496,7 +496,7 @@ def test_agent_check_session_ids_are_unique_per_run(tmp_path, monkeypatch):
 def test_run_agent_check_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
     """With a forge configured, the agent-check run clones the repo
     locally and hands the agent repo_dir and memory_dir. Idempotent + best-effort."""
-    from robotsix_mill.vcs import git_ops
+    from robotsix_mill.scm.vcs import git_ops
 
     settings = _make_settings(
         tmp_path,

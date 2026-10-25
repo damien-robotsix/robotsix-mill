@@ -6,17 +6,17 @@ _parse_owner_repo, and _build_headers directly with a mocked transport.
 
 import httpx as real_httpx
 import pytest
-from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
-from robotsix_mill.forge.github import (
+
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
+from robotsix_mill.scm.forge.base import NotConfiguredError, RepoInfo
+from robotsix_mill.scm.forge.github import (
     GitHubForge,
     _build_headers,
     _parse_owner_repo,
 )
-from robotsix_mill.forge.github_ci import (
+from robotsix_mill.scm.forge.github_ci import (
     _ANSI_RE,
 )
-
-from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -357,8 +357,8 @@ def test_capture_failure_window_anchors_on_first_error():
     """An if:always() cascade: the REAL build failure errors early, a masking
     step re-errors near the tail. A plain tail-cap would show only the mask;
     _capture_failure_window must surface the EARLY real failure."""
-    from robotsix_mill.forge._log_utils import _capture_failure_window
-    from robotsix_mill.forge.github_ci import _LOG_FAILURE_RE
+    from robotsix_mill.scm.forge._log_utils import _capture_failure_window
+    from robotsix_mill.scm.forge.github_ci import _LOG_FAILURE_RE
 
     real = "ERROR: failed to build proxy image: COPY filter not found\n##[error]Process completed with exit code 1\n"
     filler = "noise line padding the log\n" * 5000  # skipped-step noise
@@ -372,8 +372,8 @@ def test_capture_failure_window_anchors_on_first_error():
 
 def test_capture_failure_window_tailcaps_without_marker():
     """No failure marker → degrade to historical tail-cap (last N bytes)."""
-    from robotsix_mill.forge._log_utils import _capture_failure_window
-    from robotsix_mill.forge.github_ci import _LOG_FAILURE_RE
+    from robotsix_mill.scm.forge._log_utils import _capture_failure_window
+    from robotsix_mill.scm.forge.github_ci import _LOG_FAILURE_RE
 
     out = _capture_failure_window(
         "x" * 100_000, max_bytes=65536, failure_re=_LOG_FAILURE_RE
@@ -383,7 +383,7 @@ def test_capture_failure_window_tailcaps_without_marker():
 
 def test_strip_runner_noise_removes_boilerplate():
     """Runner preamble (OS version, runner image, git config) is stripped."""
-    from robotsix_mill.forge._log_utils import _strip_runner_noise
+    from robotsix_mill.scm.forge._log_utils import _strip_runner_noise
 
     log = (
         "Current runner version: '2.317.0'\n"
@@ -437,7 +437,7 @@ def test_strip_runner_noise_download_action_without_group():
     preamble headings themselves (Prepare all required actions,
     Getting action download info) may survive — they are only a
     few tokens — but the bulk download lines are stripped."""
-    from robotsix_mill.forge._log_utils import _strip_runner_noise
+    from robotsix_mill.scm.forge._log_utils import _strip_runner_noise
 
     log = (
         "Prepare all required actions\n"
@@ -454,7 +454,7 @@ def test_strip_runner_noise_download_action_without_group():
 def test_strip_runner_noise_noop_on_clean_log():
     """A log without runner boilerplate is returned unchanged (modulo
     whitespace normalisation)."""
-    from robotsix_mill.forge._log_utils import _strip_runner_noise
+    from robotsix_mill.scm.forge._log_utils import _strip_runner_noise
 
     log = "Step output line 1\nStep output line 2\n##[error]oops\n"
     out = _strip_runner_noise(log)
@@ -1755,7 +1755,7 @@ def test_create_repo_reuses_empty_repo_with_blank_owner(tmp_path, monkeypatch):
 
 def test_clamp_repo_description():
     """Descriptions are single-lined and clamped to GitHub's 350-char cap."""
-    from robotsix_mill.forge.github import _clamp_repo_description
+    from robotsix_mill.scm.forge.github import _clamp_repo_description
 
     assert (
         _clamp_repo_description("short  desc\nwith   lines") == "short desc with lines"
@@ -1995,7 +1995,7 @@ def test_update_repo_non_200_logs_status_and_body(tmp_path, monkeypatch, caplog)
         ),
     )
     forge = _forge(tmp_path, enable_repo_creation=True)
-    with caplog.at_level("WARNING", logger="robotsix_mill.forge.github"):
+    with caplog.at_level("WARNING", logger="robotsix_mill.scm.forge.github"):
         assert forge.update_repo(owner="o", repo="r", description="desc") is False
     assert "HTTP 403" in caplog.text
     assert "Resource not accessible by integration" in caplog.text
@@ -2075,7 +2075,7 @@ def test_update_repo_dead_pat_falls_back_to_forge_token(tmp_path, monkeypatch, c
     )
     forge = _forge(tmp_path, enable_repo_creation=True)
     _set_secrets(forge_token="app-tok", forge_repo_create_token="pat-dead")
-    with caplog.at_level("WARNING", logger="robotsix_mill.forge.github"):
+    with caplog.at_level("WARNING", logger="robotsix_mill.scm.forge.github"):
         assert forge.update_repo(owner="o", repo="r", description="d") is True
     assert captured["auths"] == ["Bearer pat-dead", "Bearer app-tok"]
     assert "forge_repo_create_token rejected with HTTP 401" in caplog.text
@@ -2124,7 +2124,7 @@ def test_update_repo_401_on_every_token_returns_false(tmp_path, monkeypatch, cap
     )
     forge = _forge(tmp_path, enable_repo_creation=True)
     _set_secrets(forge_token="app-tok", forge_repo_create_token="pat-dead")
-    with caplog.at_level("WARNING", logger="robotsix_mill.forge.github"):
+    with caplog.at_level("WARNING", logger="robotsix_mill.scm.forge.github"):
         assert forge.update_repo(owner="o", repo="r", description="d") is False
     assert "HTTP 401" in caplog.text
 
@@ -2202,7 +2202,9 @@ def test_list_code_scanning_alerts_404_returns_empty(tmp_path, monkeypatch):
 
 def test_list_code_scanning_alerts_403_raises_unavailable(tmp_path, monkeypatch):
     """403 (token lacks security-events scope) raises CodeScanningAlertsUnavailable."""
-    from robotsix_mill.forge.github_code_scanning import CodeScanningAlertsUnavailable
+    from robotsix_mill.scm.forge.github_code_scanning import (
+        CodeScanningAlertsUnavailable,
+    )
 
     _mock_httpx(
         monkeypatch,
@@ -2369,7 +2371,7 @@ def test_retry_after_401_invalidates_token_and_sleeps(tmp_path, monkeypatch):
     """invalidate_and_backoff() calls invalidate_github_token() and sleeps 2s."""
     import time
 
-    from robotsix_mill.forge import auth as forge_auth
+    from robotsix_mill.scm.forge import auth as forge_auth
 
     forge = _forge(tmp_path)
     invalidate_calls = []

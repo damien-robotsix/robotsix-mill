@@ -12,7 +12,8 @@ import pytest
 from robotsix_mill.agents.ci_fixing import CiFixResult
 from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.states import State
-from robotsix_mill.forge import github
+from robotsix_mill.scm.forge import github
+from robotsix_mill.scm.vcs import git_ops
 from robotsix_mill.stages.ci_fix import (
     CIFixStage,
 )
@@ -22,7 +23,6 @@ from robotsix_mill.stages.ci_fix_helpers import (
     _read_counter,
     _write_counter,
 )
-from robotsix_mill.vcs import git_ops
 
 # ---------------------------------------------------------------------------
 # Module-level autouse fixture: prevent any test from accidentally running
@@ -930,7 +930,7 @@ def test_codeql_403_unreadable_blocks_immediately(tmp_path, monkeypatch):
     """When CodeQL is failing and list_code_scanning_alerts raises
     CodeScanningAlertsUnavailable (403), the stage blocks immediately with
     a permission-hint note and does NOT invoke the ci-fix agent."""
-    from robotsix_mill.forge.github_code_scanning import (
+    from robotsix_mill.scm.forge.github_code_scanning import (
         CodeScanningAlertsUnavailable,
     )
 

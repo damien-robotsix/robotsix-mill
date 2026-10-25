@@ -31,6 +31,7 @@ from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
+from robotsix_mill.scm.vcs import git_ops
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages import refine as refine_module
 from robotsix_mill.stages.refine import RefineStage
@@ -40,7 +41,6 @@ from robotsix_mill.stages.refine.helpers import (
     UNMERGED_BRANCH_PREFIX,
     _summarize_spec_for_auto_approve,
 )
-from robotsix_mill.vcs import git_ops
 
 # A genuine (> 120 char) spec body so ``_spec_is_degenerate`` never trips.
 _REAL_SPEC = (

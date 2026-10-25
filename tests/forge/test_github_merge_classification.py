@@ -10,7 +10,7 @@ two apart.
 
 from types import SimpleNamespace
 
-from robotsix_mill.forge.github_pr import GitHubForgePRMixin, _api_message
+from robotsix_mill.scm.forge.github_pr import GitHubForgePRMixin, _api_message
 
 
 class _Response:

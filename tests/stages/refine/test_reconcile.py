@@ -21,10 +21,10 @@ from robotsix_mill.core import db
 from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
+from robotsix_mill.scm.vcs import git_ops
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.refine import _reconcile
 from robotsix_mill.stages.refine import orchestration as orch_module
-from robotsix_mill.vcs import git_ops
 
 # ---------------------------------------------------------------------------
 # fixtures

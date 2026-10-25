@@ -2,11 +2,11 @@
 
 import pytest
 from pydantic import ValidationError
-from robotsix_mill.forge.github import GitHubForge
-from robotsix_mill.forge.gitlab import GitLabForge
 
 from robotsix_mill.config import Settings
-from robotsix_mill.forge import _detect_forge_kind, get_forge
+from robotsix_mill.scm.forge import _detect_forge_kind, get_forge
+from robotsix_mill.scm.forge.github import GitHubForge
+from robotsix_mill.scm.forge.gitlab import GitLabForge
 
 # ---------------------------------------------------------------------------
 # _detect_forge_kind

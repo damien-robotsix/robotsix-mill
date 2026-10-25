@@ -1424,7 +1424,7 @@ def test_branch_ahead_with_no_edits_advances_to_deliverable(
     agent produces no new file edits (only tool calls like explore
     or read_file), the stuck-loop detector must advance to
     DELIVERABLE instead of looping until the spawn limit trips."""
-    from robotsix_mill.vcs import git_ops
+    from robotsix_mill.scm.vcs import git_ops
 
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(

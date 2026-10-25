@@ -9,7 +9,8 @@ from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.forge import github
+from robotsix_mill.scm.forge import github
+from robotsix_mill.scm.vcs import git_ops
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.ci_fix import (
     _CI_PUSH_RETRY_BUDGET,
@@ -20,7 +21,6 @@ from robotsix_mill.stages.ci_fix_helpers import (
     _read_counter,
     _write_counter,
 )
-from robotsix_mill.vcs import git_ops
 
 # ---------------------------------------------------------------------------
 # Module-level autouse fixture: prevent any test from accidentally running
@@ -1508,7 +1508,7 @@ def test_ci_fix_and_rebase_use_same_token_function(
     assert ci_fix_mod.github_token is merge_mod.github_token
 
     # Verify the shared source is forge.auth.github_token.
-    from robotsix_mill.forge.auth import github_token as canonical
+    from robotsix_mill.scm.forge.auth import github_token as canonical
 
     assert ci_fix_mod.github_token is canonical
     assert merge_mod.github_token is canonical

@@ -23,10 +23,10 @@ from robotsix_mill.config import ConfigError, CrossRepoTarget, RepoConfig, Setti
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
+from robotsix_mill.scm.vcs import git_ops
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.implement.file_operations import FileOperationsMixin
-from robotsix_mill.vcs import git_ops
 
 # ---------------------------------------------------------------------------
 # helpers

@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from robotsix_mill.forge import rate_limit
+from robotsix_mill.scm.forge import rate_limit
 
 
 @pytest.fixture(autouse=True)

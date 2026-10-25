@@ -442,7 +442,7 @@ def _collect_implement_diff(repo_dir: Path, target_branch: str) -> str:
     Combines ``git diff origin/<target>...HEAD`` (committed branch-introduced
     changes) and ``git diff HEAD`` (uncommitted working-tree edits from prior
     retry passes).  This is the lightweight local equivalent of
-    :func:`robotsix_mill.vcs.git_ops.diff_base` — it never fetches, so it is
+    :func:`robotsix_mill.scm.vcs.git_ops.diff_base` — it never fetches, so it is
     safe to call on every retry pass.  Returns ``""`` when the repo has no
     resolvable target ref or no changes.
     """

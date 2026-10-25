@@ -9,7 +9,8 @@ page size) by mocking the ``_ApiClient.retrying_client`` transport seam.
 from __future__ import annotations
 
 import httpx as real_httpx
-from robotsix_mill.forge._github_pagination import _paginated_get
+
+from robotsix_mill.scm.forge._github_pagination import _paginated_get
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -319,7 +320,7 @@ def test_non_401_exception_logs_warning_naming_url_and_fallback(caplog):
     http, _ = _make_http([page1_500])
 
     with caplog.at_level(
-        logging.WARNING, logger="robotsix_mill.forge._github_pagination"
+        logging.WARNING, logger="robotsix_mill.scm.forge._github_pagination"
     ):
         result = _paginated_get(
             http,

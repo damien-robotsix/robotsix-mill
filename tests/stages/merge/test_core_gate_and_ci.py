@@ -6,7 +6,7 @@ import json
 import pytest
 
 from robotsix_mill.core.states import State
-from robotsix_mill.forge import github
+from robotsix_mill.scm.forge import github
 from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.merge import MergeStage
 from tests.stages.merge.conftest import (
@@ -365,7 +365,7 @@ def _seed_workspace_clone(ctx, t, *, net_diff: bool) -> None:
     a real change."""
     import subprocess as _sp
 
-    from robotsix_mill.vcs import git_ops
+    from robotsix_mill.scm.vcs import git_ops
 
     tmp = ctx.service.workspace(t).dir
     seed = tmp / "seed"

@@ -438,7 +438,7 @@ def test_run_audit_pass_clones_and_passes_repo_dir(tmp_path, monkeypatch):
     """With a forge configured, the audit run clones the repo locally
     and hands the agent repo_dir (so it explores instead of
     web-fetching the project's files). Idempotent + best-effort."""
-    from robotsix_mill.vcs import git_ops
+    from robotsix_mill.scm.vcs import git_ops
 
     settings = _make_settings(
         tmp_path,

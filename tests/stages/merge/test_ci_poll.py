@@ -15,7 +15,7 @@ from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.forge import github
+from robotsix_mill.scm.forge import github
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.merge import MergeStage, _read_counter, _write_counter
 from robotsix_mill.stages.merge._shared import (

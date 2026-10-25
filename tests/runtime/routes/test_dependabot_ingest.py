@@ -70,7 +70,7 @@ def _patch_forge(monkeypatch, alerts):
             return alerts
 
     monkeypatch.setattr(
-        "robotsix_mill.forge.get_forge",
+        "robotsix_mill.scm.forge.get_forge",
         lambda settings, repo_config=None: FakeForge(),
     )
 

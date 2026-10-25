@@ -5,9 +5,9 @@ import contextlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from robotsix_mill.forge.base import BranchInfo
 
 from robotsix_mill.runtime.worker import _branch_is_stale
+from robotsix_mill.scm.forge.base import BranchInfo
 
 # ---------------------------------------------------------------------------
 # _branch_is_stale unit tests — every guard
@@ -189,7 +189,7 @@ async def test_per_repo_cleanup_deletes_only_eligible(
     # Patch get_forge to return our fake, and get_repos_config to return
     # the current repo_config.
     monkeypatch.setattr(
-        "robotsix_mill.forge.get_forge",
+        "robotsix_mill.scm.forge.get_forge",
         lambda _settings, _rc: fake,
     )
     # The loop iterates repos from get_repos_config().repos.values().
@@ -257,7 +257,7 @@ async def test_forge_exception_does_not_crash_loop(settings, repo_config, monkey
             return True
 
     monkeypatch.setattr(
-        "robotsix_mill.forge.get_forge",
+        "robotsix_mill.scm.forge.get_forge",
         lambda _settings, _rc: RaisingForge(),
     )
     from robotsix_mill.config import ReposRegistry

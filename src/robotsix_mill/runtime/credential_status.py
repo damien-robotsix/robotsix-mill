@@ -39,7 +39,7 @@ def _openrouter_missing() -> dict[str, str] | None:
 def _forge_missing(settings: Settings) -> dict[str, str] | None:
     """Return a finding when forge authentication cannot be assembled.
 
-    Mirrors the checks in :func:`robotsix_mill.forge.auth.github_token`:
+    Mirrors the checks in :func:`robotsix_mill.scm.forge.auth.github_token`:
     App mode needs an app id plus a key (inline or path); PAT mode needs
     ``forge_token``.
     """

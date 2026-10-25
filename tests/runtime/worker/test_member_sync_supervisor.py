@@ -69,7 +69,7 @@ def _make_clone(tmp_path) -> Path:
 def _stub_clone_helpers(monkeypatch):
     import subprocess as _sp
 
-    from robotsix_mill.vcs import git_ops
+    from robotsix_mill.scm.vcs import git_ops
 
     monkeypatch.setattr(git_ops, "clone", lambda *a, **k: None)
     monkeypatch.setattr(git_ops, "fetch", lambda *a, **k: None)
