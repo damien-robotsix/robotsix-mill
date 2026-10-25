@@ -39,6 +39,16 @@ _EPIC_CHILD_TERMINAL = frozenset(
 _RECENT_CHILD_WINDOW_SECONDS = 600
 _NEW_CHILD_TITLE_SIMILARITY = 0.5
 
+# Serial follow-up loop (epic 967a, 2026-10-24): eleven children filed
+# 25–60 min apart, each after the previous one closed with no delivery.
+# Neither brake above fires on a chain whose siblings are already
+# terminal, so two more apply: closed no-delivery children within the
+# epic-dedup lookback join the title-similarity set, and a per-epic cap
+# bounds the cumulative number of re-eval-filed children. Fallback
+# defaults when no settings are passed.
+_DEFAULT_DEDUP_LOOKBACK_DAYS = 7
+_DEFAULT_MAX_REEVAL_CHILDREN = 5
+
 _TITLE_STOPWORDS = frozenset(
     [
         "a",
@@ -129,7 +139,7 @@ def _run_epic_reeval(epic_id: str, settings) -> None:
 
         _handle_epic_decision(svc, epic_id, epic, result)
         # Apply child-ticket changes (new_children, child_rescopes, child_closures).
-        _reconcile_child_changes(svc, epic_id, result)
+        _reconcile_child_changes(svc, epic_id, result, settings=settings)
     except Exception:
         log.exception("epic %s: re-evaluation failed", epic_id)
 
@@ -362,10 +372,61 @@ def _fetch_draft_child(svc, child_id: str, operation: str, epic_id: str):
     return child
 
 
-def _reconcile_child_changes(svc, epic_id: str, result) -> None:
+def _closed_no_delivery_children(
+    svc: Any, children: Any, now: datetime, lookback_days: int
+) -> list[tuple[str, str]]:
+    """``(id, title)`` of terminal children that delivered nothing.
+
+    Only children created within *lookback_days* (by id timestamp) are
+    returned; a child whose id carries no timestamp is kept.
+    """
+    out: list[tuple[str, str]] = []
+    for c in children:
+        if getattr(c, "state", None) not in _EPIC_CHILD_TERMINAL:
+            continue
+        created = _id_created_at(c.id)
+        if (
+            created is not None
+            and (now - created).total_seconds() > lookback_days * 86400
+        ):
+            continue
+        try:
+            delivered = _resolve_delivery(svc, c.id)["delivered"]
+        except Exception:
+            delivered = True
+        if not delivered:
+            out.append((c.id, c.title))
+    return out
+
+
+def _count_reeval_children(epic_id: str, children: Any) -> int:
+    """Count children filed after the epic's initial breakdown.
+
+    Breakdown children are created together with the epic; a child
+    whose id timestamp is more than ``_RECENT_CHILD_WINDOW_SECONDS``
+    after the epic's own is attributed to a later re-evaluation.
+    """
+    epic_created = _id_created_at(epic_id)
+    if epic_created is None:
+        return 0
+    count = 0
+    for c in children:
+        created = _id_created_at(c.id)
+        if (
+            created is not None
+            and (created - epic_created).total_seconds() > _RECENT_CHILD_WINDOW_SECONDS
+        ):
+            count += 1
+    return count
+
+
+def _reconcile_child_changes(svc, epic_id: str, result, settings=None) -> None:
     """Apply proposed child-ticket changes with safe reconciliation.
 
-    - *new_children* are always created.
+    - *new_children* are created unless a brake fires: a recently
+      created live sibling, the per-epic re-eval child cap
+      (``epic_max_reeval_children``), or a title near-identical to a
+      live sibling or to a closed no-delivery sibling.
     - *child_rescopes* and *child_closures* only apply to DRAFT children;
       in-flight / terminal children are skipped with a warning.
     - Each child operation is wrapped in its own try/except so one
@@ -395,6 +456,23 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
                 ", ".join(recent),
             )
             result.new_children = []
+        max_reeval = getattr(
+            settings, "epic_max_reeval_children", _DEFAULT_MAX_REEVAL_CHILDREN
+        )
+        lookback_days = getattr(
+            settings, "epic_dedup_lookback_days", _DEFAULT_DEDUP_LOOKBACK_DAYS
+        )
+        reeval_count = _count_reeval_children(epic_id, existing_children)
+        if result.new_children and reeval_count >= max_reeval:
+            log.warning(
+                "epic %s: skipping %d new_children — re-eval child cap "
+                "reached (%d filed, epic_max_reeval_children=%d)",
+                epic_id,
+                len(result.new_children),
+                reeval_count,
+                max_reeval,
+            )
+            result.new_children = []
         # Titles of live (non-terminal) siblings — a near-identical
         # proposal duplicates open work instead of adding scope.
         live_titles = [
@@ -402,7 +480,22 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
             for c in existing_children
             if getattr(c, "state", None) not in _EPIC_CHILD_TERMINAL
         ]
+        # Closed siblings that delivered nothing — a near-identical
+        # proposal re-runs work that already came up empty (a loop).
+        closed_no_delivery = (
+            _closed_no_delivery_children(svc, existing_children, now, lookback_days)
+            if result.new_children
+            else []
+        )
         for i, child_spec in enumerate(result.new_children):
+            if reeval_count >= max_reeval:
+                log.warning(
+                    "epic %s: re-eval child cap reached (%d) — not filing "
+                    "remaining new_children",
+                    epic_id,
+                    max_reeval,
+                )
+                break
             if not isinstance(child_spec, dict):
                 log.warning(
                     "epic %s: new_children[%d] is not a dict, skipping",
@@ -439,6 +532,19 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
                     duplicate_of,
                 )
                 continue
+            closed_match = next(
+                (cid for cid, t in closed_no_delivery if _titles_similar(title, t)),
+                None,
+            )
+            if closed_match is not None:
+                log.warning(
+                    "epic %s: skipping follow-up %r — near-identical to closed "
+                    "no-delivery child %s",
+                    epic_id,
+                    title.strip(),
+                    closed_match,
+                )
+                continue
             try:
                 child = svc.create(
                     title=title.strip(),
@@ -446,6 +552,7 @@ def _reconcile_child_changes(svc, epic_id: str, result) -> None:
                     kind=TicketKind.TASK,
                     parent_id=epic_id,
                 )
+                reeval_count += 1
                 live_titles.append(title.strip())
                 log.info(
                     "epic %s: created new child %s ('%s')",

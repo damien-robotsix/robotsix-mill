@@ -542,6 +542,160 @@ def test_reconcile_new_children_within_batch_twin_skipped():
     assert created == ["Add regression tests for vision fallback"]
 
 
+def _closed_no_change_service(epic_id, closed_titles, extra_children=()):
+    """Fake service whose children closed ``no change needed`` (epic 967a)."""
+    from robotsix_mill.core.constants import NO_CHANGE_NEEDED_PREFIX
+
+    children = []
+    tickets = {}
+    histories = {}
+    for i, title in enumerate(closed_titles):
+        c = _aged_child(30 * (len(closed_titles) - i), title, state=State.DONE)
+        children.append(c)
+        tickets[c.id] = c
+        histories[c.id] = [_ev(State.DONE, f"{NO_CHANGE_NEEDED_PREFIX} read-only")]
+    for c in extra_children:
+        children.append(c)
+        tickets[c.id] = c
+    return _FakeEpicService(children=children, tickets=tickets, histories=histories)
+
+
+def _epic_id(minutes_ago):
+    return _aged_child(minutes_ago, "rollup module size").id
+
+
+def test_reconcile_serial_no_delivery_chain_stops_next_filing():
+    """Epic 967a: paraphrased follow-ups after closed no-delivery siblings
+    are a loop and must not be filed."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _reconcile_child_changes
+
+    svc = _closed_no_change_service(
+        _epic_id(300),
+        [
+            "Run module size scan on current main and record findings",
+            "Measure poll_loops.py on main: line count and symbol count",
+        ],
+    )
+    result = EpicStatusResult(
+        decision="keep_open",
+        new_children=[
+            {
+                "title": "Rerun module size scan on main and record finding details",
+                "body": "scan again",
+            },
+            {
+                "title": "Measure poll_loops.py line count and symbol count on main",
+                "body": "measure again",
+            },
+        ],
+    )
+
+    _reconcile_child_changes(svc, _epic_id(300), result)
+
+    assert not any(c[0] == "create" for c in svc.calls)
+
+
+def test_reconcile_first_follow_up_after_no_delivery_child_still_filed():
+    """An unrelated, legitimate follow-up is filed despite closed siblings."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _reconcile_child_changes
+
+    epic_id = _epic_id(300)
+    svc = _closed_no_change_service(
+        epic_id, ["Run module size scan on current main and record findings"]
+    )
+    result = EpicStatusResult(
+        decision="keep_open",
+        new_children=[
+            {"title": "Split poll_loops_ci.py into smaller modules", "body": "split"}
+        ],
+    )
+
+    _reconcile_child_changes(svc, epic_id, result)
+
+    created = [c[1] for c in svc.calls if c[0] == "create"]
+    assert created == ["Split poll_loops_ci.py into smaller modules"]
+
+
+def test_reconcile_merged_sibling_title_does_not_block():
+    """A near-identical title to a MERGED sibling is not a no-delivery loop."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _reconcile_child_changes
+
+    merged = _aged_child(60, "Add regression tests for vision fallback", State.DONE)
+    svc = _FakeEpicService(
+        children=[merged],
+        tickets={merged.id: merged},
+        histories={merged.id: [_ev(State.DONE, "merged: http://x/pr/1")]},
+    )
+    result = EpicStatusResult(
+        decision="keep_open",
+        new_children=[
+            {"title": "Add regression test suite for vision fallback", "body": "t"}
+        ],
+    )
+
+    _reconcile_child_changes(svc, "E1", result)
+
+    assert [c[1] for c in svc.calls if c[0] == "create"] == [
+        "Add regression test suite for vision fallback"
+    ]
+
+
+def test_reconcile_reeval_child_cap_stops_filing(caplog):
+    """Past epic_max_reeval_children, nothing is filed and a WARNING is logged."""
+    from types import SimpleNamespace
+
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _reconcile_child_changes
+
+    epic_id = _epic_id(600)
+    # Five unrelated children filed long after the epic's breakdown.
+    titles = [f"Unrelated follow-up number {w}" for w in ("one", "two", "three")]
+    children = [
+        _aged_child(300 - 60 * i, t, state=State.DONE) for i, t in enumerate(titles)
+    ]
+    svc = _FakeEpicService(children=children)
+    settings = SimpleNamespace(epic_max_reeval_children=3, epic_dedup_lookback_days=7)
+    result = EpicStatusResult(
+        decision="keep_open",
+        new_children=[{"title": "Brand new distinct work item", "body": "x"}],
+    )
+
+    with caplog.at_level("WARNING", logger="robotsix_mill.worker"):
+        _reconcile_child_changes(svc, epic_id, result, settings=settings)
+
+    assert not any(c[0] == "create" for c in svc.calls)
+    assert "re-eval child cap reached" in caplog.text
+
+
+def test_reconcile_reeval_child_cap_bounds_batch():
+    """A batch is truncated at the cap; breakdown-time children don't count."""
+    from types import SimpleNamespace
+
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.runtime.worker import _reconcile_child_changes
+
+    epic_id = _epic_id(600)
+    # Breakdown child created alongside the epic — not a re-eval child.
+    breakdown = _aged_child(599, "Original breakdown child", state=State.DONE)
+    reeval = _aged_child(120, "Earlier follow-up item", state=State.DONE)
+    svc = _FakeEpicService(children=[breakdown, reeval])
+    settings = SimpleNamespace(epic_max_reeval_children=2, epic_dedup_lookback_days=7)
+    result = EpicStatusResult(
+        decision="keep_open",
+        new_children=[
+            {"title": "Write migration guide", "body": "x"},
+            {"title": "Benchmark cache eviction", "body": "y"},
+        ],
+    )
+
+    _reconcile_child_changes(svc, epic_id, result, settings=settings)
+
+    assert [c[1] for c in svc.calls if c[0] == "create"] == ["Write migration guide"]
+
+
 def test_stage_rank_covers_every_pipeline_state():
     """Every STAGE_FOR_STATE state must have an explicit _STAGE_RANK.
 

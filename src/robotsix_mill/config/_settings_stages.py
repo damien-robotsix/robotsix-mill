@@ -649,6 +649,15 @@ class _StagesSettings(BaseModel):
         description="Recency window (days) for advisory duplicate detection in epic decomposition.",
         default=7,
     )
+    # Per-epic cumulative cap on children filed by epic re-evaluation
+    # (``new_children``).  Past it the re-eval may still close / keep_open
+    # but files nothing and logs a WARNING — bounds serial follow-up
+    # loops where each child closes with no delivery (epic 967a).
+    epic_max_reeval_children: int = Field(
+        description="Per-epic cap on follow-up children filed by epic re-evaluation.",
+        default=5,
+        ge=0,
+    )
     # Path to the agent-maintained Markdown memory ledger.  Override to
     # pin a specific path; unset (default) derives <data_dir>/retrospect_memory.md.
     retrospect_memory_path: Path | None = Field(

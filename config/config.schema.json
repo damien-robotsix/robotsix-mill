@@ -1458,6 +1458,13 @@
           "title": "Epic Dedup Lookback Days",
           "type": "integer"
         },
+        "epic_max_reeval_children": {
+          "default": 5,
+          "description": "Per-epic cap on follow-up children filed by epic re-evaluation.",
+          "minimum": 0,
+          "title": "Epic Max Reeval Children",
+          "type": "integer"
+        },
         "explore_fallback_timeout_factor": {
           "default": 3.0,
           "description": "Multiplier applied to explore_timeout_seconds while the scout's level resolves to the OpenRouter fallback slot (provider failover armed); a timed-out fallback attempt is not retried.",
