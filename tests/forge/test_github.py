@@ -2024,6 +2024,111 @@ def test_update_repo_clamps_description(tmp_path, monkeypatch):
     assert sent.endswith("…")
 
 
+def _token_sequence_client(monkeypatch, *, responses_by_auth):
+    """httpx.Client stub answering GET/PATCH per ``Authorization`` header.
+
+    *responses_by_auth*: ``{"Bearer <token>": FakeResponse}``; records the
+    sequence of Authorization headers tried in ``captured["auths"]``.
+    """
+    captured = {"auths": [], "patch_payload": None}
+
+    class SeqClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def _answer(self, headers):
+            auth = (headers or {}).get("Authorization")
+            captured["auths"].append(auth)
+            return responses_by_auth[auth]
+
+        def get(self, url, headers=None, params=None, **kwargs):
+            return self._answer(headers)
+
+        def patch(self, url, headers=None, json=None, **kwargs):
+            captured["patch_payload"] = json
+            return self._answer(headers)
+
+    monkeypatch.setattr(real_httpx, "Client", SeqClient)
+    return captured
+
+
+def test_update_repo_dead_pat_falls_back_to_forge_token(tmp_path, monkeypatch, caplog):
+    """A forge_repo_create_token that 401s must not sink the PATCH.
+
+    2026-10-25: the configured PAT answered ``401 Bad credentials`` on every
+    board for days (repo_description_sync 0/16 successful updates) while the
+    App token served every other forge call. On 401 the next token source
+    is tried; the fallback's 200 wins.
+    """
+    captured = _token_sequence_client(
+        monkeypatch,
+        responses_by_auth={
+            "Bearer pat-dead": _make_response(401, {}, '{"message":"Bad credentials"}'),
+            "Bearer app-tok": _make_response(200, {"description": "d"}),
+        },
+    )
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    _set_secrets(forge_token="app-tok", forge_repo_create_token="pat-dead")
+    with caplog.at_level("WARNING", logger="robotsix_mill.forge.github"):
+        assert forge.update_repo(owner="o", repo="r", description="d") is True
+    assert captured["auths"] == ["Bearer pat-dead", "Bearer app-tok"]
+    assert "forge_repo_create_token rejected with HTTP 401" in caplog.text
+
+
+def test_get_repo_description_dead_pat_falls_back_to_forge_token(tmp_path, monkeypatch):
+    """The read path shares the fallback: a dead PAT must not read back ``""``
+    for a repo whose description is set (that empty read is what made the
+    runner propose overwriting a non-empty GitHub description)."""
+    captured = _token_sequence_client(
+        monkeypatch,
+        responses_by_auth={
+            "Bearer pat-dead": _make_response(401, {}, '{"message":"Bad credentials"}'),
+            "Bearer app-tok": _make_response(200, {"description": " live desc "}),
+        },
+    )
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    _set_secrets(forge_token="app-tok", forge_repo_create_token="pat-dead")
+    assert forge.get_repo_description(owner="o", repo="r") == "live desc"
+    assert captured["auths"] == ["Bearer pat-dead", "Bearer app-tok"]
+
+
+def test_update_repo_pat_preferred_when_it_works(tmp_path, monkeypatch):
+    """A working PAT is used first and alone — no second call on success."""
+    captured = _token_sequence_client(
+        monkeypatch,
+        responses_by_auth={
+            "Bearer pat-ok": _make_response(200, {}),
+            "Bearer app-tok": _make_response(200, {}),
+        },
+    )
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    _set_secrets(forge_token="app-tok", forge_repo_create_token="pat-ok")
+    assert forge.update_repo(owner="o", repo="r", description="d") is True
+    assert captured["auths"] == ["Bearer pat-ok"]
+
+
+def test_update_repo_401_on_every_token_returns_false(tmp_path, monkeypatch, caplog):
+    """401 from both sources → False with the last status logged, never raise."""
+    _token_sequence_client(
+        monkeypatch,
+        responses_by_auth={
+            "Bearer pat-dead": _make_response(401, {}, '{"message":"Bad credentials"}'),
+            "Bearer app-tok": _make_response(401, {}, '{"message":"Bad credentials"}'),
+        },
+    )
+    forge = _forge(tmp_path, enable_repo_creation=True)
+    _set_secrets(forge_token="app-tok", forge_repo_create_token="pat-dead")
+    with caplog.at_level("WARNING", logger="robotsix_mill.forge.github"):
+        assert forge.update_repo(owner="o", repo="r", description="d") is False
+    assert "HTTP 401" in caplog.text
+
+
 def test_list_code_scanning_alerts_parses(tmp_path, monkeypatch):
     """Open CodeQL alerts are fetched + normalised (rule/severity/path/line)."""
     raw = [
