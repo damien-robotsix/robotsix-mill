@@ -11,7 +11,8 @@ import pytest
 
 from robotsix_mill.agents.ci_fixing import CiFixResult
 from robotsix_mill.core.states import State
-from robotsix_mill.forge import github
+from robotsix_mill.scm.forge import github
+from robotsix_mill.scm.vcs import git_ops
 from robotsix_mill.stages.ci_fix import (
     CIFixStage,
     _extract_check_names,
@@ -20,7 +21,6 @@ from robotsix_mill.stages.ci_fix_helpers import (
     _build_failing_summary,
     _ci_failure_fingerprint,
 )
-from robotsix_mill.vcs import git_ops
 
 # ---------------------------------------------------------------------------
 # Module-level autouse fixture: prevent any test from accidentally running

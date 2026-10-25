@@ -6,14 +6,14 @@ _parse_gitlab_project_path, and _build_headers directly with a mocked transport.
 
 import httpx as real_httpx
 import pytest
-from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
-from robotsix_mill.forge.gitlab import (
+
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
+from robotsix_mill.scm.forge.base import NotConfiguredError, RepoInfo
+from robotsix_mill.scm.forge.gitlab import (
     GitLabForge,
     _build_headers,
     _parse_gitlab_project_path,
 )
-
-from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -2461,8 +2461,8 @@ def test_list_open_pr_branches_exception_returns_empty(tmp_path, monkeypatch):
 
 def test_capture_failure_window_gitlab_anchors_on_error():
     """GitLab-style failure markers (^ERROR:, Job failed) trigger anchoring."""
-    from robotsix_mill.forge._log_utils import _capture_failure_window
-    from robotsix_mill.forge.gitlab import _LOG_FAILURE_RE
+    from robotsix_mill.scm.forge._log_utils import _capture_failure_window
+    from robotsix_mill.scm.forge.gitlab import _LOG_FAILURE_RE
 
     real = "ERROR: failed to build proxy image: COPY filter not found\n"
     filler = "noise line padding the log\n" * 5000
@@ -2476,8 +2476,8 @@ def test_capture_failure_window_gitlab_anchors_on_error():
 
 def test_capture_failure_window_gitlab_fatal_marker():
     """GitLab regex matches 'fatal:' patterns."""
-    from robotsix_mill.forge._log_utils import _capture_failure_window
-    from robotsix_mill.forge.gitlab import _LOG_FAILURE_RE
+    from robotsix_mill.scm.forge._log_utils import _capture_failure_window
+    from robotsix_mill.scm.forge.gitlab import _LOG_FAILURE_RE
 
     # Put the fatal marker early enough that it falls outside the tail window
     # when max_bytes is small relative to total log length.
@@ -2489,8 +2489,8 @@ def test_capture_failure_window_gitlab_fatal_marker():
 
 def test_capture_failure_window_gitlab_tailcaps_without_marker():
     """No GitLab failure marker → degrade to tail-cap."""
-    from robotsix_mill.forge._log_utils import _capture_failure_window
-    from robotsix_mill.forge.gitlab import _LOG_FAILURE_RE
+    from robotsix_mill.scm.forge._log_utils import _capture_failure_window
+    from robotsix_mill.scm.forge.gitlab import _LOG_FAILURE_RE
 
     out = _capture_failure_window(
         "x" * 100_000, max_bytes=65536, failure_re=_LOG_FAILURE_RE
@@ -2799,7 +2799,7 @@ def test_get_workflow_triggers_error_returns_none(tmp_path, monkeypatch):
 def test_gitlab_ci_triggers_helper_schedule_from_active_flag():
     """The helper adds 'schedule' when an active schedule exists even with
     no workflow:rules block."""
-    from robotsix_mill.forge.gitlab.ci import _gitlab_ci_triggers
+    from robotsix_mill.scm.forge.gitlab.ci import _gitlab_ci_triggers
 
     triggers = _gitlab_ci_triggers("", has_active_schedule=True)
     assert triggers is not None

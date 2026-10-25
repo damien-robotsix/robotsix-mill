@@ -2049,8 +2049,8 @@ def test_multi_repo_retrospect_blocks_when_any_pr_not_merged(ctx_factory, monkey
     retrospect agent is NOT invoked, no ``retrospect.md`` is written,
     and the ticket does not transition to CLOSED."""
     from robotsix_mill.agents.runners import pass_runner
-    from robotsix_mill.forge import github
     from robotsix_mill.langfuse import client as langfuse_client
+    from robotsix_mill.scm.forge import github
 
     ctx = ctx_factory(**_multirepo_forge_env())
     _set_forge_secrets()
@@ -2135,8 +2135,8 @@ def test_multi_repo_retrospect_closes_when_all_prs_merged(ctx_factory, monkeypat
     """All PRs merged → retrospect runs normally and the ticket
     transitions to CLOSED."""
     from robotsix_mill.agents.runners import pass_runner
-    from robotsix_mill.forge import github
     from robotsix_mill.langfuse import client as langfuse_client
+    from robotsix_mill.scm.forge import github
 
     ctx = ctx_factory(**_multirepo_forge_env())
     _set_forge_secrets()
@@ -2218,8 +2218,8 @@ def test_single_repo_retrospect_unchanged_when_no_pr_urls_json(
     """When ``pr_urls.json`` is absent, retrospect makes no forge calls
     for verification — the single-repo path runs unchanged."""
     from robotsix_mill.agents.runners import pass_runner
-    from robotsix_mill.forge import github
     from robotsix_mill.langfuse import client as langfuse_client
+    from robotsix_mill.scm.forge import github
 
     ctx = ctx_factory()
 

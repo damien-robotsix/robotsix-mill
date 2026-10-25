@@ -662,7 +662,7 @@ def test_dedup_clone_failure_escalates_before_dedup(ctx, service, monkeypatch):
     CalledProcessError — the worker owns the retry/block decision."""
     import subprocess
 
-    from robotsix_mill.vcs import git_ops
+    from robotsix_mill.scm.vcs import git_ops
 
     spec = "## Problem\nx\n## Acceptance criteria\n- [ ] works\n"
     monkeypatch.setattr(refining, "run_refine_agent", lambda **_: _single(spec))

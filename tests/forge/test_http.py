@@ -11,7 +11,8 @@ from types import SimpleNamespace
 
 import httpx as real_httpx
 import pytest
-from robotsix_mill.forge._http import _ApiClient
+
+from robotsix_mill.scm.forge._http import _ApiClient
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -188,7 +189,7 @@ def test_client_context_manager_yields_triplet(monkeypatch):
 
 
 def test_401_invalidates_and_retries_once(monkeypatch):
-    monkeypatch.setattr("robotsix_mill.forge._http.time.sleep", lambda _s: None)
+    monkeypatch.setattr("robotsix_mill.scm.forge._http.time.sleep", lambda _s: None)
     calls, _ = _mock_httpx(monkeypatch, [_FakeResponse(401), _FakeResponse(200)])
 
     headers_seq = [{"Authorization": "stale"}, {"Authorization": "fresh"}]
@@ -222,7 +223,7 @@ def test_401_without_callback_is_returned_as_is(monkeypatch):
 
 
 def test_second_401_returned_after_single_retry(monkeypatch):
-    monkeypatch.setattr("robotsix_mill.forge._http.time.sleep", lambda _s: None)
+    monkeypatch.setattr("robotsix_mill.scm.forge._http.time.sleep", lambda _s: None)
     calls, _ = _mock_httpx(monkeypatch, [_FakeResponse(401), _FakeResponse(401)])
     client = _client()
     client._on_401 = lambda: None
@@ -268,7 +269,7 @@ def test_transient_transport_error_is_retried(monkeypatch):
 
 def test_do_records_github_rate_limit_snapshot(monkeypatch):
     """A GitHub response's ``x-ratelimit-*`` headers are snapshotted by ``_do``."""
-    from robotsix_mill.forge import rate_limit
+    from robotsix_mill.scm.forge import rate_limit
 
     rate_limit._reset_for_tests()
 

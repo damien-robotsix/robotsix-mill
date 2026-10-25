@@ -102,7 +102,7 @@ def test_all_workflows_green_transitions_to_implement_complete(
 
     forge = _mock_forge({"lint": "success", "test": "success"})
     monkeypatch.setattr(
-        "robotsix_mill.forge.get_forge",
+        "robotsix_mill.scm.forge.get_forge",
         lambda *a, **kw: forge,
     )
 
@@ -121,7 +121,7 @@ def test_mixed_conclusions_some_green_stays_blocked(
 
     forge = _mock_forge({"lint": "success", "test": "failure"})
     monkeypatch.setattr(
-        "robotsix_mill.forge.get_forge",
+        "robotsix_mill.scm.forge.get_forge",
         lambda *a, **kw: forge,
     )
 
@@ -137,7 +137,7 @@ def test_all_workflows_failing_stays_blocked(settings, repo_config, svc, monkeyp
 
     forge = _mock_forge({"lint": "failure", "test": "failure"})
     monkeypatch.setattr(
-        "robotsix_mill.forge.get_forge",
+        "robotsix_mill.scm.forge.get_forge",
         lambda *a, **kw: forge,
     )
 
@@ -155,7 +155,7 @@ def test_neutral_and_skipped_conclusions_are_green(
 
     forge = _mock_forge({"lint": "neutral", "test": "skipped"})
     monkeypatch.setattr(
-        "robotsix_mill.forge.get_forge",
+        "robotsix_mill.scm.forge.get_forge",
         lambda *a, **kw: forge,
     )
 
@@ -177,7 +177,7 @@ def test_no_matching_note_skipped(settings, repo_config, svc, monkeypatch):
 
     forge = _mock_forge({"lint": "success"})
     monkeypatch.setattr(
-        "robotsix_mill.forge.get_forge",
+        "robotsix_mill.scm.forge.get_forge",
         lambda *a, **kw: forge,
     )
 
@@ -194,7 +194,7 @@ def test_missing_workflow_run_stays_blocked(settings, repo_config, svc, monkeypa
     # Only 'lint' has a run; 'test' is missing.
     forge = _mock_forge({"lint": "success"})
     monkeypatch.setattr(
-        "robotsix_mill.forge.get_forge",
+        "robotsix_mill.scm.forge.get_forge",
         lambda *a, **kw: forge,
     )
 
@@ -212,7 +212,7 @@ def test_list_workflow_runs_error_survives(settings, repo_config, svc, monkeypat
     forge = MagicMock()
     forge.list_workflow_runs.side_effect = RuntimeError("API down")
     monkeypatch.setattr(
-        "robotsix_mill.forge.get_forge",
+        "robotsix_mill.scm.forge.get_forge",
         lambda *a, **kw: forge,
     )
 
@@ -245,7 +245,7 @@ def test_debt_note_survives_a_later_annotation(settings, repo_config, svc, monke
     _annotate(settings, repo_config, t.id, "🔍 [Trace: review](https://lf/x)")
 
     forge = _mock_forge({"lint": "success", "test": "success"})
-    monkeypatch.setattr("robotsix_mill.forge.get_forge", lambda *a, **kw: forge)
+    monkeypatch.setattr("robotsix_mill.scm.forge.get_forge", lambda *a, **kw: forge)
 
     _blocked_recheck_pass(settings, repo_config)
 
@@ -263,7 +263,7 @@ def test_a_newer_unrelated_block_reason_wins(settings, repo_config, svc, monkeyp
     svc.transition(t.id, State.BLOCKED, note="Blocked partly on CodeQL code-scanning")
 
     forge = _mock_forge({"lint": "success", "test": "success"})
-    monkeypatch.setattr("robotsix_mill.forge.get_forge", lambda *a, **kw: forge)
+    monkeypatch.setattr("robotsix_mill.scm.forge.get_forge", lambda *a, **kw: forge)
 
     _blocked_recheck_pass(settings, repo_config)
 
@@ -312,7 +312,7 @@ def test_structured_reason_resumes_with_evidence(
     )
 
     forge = _mock_forge({"CI": "success", "Security Audit": "success"})
-    monkeypatch.setattr("robotsix_mill.forge.get_forge", lambda *a, **kw: forge)
+    monkeypatch.setattr("robotsix_mill.scm.forge.get_forge", lambda *a, **kw: forge)
 
     _blocked_recheck_pass(settings, repo_config)
 
@@ -337,7 +337,7 @@ def test_structured_unknown_kind_is_skipped(settings, repo_config, svc, monkeypa
     )
 
     forge = _mock_forge({"CI": "success"})
-    monkeypatch.setattr("robotsix_mill.forge.get_forge", lambda *a, **kw: forge)
+    monkeypatch.setattr("robotsix_mill.scm.forge.get_forge", lambda *a, **kw: forge)
 
     _blocked_recheck_pass(settings, repo_config)
 
@@ -354,7 +354,7 @@ def test_structured_still_red_stays_blocked(settings, repo_config, svc, monkeypa
     )
 
     forge = _mock_forge({"lint": "failure"})
-    monkeypatch.setattr("robotsix_mill.forge.get_forge", lambda *a, **kw: forge)
+    monkeypatch.setattr("robotsix_mill.scm.forge.get_forge", lambda *a, **kw: forge)
 
     _blocked_recheck_pass(settings, repo_config)
 

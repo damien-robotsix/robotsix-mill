@@ -90,7 +90,7 @@ def _stub_clone_helpers(monkeypatch):
     the ``git reset --hard origin/<branch>`` it issues on each cycle."""
     import subprocess as _sp
 
-    from robotsix_mill.vcs import git_ops
+    from robotsix_mill.scm.vcs import git_ops
 
     monkeypatch.setattr(git_ops, "clone", lambda *a, **k: None)
     monkeypatch.setattr(git_ops, "fetch", lambda *a, **k: None)

@@ -11,7 +11,7 @@ from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.forge import github
+from robotsix_mill.scm.forge import github
 from robotsix_mill.stages import StageContext
 
 

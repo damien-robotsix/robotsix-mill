@@ -346,7 +346,7 @@ class TestCheckUpstreamCiBreakage:
             lambda s, rc: "main",
         )
         monkeypatch.setattr(
-            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            "robotsix_mill.scm.vcs.git_ops.remote_branch_sha",
             lambda repo, branch: "abc123def456",
         )
         mock_forge = _FakeForge(
@@ -356,7 +356,7 @@ class TestCheckUpstreamCiBreakage:
             }
         )
         monkeypatch.setattr(
-            "robotsix_mill.forge.get_forge",
+            "robotsix_mill.scm.forge.get_forge",
             lambda s, repo_config: mock_forge,
         )
 
@@ -379,7 +379,7 @@ class TestCheckUpstreamCiBreakage:
             lambda s, rc: "main",
         )
         monkeypatch.setattr(
-            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            "robotsix_mill.scm.vcs.git_ops.remote_branch_sha",
             lambda repo, branch: "abc123def456",
         )
         mock_forge = _FakeForge(
@@ -389,7 +389,7 @@ class TestCheckUpstreamCiBreakage:
             }
         )
         monkeypatch.setattr(
-            "robotsix_mill.forge.get_forge",
+            "robotsix_mill.scm.forge.get_forge",
             lambda s, repo_config: mock_forge,
         )
 
@@ -418,7 +418,7 @@ class TestCheckUpstreamCiBreakage:
             calls.append("sha")
             return "abc123def4567890"
 
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.remote_branch_sha", _sha)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.git_ops.remote_branch_sha", _sha)
         mock_forge = _FakeForge(
             commit_ci_conclusion={
                 "conclusion": "failure",
@@ -426,7 +426,7 @@ class TestCheckUpstreamCiBreakage:
             }
         )
         monkeypatch.setattr(
-            "robotsix_mill.forge.get_forge",
+            "robotsix_mill.scm.forge.get_forge",
             lambda s, repo_config: mock_forge,
         )
         failing = [{"name": "Container image scan (Trivy)"}]
@@ -457,11 +457,11 @@ class TestCheckUpstreamCiBreakage:
             "robotsix_mill.config.repos.target_branch_for", lambda s, rc: "main"
         )
         monkeypatch.setattr(
-            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            "robotsix_mill.scm.vcs.git_ops.remote_branch_sha",
             lambda r, b: "abc123def4567890",
         )
         monkeypatch.setattr(
-            "robotsix_mill.forge.get_forge",
+            "robotsix_mill.scm.forge.get_forge",
             lambda s, repo_config: _FakeForge(
                 commit_ci_conclusion={
                     "conclusion": "failure",
@@ -485,7 +485,7 @@ class TestCheckUpstreamCiBreakage:
             lambda s, rc: "main",
         )
         monkeypatch.setattr(
-            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            "robotsix_mill.scm.vcs.git_ops.remote_branch_sha",
             lambda repo, branch: "abc123def4567890",
         )
         mock_forge = _FakeForge(
@@ -498,7 +498,7 @@ class TestCheckUpstreamCiBreakage:
             }
         )
         monkeypatch.setattr(
-            "robotsix_mill.forge.get_forge",
+            "robotsix_mill.scm.forge.get_forge",
             lambda s, repo_config: mock_forge,
         )
 
@@ -528,12 +528,12 @@ class TestCheckUpstreamCiBreakage:
             lambda s, rc: "main",
         )
         monkeypatch.setattr(
-            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            "robotsix_mill.scm.vcs.git_ops.remote_branch_sha",
             lambda repo, branch: None,
         )
         # Forge lists no runs → falls back to the (None) local ref.
         monkeypatch.setattr(
-            "robotsix_mill.forge.get_forge",
+            "robotsix_mill.scm.forge.get_forge",
             lambda s, repo_config: _FakeForge(workflow_runs=[]),
         )
 
@@ -556,7 +556,7 @@ class TestCheckUpstreamCiBreakage:
             lambda s, rc: "main",
         )
         monkeypatch.setattr(
-            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            "robotsix_mill.scm.vcs.git_ops.remote_branch_sha",
             lambda repo, branch: "abc123",
         )
 
@@ -564,7 +564,7 @@ class TestCheckUpstreamCiBreakage:
             raise RuntimeError("forge unavailable")
 
         monkeypatch.setattr(
-            "robotsix_mill.forge.get_forge",
+            "robotsix_mill.scm.forge.get_forge",
             lambda s, repo_config: _FakeForge(
                 commit_ci_conclusion=_raise,
             ),
@@ -598,7 +598,7 @@ class TestCheckUpstreamCiBreakage:
         )
         # Local clone is pinned to the STALE sha whose CI was red.
         monkeypatch.setattr(
-            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            "robotsix_mill.scm.vcs.git_ops.remote_branch_sha",
             lambda repo, branch: "7fc8e9d4stale",
         )
         seen: list[str] = []
@@ -615,7 +615,7 @@ class TestCheckUpstreamCiBreakage:
             workflow_runs=[{"head_sha": "53000db1fresh"}],
         )
         monkeypatch.setattr(
-            "robotsix_mill.forge.get_forge",
+            "robotsix_mill.scm.forge.get_forge",
             lambda s, repo_config: mock_forge,
         )
 
@@ -643,7 +643,7 @@ class TestCheckUpstreamCiBreakage:
             lambda s, rc: "main",
         )
         monkeypatch.setattr(
-            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            "robotsix_mill.scm.vcs.git_ops.remote_branch_sha",
             lambda repo, branch: "abc123def4567890",
         )
         seen: list[str] = []
@@ -654,7 +654,7 @@ class TestCheckUpstreamCiBreakage:
 
         mock_forge = _FakeForge(commit_ci_conclusion=_ccc, workflow_runs=[])
         monkeypatch.setattr(
-            "robotsix_mill.forge.get_forge",
+            "robotsix_mill.scm.forge.get_forge",
             lambda s, repo_config: mock_forge,
         )
 
@@ -678,7 +678,7 @@ class TestCheckUpstreamCiBreakage:
             lambda s, rc: "main",
         )
         monkeypatch.setattr(
-            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            "robotsix_mill.scm.vcs.git_ops.remote_branch_sha",
             lambda repo, branch: "abc123",
         )
         mock_forge = _FakeForge(
@@ -688,7 +688,7 @@ class TestCheckUpstreamCiBreakage:
             }
         )
         monkeypatch.setattr(
-            "robotsix_mill.forge.get_forge",
+            "robotsix_mill.scm.forge.get_forge",
             lambda s, repo_config: mock_forge,
         )
 
@@ -711,7 +711,7 @@ class TestCheckUpstreamCiBreakage:
             lambda s, rc: "develop",
         )
         monkeypatch.setattr(
-            "robotsix_mill.vcs.git_ops.remote_branch_sha",
+            "robotsix_mill.scm.vcs.git_ops.remote_branch_sha",
             lambda repo, branch: "deadbeefcafe",
         )
         mock_forge = _FakeForge(
@@ -725,7 +725,7 @@ class TestCheckUpstreamCiBreakage:
             }
         )
         monkeypatch.setattr(
-            "robotsix_mill.forge.get_forge",
+            "robotsix_mill.scm.forge.get_forge",
             lambda s, repo_config: mock_forge,
         )
 

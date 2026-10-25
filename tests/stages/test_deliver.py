@@ -8,11 +8,11 @@ from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.forge import github
+from robotsix_mill.scm.forge import github
+from robotsix_mill.scm.vcs import git_ops
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages import deliver as deliver_module
 from robotsix_mill.stages.deliver import DeliverStage
-from robotsix_mill.vcs import git_ops
 
 
 def _git(cwd, *a):
@@ -467,9 +467,8 @@ def test_cross_repo_pushes_to_fork_and_opens_fork_to_upstream_pr(tmp_path, monke
 
 def test_cross_repo_auto_fork_forks_before_push(tmp_path, monkeypatch):
     """auto_fork=True ensures the fork via Forge.fork_repo() before push."""
-    from robotsix_mill.forge.base import RepoInfo
-
     from robotsix_mill.config import CrossRepoTarget
+    from robotsix_mill.scm.forge.base import RepoInfo
 
     remote, _ = _bare(tmp_path)
     cct = CrossRepoTarget(

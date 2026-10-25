@@ -76,7 +76,7 @@ def test_refine_clones_repo_and_passes_repo_dir(ctx, service, monkeypatch):
     """With a forge configured, refine clones ONCE and hands the agent
     a repo_dir (so it explores locally, not via web_fetch). Idempotent:
     an existing clone is reused, not re-cloned."""
-    from robotsix_mill.vcs import git_ops
+    from robotsix_mill.scm.vcs import git_ops
 
     ctx.settings.forge_remote_url = "https://example.test/repo.git"
     ctx.settings.forge_target_branch = "main"
@@ -128,7 +128,7 @@ def test_refine_clone_failure_blocks_with_history_note(ctx, service, monkeypatch
     CalledProcessError — the worker owns the retry/block decision."""
     import subprocess
 
-    from robotsix_mill.vcs import git_ops
+    from robotsix_mill.scm.vcs import git_ops
 
     ctx.settings.forge_remote_url = "https://example.test/repo.git"
     refine_called = []

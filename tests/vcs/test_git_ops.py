@@ -4,7 +4,6 @@ import time
 from pathlib import Path
 
 import pytest
-from robotsix_mill.vcs.git_ops import PostPushResult
 
 import robotsix_mill.config as _cfg
 from robotsix_mill.config import (
@@ -14,7 +13,8 @@ from robotsix_mill.config import (
     _reset_repos_config,
     target_branch_for,
 )
-from robotsix_mill.vcs import clone_all_repos, git_ops
+from robotsix_mill.scm.vcs import clone_all_repos, git_ops
+from robotsix_mill.scm.vcs.git_ops import PostPushResult
 
 # ---------------------------------------------------------------------------
 # Helpers — copied verbatim from tests/stages/test_implement.py lines 18–35
@@ -215,7 +215,7 @@ class TestClone:
         # Monkeypatch _remote_has_branches to simulate what happens with
         # a real empty remote: the bare repo has no refs yet, so
         # ls-remote --heads returns empty.
-        import robotsix_mill.vcs.git_ops as go
+        import robotsix_mill.scm.vcs.git_ops as go
 
         _orig_has_branches = go._remote_has_branches
 
@@ -2440,7 +2440,7 @@ class TestPushErrorRedaction:
 
         from unittest.mock import patch
 
-        with patch("robotsix_mill.vcs.git_ops._git", side_effect=error):
+        with patch("robotsix_mill.scm.vcs.git_ops._git", side_effect=error):
             with pytest.raises(subprocess.CalledProcessError) as ei:
                 git_ops.push(
                     Path("/tmp/repo"),
@@ -2485,7 +2485,7 @@ class TestFetchErrorRedaction:
 
         from unittest.mock import patch
 
-        with patch("robotsix_mill.vcs.git_ops._git", side_effect=error):
+        with patch("robotsix_mill.scm.vcs.git_ops._git", side_effect=error):
             with pytest.raises(subprocess.CalledProcessError) as ei:
                 git_ops.fetch(
                     Path("/tmp/repo"),
@@ -2531,7 +2531,7 @@ class TestPushWithLeaseErrorRedaction:
 
         # _git always raises → remote_branch_sha() returns None (it catches
         # CalledProcessError internally), so the --force branch is taken.
-        with patch("robotsix_mill.vcs.git_ops._git", side_effect=error):
+        with patch("robotsix_mill.scm.vcs.git_ops._git", side_effect=error):
             with pytest.raises(subprocess.CalledProcessError) as ei:
                 git_ops.push_with_lease(
                     Path("/tmp/repo"),
@@ -2583,7 +2583,7 @@ class TestPushWithLeaseErrorRedaction:
                 return "abc1234"  # canned SHA for remote_branch_sha
             raise error
 
-        with patch("robotsix_mill.vcs.git_ops._git", side_effect=_git_side_effect):
+        with patch("robotsix_mill.scm.vcs.git_ops._git", side_effect=_git_side_effect):
             with pytest.raises(subprocess.CalledProcessError) as ei:
                 git_ops.push_with_lease(
                     Path("/tmp/repo"),

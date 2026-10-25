@@ -10,8 +10,8 @@ from robotsix_mill.agents import coding
 from robotsix_mill.agents.fs_tools import build_fs_tools
 from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.states import State
+from robotsix_mill.scm.vcs import git_ops
 from robotsix_mill.stages.implement import ImplementStage
-from robotsix_mill.vcs import git_ops
 from tests.stages.implement.conftest import _ticket, _write_file_map
 
 
@@ -1910,7 +1910,7 @@ def test_no_change_needed_ignored_when_branch_ahead_of_main(
         # branch so it is ahead of origin/main, but no further changes
         # in this iteration. The agent (wrongly) reports
         # no_change_needed.
-        from robotsix_mill.vcs import git_ops
+        from robotsix_mill.scm.vcs import git_ops
 
         (repo_dir / "prior_iteration.txt").write_text("from a prior pass")
         git_ops.commit_all(repo_dir, "prior pass content")
@@ -2053,9 +2053,8 @@ def test_resume_with_ahead_branch_and_clean_tree_proceeds_to_review(
 
 def _clone_repo_to(ctx, remote_url, repo_dir):
     """Clone to *repo_dir* without the full stage machinery."""
-    from robotsix_mill.forge.auth import github_token
-
-    from robotsix_mill.vcs import git_ops
+    from robotsix_mill.scm.forge.auth import github_token
+    from robotsix_mill.scm.vcs import git_ops
 
     if repo_dir.exists():
         import shutil

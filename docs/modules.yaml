@@ -135,7 +135,6 @@ modules:
       - src/robotsix_mill/scm/vcs/git_diff.py
       - src/robotsix_mill/scm/vcs/git_ops.py
       - src/robotsix_mill/scm/vcs/__init__.py
-      - src/robotsix_mill/vcs/__init__.py
       - tests/vcs/__init__.py
       - tests/vcs/test_clone_all_repos.py
       - tests/vcs/test_git_ops.py
@@ -151,9 +150,7 @@ modules:
       App installation tokens).
     paths:
       - src/robotsix_mill/scm/forge/__init__.py
-      - src/robotsix_mill/forge/__init__.py
       - src/robotsix_mill/scm/__init__.py
-      - src/robotsix_mill/scm/_compat.py
       - src/robotsix_mill/scm/forge/base.py
       - src/robotsix_mill/scm/forge/auth.py
       - src/robotsix_mill/scm/forge/github.py

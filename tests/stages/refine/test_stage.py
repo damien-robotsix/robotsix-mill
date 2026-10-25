@@ -29,10 +29,10 @@ from robotsix_mill.core import db
 from robotsix_mill.core.models import TicketKind
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
+from robotsix_mill.scm.vcs import git_ops
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages import refine as refine_module
 from robotsix_mill.stages.refine import RefineStage
-from robotsix_mill.vcs import git_ops
 
 # ---------------------------------------------------------------------------
 # fixtures
@@ -2422,7 +2422,7 @@ def test_clone_target_re_resolved_from_ticket_board_id_after_migration(
         clone_args["dest"] = dest
         clone_args["branch"] = branch
 
-    monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _capture_clone)
+    monkeypatch.setattr("robotsix_mill.scm.vcs.git_ops.clone", _capture_clone)
 
     ws = svc.workspace(t)
     result = RefineStage._clone_or_resume(ctx, t, ws)
@@ -2493,7 +2493,7 @@ def test_clone_workspace_path_derived_from_migrated_board_not_stale_ws(
         clone_args["remote_url"] = remote_url
         clone_args["dest"] = str(dest)
 
-    monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _capture)
+    monkeypatch.setattr("robotsix_mill.scm.vcs.git_ops.clone", _capture)
 
     result = RefineStage._clone_or_resume(ctx, t, ws_stale)
 
@@ -2562,7 +2562,7 @@ def test_clone_or_resume_cross_repo_target_uses_fork_url_and_base_branch(
         clone_args["dest"] = str(dest)
         clone_args["branch"] = branch
 
-    monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _capture)
+    monkeypatch.setattr("robotsix_mill.scm.vcs.git_ops.clone", _capture)
 
     result = RefineStage._clone_or_resume(ctx, t, ws)
 

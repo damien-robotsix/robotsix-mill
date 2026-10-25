@@ -45,7 +45,7 @@ def run_repo_scaffold(
 
     Parameters:
         settings: Mill :class:`~robotsix_mill.config.Settings`.
-        forge: A :class:`~robotsix_mill.forge.base.Forge` instance.
+        forge: A :class:`~robotsix_mill.scm.forge.base.Forge` instance.
         ctx: The :class:`~robotsix_mill.stages.base.StageContext`.
         params: Dict with keys ``name``, ``owner``, ``private``,
             ``description``, ``language``.

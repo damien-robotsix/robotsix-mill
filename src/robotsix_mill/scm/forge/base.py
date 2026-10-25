@@ -294,7 +294,7 @@ class Forge(ABC):
         Best-effort capability: the default implementation returns ``[]``
         (callers degrade to "cannot tell what was already posted"); forges
         that support reading issue comments override it (see
-        :class:`~robotsix_mill.forge.github_pr.GitHubForgePRMixin`).
+        :class:`~robotsix_mill.scm.forge.github_pr.GitHubForgePRMixin`).
         """
         return []
 

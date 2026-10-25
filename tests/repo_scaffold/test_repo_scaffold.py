@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 
 import pytest
 import yaml
-from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
 
 from robotsix_mill.config import (
     RepoConfig,
@@ -27,6 +26,7 @@ from robotsix_mill.repo_scaffold import (
     _write_python_skeleton,
     run_repo_scaffold,
 )
+from robotsix_mill.scm.forge.base import NotConfiguredError, RepoInfo
 from robotsix_mill.stages.base import StageContext
 
 # ---------------------------------------------------------------------------
@@ -625,7 +625,7 @@ def test_write_github_workflows(tmp_path):
 def test_non_python_scaffold_writes_no_workflows(tmp_path, monkeypatch):
     """A non-python scaffold writes NO `.github/workflows/` callers — the
     shared reusable workflows are `python-*` and don't apply."""
-    from robotsix_mill.forge.base import RepoInfo
+    from robotsix_mill.scm.forge.base import RepoInfo
 
     settings = _make_settings(tmp_path)
 
@@ -679,12 +679,11 @@ def test_file_implementation_followup_creates_buildout_ticket(tmp_path, monkeypa
     new repo's own board so the normal pipeline populates it. The spec is
     derived from the scaffold ticket's purpose (description — no marker to
     strip since markers are gone)."""
-    from robotsix_mill.forge.base import RepoInfo
-
     from robotsix_mill.core import db
     from robotsix_mill.core.models import SourceKind
     from robotsix_mill.core.service import TicketService
     from robotsix_mill.repo_scaffold import _file_implementation_followup
+    from robotsix_mill.scm.forge.base import RepoInfo
 
     settings = _make_settings(tmp_path)
     db.reset_engine()

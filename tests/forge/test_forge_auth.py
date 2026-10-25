@@ -2,7 +2,7 @@ import pytest
 import robotsix_github_auth as rga
 
 from robotsix_mill.config import Secrets, Settings, _reset_secrets
-from robotsix_mill.forge import auth
+from robotsix_mill.scm.forge import auth
 
 
 def _set_secrets(**kw):

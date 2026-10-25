@@ -1,11 +1,11 @@
-"""Tests for ``clone_all_repos`` in ``robotsix_mill.vcs``."""
+"""Tests for ``clone_all_repos`` in ``robotsix_mill.scm.vcs``."""
 
 from __future__ import annotations
 
 import subprocess
 
 from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
-from robotsix_mill.vcs import clone_all_repos
+from robotsix_mill.scm.vcs import clone_all_repos
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -41,9 +41,9 @@ class TestCloneAllRepos:
                 "alpha": _repo("alpha", forge_remote_url="https://gh.com/a.git"),
             }
         )
-        monkeypatch.setattr("robotsix_mill.vcs.get_repos_config", lambda: reg)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.get_repos_config", lambda: reg)
         monkeypatch.setattr(
-            "robotsix_mill.vcs.github_token",
+            "robotsix_mill.scm.vcs.github_token",
             lambda _settings, repo_config: "tok",
         )
 
@@ -54,7 +54,7 @@ class TestCloneAllRepos:
             dest.mkdir(parents=True, exist_ok=True)
             (dest / ".git").mkdir()
 
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.git_ops.clone", _fake_clone)
 
         result = clone_all_repos(settings)
 
@@ -76,9 +76,9 @@ class TestCloneAllRepos:
                 "no_remote": _repo("no_remote", forge_remote_url=None),
             }
         )
-        monkeypatch.setattr("robotsix_mill.vcs.get_repos_config", lambda: reg)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.get_repos_config", lambda: reg)
         monkeypatch.setattr(
-            "robotsix_mill.vcs.github_token",
+            "robotsix_mill.scm.vcs.github_token",
             lambda _settings, repo_config: "tok",
         )
 
@@ -89,7 +89,7 @@ class TestCloneAllRepos:
             dest.mkdir(parents=True, exist_ok=True)
             (dest / ".git").mkdir()
 
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.git_ops.clone", _fake_clone)
 
         result = clone_all_repos(settings)
 
@@ -105,9 +105,9 @@ class TestCloneAllRepos:
                 "alpha": _repo("alpha", forge_remote_url="https://gh.com/a.git"),
             }
         )
-        monkeypatch.setattr("robotsix_mill.vcs.get_repos_config", lambda: reg)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.get_repos_config", lambda: reg)
         monkeypatch.setattr(
-            "robotsix_mill.vcs.github_token",
+            "robotsix_mill.scm.vcs.github_token",
             lambda _settings, repo_config: "tok",
         )
 
@@ -119,7 +119,7 @@ class TestCloneAllRepos:
             (dest / ".git").mkdir()
             (dest / "stale.txt").write_text("from a previous run")
 
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.git_ops.clone", _fake_clone)
 
         result1 = clone_all_repos(settings)
         assert len(call_args) == 1
@@ -144,9 +144,9 @@ class TestCloneAllRepos:
                 "gamma": _repo("gamma", forge_remote_url="https://gh.com/g.git"),
             }
         )
-        monkeypatch.setattr("robotsix_mill.vcs.get_repos_config", lambda: reg)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.get_repos_config", lambda: reg)
         monkeypatch.setattr(
-            "robotsix_mill.vcs.github_token",
+            "robotsix_mill.scm.vcs.github_token",
             lambda _settings, repo_config: "tok",
         )
 
@@ -161,7 +161,7 @@ class TestCloneAllRepos:
             dest.mkdir(parents=True, exist_ok=True)
             (dest / ".git").mkdir()
 
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.git_ops.clone", _fake_clone)
 
         result = clone_all_repos(settings)
 
@@ -177,9 +177,9 @@ class TestCloneAllRepos:
                 "alpha": _repo("alpha", forge_remote_url="https://gh.com/a.git"),
             }
         )
-        monkeypatch.setattr("robotsix_mill.vcs.get_repos_config", lambda: reg)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.get_repos_config", lambda: reg)
         monkeypatch.setattr(
-            "robotsix_mill.vcs.github_token",
+            "robotsix_mill.scm.vcs.github_token",
             lambda _settings, repo_config: (_ for _ in ()).throw(
                 RuntimeError("no creds")
             ),
@@ -195,7 +195,7 @@ class TestCloneAllRepos:
                 128, ["git", "clone"], stderr="authentication failed"
             )
 
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.git_ops.clone", _fake_clone)
 
         result = clone_all_repos(settings)
 
@@ -212,9 +212,9 @@ class TestCloneAllRepos:
                 "gamma": _repo("gamma", forge_remote_url="https://gh.com/g.git"),
             }
         )
-        monkeypatch.setattr("robotsix_mill.vcs.get_repos_config", lambda: reg)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.get_repos_config", lambda: reg)
         monkeypatch.setattr(
-            "robotsix_mill.vcs.github_token",
+            "robotsix_mill.scm.vcs.github_token",
             lambda _settings, repo_config: "tok",
         )
 
@@ -225,7 +225,7 @@ class TestCloneAllRepos:
             dest.mkdir(parents=True, exist_ok=True)
             (dest / ".git").mkdir()
 
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.git_ops.clone", _fake_clone)
 
         result = clone_all_repos(settings)
 
@@ -244,9 +244,9 @@ class TestCloneAllRepos:
                 "empty": _repo("empty", forge_remote_url="https://gh.com/e.git"),
             }
         )
-        monkeypatch.setattr("robotsix_mill.vcs.get_repos_config", lambda: reg)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.get_repos_config", lambda: reg)
         monkeypatch.setattr(
-            "robotsix_mill.vcs.github_token",
+            "robotsix_mill.scm.vcs.github_token",
             lambda _settings, repo_config: "tok",
         )
 
@@ -259,7 +259,7 @@ class TestCloneAllRepos:
             dest.parent.mkdir(parents=True, exist_ok=True)
             (dest / ".git").mkdir(parents=True, exist_ok=True)
 
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.git_ops.clone", _fake_clone)
 
         result = clone_all_repos(settings)
 
@@ -281,9 +281,9 @@ class TestCloneAllRepos:
                 "empty": _repo("empty", forge_remote_url="https://gh.com/e.git"),
             }
         )
-        monkeypatch.setattr("robotsix_mill.vcs.get_repos_config", lambda: reg)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.get_repos_config", lambda: reg)
         monkeypatch.setattr(
-            "robotsix_mill.vcs.github_token",
+            "robotsix_mill.scm.vcs.github_token",
             lambda _settings, repo_config: "tok",
         )
 
@@ -295,7 +295,7 @@ class TestCloneAllRepos:
                 "(empty-repo bootstrap also failed: Permission denied)",
             )
 
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.git_ops.clone", _fake_clone)
 
         result = clone_all_repos(settings)
 
@@ -320,9 +320,9 @@ class TestCloneAllRepos:
                 "bad": _repo("bad", forge_remote_url="https://gh.com/bad.git"),
             }
         )
-        monkeypatch.setattr("robotsix_mill.vcs.get_repos_config", lambda: reg)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.get_repos_config", lambda: reg)
         monkeypatch.setattr(
-            "robotsix_mill.vcs.github_token",
+            "robotsix_mill.scm.vcs.github_token",
             lambda _settings, repo_config: "tok",
         )
 
@@ -333,7 +333,7 @@ class TestCloneAllRepos:
                 stderr="fatal: repository 'https://gh.com/bad.git' not found",
             )
 
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.git_ops.clone", _fake_clone)
 
         result = clone_all_repos(settings)
 
@@ -353,9 +353,9 @@ class TestCloneAllRepos:
                 "alpha": _repo("alpha", forge_remote_url="https://gh.com/a.git"),
             }
         )
-        monkeypatch.setattr("robotsix_mill.vcs.get_repos_config", lambda: reg)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.get_repos_config", lambda: reg)
         monkeypatch.setattr(
-            "robotsix_mill.vcs.github_token",
+            "robotsix_mill.scm.vcs.github_token",
             lambda _settings, repo_config: "tok",
         )
 
@@ -363,7 +363,7 @@ class TestCloneAllRepos:
             dest.mkdir(parents=True, exist_ok=True)
             (dest / ".git").mkdir()
 
-        monkeypatch.setattr("robotsix_mill.vcs.git_ops.clone", _fake_clone)
+        monkeypatch.setattr("robotsix_mill.scm.vcs.git_ops.clone", _fake_clone)
 
         # Create existing per-repo workspace dirs
         audit_ws = settings.data_dir / "audit_workspace" / "repo"

@@ -10,7 +10,8 @@ from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
-from robotsix_mill.forge import github
+from robotsix_mill.scm.forge import github
+from robotsix_mill.scm.vcs import git_ops
 from robotsix_mill.stages import StageContext
 from robotsix_mill.stages.ci_fix import CIFixStage
 from robotsix_mill.stages.ci_fix_codeql import _eligible_for_triage
@@ -19,7 +20,6 @@ from robotsix_mill.stages.ci_fix_helpers import (
     _read_counter,
     _write_counter,
 )
-from robotsix_mill.vcs import git_ops
 
 
 def _ctx(tmp_path, **env):
@@ -884,9 +884,8 @@ def test_codeql_fp_triage_agent_wiring_smoke(monkeypatch):
 def test_dismiss_code_scanning_alert_patch(monkeypatch):
     """Verify that GitHubForge.dismiss_code_scanning_alert sends the
     correct PATCH request to the dismiss endpoint."""
-    from robotsix_mill.forge.github import GitHubForge
-
     from robotsix_mill.config import RepoConfig, Settings
+    from robotsix_mill.scm.forge.github import GitHubForge
 
     s = Settings(
         data_dir="/tmp/test_dismiss",
