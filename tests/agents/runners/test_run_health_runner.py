@@ -221,6 +221,54 @@ def test_file_drafts_marker_and_dedup(monkeypatch):
     assert "<!-- run-health-gap-id: g_new3 -->" in svc.created[0].description
 
 
+def test_file_drafts_refiles_gap_of_closed_ticket(monkeypatch):
+    """A closed original's gap-id/title must not suppress a recurrence."""
+    from robotsix_mill.core.states import State
+
+    s = Settings(data_dir="/tmp/rh-test")
+    svc = _FakeService()
+    svc._recent = [
+        SimpleNamespace(
+            id="old-closed", title="run-health: repo desc", state=State.CLOSED
+        ),
+        SimpleNamespace(id="old-open", title="run-health: other", state=State.DRAFT),
+    ]
+    svc._bodies = {
+        "old-closed": "b\n\n<!-- run-health-gap-id: repo_desc -->",
+        "old-open": "b\n\n<!-- run-health-gap-id: other -->",
+    }
+    monkeypatch.setattr(rhr, "TicketService", lambda settings, board_id: svc)
+
+    result = rhr.RunHealthResult(
+        draft_titles=["run-health: repo desc", "run-health: other again"],
+        draft_bodies=["b1", "b2"],
+        gap_ids=["repo_desc", "other"],
+    )
+    created = rhr._file_drafts(result, s, "sess-1", "robotsix-mill")
+    assert [c["title"] for c in created] == ["run-health: repo desc"]
+
+
+def test_pass_passes_board_id_to_agent(monkeypatch):
+    """The agent is built with the target board so list_recent_tickets works."""
+    s = Settings(data_dir="/tmp/rh-test", run_health_target_repo_id="robotsix-mill")
+    monkeypatch.setattr(rhr, "Settings", lambda: s)
+    monkeypatch.setattr(rhr, "_build_run_health_digest", lambda settings: "<digest/>")
+    monkeypatch.setattr(rhr, "load_memory", lambda path: "")
+    monkeypatch.setattr(rhr, "_gather_recent_proposals", lambda settings, board_id: "")
+    monkeypatch.setattr(rhr, "get_repos_config", lambda: SimpleNamespace(repos={}))
+    monkeypatch.setattr(rhr, "persist_memory", lambda *a, **k: None)
+    monkeypatch.setattr(rhr, "_file_drafts", lambda *a, **k: [])
+    seen = {}
+
+    def _agent(**kwargs):
+        seen.update(kwargs)
+        return rhr.RunHealthResult()
+
+    monkeypatch.setattr(rhr, "run_run_health_agent", _agent)
+    rhr.run_run_health_pass("sess-1")
+    assert seen["board_id"] == "robotsix-mill"
+
+
 # --- agent-failure resilience ----------------------------------------------
 
 

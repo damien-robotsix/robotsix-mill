@@ -76,6 +76,12 @@ configured) the parameter is ignored and the runner uses global defaults
 Global-only passes (`meta`, `run_health`) ignore the `repo_id` parameter
 and always run once at the mill level.
 
+**Run-health draft dedup:** the run-health pass skips a proposed draft only
+when its title or `run-health-gap-id` marker matches an *open* run-health
+ticket. Done, closed, and errored tickets are ignored, so a failure that
+recurs after its original ticket was closed is re-filed as a new draft.
+Each skipped duplicate is logged at WARNING with its gap id.
+
 ## Sub-agents
 
 Used as tools by primary agents.
