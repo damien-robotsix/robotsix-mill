@@ -6,9 +6,9 @@ and ``ensure_dependency_graph_enabled`` without a real HTTP transport.
 """
 
 import httpx as real_httpx
+from robotsix_mill.forge.github import GitHubForge
 
 from robotsix_mill.config import Secrets, Settings, _reset_secrets
-from robotsix_mill.forge.github import GitHubForge
 
 
 def _set_secrets(**kw):

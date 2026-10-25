@@ -9,7 +9,6 @@ page size) by mocking the ``_ApiClient.retrying_client`` transport seam.
 from __future__ import annotations
 
 import httpx as real_httpx
-
 from robotsix_mill.forge._github_pagination import _paginated_get
 
 # ---------------------------------------------------------------------------

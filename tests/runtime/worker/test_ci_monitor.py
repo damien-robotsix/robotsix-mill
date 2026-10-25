@@ -8,6 +8,8 @@ import re
 import time
 from datetime import UTC, datetime, timedelta
 
+from robotsix_mill.vcs.git_ops import PostPushResult
+
 from robotsix_mill.agents.ci_fixing import CiFixResult
 from robotsix_mill.config import (
     RepoConfig,
@@ -22,7 +24,6 @@ from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.runtime.worker import Worker
 from robotsix_mill.stages import StageContext
-from robotsix_mill.vcs.git_ops import PostPushResult
 
 
 def _ctx(tmp_path, repo_config=None, **env):

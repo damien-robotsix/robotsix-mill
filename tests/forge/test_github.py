@@ -6,8 +6,6 @@ _parse_owner_repo, and _build_headers directly with a mocked transport.
 
 import httpx as real_httpx
 import pytest
-
-from robotsix_mill.config import Secrets, Settings, _reset_secrets
 from robotsix_mill.forge.base import NotConfiguredError, RepoInfo
 from robotsix_mill.forge.github import (
     GitHubForge,
@@ -17,6 +15,8 @@ from robotsix_mill.forge.github import (
 from robotsix_mill.forge.github_ci import (
     _ANSI_RE,
 )
+
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 # ---------------------------------------------------------------------------
 # Helpers

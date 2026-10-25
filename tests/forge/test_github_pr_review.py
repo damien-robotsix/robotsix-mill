@@ -9,8 +9,6 @@ from datetime import UTC
 
 import httpx as real_httpx
 import pytest
-
-from robotsix_mill.config import Secrets, Settings, _reset_secrets
 from robotsix_mill.forge.base import _parse_iso_utc
 from robotsix_mill.forge.github import GitHubForge
 from robotsix_mill.forge.github_ci import (
@@ -19,6 +17,8 @@ from robotsix_mill.forge.github_ci import (
     _statuses_to_check_runs,
 )
 from robotsix_mill.forge.github_pr_status import _parse_pr_detail
+
+from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 # ---------------------------------------------------------------------------
 # Helpers

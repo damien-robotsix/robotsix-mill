@@ -12,11 +12,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from robotsix_mill.forge.base import NotConfiguredError
 
 from robotsix_mill.agents import base as agents_base
 from robotsix_mill.agents import retry as agents_retry
 from robotsix_mill.agents.runners import repo_description_sync_runner as mod
-from robotsix_mill.forge.base import NotConfiguredError
 
 
 class _FakeForge:

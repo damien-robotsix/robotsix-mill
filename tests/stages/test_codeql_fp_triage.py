@@ -884,8 +884,9 @@ def test_codeql_fp_triage_agent_wiring_smoke(monkeypatch):
 def test_dismiss_code_scanning_alert_patch(monkeypatch):
     """Verify that GitHubForge.dismiss_code_scanning_alert sends the
     correct PATCH request to the dismiss endpoint."""
-    from robotsix_mill.config import RepoConfig, Settings
     from robotsix_mill.forge.github import GitHubForge
+
+    from robotsix_mill.config import RepoConfig, Settings
 
     s = Settings(
         data_dir="/tmp/test_dismiss",
