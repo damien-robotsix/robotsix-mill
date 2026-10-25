@@ -46,6 +46,7 @@ from ...config import Settings, get_repos_config
 from ...core.dedup import normalize
 from ...core.models import SourceKind
 from ...core.service import TicketService
+from ...core.states import State
 from .pass_runner import load_memory, persist_memory
 
 log = logging.getLogger("robotsix_mill.run_health")
@@ -232,6 +233,11 @@ def _build_run_health_digest(settings: Settings) -> str:
 
 _GAP_ID_RE = re.compile(r"<!--\s*run-health-gap-id:\s*(.+?)\s*-->")
 
+# Terminal states whose tickets do not block re-filing the same gap.
+_DEDUP_IGNORED_STATES: frozenset[State] = frozenset(
+    {State.DONE, State.CLOSED, State.ERRORED}
+)
+
 
 def _ticket_body(service: TicketService, ticket: object) -> str:
     """Best-effort read of a ticket's description body (for gap-id dedup)."""
@@ -242,12 +248,18 @@ def _ticket_body(service: TicketService, ticket: object) -> str:
 
 
 def _existing_markers(service: TicketService) -> tuple[set[str], set[str]]:
-    """Normalized titles + embedded gap-ids of recent run-health tickets — a
-    backstop against re-filing a proposal the agent already has.
+    """Normalized titles + embedded gap-ids of recent *open* run-health
+    tickets — a backstop against re-filing a proposal the agent already has.
+
+    Terminal tickets (done/closed/errored) are ignored: a failure that
+    recurs after its ticket was closed must be re-filed, otherwise the
+    closed original's gap-id marker silently suppresses every follow-up.
     """
     title_keys: set[str] = set()
     gap_ids: set[str] = set()
     for t in service.recent_proposals_for(SourceKind.RUN_HEALTH, limit=200):
+        if getattr(t, "state", None) in _DEDUP_IGNORED_STATES:
+            continue
         title_keys.add(normalize(t.title)[:60])
         for m in _GAP_ID_RE.findall(_ticket_body(service, t)):
             gid = m.strip()
@@ -272,7 +284,9 @@ def _file_drafts(
         key = normalize(title)[:60]
         gid = (gap_id or "").strip()
         if key in seen_titles or (gid and gid in seen_gaps):
-            log.info("run_health: skipping duplicate proposal %r", title)
+            log.warning(
+                "run_health: skipping duplicate proposal %r (gap_id=%r)", title, gid
+            )
             continue
         seen_titles.add(key)
         if gid:
@@ -353,6 +367,7 @@ def run_run_health_pass(session_id: str) -> RunHealthPassResult:
                 memory=memory,
                 recent_proposals=recent_proposals,
                 digest=digest,
+                board_id=board_id,
             )
         except Exception:
             log.exception("run_health agent failed — returning empty result")

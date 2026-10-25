@@ -51,6 +51,7 @@ def run_run_health_agent(
     memory: str = "",
     recent_proposals: str = "",
     digest: str,
+    board_id: str = "",
 ) -> RunHealthResult:
     """Run the run-health reasoning pass over a pre-built *digest*.
 
@@ -60,6 +61,9 @@ def run_run_health_agent(
         recent_proposals: Prior run-health proposals block.
         digest: The deterministic run-health digest (grouped failed/degraded
             run candidates), built by the runner.
+        board_id: Board the drafts are filed to; scopes the
+            ``read_ticket`` / ``list_recent_tickets`` tools (without it
+            ``list_recent_tickets`` fails with "board_id is required").
 
     Returns:
         A ``RunHealthResult`` with parallel draft lists (clipped to
@@ -86,6 +90,7 @@ def run_run_health_agent(
         # normal/default tier (llmio resolves it per backend).
         level=2,
         name="run_health",
+        board_id=board_id,
     )
 
     prompt = recent_proposals
