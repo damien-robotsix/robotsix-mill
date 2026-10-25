@@ -16,6 +16,14 @@
 # ---------------------------------------------------------------------------
 main
 
+# ---------------------------------------------------------------------------
+# importlib protocol hooks (invoked by the import machinery via sys.meta_path)
+# — scm/_compat.py alias finder/loader for relocated vcs/forge packages.
+# ---------------------------------------------------------------------------
+create_module
+exec_module
+find_spec
+
 # ===========================================================================
 # Pre-existing dead code — grandfathered so vulture only catches *new* dead
 # code.  Each name below is genuinely unused today but kept because it is
