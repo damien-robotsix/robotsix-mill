@@ -427,51 +427,91 @@ class GitHubForge(
         return self._get_repo_description(owner=owner, repo=repo)
 
     # --- HTTP seam (monkeypatched in tests) ---
-    def _get_repo_description(self, *, owner: str, repo: str) -> str:
+    def _repo_metadata_headers(self) -> list[tuple[str, dict[str, Any]]]:
+        """Auth header candidates for repo-metadata calls, in trial order.
+
+        ``forge_repo_create_token`` (a PAT, needed for cross-namespace repo
+        creation) comes first when set; the App installation token (the
+        token every other forge call uses) is the fallback. On 2026-10-25
+        the configured PAT answered ``401 Bad credentials`` on every board
+        for days: the GET read back ``""`` for a repo whose description was
+        set, the runner proposed to overwrite it, and the PATCH failed too
+        — ``repo_description_sync`` was 0/16 for a dead secret while the
+        App token would have served both calls.
+        """
         from ..config import get_secrets
         from .auth import github_token
 
-        s = self.settings
-        token = get_secrets().forge_repo_create_token or github_token(
-            s, repo_config=self._repo_config
-        )
-        custom_headers = _build_headers(token)
-
-        with self._http.client() as (c, api, _headers):
-            r = c.get(
-                f"{api}/repos/{owner}/{repo}",
-                headers=custom_headers,
+        candidates: list[tuple[str, dict[str, Any]]] = []
+        pat = get_secrets().forge_repo_create_token
+        if pat:
+            candidates.append(("forge_repo_create_token", _build_headers(pat)))
+        try:
+            app_token = github_token(self.settings, repo_config=self._repo_config)
+        except Exception as exc:  # metadata calls must never raise
+            if not candidates:
+                raise
+            log.warning(
+                "repo metadata: no fallback forge token available (%s) — "
+                "only forge_repo_create_token will be tried",
+                exc,
             )
-        if r.status_code == 200:
+            return candidates
+        if app_token and app_token != pat:
+            candidates.append(("forge token", _build_headers(app_token)))
+        return candidates
+
+    def _repo_metadata_request(
+        self,
+        method: str,
+        owner: str,
+        repo: str,
+        *,
+        json: dict[str, Any] | None = None,
+    ) -> Any:
+        """Issue ``method /repos/{owner}/{repo}`` with 401 token fallback.
+
+        Returns the last response. A ``401`` from one token source moves on
+        to the next; any other status is final.
+        """
+        r: Any = None
+        for source, custom_headers in self._repo_metadata_headers():
+            with self._http.client() as (c, api, _headers):
+                url = f"{api}/repos/{owner}/{repo}"
+                if method == "PATCH":
+                    r = c.patch(url, headers=custom_headers, json=json)
+                else:
+                    r = c.get(url, headers=custom_headers)
+            if r.status_code != 401:
+                break
+            log.warning(
+                "repo metadata %s repos/%s/%s: %s rejected with HTTP 401 "
+                "(Bad credentials) — trying the next token source",
+                method,
+                owner,
+                repo,
+                source,
+            )
+        return r
+
+    def _get_repo_description(self, *, owner: str, repo: str) -> str:
+        r = self._repo_metadata_request("GET", owner, repo)
+        if r is not None and r.status_code == 200:
             return (r.json().get("description") or "").strip()
         return ""
 
     def _update_repo(self, *, owner: str, repo: str, description: str) -> bool:
-        from ..config import get_secrets
-        from .auth import github_token
-
-        s = self.settings
-        token = get_secrets().forge_repo_create_token or github_token(
-            s, repo_config=self._repo_config
-        )
-        custom_headers = _build_headers(token)
         payload = {"description": _clamp_repo_description(description)}
-
-        with self._http.client() as (c, api, _headers):
-            r = c.patch(
-                f"{api}/repos/{owner}/{repo}",
-                headers=custom_headers,
-                json=payload,
-            )
-        if r.status_code != 200:
+        r = self._repo_metadata_request("PATCH", owner, repo, json=payload)
+        if r is None or r.status_code != 200:
             # Surface the real cause (403 = token lacks Administration:write,
             # 404 = repo not visible to the token, ...) instead of a bare False.
             log.warning(
                 "update_repo PATCH repos/%s/%s failed: HTTP %s: %s",
                 owner,
                 repo,
-                r.status_code,
-                (r.text or "")[:500],
+                getattr(r, "status_code", "n/a"),
+                (getattr(r, "text", "") or "")[:500],
             )
             return False
         return True
