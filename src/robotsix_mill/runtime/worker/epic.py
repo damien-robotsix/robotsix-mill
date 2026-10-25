@@ -373,7 +373,7 @@ def _fetch_draft_child(svc, child_id: str, operation: str, epic_id: str):
 
 
 def _closed_no_delivery_children(
-    svc, children, now: datetime, lookback_days: int
+    svc: Any, children: Any, now: datetime, lookback_days: int
 ) -> list[tuple[str, str]]:
     """``(id, title)`` of terminal children that delivered nothing.
 
@@ -399,7 +399,7 @@ def _closed_no_delivery_children(
     return out
 
 
-def _count_reeval_children(epic_id: str, children) -> int:
+def _count_reeval_children(epic_id: str, children: Any) -> int:
     """Count children filed after the epic's initial breakdown.
 
     Breakdown children are created together with the epic; a child
