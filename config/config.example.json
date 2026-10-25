@@ -162,6 +162,7 @@
         "docstring_coverage_request_limit": 80,
         "enable_repo_creation": false,
         "epic_dedup_lookback_days": 7,
+        "epic_max_reeval_children": 5,
         "ingest_blocked_source_tags": [
             "caretaker",
             "pin_bump",
