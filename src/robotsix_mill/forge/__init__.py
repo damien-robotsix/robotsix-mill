@@ -1,11 +1,5 @@
-"""Forge abstraction: Forge base class, GitHub adapter, GitLab adapter, and auth module."""
+"""Backward-compat shim: moved to :mod:`robotsix_mill.scm.forge`."""
 
-from .base import Forge, NotConfiguredError, RepoInfo, _detect_forge_kind, get_forge
+from robotsix_mill.scm._compat import alias_package
 
-__all__ = [
-    "Forge",
-    "NotConfiguredError",
-    "RepoInfo",
-    "_detect_forge_kind",
-    "get_forge",
-]
+alias_package(__name__, "robotsix_mill.scm.forge")

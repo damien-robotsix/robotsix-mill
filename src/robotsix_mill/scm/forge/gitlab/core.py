@@ -114,7 +114,7 @@ class GitLabForge(
         API returns a non-201 status that is not a recoverable conflict.
         """
         s = self.settings
-        from ...config import target_branch_for  # lazy: avoid import cycle
+        from ....config import target_branch_for  # lazy: avoid import cycle
 
         project_path = _parse_gitlab_project_path(self._remote_url)
         target_branch = target_branch_for(s, self._repo_config)
@@ -692,7 +692,7 @@ class GitLabForge(
         if private is None:
             private = self.settings.repo_visibility_default == "private"
 
-        from ...config import get_secrets
+        from ....config import get_secrets
 
         # Prefer a dedicated repo-creation token when configured; fall
         # back to the normal forge token otherwise.  Mirrors the GitHub
@@ -742,7 +742,7 @@ class GitLabForge(
         target_namespace: str | None = None,
     ) -> RepoInfo:
         """POST /projects/:id/fork → RepoInfo."""
-        from ...config import get_secrets
+        from ....config import get_secrets
 
         # Prefer a dedicated repo-creation token when configured; fall
         # back to the normal forge token otherwise.

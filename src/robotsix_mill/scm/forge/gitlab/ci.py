@@ -616,7 +616,7 @@ class GitLabForgeCIMixin:
         """
         from urllib.parse import quote
 
-        from ...config import target_branch_for
+        from ....config import target_branch_for
 
         pid = self._resolve_project_id(project_path)  # type: ignore[attr-defined]
         ref = target_branch_for(self.settings, self._repo_config)  # type: ignore[attr-defined]

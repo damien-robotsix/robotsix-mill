@@ -25,7 +25,7 @@ import time
 
 import robotsix_github_auth as rga
 
-from ..config import RepoConfig, Settings, get_secrets
+from ...config import RepoConfig, Settings, get_secrets
 
 logger = logging.getLogger(__name__)
 

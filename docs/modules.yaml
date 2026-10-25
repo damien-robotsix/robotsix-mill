@@ -132,8 +132,9 @@ modules:
       Thin wrapper around the git CLI via subprocess.  No dependencies on
       any other robotsix-mill module.
     paths:
-      - src/robotsix_mill/vcs/git_diff.py
-      - src/robotsix_mill/vcs/git_ops.py
+      - src/robotsix_mill/scm/vcs/git_diff.py
+      - src/robotsix_mill/scm/vcs/git_ops.py
+      - src/robotsix_mill/scm/vcs/__init__.py
       - src/robotsix_mill/vcs/__init__.py
       - tests/vcs/__init__.py
       - tests/vcs/test_clone_all_repos.py
@@ -149,28 +150,31 @@ modules:
       repository metadata.  Also handles forge authentication (PAT, GitHub
       App installation tokens).
     paths:
+      - src/robotsix_mill/scm/forge/__init__.py
       - src/robotsix_mill/forge/__init__.py
-      - src/robotsix_mill/forge/base.py
-      - src/robotsix_mill/forge/auth.py
-      - src/robotsix_mill/forge/github.py
-      - src/robotsix_mill/forge/github_pr.py
-      - src/robotsix_mill/forge/github_pr_status.py
-      - src/robotsix_mill/forge/github_branch.py
-      - src/robotsix_mill/forge/github_pr_reviews.py
-      - src/robotsix_mill/forge/github_ci.py
-      - src/robotsix_mill/forge/github_code_scanning.py
-      - src/robotsix_mill/forge/github_dependabot.py
-      - src/robotsix_mill/forge/github_security.py
-      - src/robotsix_mill/forge/gitlab/__init__.py
-      - src/robotsix_mill/forge/gitlab/core.py
-      - src/robotsix_mill/forge/gitlab/ci.py
-      - src/robotsix_mill/forge/gitlab/code_scanning.py
-      - src/robotsix_mill/forge/gitlab/dependabot.py
-      - src/robotsix_mill/forge/_github_pagination.py
-      - src/robotsix_mill/forge/gitlab/_pagination.py
-      - src/robotsix_mill/forge/_http.py
-      - src/robotsix_mill/forge/_log_utils.py
-      - src/robotsix_mill/forge/rate_limit.py
+      - src/robotsix_mill/scm/__init__.py
+      - src/robotsix_mill/scm/_compat.py
+      - src/robotsix_mill/scm/forge/base.py
+      - src/robotsix_mill/scm/forge/auth.py
+      - src/robotsix_mill/scm/forge/github.py
+      - src/robotsix_mill/scm/forge/github_pr.py
+      - src/robotsix_mill/scm/forge/github_pr_status.py
+      - src/robotsix_mill/scm/forge/github_branch.py
+      - src/robotsix_mill/scm/forge/github_pr_reviews.py
+      - src/robotsix_mill/scm/forge/github_ci.py
+      - src/robotsix_mill/scm/forge/github_code_scanning.py
+      - src/robotsix_mill/scm/forge/github_dependabot.py
+      - src/robotsix_mill/scm/forge/github_security.py
+      - src/robotsix_mill/scm/forge/gitlab/__init__.py
+      - src/robotsix_mill/scm/forge/gitlab/core.py
+      - src/robotsix_mill/scm/forge/gitlab/ci.py
+      - src/robotsix_mill/scm/forge/gitlab/code_scanning.py
+      - src/robotsix_mill/scm/forge/gitlab/dependabot.py
+      - src/robotsix_mill/scm/forge/_github_pagination.py
+      - src/robotsix_mill/scm/forge/gitlab/_pagination.py
+      - src/robotsix_mill/scm/forge/_http.py
+      - src/robotsix_mill/scm/forge/_log_utils.py
+      - src/robotsix_mill/scm/forge/rate_limit.py
       - tests/forge/test_forge_auth.py
       - tests/forge/test_forge_base.py
       - tests/forge/test_github.py
