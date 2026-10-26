@@ -4,7 +4,7 @@
 # additional LLM budget.
 
 name: pre-refine-classifier
-description: >-
+description: >
   Combined pre-refine classifier that checks standards violations,
   triages the draft (SKIP/NO_CHANGE/REFINE/MIGRATE), and detects
   duplicates in a single LLM call
@@ -91,6 +91,13 @@ system_prompt: |
   open ticket.  Set `already_done` when a CLOSED ticket's body
   describes the same concrete change.  When less than ~90% confident,
   leave both null.
+
+  **Guard**: When the `<candidates>` block is absent or empty, this check
+  is **skipped** — the draft body was too thin for confident classification.
+  Thin specs proceed to the refiner, which expands them into fuller specs;
+  later dedup checks (if any) then have sufficient detail to work correctly.
+  This prevents legitimate follow-ups from being incorrectly killed as
+  duplicates when they have only a minimal initial spec (< 100 chars).
 
   Rules:
   - Compare intent/change, not just area.

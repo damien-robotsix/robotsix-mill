@@ -68,6 +68,21 @@ def _build_prompt(
     return "\n".join(parts)
 
 
+def _should_skip_dedup_for_thin_spec(draft: str) -> bool:
+    """Return True if the draft body is too thin for confident dedup classification.
+
+    When a draft body is below the minimum threshold, there is insufficient signal
+    for the dedup check to be ~90% confident in its verdict.  This can cause
+    legitimate follow-ups (part 2 of a multi-part work) to be incorrectly flagged
+    as duplicates of unrelated tickets.
+
+    Thin specs are allowed to proceed — the refiner will expand them into a fuller
+    spec with sufficient detail for later dedup checks (if any) to work correctly.
+    """
+    MIN_SPEC_LENGTH = 100  # Characters
+    return len((draft or "").strip()) < MIN_SPEC_LENGTH
+
+
 def run_pre_refine_classifier(
     *,
     settings: Settings,
@@ -88,11 +103,22 @@ def run_pre_refine_classifier(
 
     from .yaml_loader import load_and_run_agent
 
+    # Thin specs lack sufficient signal for confident dedup classification.
+    # Allow them to proceed — the refiner expands them, and later checks have
+    # enough detail to work correctly.
+    dedup_candidates = candidates_json
+    if _should_skip_dedup_for_thin_spec(draft):
+        dedup_candidates = ""
+        log.debug(
+            "skipping dedup classification for thin spec (len=%d)",
+            len((draft or "").strip()),
+        )
+
     prompt = _build_prompt(
         title=title,
         draft=draft,
         standards_context=standards_context,
-        candidates_json=candidates_json,
+        candidates_json=dedup_candidates,
         reviewer_comments=reviewer_comments,
     )
 
