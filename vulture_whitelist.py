@@ -253,6 +253,11 @@ CommentRead
 # html_url — dataclass field on RepoInfo accessed via attribute access;
 # vulture (60% confidence) cannot trace dataclass field reads.
 html_url
+# create_repo, clone_url — Forge.create_repo() API (gated by a config flag)
+# and its RepoInfo field; the only src caller (repo_scaffold) was removed,
+# so they are now exercised only from tests/forge/.
+create_repo
+clone_url
 list_pr_reviews
 list_review_comments
 close_pr
