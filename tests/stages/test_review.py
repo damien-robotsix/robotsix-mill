@@ -941,6 +941,71 @@ def test_request_changes_out_of_scope_spawns_followup_ticket(ctx_factory, monkey
     assert ".gitignore" in ctx.service.workspace(child).read_description()
 
 
+def test_spawned_followup_inherits_parent_repo_board_not_meta(ctx_factory):
+    """Regression (e6d2): a meta-sourced parent living on a repo board
+    must spawn its out-of-scope follow-ups on THAT repo board — never on
+    the forge-less ``meta`` board — even when the stage's bound service
+    is the meta board or the parent row carries no board_id."""
+    from robotsix_mill.core.models import SourceKind
+    from robotsix_mill.stages._review_helpers import _spawn_dependency_tickets
+
+    ctx = ctx_factory()
+    parent = ctx.service.create(
+        "Add trivyignores inputs", "meta gap", source=SourceKind.META
+    )
+    assert parent.board_id == "test-board"
+    db.init_db(ctx.settings, board_id="meta")
+    meta_ctx = StageContext(
+        settings=ctx.settings,
+        service=TicketService(ctx.settings, board_id="meta"),
+        repo_config=ctx.repo_config,
+    )
+    ask = ReviewAsk(
+        title="Make trivy-sarif honour trivyignores",
+        description="Bump the trivy-sarif pin so trivyignores reaches SARIF.",
+        files_touched=[
+            ".github/workflows/docker-pr-scan.yml",
+            ".github/workflows/docker-release.yml",
+            "docs/workflow-reference.md",
+            "README.md",
+        ],
+    )
+
+    [child_id] = _spawn_dependency_tickets(parent, [ask], meta_ctx)
+    child = ctx.service.get(child_id)
+    assert child.board_id == "test-board"
+    assert child.source == "review"
+
+    # A parent row without a board_id still resolves via repo_config.
+    parent.board_id = ""
+    [child_id2] = _spawn_dependency_tickets(parent, [ask], meta_ctx)
+    assert ctx.service.get(child_id2).board_id == "test-board"
+    # Nothing landed on meta.
+    assert meta_ctx.service.list() == []
+
+
+def test_meta_board_rejects_agent_ticket_naming_repo_paths(ctx_factory):
+    """The forge-less meta board refuses agent/stage-spawned tickets that
+    name repository files; meta-pass proposals stay allowed."""
+    from robotsix_mill.core.models import SourceKind
+
+    ctx = ctx_factory()
+    db.init_db(ctx.settings, board_id="meta")
+    meta_svc = TicketService(ctx.settings, board_id="meta")
+    body = "Files involved:\n- `.github/workflows/docker-release.yml`"
+
+    with pytest.raises(ValueError, match="meta"):
+        meta_svc.create("follow-up", body, source="review")
+    with pytest.raises(ValueError, match="meta"):
+        ctx.service.create("follow-up", body, source="review", board_id="meta")
+    assert meta_svc.list() == []
+
+    # Path-free agent tickets and meta-pass proposals are unaffected.
+    meta_svc.create("cross-repo idea", "no paths here", source="review")
+    meta_svc.create("extraction", body, source=SourceKind.META)
+    assert len(meta_svc.list()) == 2
+
+
 def test_request_changes_mixed_scope_one_dep_one_in_scope(ctx_factory, monkeypatch):
     """Mixed verdict: in-scope asks keep the parent in READY (re-implement),
     the out-of-scope ask spawns ONE follow-up that depends on the parent —

@@ -53,6 +53,28 @@ class StageContext:
             or ticket.board_id
         )
 
+    def spawn_board_id(self, parent: Ticket) -> str | None:
+        """Resolve the board a follow-up spawned from *parent* lands on.
+
+        Children inherit the PARENT's repo board — never the synthetic,
+        forge-less ``"meta"`` board, which cannot implement anything
+        (a meta-sourced parent that was filed on a repo board must not
+        leak its children onto ``meta``). Candidates in order: the
+        parent's ``board_id``, the stage's ``repo_config`` board, then
+        the bound service board; the first non-meta one wins. Returns
+        the parent's board (``"meta"`` included) or ``None`` when no
+        repo board is known, leaving the create-time guard to decide.
+        """
+        candidates = (
+            parent.board_id,
+            self.repo_config.board_id if self.repo_config else "",
+            self.service.board_id,
+        )
+        for board in candidates:
+            if board and board != "meta":
+                return board
+        return parent.board_id or None
+
 
 @dataclass
 class Outcome:
