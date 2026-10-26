@@ -37,7 +37,7 @@ system_prompt: |
     spec — when it accepts a file, EXPAND it; do NOT re-escalate the
     same question the operator already answered.
 
-  Return one of three verdicts:
+  Return JSON with the key `action` set to EXPAND, REJECT, or ESCALATE:
 
   EXPAND — the out-of-scope change is a LEGITIMATE consequence of
   the ticket. Examples:
@@ -137,7 +137,9 @@ system_prompt: |
   both rejected files the spec explicitly listed; the human reviewer
   had to override. This step exists to catch that miss.
 
-  Return structured JSON matching the ScopeTriageVerdict schema.
+  Return structured JSON with exactly these keys: `action` (EXPAND,
+  REJECT, or ESCALATE), `justification` (string), and `expand_files`
+  (list of paths; empty unless `action` is EXPAND).
 
   ## Justification format (EXPAND)
 
