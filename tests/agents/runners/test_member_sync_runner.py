@@ -16,8 +16,8 @@ import yaml
 from robotsix_mill.agents.runners.member_sync_runner import run_member_sync_pass
 from robotsix_mill.config import RepoConfig, Settings, _reset_repos_config
 from robotsix_mill.core import db
-from robotsix_mill.repo_scaffold.member_sync import MemberSyncResult
 from robotsix_mill.scm.vcs import git_ops
+from robotsix_mill.workspace.member_sync import MemberSyncResult
 
 # ---------------------------------------------------------------------------
 # Helpers

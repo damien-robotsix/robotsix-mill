@@ -473,19 +473,16 @@ modules:
   # Support services
   # -------------------------------------------------------------------
 
-  - id: repo-scaffold
+  - id: workspace-member-sync
     description: >-
-      Repo-scaffold workflow.  When a meta-board ticket carries a
-      ``new-repo`` extraction marker, this module calls
-      ``Forge.create_repo()``, scaffolds an initial commit (README,
-      LICENSE, Python skeleton), and registers the new repo in
-      ``config/repos.yaml``.
+      Workspace member sync.  Upserts vcs2l workspace members detected in a
+      master repo's manifest into ``<data_dir>/registered_repos.yaml`` and files
+      build-out tickets for newly registered members.
     paths:
-      - src/robotsix_mill/repo_scaffold/**/*.py
-      - tests/repo_scaffold/test_repo_scaffold.py
-      - tests/repo_scaffold/test_workspace_member_sync.py
-      - docs/repo-scaffold/**/*
-    dependencies: [config, forge, vcs]
+      - src/robotsix_mill/workspace/**/*.py
+      - tests/workspace/**/*
+      - docs/workspace/**/*
+    dependencies: [config]
 
   - id: sandbox
     description: >-

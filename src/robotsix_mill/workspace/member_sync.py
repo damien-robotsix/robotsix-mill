@@ -9,8 +9,7 @@ manifest ``url``, a ``working_branch`` from the manifest ``version`` and a
 ``cross_repo_target`` from the master's per-member policy, inheriting the
 master's Langfuse project (the inheritance mechanism is refined in Ticket
 4). Entries are upserted into ``<data_dir>/registered_repos.yaml`` and the
-registry singleton is hot-reloaded via :func:`_reset_repos_config`, exactly
-like the repo-scaffold workflow does for brand-new repos.
+registry singleton is hot-reloaded via :func:`_reset_repos_config`.
 
 Each *newly* registered member also gets a build-out ticket filed on its
 own board (which the ticket service materialises on first write), so the
@@ -43,9 +42,17 @@ if TYPE_CHECKING:
 
 from ..config import _reset_repos_config
 from ..config.workspace_members import DetectedMember
-from . import _repos_yaml_path
 
 log = logging.getLogger("robotsix_mill.workspace_member_sync")
+
+
+def _repos_yaml_path(settings: Settings | None = None) -> Path:
+    """Resolve the machine-owned overlay path for auto-registered repos.
+
+    Always targets the writable data volume overlay.
+    """
+    data_dir = settings.data_dir if settings is not None else Path(".data")
+    return Path(data_dir) / "registered_repos.yaml"
 
 
 @dataclass
@@ -86,7 +93,7 @@ def sync_workspace_members(
         members: detected workspace members (see
             :func:`~robotsix_mill.config.workspace_members.detect_workspace_members`).
         repos_yaml_path: override for the auto-registration overlay path;
-            defaults to :func:`repo_scaffold._repos_yaml_path`.
+            defaults to :func:`_repos_yaml_path`.
         file_tickets: when True (default) file a build-out ticket on each
             newly registered member's board.
 
