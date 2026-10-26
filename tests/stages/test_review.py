@@ -1329,6 +1329,55 @@ def test_prior_context_under_cap_verbatim(ctx_factory):
     assert "brief rebuttal" in block
 
 
+def test_prior_context_drops_gate_era_escalation_comment(ctx_factory):
+    """A chat drain's "ESCALATED … do NOT approve" hold posted while the
+    ticket sat at human_issue_approval is superseded by the operator's
+    approval and must not reach the review agent — on 2026-10-26 five
+    reviews read it and parked at awaiting_user_reply for an answer the
+    operator had already given. A comment posted after the approval still
+    lands."""
+    import time as _time
+
+    from robotsix_mill.stages.review import _build_prior_context
+
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
+    t = ctx.service.create("Feature", "body")
+    ws = ctx.service.workspace(t)
+    ws.artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    ctx.service.transition(t.id, State.HUMAN_ISSUE_APPROVAL)
+    ctx.service.add_comment(
+        t.id,
+        "ESCALATED to operator 2026-10-26T00:07Z: shared-workflow change. "
+        "Do NOT approve until an operator answer is recorded.",
+        author="robotsix-chat",
+    )
+    _time.sleep(0.01)
+    ctx.service.transition(t.id, State.READY, note="Operator approved Option C")
+    _time.sleep(0.01)
+    ctx.service.add_comment(t.id, "please rename the helper", author="review")
+
+    block = _build_prior_context(t, ctx, ws)
+    assert block is not None
+    assert "ESCALATED to operator" not in block
+    assert "please rename the helper" in block
+
+
+def test_prior_context_keeps_comments_without_approval_transition(ctx_factory):
+    """No human_issue_approval → ready transition: nothing is dropped."""
+    from robotsix_mill.stages.review import _build_prior_context
+
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
+    t = ctx.service.create("Feature", "body")
+    ws = ctx.service.workspace(t)
+    ws.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    ctx.service.add_comment(t.id, "first remark", author="robotsix-chat")
+
+    block = _build_prior_context(t, ctx, ws)
+    assert block is not None
+    assert "first remark" in block
+
+
 # --- Diff bounding (review_diff_max_chars) -----------------------------
 
 

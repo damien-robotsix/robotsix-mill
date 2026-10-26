@@ -593,6 +593,22 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
 
     prior_comments = ctx.service.list_comments(ticket.id)
     if prior_comments:
+        # Gate-era discussion — a chat drain's "ESCALATED to operator … do
+        # NOT approve until an operator answer is recorded" hold posted
+        # while the ticket sat at human_issue_approval — is superseded by
+        # the operator's approval (the human_issue_approval → ready
+        # transition). Fed to review it reads as an open instruction: on
+        # 2026-10-26 five reviews of operator-approved tickets (e9c3, 8290,
+        # 9851, ea28, 4582) parked at awaiting_user_reply asking for the
+        # go/no-go the operator had already given. Same filter as
+        # implement's (#3429); review comments are posted after the
+        # approval and are unaffected.
+        from .implement.phase_coordinator import _drop_gate_era_comments
+
+        prior_comments = _drop_gate_era_comments(
+            prior_comments, ctx.service.history(ticket.id), ticket.id
+        )
+    if prior_comments:
         # Closed threads are normally skipped (resolved REQUEST_CHANGES
         # feedback the implement agent already addressed). EXCEPTION: a
         # closed top-level [ASK_USER] thread carries the operator's
