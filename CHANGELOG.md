@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.19.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.19.0...v0.19.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* Epic re-eval: stop the serial follow-up loop (near-identical children re-filed after each no-delivery close) (20261025T134514Z-epic-re-eval-stop-the-serial-follow-up-l-53ff) ([#3450](https://github.com/damien-robotsix/robotsix-mill/issues/3450)) ([09c013c](https://github.com/damien-robotsix/robotsix-mill/commit/09c013cf694a4a67799f618e2b329c7206842f63))
+* **forge:** fall back to the forge token when forge_repo_create_token 401s ([#3448](https://github.com/damien-robotsix/robotsix-mill/issues/3448)) ([7e45ee3](https://github.com/damien-robotsix/robotsix-mill/commit/7e45ee374dbe06bc4334a0ffa31e43b6e70bd4ec))
+* run_health follow-up drafts never appear in recent-proposals (2 passes) while repo_description_sync keeps erroring on robotsix-mill (4×) (20261025T213818Z-run-health-follow-up-drafts-never-appear-7348) ([#3454](https://github.com/damien-robotsix/robotsix-mill/issues/3454)) ([73572b8](https://github.com/damien-robotsix/robotsix-mill/commit/73572b8129ffbe05da92c0b70d4e6b7e618083c2))
+
+
+### Documentation
+
+* scm consolidation (3/3): migrate vcs/forge docs under docs/scm/ (20261025T172332Z-scm-consolidation-3-3-migrate-vcs-forge-076c) ([#3455](https://github.com/damien-robotsix/robotsix-mill/issues/3455)) ([9ded7e4](https://github.com/damien-robotsix/robotsix-mill/commit/9ded7e4802da106c93d89b4b0c5ac77a0986f373))
+
 ## [0.19.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.18.0...v0.19.0) (2026-10-24)
 
 
