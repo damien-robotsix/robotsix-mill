@@ -44,6 +44,19 @@ The meta-agent runner wires this together at runtime.
 
 ## Safety guards
 
+### Repo-file tickets refused on the meta board
+
+The meta board has no forge remote, so nothing filed there can be
+implemented. Ticket creation therefore rejects a ticket on `meta` whose
+description names repository file paths, unless its `source` is `meta`
+(meta-pass proposals) or `user` (operator-filed). The `ValueError` tells
+the caller to file on the owning repo's board instead.
+
+Follow-ups spawned by a stage (e.g. out-of-scope review asks) inherit the
+**parent ticket's repo board**, never `meta`, so they land on the repo
+that owns the files. A meta-sourced parent that lives on a repo board
+therefore spawns its children there.
+
 ### Repo-triage fallback protection
 
 When triage cannot confidently match a target repository (the agent
