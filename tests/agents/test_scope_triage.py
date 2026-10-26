@@ -244,6 +244,17 @@ def test_system_prompt_covers_module_registration_companion():
     assert "registers a new module entry" in low
 
 
+def test_system_prompt_names_action_key():
+    """The prompt must name the ``action`` output key explicitly and must
+    not phrase the instruction as a "verdict" (models then emit a
+    ``verdict`` key, failing ``action: Field required`` validation)."""
+    prompt = _load_scope_triage_system_prompt()
+
+    assert "`action`" in prompt
+    assert "key `action` set to EXPAND, REJECT, or ESCALATE" in prompt
+    assert "verdict" not in prompt.lower()
+
+
 def test_expand_for_companion_files(monkeypatch):
     """A new-file ticket whose implement adds docs/modules.yaml +
     accompanying doc file → plumbing routes EXPAND correctly."""
