@@ -2343,6 +2343,27 @@ def test_scope_triage_re_escalate_after_resume_surfaces_note(
     assert note.endswith(f"— out-of-scope: `{_ZIZMOR}`")
 
 
+def test_scope_triage_non_resume_ready_note_is_not_operator_resolution(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A READY note from another stage (e.g. review REQUEST_CHANGES)
+    naming the escalated file is not an operator decision."""
+    ctx, t, repo = _setup_escalated_ticket(ctx_factory, tmp_path, "")
+    ctx.service.transition(t.id, State.CODE_REVIEW, note="review")
+    ctx.service.transition(t.id, State.READY, note="zizmor.yml needs a header comment")
+    t = ctx.service.get(t.id)
+    calls: list = []
+    _escalating_triage(monkeypatch, calls)
+
+    result = _run_guardrail(ctx, t, repo)
+
+    assert len(calls) == 1
+    assert "operator_resolution" not in calls[0]
+    assert result.outcome is not None
+    assert result.outcome.next_state is State.BLOCKED
+    assert "re-escalated despite operator resume note" not in result.outcome.note
+
+
 def test_operator_resolution_rejecting_note_does_not_accept():
     from robotsix_mill.stages.implement.validation import _OperatorResolution
 

@@ -141,8 +141,20 @@ def _operator_escalation_resolution(
             seen.add(text)
             texts.append((at.isoformat(timespec="seconds"), text))
 
+        # Only ``blocked → ready`` transition notes count: other stages
+        # also move tickets to READY with free text (review
+        # REQUEST_CHANGES, rebase, ci-fix) that may name the file
+        # without being an operator decision.
+        prev_state: State | None = None
         for ev in events:
-            if ev.at <= last.at or ev.state is not State.READY or not ev.note:
+            was_blocked = prev_state is State.BLOCKED
+            prev_state = ev.state
+            if (
+                ev.at <= last.at
+                or ev.state is not State.READY
+                or not was_blocked
+                or not ev.note
+            ):
                 continue
             text = ev.note
             if text.startswith("resumed from blocked"):
