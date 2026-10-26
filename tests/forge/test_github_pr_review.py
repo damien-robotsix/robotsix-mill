@@ -731,6 +731,57 @@ def test_derive_conclusion_superseded_cancelled_same_name_uses_success():
     assert out["pending"] == []
 
 
+def test_derive_conclusion_zombie_in_progress_with_conclusion_is_finished():
+    """A check run GitHub left at ``status: in_progress`` but with a
+    recorded ``conclusion`` and ``completed_at`` is finished. Real shape:
+    robotsix-chat job 119955826312 ("Auto-format with ruff") on PR #2188 —
+    read as pending it parked ticket 1529 at IMPLEMENT_COMPLETE for four
+    days (2026-10-22 → 10-26)."""
+    from robotsix_mill.scm.forge.github_ci import _derive_check_conclusion
+
+    runs = [
+        {
+            "id": 1,
+            "name": "CI / Tests",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-22T16:43:40Z",
+            "completed_at": "2026-10-22T16:52:10Z",
+        },
+        {
+            "id": 119955826312,
+            "name": "Auto-format with ruff",
+            "status": "in_progress",
+            "conclusion": "success",
+            "started_at": "2026-10-22T16:43:42Z",
+            "completed_at": "2026-10-22T16:44:06Z",
+        },
+    ]
+    out = _derive_check_conclusion(None, "", "o", "r", {}, runs)
+    assert out["conclusion"] == "success"
+    assert out["pending"] == []
+    assert out["failing"] == []
+
+
+def test_derive_conclusion_in_progress_without_completion_stays_pending():
+    """A genuinely running check (no conclusion, no completed_at) is pending."""
+    from robotsix_mill.scm.forge.github_ci import _derive_check_conclusion
+
+    runs = [
+        {
+            "id": 1,
+            "name": "CI / Tests",
+            "status": "in_progress",
+            "conclusion": None,
+            "started_at": "2026-10-26T11:00:00Z",
+            "completed_at": None,
+        },
+    ]
+    out = _derive_check_conclusion(None, "", "o", "r", {}, runs)
+    assert out["conclusion"] == "pending"
+    assert out["pending"] == ["CI / Tests"]
+
+
 # ---------------------------------------------------------------------------
 # commit_ci_conclusion — SHA-based CI lookup (no PR)
 # ---------------------------------------------------------------------------
