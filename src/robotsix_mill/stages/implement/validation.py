@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -40,6 +44,125 @@ from .validation_cleanup import ValidationCleanupMixin, _spec_names_path
 # auto-revert path.  The write-path guard below validates it and detects
 # clobbered keys against the whole changed set instead.
 _REPO_SETTINGS_FILE = ".robotsix-mill/config.yaml"
+
+
+# --- operator resolution of a prior scope-triage ESCALATE ---
+# The scope gate judges the spec text and the diff only.  When it
+# ESCALATEs and the operator resumes with a note confirming the file is in
+# scope, the next pass used to re-escalate word for word (e710,
+# 2026-10-26) until the operator rewrote the spec itself.  These helpers
+# read the operator's answer back out of history/comments.
+_ESCALATE_PREFIX = "scope-triage ESCALATE"
+_OOS_MARKER = "— out-of-scope: "
+_OPERATOR_COMMENT_AUTHORS = frozenset({"user", "operator"})
+_ACCEPT_RE = re.compile(
+    r"\b(in[ -]scope|accept(?:s|ed)?|confirm(?:s|ed)?|approve[sd]?)\b", re.IGNORECASE
+)
+_REJECT_RE = re.compile(
+    r"\b(revert|reject(?:s|ed)?|remove|drop|out[ -]of[ -]scope|scope creep)\b",
+    re.IGNORECASE,
+)
+# Mirrors blocked_auto_resume_runner.AUTO_RESUME_MARKER: an automatic
+# retry embeds the block note (file names included) and must never count
+# as an operator decision.
+_AUTO_RESUME_MARKER = "[auto-resume"
+
+
+@dataclass
+class _OperatorResolution:
+    """Operator answer to the latest scope-triage ESCALATE on a ticket."""
+
+    escalated_files: list[str] = field(default_factory=list)
+    notes: list[tuple[str, str]] = field(default_factory=list)  # (ts, text)
+
+    def accepted_files(self) -> dict[str, str]:
+        """Map each escalated file the notes accept to the accepting note's ts.
+
+        A note naming a file (full path or basename) accepts it unless it
+        reads as a rejection; a note naming none of them accepts all of
+        them when it says "in scope" / "accepted" / "confirmed".
+        """
+        accepted: dict[str, str] = {}
+        for ts, text in self.notes:
+            says_accept = bool(_ACCEPT_RE.search(text))
+            says_reject = bool(_REJECT_RE.search(text))
+            named = [
+                f for f in self.escalated_files if f in text or Path(f).name in text
+            ]
+            if named:
+                if says_accept or not says_reject:
+                    for f in named:
+                        accepted.setdefault(f, ts)
+            elif says_accept:
+                for f in self.escalated_files:
+                    accepted.setdefault(f, ts)
+        return accepted
+
+    def render(self) -> str:
+        files = ", ".join(f"`{f}`" for f in self.escalated_files)
+        lines = [f"Previous scope-triage ESCALATE named: {files}"]
+        lines += [f"- [{ts}] {text}" for ts, text in self.notes]
+        return "\n".join(lines)
+
+
+def _operator_escalation_resolution(
+    service: Any, ticket_id: str
+) -> _OperatorResolution | None:
+    """Return the operator's resolution of the latest scope-triage ESCALATE.
+
+    Collects the ``blocked → ready`` transition notes and operator/author
+    comments newer than that ESCALATE, ignoring automatic resumes.
+    Returns ``None`` when there was no prior ESCALATE or no operator note.
+    Best-effort: a history/comment read failure yields ``None``.
+    """
+    try:
+        events: list[TicketEvent] = service.history(ticket_id)
+        last = next(
+            (
+                ev
+                for ev in reversed(events)
+                if ev.state is State.BLOCKED
+                and (ev.note or "").startswith(_ESCALATE_PREFIX)
+            ),
+            None,
+        )
+        if last is None:
+            return None
+        note = last.note or ""
+        tail = note.rsplit(_OOS_MARKER, 1)[1] if _OOS_MARKER in note else ""
+        escalated = _BACKTICK_RE.findall(tail)
+        texts: list[tuple[str, str]] = []
+        seen: set[str] = set()
+
+        def _add(at: datetime, text: str) -> None:
+            text = text.strip()
+            if not text or _AUTO_RESUME_MARKER in text or text in seen:
+                return
+            seen.add(text)
+            texts.append((at.isoformat(timespec="seconds"), text))
+
+        for ev in events:
+            if ev.at <= last.at or ev.state is not State.READY or not ev.note:
+                continue
+            text = ev.note
+            if text.startswith("resumed from blocked"):
+                if "; override: " not in text:
+                    continue
+                text = text.split("; override: ", 1)[1]
+            elif text.startswith("scope-triage"):
+                continue
+            _add(ev.at, text)
+        for c in service.list_comments(ticket_id):
+            if c.created_at > last.at and c.author in _OPERATOR_COMMENT_AUTHORS:
+                _add(c.created_at, c.body)
+    except Exception:
+        log.warning(
+            "%s: could not read operator scope resolution", ticket_id, exc_info=True
+        )
+        return None
+    if not texts:
+        return None
+    return _OperatorResolution(escalated_files=escalated, notes=texts)
 
 
 def _spawn_scope_split_tickets(
@@ -580,6 +703,34 @@ class ValidationMixin(ValidationCleanupMixin, _ImplementStageBase):
         ESCALATE verdicts (including finalization for terminal
         outcomes).
         """
+        # --- operator resolution of a previous ESCALATE ---
+        # A blocked → ready resume whose note confirms an escalated file
+        # is in scope expands it deterministically instead of re-asking
+        # the LLM (which only sees the spec and would re-escalate).
+        resolution = _operator_escalation_resolution(ctx.service, ticket.id)
+        if resolution is not None:
+            accepted = resolution.accepted_files()
+            granted = [f for f in out_of_scope if f in accepted]
+            for f in granted:
+                file_map.add(f)
+                ctx.service.add_step_event(
+                    ticket.id,
+                    f"scope-triage: `{f}` accepted by operator note {accepted[f]}",
+                )
+            if granted:
+                log.info(
+                    "%s: scope-triage operator-accepted EXPAND: %s",
+                    ticket.id,
+                    ", ".join(granted),
+                )
+                out_of_scope = [f for f in out_of_scope if f not in accepted]
+                if not out_of_scope:
+                    return _ScopeGuardrailResult(
+                        action="skip_iteration",
+                        file_map=file_map,
+                        feedback=None,
+                    )
+
         # --- build per-file diff summaries ---
         diff_summaries: dict[str, str] = {}
         for path in out_of_scope:
@@ -620,12 +771,18 @@ class ValidationMixin(ValidationCleanupMixin, _ImplementStageBase):
 
         triage_error: str | None = None
         try:
+            extra: dict[str, str] = (
+                {"operator_resolution": resolution.render()}
+                if resolution is not None
+                else {}
+            )
             verdict = st.run_scope_triage_agent(
                 settings=settings,
                 ticket_spec=spec,
                 file_map=sorted(file_map),
                 out_of_scope_files=out_of_scope,
                 diff_summaries=diff_summaries,
+                **extra,
             )
         except Exception as exc:
             from ...runtime.transient_errors import (
@@ -884,6 +1041,14 @@ class ValidationMixin(ValidationCleanupMixin, _ImplementStageBase):
                 "— escalated for human review; resume-blocked re-runs the triage"
             )
         )
+        if resolution is not None:
+            # Never re-escalate silently after a resume: surface the
+            # operator's note so the loop is visible in the block note.
+            ts, text = resolution.notes[-1]
+            reason += (
+                f" — re-escalated despite operator resume note ({ts}): "
+                f"{text[:300]!r}; put the decision in the spec to proceed"
+            )
         log.warning("%s: %s", ticket.id, reason)
         cls._finalize(
             ctx,
