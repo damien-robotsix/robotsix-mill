@@ -790,9 +790,10 @@ class _AgentRunOutcome:
     """Result of the agent invocation phase.
 
     Exactly one of ``success`` / ``failure`` is non-None.  ``success``
-    holds the 7-tuple returned by ``coding.run_implement_agent``
+    holds the tuple returned by ``coding.run_implement_agent``
     (summary, ref_files, updated_memory, conv_state, new_msgs,
-    no_change_needed, no_change_rationale); ``failure`` holds the
+    no_change_needed, no_change_rationale, deferred_spec_items); the
+    8th element is optional for legacy 7-tuples. ``failure`` holds the
     ``_SinglePassResult`` the orchestrator should return when the agent
     call raised a caught error.  Used only inside ``implement.py`` to
     let the orchestrator early-return cleanly without leaking the

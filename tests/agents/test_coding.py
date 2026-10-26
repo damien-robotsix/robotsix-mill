@@ -163,6 +163,20 @@ def test_happy_path_passthrough(settings, tmp_path, monkeypatch):
     # Note: origin/main still carries a 5th element (new_messages);
     # we assert on the common prefix only.
     assert out[:4] == ("s", ["f.py"], "um", b"cs")
+    assert out[7] == []
+
+
+def test_deferred_spec_items_returned(settings, tmp_path, monkeypatch):
+    """Deferred spec items reach the stage as the 8th tuple element."""
+    result = _make_result().model_copy(
+        update={"deferred_spec_items": ["ready fallback when branch is gone"]}
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.agents.coordinating.run_coordinator",
+        lambda **kw: result,
+    )
+    out = _call(settings, tmp_path)
+    assert out[7] == ["ready fallback when branch is gone"]
 
 
 # ------------------------------------------------------------------

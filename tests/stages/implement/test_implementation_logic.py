@@ -1995,6 +1995,44 @@ class TestRunSummaryVerification:
         assert result is None
 
 
+class TestRunDeferredSpecGate:
+    """A knowingly-partial implementation never auto-advances (trace bffbb10a)."""
+
+    def _call(self, items, feedback=None):
+        return _Stage._run_deferred_spec_gate(
+            ticket=FakeTicket(),
+            deferred_spec_items=items,
+            ic=_ic(feedback=feedback),
+            updated_ref_files=None,
+            updated_prev_summary="prev",
+            new_msgs=b"ms",
+        )
+
+    def test_passes_when_nothing_deferred(self):
+        assert self._call([]) is None
+        assert self._call(["  "]) is None
+
+    def test_retry_on_first_deferral(self):
+        result = self._call(["ready fallback when the PR branch is gone"])
+        assert result is not None
+        assert result.next_action == "retry"
+        assert result.feedback.startswith("[SPEC-DEFERRED]")
+        assert "ready fallback" in result.feedback
+        assert result.ic.feedback == result.feedback
+        assert result.ic.previous_attempt_summary == "prev"
+        assert result.new_msgs == b"ms"
+
+    def test_block_on_repeated_deferral(self):
+        result = self._call(
+            ["ready fallback"],
+            feedback="[SPEC-DEFERRED] Your previous pass left ...",
+        )
+        assert result is not None
+        assert result.next_action == "return"
+        assert result.outcome.next_state == State.BLOCKED
+        assert "ready fallback" in result.outcome.note
+
+
 # ---------------------------------------------------------------------------
 # 7. _find_insertion_point
 # ---------------------------------------------------------------------------
