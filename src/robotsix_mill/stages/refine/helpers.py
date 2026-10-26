@@ -24,7 +24,7 @@ from ...agents import refining
 from ...config.settings import Settings
 from ...core import constants as _constants
 from ...core.constants import BINARY_EXTENSIONS
-from ...core.models import Ticket
+from ...core.models import Ticket, TicketEvent
 from ...core.states import State
 from ...scm.vcs import git_ops
 from ..base import StageContext
@@ -790,7 +790,7 @@ def _operator_already_approved(ctx: StageContext, ticket_id: str) -> bool:
     lookup failure returns False so the normal gate still applies.
     """
     try:
-        events = list(ctx.service.history(ticket_id))
+        events: list[TicketEvent] = list(ctx.service.history(ticket_id))
         return any(
             prev.state == State.HUMAN_ISSUE_APPROVAL and cur.state == State.READY
             for prev, cur in itertools.pairwise(events)
