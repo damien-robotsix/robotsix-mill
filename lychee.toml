@@ -4,7 +4,7 @@
 # Exclude common false positives that can't be validated via HTTP
 [exclude]
 path = [
-  "docs/forge/github-app.md",  # GitHub App URLs are user-specific
+  "docs/scm/forge/github-app.md",  # GitHub App URLs are user-specific
 ]
 url = [
   # Localhost URLs in agent-config example docs

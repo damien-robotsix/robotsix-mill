@@ -59,7 +59,7 @@ nav:
       - Notifications: notify/notifications.md
       - Event notifications: notify/event-notifications.md
       - Ticket provenance: core/ticket-provenance.md
-      - VCS (git) module: vcs/README.md
+      - VCS (git) module: scm/vcs/README.md
       - Workspace cleanup: core/workspace-cleanup.md
       - Orphaned-PR check: agents/runners/orphaned-pr-check.md
       - Pin bump: agents/runners/pin-bump.md
@@ -68,12 +68,12 @@ nav:
       - Cost indicators: design/cost-indicators.md
       - Worker Process Split (ADR): design/worker-process-split.md
   - Forge:
-      - Overview: forge/architecture.md
-      - GitHub App setup: forge/github-app.md
-      - Authentication: forge/auth.md
-      - GitLab backend: forge/gitlab.md
-      - CI monitoring: forge/ci-monitoring.md
-      - Code scanning: forge/code-scanning.md
+      - Overview: scm/forge/architecture.md
+      - GitHub App setup: scm/forge/github-app.md
+      - Authentication: scm/forge/auth.md
+      - GitLab backend: scm/forge/gitlab.md
+      - CI monitoring: scm/forge/ci-monitoring.md
+      - Code scanning: scm/forge/code-scanning.md
   - CLI:
       - Usage: cli/usage.md
   - Guides:

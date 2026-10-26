@@ -171,7 +171,7 @@ reference are covered in [docs/config/configuration.md](docs/config/configuratio
 - [docs/config/configuration.md](docs/config/configuration.md) — Complete configuration reference (YAML schema, loading order, secrets)
 - [docs/dev-tooling/deployment.md](docs/dev-tooling/deployment.md) — Continuous deployment via GitHub Actions + Watchtower
 - [docs/docker-architecture.md](docs/docker-architecture.md) — Container topology & conceptual architecture
-- [docs/forge/github-app.md](docs/forge/github-app.md) — Delivery identity setup (PAT or GitHub App bot)
+- [docs/scm/forge/github-app.md](docs/scm/forge/github-app.md) — Delivery identity setup (PAT or GitHub App bot)
 - [docs/inquiry-to-task.md](docs/inquiry-to-task.md) — Convert an answered inquiry into an actionable task ticket
 - [docs/sandbox/security.md](docs/sandbox/security.md) — Security model
 - [docs/agents/index.md](docs/agents/index.md) — Full agent catalog
@@ -193,7 +193,7 @@ reference are covered in [docs/config/configuration.md](docs/config/configuratio
 - [docs/core/ticket-provenance.md](docs/core/ticket-provenance.md) — How `source` tracks which actor created each ticket
 - [docs/core/workspace-cleanup.md](docs/core/workspace-cleanup.md) — Automatic clone pruning on ticket close
 - [docs/dev-tooling/ci-policy.md](docs/dev-tooling/ci-policy.md) — CI gate-or-remove policy & checklist for new checks
-- [docs/forge/architecture.md](docs/forge/architecture.md) — Forge abstraction design: GitHub + GitLab adapters, auth, and extension points
+- [docs/scm/forge/architecture.md](docs/scm/forge/architecture.md) — Forge abstraction design: GitHub + GitLab adapters, auth, and extension points
 
 ## Contributing
 
