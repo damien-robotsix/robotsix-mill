@@ -1167,7 +1167,8 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         if agent_result.failure is not None:
             return agent_result.failure
         success = agent_result.success
-        assert success is not None
+        if success is None:
+            raise RuntimeError("implement agent returned neither success nor failure")
         (
             summary,
             ref_files,
