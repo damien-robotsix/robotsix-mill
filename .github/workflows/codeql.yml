@@ -21,9 +21,9 @@ jobs:
     name: Analyze
     runs-on: ubuntu-latest
     permissions:
-      actions: read
+      actions: read  # CodeQL reads workflow-run metadata for the analysis
       contents: read
-      security-events: write
+      security-events: write  # upload the CodeQL SARIF to code scanning
     strategy:
       matrix:
         language: [python]

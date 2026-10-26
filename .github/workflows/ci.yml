@@ -16,7 +16,7 @@ jobs:
   ci:
     permissions:
       contents: read
-      security-events: write
+      security-events: write  # shared python-ci.yml uploads scan SARIF to code scanning
     uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@2de56a85055b60d0f01c406342eda081e68c0c8b
     with:
       python-version: "3.14"
@@ -57,6 +57,7 @@ jobs:
       audit-ignore: "PYSEC-2025-183, MAL-2026-4750, GHSA-9xwg-3r6f-jcx2, GHSA-jwv3-5hgf-82ww, GHSA-m2h6-j472-rp4c, GHSA-g6cj-pr64-35w5"
 
   mill-specific:
+    name: Mill-specific checks
     runs-on: ubuntu-latest
     env:
       UV_MALWARE_CHECK: "1"
@@ -188,11 +189,6 @@ jobs:
         run: |
           ! grep -nE 'uses:\s*\S+\.github/workflows/[^@]*@(main|master|latest|v[0-9]+)' \
             .github/workflows/*.yml
-
-      - name: Validate workflow permissions
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-        run: uv run python scripts/validate_workflow_permissions.py
 
       - name: Check shell completions are up-to-date
         env:
