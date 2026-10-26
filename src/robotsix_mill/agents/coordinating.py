@@ -57,6 +57,11 @@ class ImplementResult(BaseModel):
     # existing BLOCK-on-silent-no-changes behaviour.
     no_change_needed: bool = False
     no_change_rationale: str = ""
+    # Spec requirements the agent knowingly left unimplemented. A
+    # non-empty list never advances to code review: the stage re-prompts
+    # once to finish them, then blocks for human review (trace bffbb10a:
+    # a summary admitting a skipped spec item still shipped).
+    deferred_spec_items: list[str] = []
 
     @model_validator(mode="before")
     @classmethod
@@ -780,6 +785,17 @@ def run_coordinator(
                         f"{feedback}",
                     )
                     + "\n\nRevert the out-of-scope changes and stop."
+                )
+            elif feedback.startswith("[SPEC-DEFERRED]"):
+                user_prompt += (
+                    "\n\n"
+                    + section(
+                        "deferred-spec-items",
+                        "Your previous edit pass is already on disk, but it "
+                        "left spec requirements unimplemented.\n"
+                        f"{feedback}",
+                    )
+                    + "\n\nImplement the deferred items, then stop."
                 )
             elif feedback.startswith("[VERIFY"):
                 user_prompt += (

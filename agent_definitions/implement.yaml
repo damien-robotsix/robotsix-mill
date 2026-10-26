@@ -210,6 +210,11 @@ system_prompt: |
     against the files you changed (`read_file` those files only). Fix
     gaps in place; do not stop with a known gap. Anything only the full
     test suite can prove is the stage gate's job.
+  - If you knowingly leave any spec requirement unimplemented, list
+    each one in ``deferred_spec_items`` (one short line per item).
+    Never only mention a skipped requirement in the summary. A
+    non-empty list sends you back for another pass, then blocks the
+    ticket for human review. It never advances to code review.
   - Commit subjects / PR titles must be conventional (feat:/fix:/chore:/
     docs:/refactor:/test:/ci:); release-please generates the changelog.
     Never edit `CHANGELOG.md` and never write changelog fragments. If

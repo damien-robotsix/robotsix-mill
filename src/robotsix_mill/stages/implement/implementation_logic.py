@@ -42,6 +42,10 @@ from ._shared import (
 )
 from .implementation_editing import _ImplementationEditingMixin
 
+# Feedback prefix for the deferred-spec-items re-prompt; seeing it on the
+# incoming feedback means the agent already had its one retry.
+_SPEC_DEFERRED_MARKER = "[SPEC-DEFERRED]"
+
 # ---------------------------------------------------------------------------
 # Post-summary verification gate
 # ---------------------------------------------------------------------------
@@ -589,6 +593,68 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         return updated_ref_files, updated_prev_summary
 
     @classmethod
+    def _run_deferred_spec_gate(
+        cls,
+        ticket: Ticket,
+        deferred_spec_items: list[str],
+        ic: _ImplementContext,
+        updated_ref_files: list[Any] | None,
+        updated_prev_summary: str | None,
+        new_msgs: bytes | None,
+    ) -> _SinglePassResult | None:
+        """Keep a knowingly-partial implementation out of code review.
+
+        Returns ``None`` when the agent deferred nothing. Otherwise the
+        first time it re-prompts with a ``[SPEC-DEFERRED]`` feedback
+        block listing the items. If the agent defers items again on that
+        re-prompt, the ticket is blocked for human review.
+        """
+        items = [i.strip() for i in deferred_spec_items if i and i.strip()]
+        if not items:
+            return None
+        listing = "; ".join(items)
+        if (ic.feedback or "").startswith(_SPEC_DEFERRED_MARKER):
+            log.warning(
+                "%s: spec items still deferred after re-prompt — %s; blocking",
+                ticket.id,
+                listing,
+            )
+            return _SinglePassResult(
+                next_action="return",
+                outcome=Outcome(
+                    State.BLOCKED,
+                    "implementation incomplete — agent deferred spec items "
+                    f"after retry (needs human review): {listing}",
+                ),
+            )
+        log.warning(
+            "%s: agent deferred spec items — %s; re-prompting",
+            ticket.id,
+            listing,
+        )
+        feedback = (
+            f"{_SPEC_DEFERRED_MARKER} Your previous pass left these spec "
+            f"requirements unimplemented: {listing}. Implement them now. "
+            "If one truly cannot be done, list it again in "
+            "deferred_spec_items; the ticket will then block for human "
+            "review."
+        )
+        return _SinglePassResult(
+            next_action="retry",
+            feedback=feedback,
+            ic=_ImplementContext(
+                spec=ic.spec,
+                memory_text=ic.memory_text,
+                reference_files=updated_ref_files,
+                file_map=ic.file_map,
+                feedback=feedback,
+                previous_attempt_summary=updated_prev_summary,
+                open_thread_ids=ic.open_thread_ids,
+            ),
+            new_msgs=new_msgs,
+        )
+
+    @classmethod
     def _run_summary_verification(
         cls,
         ticket: Ticket,
@@ -1100,6 +1166,9 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             )
         if agent_result.failure is not None:
             return agent_result.failure
+        success = agent_result.success
+        if success is None:
+            raise RuntimeError("implement agent returned neither success nor failure")
         (
             summary,
             ref_files,
@@ -1108,7 +1177,9 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             new_msgs,
             no_change_needed,
             no_change_rationale,
-        ) = agent_result.success
+        ) = success[:7]
+        # Optional 8th element: spec items the agent knowingly deferred.
+        deferred_spec_items: list[str] = list(success[7]) if len(success) > 7 else []
 
         pause = cls._maybe_handle_pause(
             ctx,
@@ -1154,6 +1225,17 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         )
         if verification_result is not None:
             return verification_result
+
+        deferred_result = cls._run_deferred_spec_gate(
+            ticket=ticket,
+            deferred_spec_items=deferred_spec_items,
+            ic=ic,
+            updated_ref_files=updated_ref_files,
+            updated_prev_summary=updated_prev_summary,
+            new_msgs=new_msgs,
+        )
+        if deferred_result is not None:
+            return deferred_result
 
         guardrail = cls._run_scope_guardrail(
             ctx,

@@ -149,6 +149,15 @@ stage skips the full LLM coordinator and uses a cheaper direct path:
 - `level=-1`: spec-exact-code tickets (fenced code blocks with paths)
 - `level=1`: no-change-needed re-checks, config/docs-only
 
+### Deferred spec items
+
+The agent lists any spec requirement it knowingly left unimplemented in
+`deferred_spec_items`. A non-empty list never advances to code review:
+the stage re-prompts once with a `[SPEC-DEFERRED]` block asking the
+agent to implement the listed items. If the agent defers items again on
+that retry, the ticket is `BLOCKED` for human review (resumable). A
+deferral mentioned only in the summary does not count.
+
 ### Test gate
 
 After the agent produces a diff, the stage runs the project's test

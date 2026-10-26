@@ -293,7 +293,6 @@ src/robotsix_mill/stages/implement/implementation_logic.py:0: error: Function is
 src/robotsix_mill/stages/implement/implementation_logic.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/stages/implement/implementation_logic.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 src/robotsix_mill/stages/implement/implementation_logic.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
-src/robotsix_mill/stages/implement/implementation_logic.py:0: error: "None" object is not iterable  [misc]
 src/robotsix_mill/stages/implement/implementation_logic.py:0: error: Returning Any from function declared to return "_SinglePassResult"  [no-any-return]
 src/robotsix_mill/stages/refine/orchestration.py:0: error: "list?[robotsix_mill.core.models.Comment]" has no attribute "__iter__" (not iterable)  [attr-defined]
 src/robotsix_mill/stages/refine/orchestration.py:0: error: "list?[robotsix_mill.core.models.Comment]" has no attribute "__iter__" (not iterable)  [attr-defined]
