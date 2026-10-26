@@ -21,7 +21,6 @@ def test_secrets_from_kwargs():
     s = Secrets(
         openrouter_api_key="sk-test",
         forge_token="ghp_fake",
-        forge_repo_create_token="ghp_create",
         sandbox_push_token="ghp_push_bridge",
         github_app_id="12345",
         github_app_private_key="-----BEGIN RSA PRIVATE KEY-----",
@@ -31,7 +30,6 @@ def test_secrets_from_kwargs():
     )
     assert s.openrouter_api_key == "sk-test"
     assert s.forge_token == "ghp_fake"
-    assert s.forge_repo_create_token == "ghp_create"
     assert s.sandbox_push_token == "ghp_push_bridge"
     assert s.github_app_id == "12345"
     assert s.github_app_private_key == "-----BEGIN RSA PRIVATE KEY-----"

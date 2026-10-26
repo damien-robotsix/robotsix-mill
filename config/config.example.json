@@ -18,7 +18,6 @@
     "secrets": {
         "fleet_notify_token": "SECRET",
         "fleet_notify_url": "SECRET",
-        "forge_repo_create_token": "SECRET",
         "forge_token": "SECRET",
         "github_app_id": "SECRET",
         "github_app_private_key": "SECRET",
@@ -160,7 +159,6 @@
         "docstring_coverage_max_errors": 20,
         "docstring_coverage_max_tool_calls": 100,
         "docstring_coverage_request_limit": 80,
-        "enable_repo_creation": false,
         "epic_dedup_lookback_days": 7,
         "epic_max_reeval_children": 5,
         "ingest_blocked_source_tags": [
@@ -297,7 +295,6 @@
         "refine_web_fetch_max_total_bytes": 500000,
         "refine_web_search_max_calls": 5,
         "repo_description_sync_interval_seconds": 604800,
-        "repo_visibility_default": "public",
         "requeue_batch_pause_seconds": 2.0,
         "requeue_batch_size": 5,
         "require_approval": true,

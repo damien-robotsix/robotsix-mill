@@ -22,7 +22,6 @@ MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
     {
         # -- Secrets / credentials — sourced from the config.json
         #    ``secrets:`` block (Secrets model) or env vars --
-        "forge_repo_create_token",
         "fleet_notify_token",
         "fleet_notify_url",
         "openrouter_management_key",
@@ -61,7 +60,6 @@ MODEL_FIELDS_NOT_IN_JSON: frozenset[str] = frozenset(
 # Used by the periodic agent to explain *why* a field was previously
 # judged intentional, so a reviewer can reassess.
 MODEL_FIELDS_NOT_IN_JSON_RATIONALES: dict[str, str] = {
-    "forge_repo_create_token": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
     "fleet_notify_token": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
     "fleet_notify_url": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",
     "openrouter_management_key": "Secrets / credentials — sourced from the config.json secrets: block (Secrets model) or env vars",

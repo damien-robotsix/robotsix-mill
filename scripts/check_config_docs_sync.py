@@ -69,7 +69,6 @@ _MODEL_FIELDS_NOT_IN_DOCS: frozenset[str] = frozenset(
         #    secrets table has no "Default" column --
         "openrouter_api_key",
         "forge_token",
-        "forge_repo_create_token",
         "fleet_notify_token",
         "fleet_notify_url",
         "github_app_id",

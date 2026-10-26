@@ -535,8 +535,6 @@ Node + the `claude` CLI in the container). These knobs govern that path:
 | `forge.github_api_url` | `MILL_GITHUB_API_URL` | `https://api.github.com` | GitHub API base URL (override for GitHub Enterprise) |
 | `forge.github_rate_limit_reserve` | `MILL_GITHUB_RATE_LIMIT_RESERVE` | `200` | Reserve floor on the GitHub primary rate limit. When the observed `x-ratelimit-remaining` drops below this, non-urgent callers (CI monitor poll, orphaned-pr-check, pin_bump, upstream_ci_recovery, stale-branch cleanup) skip their pass until the reset, and stage callers (merge, ci_fix) wait for the reset instead of re-polling. The snapshot is exposed on `GET /health` as `github_rate_limit` and logged hourly as `github api budget: used N/limit, reset HH:MM`. |
 | `forge.gitlab_api_url` | `MILL_GITLAB_API_URL` | `https://gitlab.com/api/v4` | GitLab API base URL (override for self-hosted GitLab) |
-| `core.enable_repo_creation` | `MILL_ENABLE_REPO_CREATION` | `false` | Allow the new-repo meta flow to create repositories via the forge API |
-| `core.repo_visibility_default` | `MILL_REPO_VISIBILITY_DEFAULT` | `public` | Default visibility for newly created repositories. `public` — repos are public unless the caller specifies private=True. `private` — repos are private unless the caller specifies private=False. |
 
 ### 9. Sandbox
 
@@ -1107,7 +1105,6 @@ unset.
 | `openrouter_api_key` | `OPENROUTER_API_KEY` | OpenRouter API key (required for any LLM call) |
 | `openrouter_management_key` | — | OpenRouter management API key for credit balance checks (`GET /api/v1/activity`). Separate from the inference key; leave blank to skip OpenRouter-side fetching. |
 | `forge_token` | `FORGE_TOKEN` | PAT for forge authentication |
-| `forge_repo_create_token` | — | Fine-grained PAT used ONLY for repo creation. Falls back to `forge_token` if unset. |
 | `github_app_id` | `GITHUB_APP_ID` | GitHub App ID (when `forge_auth=app`) |
 | `github_app_private_key` | `GITHUB_APP_PRIVATE_KEY` | GitHub App private key (inline PEM, newlines as `\n`) |
 | `github_app_private_key_path` | `GITHUB_APP_PRIVATE_KEY_PATH` | Alternative: host path to GitHub App private-key `.pem` file |

@@ -66,6 +66,17 @@ class TestDetectPinDrift:
         assert result.checked == 0
         assert result.drifted == []
 
+    def test_removed_repo_creation_pins_are_skipped(self, monkeypatch) -> None:
+        """The live config still pins the removed repo-creation keys; the
+        pass must neither report nor crash on them."""
+        _patch_pins(
+            monkeypatch,
+            {"enable_repo_creation": True, "repo_visibility_default": "public"},
+        )
+        result = mod.detect_pin_drift(_settings())
+        assert result.checked == 0
+        assert result.drifted == []
+
     def test_default_factory_fields_are_skipped(self, monkeypatch) -> None:
         """List-valued settings report PydanticUndefined as their default;
         comparing against it would flag every one of them on every pass."""

@@ -30,7 +30,6 @@ _SECRET_FIELD_NAMES: frozenset[str] = frozenset(
     {
         "openrouter_api_key",
         "forge_token",
-        "forge_repo_create_token",
         "sandbox_push_token",
         "github_app_id",
         "github_app_private_key",
@@ -243,11 +242,6 @@ class Secrets:
     def forge_token(self) -> str | None:
         """Return the forge authentication token."""
         return self._forge_token  # type: ignore[no-any-return]
-
-    @property
-    def forge_repo_create_token(self) -> str | None:
-        """Return the forge repo-creation token."""
-        return self._forge_repo_create_token  # type: ignore[no-any-return]
 
     @property
     def sandbox_push_token(self) -> str | None:
