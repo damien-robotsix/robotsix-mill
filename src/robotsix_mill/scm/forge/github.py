@@ -11,8 +11,8 @@ Split from a monolithic file into domain-specific mixins:
 ``github_code_scanning.py`` (code scanning alerts).
 
 This module keeps the main ``GitHubForge`` class (which inherits from
-all the mixins), shared helpers, and repo-CRUD operations
-(create / fork).
+all the mixins), shared helpers, and repo-metadata operations
+(description read / update).
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import re
 from typing import Any
 
 from ._http import _ApiClient
-from .base import Forge, NotConfiguredError, RepoInfo
+from .base import Forge
 from .github_branch import GitHubForgeBranchMixin
 from .github_ci import GitHubForgeCIMixin
 from .github_code_scanning import GitHubForgeCodeScanningMixin
@@ -42,7 +42,7 @@ _REMOTE_RE = re.compile(
     r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$"
 )
 
-# GitHub's hard cap on a repository description (POST /user|orgs/.../repos).
+# GitHub's hard cap on a repository description (PATCH /repos/...).
 _MAX_REPO_DESCRIPTION = 350
 
 
@@ -72,16 +72,6 @@ def _clamp_repo_description(description: str) -> str:
     if len(text) <= _MAX_REPO_DESCRIPTION:
         return text
     return text[: _MAX_REPO_DESCRIPTION - 1].rstrip() + "…"
-
-
-def _parse_repo_info(r: dict[str, Any]) -> RepoInfo:
-    """Extract ``RepoInfo`` from a GitHub ``POST /repos`` response dict."""
-    return RepoInfo(
-        id=r["id"],
-        name=r["name"],
-        clone_url=r["clone_url"],
-        html_url=r["html_url"],
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -164,241 +154,8 @@ class GitHubForge(
         return self._owner_repo[0]
 
     # ------------------------------------------------------------------
-    # Repo CRUD
+    # Repo metadata
     # ------------------------------------------------------------------
-
-    # --- HTTP seam (monkeypatched in tests) ---
-    def _create_repo(
-        self,
-        *,
-        name: str,
-        owner: str,
-        private: bool | None = None,
-        description: str,
-    ) -> RepoInfo:
-        if private is None:
-            private = self.settings.repo_visibility_default == "private"
-
-        from ...config import get_secrets
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        # Repo creation needs a token that can create repos. GitHub App
-        # installation tokens cannot create repositories under a personal
-        # account, so prefer a dedicated repo-creation PAT when configured;
-        # fall back to the normal (App or token) auth otherwise.
-        token: str = ""
-        custom_headers: dict[str, str] = {}
-
-        def _mk_headers() -> dict[str, str]:
-            nonlocal token, custom_headers
-            token = get_secrets().forge_repo_create_token or github_token(
-                s, repo_config=self._repo_config
-            )
-            custom_headers = _build_headers(token)
-            return custom_headers
-
-        def _create_attempt(c, api):
-            # Primary: create under org
-            org_url = f"{api}/orgs/{owner}/repos"
-            r = c.post(org_url, headers=custom_headers, json=payload)
-            if r.status_code == 201:
-                return r, False  # response, not_a_401
-            if r.status_code in (403, 404):
-                user_url = f"{api}/user/repos"
-                r2 = c.post(user_url, headers=custom_headers, json=payload)
-                if r2.status_code == 201:
-                    return r2, False
-                r = r2
-            if r.status_code == 401:
-                return r, True  # signal 401
-            return r, False
-
-        payload = {
-            "name": name,
-            "private": private,
-            # GitHub rejects repo descriptions over 350 chars with a 422;
-            # the meta-agent's draft body easily exceeds that, so clamp.
-            "description": _clamp_repo_description(description),
-            "auto_init": False,
-        }
-
-        for _retry, c, api, _headers in self._http.retrying_client(
-            headers_factory=_mk_headers,
-        ):
-            r, is_401 = _create_attempt(c, api)
-            if is_401:
-                continue
-            break
-
-        # Post-request error handling (original logic preserved).
-        if r.status_code == 201:
-            return _parse_repo_info(r.json())
-        # 422 handling — no retry; repo creation races don't apply
-        if r.status_code == 422:
-            err_text = r.text or ""
-            if "name already exists" in err_text.lower():
-                # Re-run safety: a prior scaffold attempt may have created
-                # the repo before failing later (e.g. on the initial
-                # push). If the existing repo is EMPTY (no commits), reuse
-                # it so the scaffold's force-push completes the job; only a
-                # repo with real content is treated as a genuine conflict.
-                with self._http.client() as (c, api, _headers):
-                    existing = self._reuse_if_empty(c, api, custom_headers, owner, name)
-                if existing is not None:
-                    return existing
-                raise RuntimeError(
-                    f"Repository '{name}' already exists under '{owner}' "
-                    f"and is not empty — refusing to overwrite"
-                )
-            raise RuntimeError(
-                f"GitHub repo create failed: {r.status_code} {r.text[:300]}"
-            )
-        if (
-            r.status_code == 403
-            and "not accessible by integration" in (r.text or "").lower()
-        ):
-            raise RuntimeError(
-                "GitHub repo create failed: 403 Resource not accessible by "
-                "integration. A GitHub App installation token cannot create "
-                "repositories under a personal account — set "
-                "`forge_repo_create_token` in secrets to a PAT with "
-                "repo-creation rights (classic: `repo` scope; fine-grained: "
-                "Administration:Read and write on the target account)."
-            )
-        raise RuntimeError(f"GitHub repo create failed: {r.status_code} {r.text[:300]}")
-
-    def _reuse_if_empty(self, c, api, headers, owner, name) -> RepoInfo | None:
-        """Return the existing repo's ``RepoInfo`` iff it exists and is EMPTY
-        (no commits), else ``None``.
-
-        Used to make repo creation re-run-safe: GitHub's commits endpoint
-        returns 409 (``Git Repository is empty``) for a repo with no commits.
-        An empty repo is safe for the scaffold to force-push into; a repo with
-        real content is not, so we signal a genuine conflict by returning None.
-
-        When *owner* is empty the create fell back to ``/user/repos`` (the
-        authenticated user), so resolve that login via ``/user`` — otherwise
-        the ``/repos//{name}`` lookup 404s and a re-run wrongly blocks.
-        """
-        if not owner:
-            u = c.get(f"{api}/user", headers=headers)
-            owner = u.json().get("login", "") if u.status_code == 200 else ""
-            if not owner:
-                return None
-        repo_url = f"{api}/repos/{owner}/{name}"
-        rr = c.get(repo_url, headers=headers)
-        if rr.status_code != 200:
-            return None
-        commits = c.get(f"{repo_url}/commits", headers=headers, params={"per_page": 1})
-        # 409 = "Git Repository is empty"; an empty 200 list is empty too.
-        is_empty = commits.status_code == 409 or (
-            commits.status_code == 200 and not commits.json()
-        )
-        return _parse_repo_info(rr.json()) if is_empty else None
-
-    # --- HTTP seam (monkeypatched in tests) ---
-    def _fork_repo(
-        self,
-        *,
-        source_owner: str,
-        source_repo: str,
-        target_namespace: str | None = None,
-    ) -> RepoInfo:
-        from ...config import get_secrets
-        from .auth import github_token  # lazy: avoid import cycle
-
-        s = self.settings
-        url = f"/repos/{source_owner}/{source_repo}/forks"
-        payload: dict[str, Any] = {}
-        if target_namespace is not None:
-            payload["organization"] = target_namespace
-
-        def _mk_headers() -> dict[str, str]:
-            token = get_secrets().forge_repo_create_token or github_token(
-                s, repo_config=self._repo_config
-            )
-            return _build_headers(token)
-
-        for _retry, c, api, headers in self._http.retrying_client(
-            headers_factory=_mk_headers,
-        ):
-            r = c.post(f"{api}{url}", headers=headers, json=payload)
-            if r.status_code == 401:
-                continue
-            break
-
-        if r.status_code in (200, 201, 202):
-            return _parse_repo_info(r.json())
-        if (
-            r.status_code == 403
-            and "not accessible by integration" in (r.text or "").lower()
-        ):
-            raise RuntimeError(
-                "GitHub fork failed: 403 Resource not accessible by "
-                "integration. A GitHub App installation token cannot fork "
-                "repositories under a personal account — set "
-                "`forge_repo_create_token` in secrets to a PAT with "
-                "repo-creation rights (classic: `repo` scope; fine-grained: "
-                "Administration:Read and write on the target account)."
-            )
-        raise RuntimeError(f"GitHub fork failed: {r.status_code} {r.text[:300]}")
-
-    def create_repo(
-        self, *, name: str, owner: str, private: bool | None = None, description: str
-    ) -> RepoInfo:
-        """Create a new GitHub repository and return its :class:`RepoInfo`.
-
-        :param name: repository name.
-        :param owner: org/user namespace to create under (empty falls back
-            to the authenticated user).
-        :param private: whether the repo is private (defaults to config).
-        :param description: repo description (clamped to GitHub's limit).
-        Mutates remote state: creates the repo via the GitHub API. Raises
-        :class:`NotConfiguredError` when ``enable_repo_creation`` is off.
-        """
-        if not self.settings.enable_repo_creation:
-            raise NotConfiguredError(
-                "Repo creation is disabled. Set enable_repo_creation=True "
-                "and verify the GitHub App installation has the "
-                "Administration:Read and write permission (or equivalent "
-                "PAT scope)."
-            )
-        return self._create_repo(
-            name=name,
-            owner=owner,
-            private=private,
-            description=description,
-        )
-
-    def fork_repo(
-        self,
-        *,
-        source_owner: str,
-        source_repo: str,
-        target_namespace: str | None = None,
-    ) -> RepoInfo:
-        """Fork an existing GitHub repository and return its :class:`RepoInfo`.
-
-        :param source_owner: owner of the repo to fork.
-        :param source_repo: name of the repo to fork.
-        :param target_namespace: org to create the fork under (defaults to
-            the authenticated account).
-        Mutates remote state: creates the fork via the GitHub API. Raises
-        :class:`NotConfiguredError` when ``enable_repo_creation`` is off.
-        """
-        if not self.settings.enable_repo_creation:
-            raise NotConfiguredError(
-                "Repo creation is disabled. Set enable_repo_creation=True "
-                "and verify the GitHub App installation has the "
-                "Administration:Read and write permission (or equivalent "
-                "PAT scope)."
-            )
-        return self._fork_repo(
-            source_owner=source_owner,
-            source_repo=source_repo,
-            target_namespace=target_namespace,
-        )
 
     def update_repo(self, *, owner: str, repo: str, description: str) -> bool:
         """Update an existing GitHub repository's metadata (description).
@@ -406,16 +163,8 @@ class GitHubForge(
         :param owner: org/user that owns the repo.
         :param repo: repository name.
         :param description: new repo description (clamped to GitHub's limit).
-        Returns ``True`` on success, ``False`` on any API failure. Raises
-        :class:`NotConfiguredError` when ``enable_repo_creation`` is off.
+        Returns ``True`` on success, ``False`` on any API failure.
         """
-        if not self.settings.enable_repo_creation:
-            raise NotConfiguredError(
-                "Repo metadata updates are disabled. Set enable_repo_creation=True "
-                "and verify the GitHub App installation has the "
-                "Administration:Read and write permission (or equivalent "
-                "PAT scope)."
-            )
         return self._update_repo(owner=owner, repo=repo, description=description)
 
     def get_repo_description(self, *, owner: str, repo: str) -> str:
@@ -427,39 +176,19 @@ class GitHubForge(
         return self._get_repo_description(owner=owner, repo=repo)
 
     # --- HTTP seam (monkeypatched in tests) ---
-    def _repo_metadata_headers(self) -> list[tuple[str, dict[str, Any]]]:
-        """Auth header candidates for repo-metadata calls, in trial order.
+    def _repo_metadata_headers(self) -> dict[str, Any]:
+        """Auth headers for repo-metadata calls: the forge (App) token only.
 
-        ``forge_repo_create_token`` (a PAT, needed for cross-namespace repo
-        creation) comes first when set; the App installation token (the
-        token every other forge call uses) is the fallback. On 2026-10-25
-        the configured PAT answered ``401 Bad credentials`` on every board
-        for days: the GET read back ``""`` for a repo whose description was
-        set, the runner proposed to overwrite it, and the PATCH failed too
-        — ``repo_description_sync`` was 0/16 for a dead secret while the
-        App token would have served both calls.
+        Repo metadata uses the same token as every other forge call. A
+        separate PAT used to take precedence here; when it went stale
+        (``401 Bad credentials``) it broke ``repo_description_sync`` while
+        the App token would have served both calls.
         """
-        from ...config import get_secrets
         from .auth import github_token
 
-        candidates: list[tuple[str, dict[str, Any]]] = []
-        pat = get_secrets().forge_repo_create_token
-        if pat:
-            candidates.append(("forge_repo_create_token", _build_headers(pat)))
-        try:
-            app_token = github_token(self.settings, repo_config=self._repo_config)
-        except Exception as exc:  # metadata calls must never raise
-            if not candidates:
-                raise
-            log.warning(
-                "repo metadata: no fallback forge token available (%s) — "
-                "only forge_repo_create_token will be tried",
-                exc,
-            )
-            return candidates
-        if app_token and app_token != pat:
-            candidates.append(("forge token", _build_headers(app_token)))
-        return candidates
+        return _build_headers(
+            github_token(self.settings, repo_config=self._repo_config)
+        )
 
     def _repo_metadata_request(
         self,
@@ -469,30 +198,13 @@ class GitHubForge(
         *,
         json: dict[str, Any] | None = None,
     ) -> Any:
-        """Issue ``method /repos/{owner}/{repo}`` with 401 token fallback.
-
-        Returns the last response. A ``401`` from one token source moves on
-        to the next; any other status is final.
-        """
-        r: Any = None
-        for source, custom_headers in self._repo_metadata_headers():
-            with self._http.client() as (c, api, _headers):
-                url = f"{api}/repos/{owner}/{repo}"
-                if method == "PATCH":
-                    r = c.patch(url, headers=custom_headers, json=json)
-                else:
-                    r = c.get(url, headers=custom_headers)
-            if r.status_code != 401:
-                break
-            log.warning(
-                "repo metadata %s repos/%s/%s: %s rejected with HTTP 401 "
-                "(Bad credentials) — trying the next token source",
-                method,
-                owner,
-                repo,
-                source,
-            )
-        return r
+        """Issue ``method /repos/{owner}/{repo}`` and return the response."""
+        custom_headers = self._repo_metadata_headers()
+        with self._http.client() as (c, api, _headers):
+            url = f"{api}/repos/{owner}/{repo}"
+            if method == "PATCH":
+                return c.patch(url, headers=custom_headers, json=json)
+            return c.get(url, headers=custom_headers)
 
     def _get_repo_description(self, *, owner: str, repo: str) -> str:
         r = self._repo_metadata_request("GET", owner, repo)

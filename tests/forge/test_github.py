@@ -8,7 +8,6 @@ import httpx as real_httpx
 import pytest
 
 from robotsix_mill.config import Secrets, Settings, _reset_secrets
-from robotsix_mill.scm.forge.base import NotConfiguredError, RepoInfo
 from robotsix_mill.scm.forge.github import (
     GitHubForge,
     _build_headers,
@@ -1527,232 +1526,6 @@ def test_pr_files_multi_page(tmp_path, monkeypatch):
     assert files[-1]["path"] == "src/last.py"
 
 
-# ---------------------------------------------------------------------------
-# create_repo
-# ---------------------------------------------------------------------------
-
-
-def test_create_repo_happy_path_org(tmp_path, monkeypatch):
-    """201 from org endpoint → returns RepoInfo with correct fields."""
-    fake_json = {
-        "id": 42,
-        "name": "my-repo",
-        "clone_url": "https://github.com/o/my-repo.git",
-        "html_url": "https://github.com/o/my-repo",
-    }
-    _mock_httpx(
-        monkeypatch,
-        post_response=_make_response(201, fake_json),
-    )
-
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    result = forge.create_repo(
-        name="my-repo", owner="o", private=True, description="A test repo"
-    )
-    assert isinstance(result, RepoInfo)
-    assert result.id == 42
-    assert result.name == "my-repo"
-    assert result.clone_url == "https://github.com/o/my-repo.git"
-    assert result.html_url == "https://github.com/o/my-repo"
-
-
-def test_create_repo_flag_disabled(tmp_path, monkeypatch):
-    """NotConfiguredError raised when enable_repo_creation=False (default)."""
-    forge = _forge(tmp_path)  # enable_repo_creation defaults to False
-    with pytest.raises(NotConfiguredError, match="Repo creation is disabled"):
-        forge.create_repo(name="my-repo", owner="o", private=True, description="desc")
-
-
-def test_create_repo_org_fallback_to_user(tmp_path, monkeypatch):
-    """403 from org endpoint → 201 from /user/repos → returns RepoInfo."""
-    fake_json = {
-        "id": 99,
-        "name": "fallback-repo",
-        "clone_url": "https://github.com/user/fallback-repo.git",
-        "html_url": "https://github.com/user/fallback-repo",
-    }
-
-    call_count = 0
-
-    # We need a post that returns 403 first, then 201 on second call.
-    class TwoStepPostClient:
-        def __init__(self, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            pass
-
-        def get(self, url, headers=None, params=None):
-            return _make_response(404, [], "")
-
-        def post(self, url, headers=None, json=None, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                # Org endpoint
-                return _make_response(403, {}, "forbidden")
-            if call_count == 2:
-                # User fallback
-                return _make_response(201, fake_json)
-            return _make_response(500, {}, "error")
-
-    monkeypatch.setattr(real_httpx, "Client", TwoStepPostClient)
-
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    result = forge.create_repo(
-        name="fallback-repo", owner="big-org", private=False, description="fallback"
-    )
-    assert result.id == 99
-    assert result.name == "fallback-repo"
-    assert call_count == 2
-
-
-def test_create_repo_422_name_exists(tmp_path, monkeypatch):
-    """422 with 'name already exists' → RuntimeError."""
-    _mock_httpx(
-        monkeypatch,
-        post_response=_make_response(
-            422, {}, '{"message": "name already exists on this account"}'
-        ),
-    )
-
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    with pytest.raises(RuntimeError, match="already exists"):
-        forge.create_repo(
-            name="existing-repo", owner="o", private=True, description="desc"
-        )
-
-
-def test_create_repo_other_non_2xx(tmp_path, monkeypatch):
-    """Non-422, non-403/404 non-2xx → RuntimeError with status code and body."""
-    _mock_httpx(
-        monkeypatch,
-        post_response=_make_response(500, {}, "internal error"),
-    )
-
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    with pytest.raises(RuntimeError, match="GitHub repo create failed: 500"):
-        forge.create_repo(name="my-repo", owner="o", private=True, description="desc")
-
-
-def test_create_repo_prefers_repo_create_token(tmp_path, monkeypatch):
-    """When forge_repo_create_token (a PAT) is set, the create call
-    authenticates with it instead of the normal forge token."""
-    captured = {"auth": None}
-
-    class HeaderCapturingClient:
-        def __init__(self, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            pass
-
-        def get(self, url, headers=None, params=None, **kwargs):
-            return _make_response(404, [], "")
-
-        def post(self, url, headers=None, json=None, **kwargs):
-            captured["auth"] = (headers or {}).get("Authorization")
-            return _make_response(
-                201, {"id": 1, "name": "b", "clone_url": "x", "html_url": "y"}
-            )
-
-    monkeypatch.setattr(real_httpx, "Client", HeaderCapturingClient)
-
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    # Set the PAT after building the forge (which seeds forge_token).
-    _set_secrets(forge_token="app-tok", forge_repo_create_token="pat-xyz")
-    forge.create_repo(name="b", owner="o", private=False, description="d")
-
-    assert captured["auth"] == "Bearer pat-xyz"
-
-
-def test_create_repo_403_integration_message(tmp_path, monkeypatch):
-    """A 403 'not accessible by integration' (App token, user account) →
-    RuntimeError naming the forge_repo_create_token PAT remedy."""
-    _mock_httpx(
-        monkeypatch,
-        post_response=_make_response(403, {}, "Resource not accessible by integration"),
-    )
-
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    with pytest.raises(RuntimeError, match="forge_repo_create_token"):
-        forge.create_repo(name="b", owner="o", private=False, description="d")
-
-
-def _empty_reuse_client(*, commits_status, commits_json=None):
-    """Client where create 422s 'name already exists', the repo GET 200s, and
-    the commits GET returns *commits_status* (409=empty) / *commits_json*."""
-
-    class C:
-        def __init__(self, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            pass
-
-        def post(self, url, headers=None, json=None, **kwargs):
-            # org create 404 → user create 422 name-exists
-            if url.endswith("/orgs/o/repos"):
-                return _make_response(404, {}, "no org")
-            return _make_response(422, {}, "name already exists on this account")
-
-        def get(self, url, headers=None, params=None, **kwargs):
-            if url.endswith("/user"):
-                # empty-owner resolution → authenticated login 'o'
-                return _make_response(200, {"login": "o"}, "")
-            if url.endswith("/repos/o/b/commits"):
-                return _make_response(commits_status, commits_json or [], "")
-            if url.endswith("/repos/o/b"):
-                return _make_response(
-                    200,
-                    {"id": 7, "name": "b", "clone_url": "cu", "html_url": "hu"},
-                )
-            return _make_response(404, [], "")
-
-    return C
-
-
-def test_create_repo_reuses_existing_empty_repo(tmp_path, monkeypatch):
-    """A prior partial scaffold left an EMPTY repo → create reuses it
-    (returns its RepoInfo) instead of failing on 'already exists'."""
-    monkeypatch.setattr(real_httpx, "Client", _empty_reuse_client(commits_status=409))
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    info = forge.create_repo(name="b", owner="o", private=False, description="d")
-    assert info.id == 7
-    assert info.clone_url == "cu"
-
-
-def test_create_repo_existing_nonempty_repo_raises(tmp_path, monkeypatch):
-    """An existing repo WITH commits is a genuine conflict → RuntimeError."""
-    monkeypatch.setattr(
-        real_httpx,
-        "Client",
-        _empty_reuse_client(commits_status=200, commits_json=[{"sha": "abc"}]),
-    )
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    with pytest.raises(RuntimeError, match="not empty"):
-        forge.create_repo(name="b", owner="o", private=False, description="d")
-
-
-def test_create_repo_reuses_empty_repo_with_blank_owner(tmp_path, monkeypatch):
-    """owner='' (meta agent leaves it blank) → create falls back to
-    /user/repos; reuse resolves the authenticated login via /user so the
-    empty-repo lookup still succeeds instead of falsely blocking."""
-    monkeypatch.setattr(real_httpx, "Client", _empty_reuse_client(commits_status=409))
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    info = forge.create_repo(name="b", owner="", private=False, description="d")
-    assert info.id == 7
-
-
 def test_clamp_repo_description():
     """Descriptions are single-lined and clamped to GitHub's 350-char cap."""
     from robotsix_mill.scm.forge.github import _clamp_repo_description
@@ -1767,198 +1540,6 @@ def test_clamp_repo_description():
     assert _clamp_repo_description("") == ""
 
 
-def test_create_repo_clamps_long_description(tmp_path, monkeypatch):
-    """The create POST payload carries a ≤350-char description even when
-    the caller passes a longer one (the 422 root cause)."""
-    captured = {"payload": None}
-
-    class PayloadClient:
-        def __init__(self, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            pass
-
-        def get(self, url, headers=None, params=None, **kwargs):
-            return _make_response(404, [], "")
-
-        def post(self, url, headers=None, json=None, **kwargs):
-            captured["payload"] = json
-            return _make_response(
-                201, {"id": 1, "name": "b", "clone_url": "x", "html_url": "y"}
-            )
-
-    monkeypatch.setattr(real_httpx, "Client", PayloadClient)
-
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    forge.create_repo(name="b", owner="o", private=False, description="y" * 600)
-
-    assert len(captured["payload"]["description"]) <= 350
-
-
-def test_create_repo_defaults_to_public_from_config(tmp_path, monkeypatch):
-    """When private is not passed, repo_visibility_default (default 'public')
-    resolves to private=False in the POST payload."""
-    captured = {"payload": None}
-
-    class PayloadClient:
-        def __init__(self, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            pass
-
-        def get(self, url, headers=None, params=None, **kwargs):
-            return _make_response(404, [], "")
-
-        def post(self, url, headers=None, json=None, **kwargs):
-            captured["payload"] = json
-            return _make_response(
-                201, {"id": 1, "name": "b", "clone_url": "x", "html_url": "y"}
-            )
-
-    monkeypatch.setattr(real_httpx, "Client", PayloadClient)
-
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    forge.create_repo(name="b", owner="o", description="d")
-
-    assert captured["payload"]["private"] is False
-
-
-def test_create_repo_respects_private_default_config(tmp_path, monkeypatch):
-    """When repo_visibility_default is 'private', omitted private resolves
-    to True in the POST payload."""
-    captured = {"payload": None}
-
-    class PayloadClient:
-        def __init__(self, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            pass
-
-        def get(self, url, headers=None, params=None, **kwargs):
-            return _make_response(404, [], "")
-
-        def post(self, url, headers=None, json=None, **kwargs):
-            captured["payload"] = json
-            return _make_response(
-                201, {"id": 1, "name": "b", "clone_url": "x", "html_url": "y"}
-            )
-
-    monkeypatch.setattr(real_httpx, "Client", PayloadClient)
-
-    forge = _forge(
-        tmp_path,
-        enable_repo_creation=True,
-        repo_visibility_default="private",
-    )
-    forge.create_repo(name="b", owner="o", description="d")
-
-    assert captured["payload"]["private"] is True
-
-
-def test_create_repo_explicit_private_overrides_config(tmp_path, monkeypatch):
-    """Explicit private=False still wins when repo_visibility_default='private'."""
-    captured = {"payload": None}
-
-    class PayloadClient:
-        def __init__(self, **kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            pass
-
-        def get(self, url, headers=None, params=None, **kwargs):
-            return _make_response(404, [], "")
-
-        def post(self, url, headers=None, json=None, **kwargs):
-            captured["payload"] = json
-            return _make_response(
-                201, {"id": 1, "name": "b", "clone_url": "x", "html_url": "y"}
-            )
-
-    monkeypatch.setattr(real_httpx, "Client", PayloadClient)
-
-    forge = _forge(
-        tmp_path,
-        enable_repo_creation=True,
-        repo_visibility_default="private",
-    )
-    forge.create_repo(name="b", owner="o", private=False, description="d")
-
-    assert captured["payload"]["private"] is False
-
-
-# ---------------------------------------------------------------------------
-# fork_repo
-# ---------------------------------------------------------------------------
-
-
-def test_fork_repo_happy_path(tmp_path, monkeypatch):
-    """202 response with repo info → returns RepoInfo; POST URL contains /forks."""
-    fake_json = {
-        "id": 99,
-        "name": "r",
-        "clone_url": "https://github.com/my-org/r.git",
-        "html_url": "https://github.com/my-org/r",
-    }
-    captured = _mock_httpx(
-        monkeypatch,
-        post_response=_make_response(202, fake_json),
-    )
-
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    result = forge.fork_repo(source_owner="o", source_repo="r")
-    assert isinstance(result, RepoInfo)
-    assert result.id == 99
-    assert result.name == "r"
-    assert result.clone_url == "https://github.com/my-org/r.git"
-    assert result.html_url == "https://github.com/my-org/r"
-    # POST URL contains /repos/o/r/forks
-    assert "/repos/o/r/forks" in captured["post_url"]
-
-
-def test_fork_repo_with_target_namespace(tmp_path, monkeypatch):
-    """target_namespace → payload includes organization."""
-    fake_json = {
-        "id": 99,
-        "name": "r",
-        "clone_url": "cu",
-        "html_url": "hu",
-    }
-    captured = _mock_httpx(
-        monkeypatch,
-        post_response=_make_response(202, fake_json),
-    )
-
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    result = forge.fork_repo(
-        source_owner="o", source_repo="r", target_namespace="my-org"
-    )
-    assert isinstance(result, RepoInfo)
-    assert captured["post_payload"] == {"organization": "my-org"}
-
-
-def test_fork_repo_flag_disabled(tmp_path, monkeypatch):
-    """enable_repo_creation=False (default) → NotConfiguredError."""
-    forge = _forge(tmp_path)  # no enable_repo_creation
-    with pytest.raises(NotConfiguredError, match="Repo creation is disabled"):
-        forge.fork_repo(source_owner="o", source_repo="r")
-
-
 # ---------------------------------------------------------------------------
 # update_repo
 # ---------------------------------------------------------------------------
@@ -1970,7 +1551,7 @@ def test_update_repo_happy_path(tmp_path, monkeypatch):
         monkeypatch,
         patch_response=_make_response(200, {"description": "new desc"}),
     )
-    forge = _forge(tmp_path, enable_repo_creation=True)
+    forge = _forge(tmp_path)
     result = forge.update_repo(owner="o", repo="r", description="new desc")
     assert result is True
 
@@ -1981,7 +1562,7 @@ def test_update_repo_non_200_returns_false(tmp_path, monkeypatch):
         monkeypatch,
         patch_response=_make_response(404, {}, "not found"),
     )
-    forge = _forge(tmp_path, enable_repo_creation=True)
+    forge = _forge(tmp_path)
     result = forge.update_repo(owner="o", repo="r", description="desc")
     assert result is False
 
@@ -1994,18 +1575,11 @@ def test_update_repo_non_200_logs_status_and_body(tmp_path, monkeypatch, caplog)
             403, {}, '{"message":"Resource not accessible by integration"}'
         ),
     )
-    forge = _forge(tmp_path, enable_repo_creation=True)
+    forge = _forge(tmp_path)
     with caplog.at_level("WARNING", logger="robotsix_mill.scm.forge.github"):
         assert forge.update_repo(owner="o", repo="r", description="desc") is False
     assert "HTTP 403" in caplog.text
     assert "Resource not accessible by integration" in caplog.text
-
-
-def test_update_repo_flag_disabled(tmp_path, monkeypatch):
-    """enable_repo_creation=False (default) → NotConfiguredError."""
-    forge = _forge(tmp_path)  # no enable_repo_creation
-    with pytest.raises(NotConfiguredError, match="Repo metadata updates are disabled"):
-        forge.update_repo(owner="o", repo="r", description="desc")
 
 
 def test_update_repo_clamps_description(tmp_path, monkeypatch):
@@ -2014,7 +1588,7 @@ def test_update_repo_clamps_description(tmp_path, monkeypatch):
         monkeypatch,
         patch_response=_make_response(200, {}),
     )
-    forge = _forge(tmp_path, enable_repo_creation=True)
+    forge = _forge(tmp_path)
     long_desc = "x" * 400
     result = forge.update_repo(owner="o", repo="r", description=long_desc)
     assert result is True
@@ -2058,72 +1632,32 @@ def _token_sequence_client(monkeypatch, *, responses_by_auth):
     return captured
 
 
-def test_update_repo_dead_pat_falls_back_to_forge_token(tmp_path, monkeypatch, caplog):
-    """A forge_repo_create_token that 401s must not sink the PATCH.
-
-    2026-10-25: the configured PAT answered ``401 Bad credentials`` on every
-    board for days (repo_description_sync 0/16 successful updates) while the
-    App token served every other forge call. On 401 the next token source
-    is tried; the fallback's 200 wins.
-    """
+def test_repo_metadata_uses_forge_token_only(tmp_path, monkeypatch):
+    """GET and PATCH both authenticate with the forge (App) token alone —
+    exactly one request each, no alternate token source."""
     captured = _token_sequence_client(
         monkeypatch,
         responses_by_auth={
-            "Bearer pat-dead": _make_response(401, {}, '{"message":"Bad credentials"}'),
-            "Bearer app-tok": _make_response(200, {"description": "d"}),
-        },
-    )
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    _set_secrets(forge_token="app-tok", forge_repo_create_token="pat-dead")
-    with caplog.at_level("WARNING", logger="robotsix_mill.scm.forge.github"):
-        assert forge.update_repo(owner="o", repo="r", description="d") is True
-    assert captured["auths"] == ["Bearer pat-dead", "Bearer app-tok"]
-    assert "forge_repo_create_token rejected with HTTP 401" in caplog.text
-
-
-def test_get_repo_description_dead_pat_falls_back_to_forge_token(tmp_path, monkeypatch):
-    """The read path shares the fallback: a dead PAT must not read back ``""``
-    for a repo whose description is set (that empty read is what made the
-    runner propose overwriting a non-empty GitHub description)."""
-    captured = _token_sequence_client(
-        monkeypatch,
-        responses_by_auth={
-            "Bearer pat-dead": _make_response(401, {}, '{"message":"Bad credentials"}'),
             "Bearer app-tok": _make_response(200, {"description": " live desc "}),
         },
     )
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    _set_secrets(forge_token="app-tok", forge_repo_create_token="pat-dead")
+    forge = _forge(tmp_path)
+    _set_secrets(forge_token="app-tok")
     assert forge.get_repo_description(owner="o", repo="r") == "live desc"
-    assert captured["auths"] == ["Bearer pat-dead", "Bearer app-tok"]
-
-
-def test_update_repo_pat_preferred_when_it_works(tmp_path, monkeypatch):
-    """A working PAT is used first and alone — no second call on success."""
-    captured = _token_sequence_client(
-        monkeypatch,
-        responses_by_auth={
-            "Bearer pat-ok": _make_response(200, {}),
-            "Bearer app-tok": _make_response(200, {}),
-        },
-    )
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    _set_secrets(forge_token="app-tok", forge_repo_create_token="pat-ok")
     assert forge.update_repo(owner="o", repo="r", description="d") is True
-    assert captured["auths"] == ["Bearer pat-ok"]
+    assert captured["auths"] == ["Bearer app-tok", "Bearer app-tok"]
 
 
-def test_update_repo_401_on_every_token_returns_false(tmp_path, monkeypatch, caplog):
-    """401 from both sources → False with the last status logged, never raise."""
+def test_update_repo_401_returns_false(tmp_path, monkeypatch, caplog):
+    """401 from the forge token → False with the status logged, never raise."""
     _token_sequence_client(
         monkeypatch,
         responses_by_auth={
-            "Bearer pat-dead": _make_response(401, {}, '{"message":"Bad credentials"}'),
             "Bearer app-tok": _make_response(401, {}, '{"message":"Bad credentials"}'),
         },
     )
-    forge = _forge(tmp_path, enable_repo_creation=True)
-    _set_secrets(forge_token="app-tok", forge_repo_create_token="pat-dead")
+    forge = _forge(tmp_path)
+    _set_secrets(forge_token="app-tok")
     with caplog.at_level("WARNING", logger="robotsix_mill.scm.forge.github"):
         assert forge.update_repo(owner="o", repo="r", description="d") is False
     assert "HTTP 401" in caplog.text

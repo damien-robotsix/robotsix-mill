@@ -1,8 +1,8 @@
-"""GitLab forge adapter — core operations: MR lifecycle, branches, repo CRUD.
+"""GitLab forge adapter — core operations: MR lifecycle, branches, repo metadata.
 
 Split from the monolithic ``forge/gitlab.py``.  The CI, code-scanning,
 and Dependabot operations live in sibling mixin modules; this file
-holds the main ``GitLabForge`` class, shared helpers, and repo-CRUD
+holds the main ``GitLabForge`` class, shared helpers, and repo-metadata
 operations.
 """
 
@@ -13,7 +13,7 @@ from typing import Any
 
 from .._http import _ApiClient
 from ..auth import gitlab_token
-from ..base import BranchInfo, Forge, NotConfiguredError, RepoInfo, _parse_iso_utc
+from ..base import BranchInfo, Forge, _parse_iso_utc
 from ._pagination import _paginated_get
 from .ci import GitLabForgeCIMixin
 from .code_scanning import GitLabForgeCodeScanningMixin
@@ -399,65 +399,11 @@ class GitLabForge(
             return None
         return self._pr_review_status(project_path=project_path, mr_iid=mr["iid"])
 
-    def create_repo(
-        self, *, name: str, owner: str, private: bool | None = None, description: str
-    ) -> RepoInfo:
-        """Create a new project under *owner* and return a :class:`RepoInfo`.
-
-        Raises :class:`NotConfiguredError` when repo creation is disabled.
-        Raises :class:`RuntimeError` when the namespace lookup fails or
-        the API returns an error.
-        """
-        if not self.settings.enable_repo_creation:
-            raise NotConfiguredError(
-                "Repo creation is disabled. Set enable_repo_creation=True "
-                "and verify the GitLab token has api scope with permission to "
-                "create projects in the target namespace."
-            )
-        return self._create_project(
-            name=name,
-            owner=owner,
-            private=private,
-            description=description,
-        )
-
-    def fork_repo(
-        self,
-        *,
-        source_owner: str,
-        source_repo: str,
-        target_namespace: str | None = None,
-    ) -> RepoInfo:
-        """Fork *source_owner*/*source_repo* into *target_namespace* and return a :class:`RepoInfo`.
-
-        Raises :class:`NotConfiguredError` when repo creation is disabled.
-        Raises :class:`RuntimeError` when the API returns an error.
-        """
-        if not self.settings.enable_repo_creation:
-            raise NotConfiguredError(
-                "Repo creation is disabled. Set enable_repo_creation=True "
-                "and verify the GitLab token has api scope with permission to "
-                "create projects in the target namespace."
-            )
-        return self._fork_repo(
-            source_owner=source_owner,
-            source_repo=source_repo,
-            target_namespace=target_namespace,
-        )
-
     def update_repo(self, *, owner: str, repo: str, description: str) -> bool:
         """Update the description of *owner*/*repo*.
 
         Returns ``True`` on success, ``False`` on failure.
-        Raises :class:`NotConfiguredError` when repo metadata updates are
-        disabled.
         """
-        if not self.settings.enable_repo_creation:
-            raise NotConfiguredError(
-                "Repo metadata updates are disabled. Set enable_repo_creation=True "
-                "and verify the GitLab token has api scope with permission to "
-                "update projects in the target namespace."
-            )
         return self._update_project(owner=owner, repo=repo, description=description)
 
     def _update_project(self, *, owner: str, repo: str, description: str) -> bool:
@@ -667,111 +613,6 @@ class GitLabForge(
         }
 
     # -- shared helpers ---------------------------------------------------
-
-    @staticmethod
-    def _to_repo_info(data: dict[str, Any]) -> RepoInfo:
-        """Build a RepoInfo from a GitLab 201 project-creation response."""
-        return RepoInfo(
-            id=data["id"],
-            name=data["path"] or data["name"],
-            clone_url=data["http_url_to_repo"],
-            html_url=data["web_url"],
-        )
-
-    def _create_project(
-        self,
-        *,
-        name: str,
-        owner: str,
-        private: bool | None = None,
-        description: str,
-    ) -> RepoInfo:
-        """POST /projects → RepoInfo. Resolves *owner* to a namespace id."""
-        from urllib.parse import quote
-
-        if private is None:
-            private = self.settings.repo_visibility_default == "private"
-
-        from ....config import get_secrets
-
-        # Prefer a dedicated repo-creation token when configured; fall
-        # back to the normal forge token otherwise.  Mirrors the GitHub
-        # pattern where App installation tokens cannot create repos.
-        token = get_secrets().forge_repo_create_token or gitlab_token()
-        custom_headers = _build_headers(token)
-
-        payload: dict[str, Any] = {
-            "name": name,
-            "visibility": "private" if private else "public",
-            "description": description,
-        }
-
-        with self._http.client() as (c, api, _headers):
-            if owner:
-                ns = c.get(
-                    f"{api}/namespaces/{quote(owner, safe='')}",
-                    headers=custom_headers,
-                )
-                if ns.status_code != 200:
-                    raise RuntimeError(
-                        f"GitLab namespace lookup for {owner!r} failed: "
-                        f"{ns.status_code} {ns.text[:300]}"
-                    )
-                payload["namespace_id"] = ns.json()["id"]
-
-            r = c.post(f"{api}/projects", headers=custom_headers, json=payload)
-            if r.status_code == 201:
-                return self._to_repo_info(r.json())
-            if r.status_code in (400, 409) and (
-                "already been taken" in (r.text or "").lower()
-                or "already exists" in (r.text or "").lower()
-            ):
-                raise RuntimeError(
-                    f"GitLab project '{name}' already exists under "
-                    f"namespace '{owner}': {r.text[:300]}"
-                )
-            raise RuntimeError(
-                f"GitLab repo create failed: {r.status_code} {r.text[:300]}"
-            )
-
-    def _fork_repo(
-        self,
-        *,
-        source_owner: str,
-        source_repo: str,
-        target_namespace: str | None = None,
-    ) -> RepoInfo:
-        """POST /projects/:id/fork → RepoInfo."""
-        from ....config import get_secrets
-
-        # Prefer a dedicated repo-creation token when configured; fall
-        # back to the normal forge token otherwise.
-        token = get_secrets().forge_repo_create_token or gitlab_token()
-        custom_headers = _build_headers(token)
-
-        source_path = f"{source_owner}/{source_repo}"
-        pid = self._resolve_project_id(source_path)
-        payload: dict[str, Any] = {}
-        if target_namespace is not None:
-            payload["namespace"] = target_namespace
-
-        with self._http.client() as (c, api, _headers):
-            r = c.post(
-                f"{api}/projects/{pid}/fork",
-                headers=custom_headers,
-                json=payload,
-            )
-            if r.status_code == 201:
-                return self._to_repo_info(r.json())
-            if r.status_code == 409 and (
-                "already been taken" in (r.text or "").lower()
-                or "already exists" in (r.text or "").lower()
-            ):
-                raise RuntimeError(
-                    f"GitLab fork failed: a fork of '{source_path}' already "
-                    f"exists in the target namespace: {r.text[:300]}"
-                )
-            raise RuntimeError(f"GitLab fork failed: {r.status_code} {r.text[:300]}")
 
     def _create_mr(
         self,

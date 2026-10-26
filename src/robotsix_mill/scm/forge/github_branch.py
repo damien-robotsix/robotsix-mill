@@ -66,9 +66,9 @@ class GitHubForgeBranchMixin:
             if cct is not None and cct.fork_remote_url:
                 from .github import _parse_owner_repo
 
-                fork_owner, fork_repo = _parse_owner_repo(cct.fork_remote_url)
+                fork_owner, fork_name = _parse_owner_repo(cct.fork_remote_url)
                 return self._delete_branch(
-                    owner=fork_owner, repo=fork_repo, branch=branch
+                    owner=fork_owner, repo=fork_name, branch=branch
                 )
         owner, repo = self._owner_repo  # type: ignore[attr-defined]
         return self._delete_branch(owner=owner, repo=repo, branch=branch)
