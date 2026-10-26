@@ -1546,6 +1546,105 @@ def test_scope_triage_repo_awareness_skips_meta_board(ctx_factory, tmp_path):
     assert out is None
 
 
+# Verbatim description of ghwf ticket 63f9, wrongly closed by the gate
+# because the narrative named the reporting "implement agent".
+_GHWF_63F9_TITLE = (
+    "docker-release.yml: add a GHCR push-retry input (unknown-blob race) so "
+    "consumers can drop their inline retry loops"
+)
+_GHWF_63F9_BODY = (
+    "Lineage: re-filed by the operator drain on 2026-10-26 from "
+    "20261026T111032Z-robotsix-github-workflows-add-ghcr-push-01b3 "
+    "(robotsix-browser board), which was filed by the implement agent's "
+    "report_issue on the HOST board although the change belongs in "
+    "robotsix-github-workflows (capability gap: mill ticket "
+    "20261023T162255Z-…-a0b6 `draft_repo_ids`).\n\n"
+    "**Reported by the `implement` agent** (category: workflow-improvement)\n\n"
+    "robotsix-browser's ci.yml `publish` job used a bespoke 5-attempt "
+    "`retry_push` loop (10 s backoff) to work around GHCR's intermittent "
+    '"unknown blob" blob-upload race during `docker push`. That job now '
+    "calls the shared `docker-release.yml` (pinned v1.3.0, 05d872b). "
+    "docker-release pushes through `docker/build-push-action` twice (the "
+    "by-digest base and the hardened tagged image) and has no retry, so a "
+    "transient GHCR failure now fails the main publish. Proposal: add a "
+    "retry input to docker-release.yml, e.g. `push-retries` (default 1 = "
+    "current behaviour). It could re-run the push steps, or wrap them in a "
+    "retry composite action. Fleet repos (memory, calendar, file-hub, "
+    "cost-monitor, browser) could then opt in. Until this ships, a failed "
+    "browser publish can be re-run by hand from the Actions UI."
+)
+_GHWF_FILES = {
+    ".github/workflows/docker-release.yml": "on: workflow_call\n",
+    ".github/workflows/python-ci.yml": "on: workflow_call\n",
+}
+
+
+def test_scope_triage_repo_awareness_passes_ghwf_63f9(ctx_factory, tmp_path):
+    """Regression: the 63f9 text on the ghwf board is in scope.
+
+    The named ``docker-release.yml`` exists in the repo, and the
+    "implement agent" mentions are provenance narrative, not the change.
+    """
+    ctx = ctx_factory()
+    t = _ticket(ctx, title=_GHWF_63F9_TITLE, body=_GHWF_63F9_BODY)
+    t.board_id = "robotsix-github-workflows"
+    repo = _make_repo(tmp_path, _GHWF_FILES)
+
+    out = RefineStage._run_scope_triage_repo_awareness_gate(
+        ctx, t, _GHWF_63F9_BODY, _GHWF_63F9_TITLE, repo
+    )
+    assert out is None
+
+
+def test_scope_triage_repo_awareness_narrative_vocabulary_is_neutral(
+    ctx_factory, tmp_path
+):
+    """Without a named path, reporter narrative alone does not flag."""
+    ctx = ctx_factory()
+    title = "Add a push-retry input to the docker release workflow"
+    body = (
+        "Reported by the implement agent via report_issue. "
+        "Add a retry input so transient registry failures are retried."
+    )
+    t = _ticket(ctx, title=title, body=body)
+    repo = _make_repo(tmp_path, _GHWF_FILES)
+
+    out = RefineStage._run_scope_triage_repo_awareness_gate(ctx, t, body, title, repo)
+    assert out is None
+
+
+def test_scope_triage_repo_awareness_flags_implement_prompt_on_ghwf(
+    ctx_factory, tmp_path
+):
+    """A requested change to a mill stage on the ghwf board is still flagged."""
+    ctx = ctx_factory()
+    title = "change the implement stage prompt"
+    body = "Change the implement stage prompt so it asks for smaller diffs."
+    t = _ticket(ctx, title=title, body=body)
+    t.board_id = "robotsix-github-workflows"
+    repo = _make_repo(tmp_path, _GHWF_FILES)
+
+    out = RefineStage._run_scope_triage_repo_awareness_gate(ctx, t, body, title, repo)
+    assert out is not None
+    assert out.next_state is State.DONE
+    assert "implement stage" in out.note
+
+
+def test_scope_triage_repo_awareness_parks_agent_filed_ticket(ctx_factory, tmp_path):
+    """A wrong-board verdict on a non-user ticket parks for a human."""
+    ctx = ctx_factory()
+    title = "change the implement stage prompt"
+    body = "Change the implement stage prompt so it asks for smaller diffs."
+    t = _ticket(ctx, title=title, body=body, source=SourceKind.AGENT)
+    t.board_id = "robotsix-github-workflows"
+    repo = _make_repo(tmp_path, _GHWF_FILES)
+
+    out = RefineStage._run_scope_triage_repo_awareness_gate(ctx, t, body, title, repo)
+    assert out is not None
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert "suspected board: robotsix-mill" in out.note
+
+
 def test_doc_only_gate_mixed_code_and_docs_returns_none(ctx_factory):
     ctx = ctx_factory()
     body = "Update `docs/api.md` and fix `src/api.py` handler"
