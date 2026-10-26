@@ -150,9 +150,28 @@ def _statuses_to_check_runs(statuses_data: dict[str, Any]) -> list[dict[str, Any
     return runs
 
 
+def _in_flight(cr: dict[str, Any]) -> bool:
+    """True when a check run is still running.
+
+    ``status`` alone lies: GitHub can leave a check run at
+    ``status: in_progress`` forever while recording a ``conclusion`` and a
+    ``completed_at`` for it (robotsix-chat job 119955826312, "Auto-format
+    with ruff": ``in_progress`` / ``success`` / completed 2026-10-22
+    16:44:06Z, its workflow run ``completed``/``success``). Read as pending,
+    that one zombie kept chat #2188 (ticket 1529) re-polling at
+    IMPLEMENT_COMPLETE every two minutes for four days with ``pending
+    checks: ['Auto-format with ruff']`` and "CI still running — skipping
+    branch refresh". A run that carries a conclusion AND a completion time
+    is finished whatever ``status`` says.
+    """
+    if cr.get("status", "") not in _PENDING_STATUSES:
+        return False
+    return not (cr.get("conclusion") and cr.get("completed_at"))
+
+
 def _conclusion_for_check(cr: dict[str, Any]) -> str:
     """Classify a single check run as 'pending', 'failure', or 'neutral'."""
-    if cr.get("status", "") in _PENDING_STATUSES:
+    if _in_flight(cr):
         return "pending"
     conclusion = cr.get("conclusion")
     if conclusion in _INCONCLUSIVE_CONCLUSIONS:
@@ -192,7 +211,7 @@ def _latest_definitive_runs(check_runs: list[dict[str, Any]]) -> list[dict[str, 
         definitive = [
             r
             for r in runs_sorted
-            if r.get("status", "") not in _PENDING_STATUSES
+            if not _in_flight(r)
             and (r.get("conclusion") or "") not in _INCONCLUSIVE_CONCLUSIONS
         ]
         reps.append(definitive[-1] if definitive else runs_sorted[-1])
