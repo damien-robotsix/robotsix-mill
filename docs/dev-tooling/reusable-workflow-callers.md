@@ -25,9 +25,8 @@ repo's `main` red and masks every real gate behind it:
 > — including mill itself — must use the CROSS-REPO form; there is no
 > local `./...` form for these workflows.
 
-The repo scaffold (`run_repo_scaffold`) emits these callers for python
-repos automatically, so generated callers are correct by construction.
-For an existing repo, copy the snippets below.
+New repos get these callers from their language template repo; for any
+other repo, add them manually by copying the snippets below.
 
 ## `.github/workflows/ci.yml`
 

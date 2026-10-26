@@ -336,11 +336,6 @@ MARKERS
 # vulture (60% confidence) cannot trace the call site.
 run_meta_pass_wrapper
 
-# -- repo_scaffold -----------------------------------------------------------
-# run_repo_scaffold — callers removed when ticket-based maintenance flow
-# was retired; kept as reusable scaffold utility.
-run_repo_scaffold
-
 # -- deploy-server ------------------------------------------------------------
 # Pydantic model fields (DeploySettings) — accessed via string-based
 # env-var binding; vulture does not trace pydantic-settings Field() usage.
