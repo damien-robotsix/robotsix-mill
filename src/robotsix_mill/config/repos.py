@@ -37,10 +37,6 @@ class CrossRepoTarget(BaseModel):
         "main",
         description="The upstream branch to target in the cross-fork PR (default: main).",
     )
-    auto_fork: bool = Field(
-        False,
-        description="When true, automatically create the fork via the forge API before pushing.",
-    )
 
     @field_validator("upstream_remote_url", "fork_remote_url", "base_branch")
     @classmethod

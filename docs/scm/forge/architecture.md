@@ -24,14 +24,6 @@ design decisions, and how to add a third provider.
 
 ```python
 @dataclass
-class RepoInfo:
-    id: int
-    name: str
-    clone_url: str
-    html_url: str
-
-
-@dataclass
 class BranchInfo:
     name: str
     last_commit_at: datetime  # timezone-aware (UTC)
@@ -63,7 +55,7 @@ callers in the deliver/merge stages depend on these exact keys.
 | 9 | `list_review_comments` | `(*, source_branch: str)` | `list[dict]` | Inline code-review comments.  `[]` when no PR exists.  Each: `"id"`, `"author"`, `"created_at"`, `"body"`, `"file_path"`, `"line"` (int|None), `"diff_hunk"`. |
 | 10 | `list_workflow_runs` | `(*, branch: str|None, head_sha: str|None)` | `list[dict]` | Completed workflow/pipeline runs, optionally filtered.  Each: `"id"`, `"name"`, `"workflow_id"`, `"head_sha"`, `"conclusion"`, `"html_url"`, `"created_at"`. |
 | 11 | `fetch_workflow_job_logs` | `(*, run_id: int)` | `str` | Concatenated, ANSI-stripped, size-capped logs of all failed jobs in a workflow run.  Returns `""` when no failed jobs found. |
-| 12 | `create_repo` | `(*, name: str, owner: str, private: bool, description: str)` | `RepoInfo` | Create a new repository.  Must raise `NotConfiguredError` when repo creation is disabled by configuration. |
+| 12 | `update_repo` | `(*, owner: str, repo: str, description: str)` | `bool` | Update the repository description.  Returns `False` on any API failure — must never raise.  The read-back counterpart `get_repo_description()` is concrete (defaults to `""`). |
 
 #### 1.2.2 Concrete (non-abstract) methods (4 total)
 
@@ -109,11 +101,12 @@ the global setting). See §5.3 for the auto-detection heuristics.
 
 ```python
 class NotConfiguredError(RuntimeError):
-    """Raised when an optional forge capability (e.g. repo creation) is
-    disabled by configuration."""
+    """Raised when an optional forge capability is disabled by
+    configuration."""
 ```
 
-Used by `create_repo()` when `enable_repo_creation` is `False`.
+Callers such as `repo_description_sync` catch it to skip a repo whose
+forge capability is gated; the API maps it to an HTTP error response.
 
 ---
 
@@ -147,7 +140,7 @@ Each public method resolves `owner`/`repo`, then delegates to a private
 | `list_review_comments` | `_list_review_comments` | `GET /repos/{owner}/{repo}/pulls/{number}/comments?per_page=100` |
 | `list_workflow_runs` | `_list_workflow_runs` | `GET /repos/{owner}/{repo}/actions/runs?status=completed&per_page=30` (optional `branch`/`head_sha` params) |
 | `fetch_workflow_job_logs` | `_fetch_workflow_job_logs` | `GET /repos/.../actions/runs/{run_id}/jobs?status=completed` → filter to failed-like conclusions → `GET /repos/.../actions/jobs/{job_id}/logs` for each (up to `_MAX_FAILED_JOBS`) |
-| `create_repo` | `_create_repo` | `POST /orgs/{owner}/repos` → fallback `POST /user/repos` on 403/404. 422 with "name already exists": attempt to reuse if repo is empty (no commits). |
+| `update_repo` | `_update_repo` | `PATCH /repos/{owner}/{repo}` with the clamped description, authenticated with the forge (App) token. |
 
 ### 2.3 `check_status` detail
 
@@ -192,15 +185,7 @@ returns `[]`.  `GitHubForge` overrides it to call
 403 (no security-events scope) and 404 (no CodeQL) degrade silently
 to `[]`.
 
-### 2.6 Repo creation reuse safety
-
-`_create_repo()`'s 422 "name already exists" path does not
-unconditionally fail.  `_reuse_if_empty()` checks whether the existing
-repo has zero commits (`GET /repos/.../commits` returns 409 or empty
-list).  An empty repo is treated as a prior incomplete scaffold attempt
-and reused; a repo with real content raises a `RuntimeError`.
-
-### 2.7 Utility functions
+### 2.6 Utility functions
 
 | Function | Purpose |
 |----------|---------|
@@ -213,7 +198,6 @@ and reused; a repo with real content raises a `RuntimeError`.
 | `_build_headers(token)` | Returns `{"Authorization": "Bearer {token}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}`. |
 | `_parse_owner_repo(remote_url)` | Extracts `(owner, repo)` from GitHub remote URLs. |
 | `_clamp_repo_description(description)` | Truncates to 350 chars (GitHub's repo-description limit). |
-| `_parse_repo_info(r)` | Extracts `RepoInfo` from a GitHub repo-creation response. |
 
 `_ANSI_RE`, `_MAX_FAILED_JOBS`, `_capture_failure_window`, and
 `_parse_iso_utc` are **re-used by `GitLabForge`** (imported from
@@ -254,7 +238,7 @@ project `id` field.  This is the single point of project-ID resolution
 | `list_review_comments` | `_mr_notes` | Same endpoint — returns notes **with** a `position` (inline diff comments). |
 | `list_workflow_runs` | `_list_pipelines` | `GET /projects/:id/pipelines?per_page=30` (optional `ref`/`sha` params) |
 | `fetch_workflow_job_logs` | `_fetch_pipeline_job_logs` | `GET /projects/:id/pipelines/{run_id}/jobs?scope=failed&per_page=20` → `GET /projects/:id/jobs/{job_id}/trace` for each (up to `_MAX_FAILED_JOBS`) |
-| `create_repo` | `_create_project` | `POST /projects` with optional `namespace_id` (resolved via `GET /namespaces/:encoded`). 400/409 "already been taken" / "already exists" raises `RuntimeError`. |
+| `update_repo` | `_update_project` | `PUT /projects/:id` with the new description. |
 
 ### 3.4 MR lookup: branch-based vs. IID-based
 
@@ -383,13 +367,13 @@ When a `RepoConfig` with a non-empty `forge_remote_url` is passed,
 setting.  The cache key includes the remote URL, so different repos
 under the same App get separate cached tokens.
 
-### 4.5 `Secrets.forge_repo_create_token`
+### 4.5 Repo metadata
 
-A separate PAT used **only** for `create_repo()`.  GitHub App
-installation tokens cannot create repositories under personal accounts.
-When `forge_repo_create_token` is set, it is used instead of the main
-token for `POST /orgs/{owner}/repos` and `POST /user/repos`.  Falls
-back to the normal `github_token()` when not set.
+Mill never creates or forks repositories.  The forge's repository
+surface is metadata-only — `update_repo()` and
+`get_repo_description()` — and both authenticate with the same
+App/static forge token (`github_token()`) as every other forge call.
+No separate PAT is involved.
 
 ### 4.6 Push authentication (`github_push_token`)
 
@@ -459,7 +443,6 @@ All fields are in `src/robotsix_mill/config.py`, class `Settings`.
 | `github_app_private_key_path` | `str \| None` | `None` | `GITHUB_APP_PRIVATE_KEY_PATH` | Host path to the private key `.pem` file (not a secret — path may be in YAML). |
 | `github_api_url` | `str` | `"https://api.github.com"` | — | API base URL (override for GitHub Enterprise Server). |
 | `gitlab_api_url` | `str` | `"https://gitlab.com/api/v4"` | — | API base URL (override for self-hosted GitLab instances). |
-| `enable_repo_creation` | `bool` | `False` | — | Gate for `create_repo()`. Must be explicitly enabled. |
 | `ci_log_max_bytes` | `int` | `65536` | — | Maximum bytes fetched per CI job log (applied after ANSI stripping). |
 | `delete_branch_on_merge` | `bool` | `True` | — | Delete the head branch after merge. |
 
@@ -476,7 +459,6 @@ Singleton, accessed via `get_secrets()`.
 | Field | Type | Default | Purpose |
 |-------|------|---------|---------|
 | `forge_token` | `str \| None` | `None` | Static forge access token (PAT for GitHub, personal/project token for GitLab). |
-| `forge_repo_create_token` | `str \| None` | `None` | Separate PAT for `create_repo()` when the main token lacks sufficient scope. |
 | `github_app_id` | `str \| None` | `None` | GitHub App ID (needed for `forge_auth=app`). |
 | `github_app_private_key` | `str \| None` | `None` | GitHub App private key PEM text. |
 | `github_app_private_key_path` | `str \| None` | `None` | Path to the private key `.pem` file (may be in secrets or YAML). |
@@ -610,7 +592,7 @@ each adapter:
 | 9 | `list_review_comments` | `GET /repos/{o}/{r}/pulls/{num}/comments?per_page=100` | `GET /projects/:id/merge_requests/:iid/notes?per_page=100` (with position) |
 | 10 | `list_workflow_runs` | `GET /repos/{o}/{r}/actions/runs?status=completed&per_page=30` | `GET /projects/:id/pipelines?per_page=30` |
 | 11 | `fetch_workflow_job_logs` | `GET …/actions/runs/{id}/jobs?status=completed` → `GET …/actions/jobs/{id}/logs` | `GET …/pipelines/{id}/jobs?scope=failed&per_page=20` → `GET …/jobs/{id}/trace` |
-| 12 | `create_repo` | `POST /orgs/{owner}/repos` → fallback `POST /user/repos` | `POST /projects` (+ `GET /namespaces/:encoded` for namespace resolution) |
+| 12 | `update_repo` | `PATCH /repos/{o}/{r}` | `PUT /projects/:id` |
 
 Concrete methods:
 

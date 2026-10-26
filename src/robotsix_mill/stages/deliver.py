@@ -706,24 +706,6 @@ class DeliverStage(Stage):
         ) or not git_ops.branch_has_net_diff(repo_dir, target):
             return None, None
 
-        # Cross-repo auto-fork: ensure the fork exists before pushing to
-        # it. Opt-in (default False), mirroring enable_repo_creation's
-        # conservative default.
-        if cross_repo_target is not None and cross_repo_target.auto_fork:
-            try:
-                up_owner, up_repo = _parse_owner_repo(
-                    cross_repo_target.upstream_remote_url
-                )
-                get_forge(s, repo_config=repo_config).fork_repo(
-                    source_owner=up_owner, source_repo=up_repo
-                )
-            except Exception as e:
-                log.exception("%s: auto-fork failed for %s", ticket.id, repo_label)
-                return None, Outcome(
-                    State.BLOCKED,
-                    f"auto-fork failed for {repo_label} — resumable: {e}",
-                )
-
         # Regenerate stale lockfiles so the PR is born with a correct lock.
         _regen_lockfiles(repo_dir, ticket.id)
 
@@ -806,14 +788,14 @@ class DeliverStage(Stage):
                 # Cross-repo: open the PR fork→upstream. Pass the fork's
                 # ``owner/repo`` as the head so GitHub forms
                 # ``head=<fork-owner>:<branch>``.
-                fork_owner, fork_repo = _parse_owner_repo(
+                fork_owner, fork_name = _parse_owner_repo(
                     cross_repo_target.fork_remote_url
                 )
                 url = forge.open_merge_request(
                     source_branch=branch,
                     title=title,
                     body=body,
-                    head_repo=f"{fork_owner}/{fork_repo}",
+                    head_repo=f"{fork_owner}/{fork_name}",
                 )
             else:
                 url = forge.open_merge_request(

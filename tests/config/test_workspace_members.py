@@ -47,7 +47,6 @@ members:
       upstream_remote_url: https://github.com/upstream/zeta.git
       fork_remote_url: https://github.com/fork/zeta.git
       base_branch: lyrical
-      auto_fork: true
 """
 
 
@@ -66,7 +65,6 @@ def test_happy_path(tmp_path):
     assert isinstance(zeta.cross_repo_target, CrossRepoTarget)
     assert zeta.cross_repo_target.fork_remote_url == "https://github.com/fork/zeta.git"
     assert zeta.cross_repo_target.base_branch == "lyrical"
-    assert zeta.cross_repo_target.auto_fork is True
 
 
 def test_none_repo_dir_returns_empty():

@@ -367,7 +367,7 @@ filing a "stale paths" cleanup ticket after the fact.
   to the **private `_method_name()`**. The private method is the
   monkeypatch-able HTTP seam — use `_build_headers(github_token(...))`
   and `with httpx.Client(timeout=30) as c:` to talk to the API, exactly
-  as the existing private helpers do (e.g. `_create_repo`,
+  as the existing private helpers do (e.g. `_update_repo`,
   `_create_pr`, `_get_pr`).
 
 ## Implement-agent notes specific to this repo

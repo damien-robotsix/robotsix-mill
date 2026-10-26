@@ -16,19 +16,9 @@ from ...config import RepoConfig, Settings
 
 
 class NotConfiguredError(RuntimeError):
-    """Raised when an optional forge capability (e.g. repo creation) is
-    disabled by configuration.
+    """Raised when an optional forge capability is disabled by
+    configuration.
     """
-
-
-@dataclass
-class RepoInfo:
-    """Metadata about a repository returned by :meth:`Forge.create_repo`."""
-
-    id: int
-    name: str
-    clone_url: str
-    html_url: str
 
 
 @dataclass
@@ -341,43 +331,12 @@ class Forge(ABC):
         """
 
     @abstractmethod
-    def create_repo(
-        self, *, name: str, owner: str, private: bool | None = None, description: str
-    ) -> RepoInfo:
-        """Create a new repository under *owner* and return its metadata.
-
-        Must raise ``NotConfiguredError`` when repo creation is disabled
-        by configuration (e.g. a feature flag).
-        """
-
-    @abstractmethod
-    def fork_repo(
-        self,
-        *,
-        source_owner: str,
-        source_repo: str,
-        target_namespace: str | None = None,
-    ) -> RepoInfo:
-        """Fork *source_owner/source_repo* and return the new fork's metadata.
-
-        When *target_namespace* is provided, the fork is created under that
-        organization (GitHub) or namespace path/id (GitLab).  Otherwise the
-        fork is created under the authenticated user's account.
-
-        Must raise ``NotConfiguredError`` when repo creation is disabled
-        by configuration (e.g. a feature flag).
-        """
-
-    @abstractmethod
     def update_repo(self, *, owner: str, repo: str, description: str) -> bool:
         """Update a repository's metadata (description).
 
         Returns ``True`` on success, ``False`` on failure (not found,
         insufficient scope, network error). Must NEVER raise — catch
         all API-level failures and return ``False``.
-
-        Must raise ``NotConfiguredError`` when repo metadata updates are
-        disabled by configuration (e.g. a feature flag).
         """
 
     def get_repo_description(self, *, owner: str, repo: str) -> str:

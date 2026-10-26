@@ -125,12 +125,11 @@ When `RepoConfig.forge_remote_url` is set, the adapter resolves the
 remote per-repo. GitHub App tokens are cached independently per
 `(app_id, remote_url)` pair.
 
-## Separate repo-creation token
+## Repo metadata
 
-`Secrets.forge_repo_create_token` is a separate PAT used only for
-`create_repo()`. GitHub App installation tokens cannot create repos
-under personal accounts. When set, it overrides the main token for
-`POST /orgs/{owner}/repos` and `POST /user/repos`.
+Repo-metadata calls (`update_repo()`, `get_repo_description()`) use the
+same forge token as every other call. Mill does not create or fork
+repositories, so no separate PAT is needed.
 
 ## See also
 

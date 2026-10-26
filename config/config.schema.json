@@ -3,12 +3,6 @@
     "CrossRepoTarget": {
       "description": "Cross-repo target: routes contributions from this repo to a\ndifferent (forked/external) repository via a fork-contribution\nworkflow.",
       "properties": {
-        "auto_fork": {
-          "default": false,
-          "description": "When true, automatically create the fork via the forge API before pushing.",
-          "title": "Auto Fork",
-          "type": "boolean"
-        },
         "base_branch": {
           "default": "main",
           "description": "The upstream branch to target in the cross-fork PR (default: main).",

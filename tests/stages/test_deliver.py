@@ -465,60 +465,6 @@ def test_cross_repo_pushes_to_fork_and_opens_fork_to_upstream_pr(tmp_path, monke
     assert seen["source_branch"] == branch
 
 
-def test_cross_repo_auto_fork_forks_before_push(tmp_path, monkeypatch):
-    """auto_fork=True ensures the fork via Forge.fork_repo() before push."""
-    from robotsix_mill.config import CrossRepoTarget
-    from robotsix_mill.scm.forge.base import RepoInfo
-
-    remote, _ = _bare(tmp_path)
-    cct = CrossRepoTarget(
-        upstream_remote_url="https://github.com/up/r.git",
-        fork_remote_url="https://github.com/fork-owner/r.git",
-        auto_fork=True,
-    )
-    ctx = _ctx_cross(
-        tmp_path,
-        cct,
-        forge_kind="github",
-        forge_remote_url=remote,
-        FORGE_TOKEN="t",
-    )
-
-    events = []
-
-    def fake_push(repo_dir, branch, remote_url, token):
-        events.append(("push", remote_url))
-
-    def fake_fork(self, *, source_owner, source_repo, target_namespace=None):
-        events.append(("fork", source_owner, source_repo))
-        return RepoInfo(
-            id=1,
-            name=source_repo,
-            clone_url="https://github.com/fork-owner/r.git",
-            html_url="https://github.com/fork-owner/r",
-        )
-
-    def fake_pr(self, *, source_branch, title, body, head_repo=None):
-        return "https://github.com/up/r/pull/9"
-
-    monkeypatch.setattr(git_ops, "push", fake_push)
-    monkeypatch.setattr(github.GitHubForge, "fork_repo", fake_fork)
-    monkeypatch.setattr(github.GitHubForge, "open_merge_request", fake_pr)
-    t, _ = _ticket_with_branch(ctx, remote)
-
-    out = DeliverStage().run(t, ctx)
-
-    assert out.next_state is State.IMPLEMENT_COMPLETE
-    # Fork happened, and it happened BEFORE the push.
-    assert ("fork", "up", "r") in events
-    assert events.index(("fork", "up", "r")) < events.index(
-        ("push", "https://github.com/fork-owner/r.git")
-    )
-
-
-# --- multi-repo delivery (meta-board tickets, N ≥ 1) -------------------
-
-
 def _bare_in(parent: Path, name: str) -> tuple[str, Path]:
     """Create a throwaway bare remote under ``parent/name/`` with a
     ``main`` branch. Returns ``(file:// url, bare path)``."""

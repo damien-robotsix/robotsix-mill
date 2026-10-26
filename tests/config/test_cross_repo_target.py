@@ -35,7 +35,6 @@ def test_cross_repo_target_round_trips(tmp_path):
       upstream_remote_url: "https://github.com/up/example.git"
       fork_remote_url: "https://github.com/me/example.git"
       base_branch: "develop"
-      auto_fork: true
 """
     )
     reg = load_repos_config(_write(tmp_path, body))
@@ -44,7 +43,6 @@ def test_cross_repo_target_round_trips(tmp_path):
     assert cct.upstream_remote_url == "https://github.com/up/example.git"
     assert cct.fork_remote_url == "https://github.com/me/example.git"
     assert cct.base_branch == "develop"
-    assert cct.auto_fork is True
 
 
 def test_cross_repo_target_defaults(tmp_path):
@@ -60,7 +58,6 @@ def test_cross_repo_target_defaults(tmp_path):
     cct = reg.repos["example"].cross_repo_target
     assert cct is not None
     assert cct.base_branch == "main"
-    assert cct.auto_fork is False
 
 
 def test_cross_repo_target_omitted_is_none(tmp_path):

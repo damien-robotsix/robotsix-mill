@@ -94,7 +94,6 @@ class TestRegistration:
             upstream_remote_url="https://github.com/upstream/zeta.git",
             fork_remote_url="https://github.com/fork/zeta.git",
             base_branch="lyrical",
-            auto_fork=True,
         )
         members = [
             _member(
