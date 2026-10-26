@@ -12,6 +12,7 @@ call each other by bare name (e.g. ``_resolve_next_state`` →
 
 from __future__ import annotations
 
+import itertools
 import logging
 import re
 import subprocess
@@ -23,7 +24,7 @@ from ...agents import refining
 from ...config.settings import Settings
 from ...core import constants as _constants
 from ...core.constants import BINARY_EXTENSIONS
-from ...core.models import Ticket
+from ...core.models import Ticket, TicketEvent
 from ...core.states import State
 from ...scm.vcs import git_ops
 from ..base import StageContext
@@ -783,6 +784,22 @@ def _summarize_spec_for_auto_approve(spec: str, max_chars: int = 2000) -> str:
     return truncated + note
 
 
+def _operator_already_approved(ctx: StageContext, ticket_id: str) -> bool:
+    """True when *ticket_id*'s history holds a ``human_issue_approval →
+    ready`` transition (the operator's approval). Best-effort: a history
+    lookup failure returns False so the normal gate still applies.
+    """
+    try:
+        events: list[TicketEvent] = list(ctx.service.history(ticket_id))
+        return any(
+            prev.state == State.HUMAN_ISSUE_APPROVAL and cur.state == State.READY
+            for prev, cur in itertools.pairwise(events)
+        )
+    except Exception:
+        log.warning("%s: approval-history lookup failed", ticket_id, exc_info=True)
+        return False
+
+
 def _resolve_next_state(
     ctx: StageContext,
     spec: str,
@@ -823,6 +840,14 @@ def _resolve_next_state(
         return State.READY, None
     if _spec_is_degenerate(spec):
         return State.BLOCKED, "refine produced no spec"
+    # An operator already approved this ticket (a human_issue_approval →
+    # ready event exists): never re-gate it — a re-refine after e.g. a
+    # dependency unblock must not make the operator approve it twice.
+    if _operator_already_approved(ctx, ticket_id):
+        return State.READY, (
+            "auto-approve: APPROVE — operator already approved this ticket "
+            "(human_issue_approval → ready); not re-gating"
+        )
     # Deterministic auto-approve for sources whose drafts are
     # internal-only by construction.
     suspicious = False

@@ -547,8 +547,9 @@ def test_out_of_scope_dedups_across_parent_tickets(tmp_path, monkeypatch):
 
 
 def test_out_of_scope_fix_done_auto_resumes_original(tmp_path, monkeypatch):
-    """When the spawned fix ticket reaches DONE, the existing _fire_unblocks
-    path moves the parked original BLOCKED → DRAFT."""
+    """When the spawned fix ticket reaches DONE, _fire_unblocks resumes the
+    parked original to FIXING_CI (the state it was parked from) — never
+    DRAFT, which re-ran refine and re-gated an already-approved ticket."""
     ctx = _gh(tmp_path)
     _oos_forge(monkeypatch)
     monkeypatch.setattr(
@@ -570,10 +571,14 @@ def test_out_of_scope_fix_done_auto_resumes_original(tmp_path, monkeypatch):
 
     fix = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)[0]
 
-    # Fix ticket completes → original is auto-unblocked to DRAFT.
+    # Fix ticket completes → original resumes where it was parked.
     ctx.service.transition(fix.id, State.DONE)
     orig = ctx.service.get(t.id)
-    assert orig.state is State.DRAFT
+    assert orig.state is State.FIXING_CI
+    assert orig.blocked_from is None
+    states = [e.state for e in ctx.service.history(t.id)]
+    assert State.DRAFT not in states[1:]
+    assert states.count(State.HUMAN_ISSUE_APPROVAL) <= 1
 
 
 def test_in_scope_done_still_pushes_no_fix_ticket(tmp_path, monkeypatch):

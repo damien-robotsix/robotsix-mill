@@ -209,6 +209,30 @@ def test_resolve_next_state_deterministic_source():
     assert "test_gap" in note
 
 
+def test_resolve_next_state_never_regates_operator_approved_ticket(monkeypatch):
+    """A ticket whose history already holds human_issue_approval → ready
+    (e.g. re-refined after a dependency unblock) is never re-gated."""
+
+    def _boom(**kw):
+        raise AssertionError("triage must not run for an approved ticket")
+
+    monkeypatch.setattr(refining, "triage_auto_approve", _boom)
+    events = [
+        SimpleNamespace(state=State.DRAFT),
+        SimpleNamespace(state=State.HUMAN_ISSUE_APPROVAL),
+        SimpleNamespace(state=State.READY),
+        SimpleNamespace(state=State.BLOCKED),
+        SimpleNamespace(state=State.DRAFT),
+    ]
+    ctx = _ctx()
+    ctx.service = SimpleNamespace(history=lambda tid: events)
+    state, note = refine_module._resolve_next_state(
+        ctx, "## Problem\nA genuine, real spec body", "t1"
+    )
+    assert state is State.READY
+    assert note is not None and "operator already approved" in note
+
+
 def test_resolve_next_state_triage_approve(monkeypatch):
     monkeypatch.setattr(
         refining,

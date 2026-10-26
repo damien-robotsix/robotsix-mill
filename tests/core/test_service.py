@@ -2026,6 +2026,38 @@ def test_unblocks_fires_on_mark_done(service):
     assert any(solver.id in (n or "") for n in draft_notes)
 
 
+def test_unblocks_restores_parked_state_not_draft(service):
+    """An approved ticket parked from fixing_ci on an out-of-scope CI
+    failure resumes to fixing_ci when its solver completes — not DRAFT
+    (which re-ran refine and re-gated it at human_issue_approval)."""
+    solver = service.create("solver")
+    target = service.create("target")
+    for st in (
+        State.HUMAN_ISSUE_APPROVAL,
+        State.READY,
+        State.CODE_REVIEW,
+        State.DOCUMENTING,
+        State.DELIVERABLE,
+        State.IMPLEMENT_COMPLETE,
+        State.FIXING_CI,
+    ):
+        service.transition(target.id, st)
+    service.transition(target.id, State.BLOCKED, note="out of scope")
+    service.set_unblocks(solver.id, [target.id])
+
+    service.transition(solver.id, State.DONE)
+
+    t = service.get(target.id)
+    assert t.state is State.FIXING_CI
+    assert t.blocked_from is None
+    hist = service.history(target.id)
+    assert hist[-1].state is State.FIXING_CI
+    assert solver.id in (hist[-1].note or "")
+    states = [e.state for e in hist]
+    assert states.count(State.HUMAN_ISSUE_APPROVAL) == 1
+    assert State.DRAFT not in states[1:]
+
+
 def test_unblocks_skips_target_that_is_not_blocked(service):
     solver = service.create("solver")
     target = service.create("target")

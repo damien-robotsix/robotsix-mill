@@ -588,7 +588,14 @@ class _TransitionMixin(_ServiceBase):
         return self.get(ticket_id) or ticket
 
     def _fire_unblocks(self, solver_id: str, target_ids: list[str]) -> None:
-        """Transition each BLOCKED ticket in *target_ids* to DRAFT.
+        """Resume each BLOCKED ticket in *target_ids* to its ``blocked_from``.
+
+        A ticket parked mid-pipeline (e.g. ``fixing_ci`` on an
+        out-of-scope CI failure) returns to the state it was parked from,
+        keeping its workspace and PR branch — routing it through DRAFT
+        re-ran refine and re-gated an already-approved ticket at
+        ``human_issue_approval``.  Only a target with no recorded
+        ``blocked_from`` falls back to DRAFT.
 
         Called when *solver_id* completes. Best-effort and idempotent: a
         target that is missing or not currently BLOCKED is skipped (so
@@ -602,8 +609,18 @@ class _TransitionMixin(_ServiceBase):
                 target = self.get(tid)
                 if target is None or target.state is not State.BLOCKED:
                     continue
-                self.transition(tid, State.DRAFT, note=note)
-                log.info("unblock: %s -> DRAFT (solver %s completed)", tid, solver_id)
+                dst = State.DRAFT
+                if target.blocked_from:
+                    parked = State(target.blocked_from)
+                    if can_transition(State.BLOCKED, parked, parked):
+                        dst = parked
+                self.transition(tid, dst, note=note)
+                log.info(
+                    "unblock: %s -> %s (solver %s completed)",
+                    tid,
+                    dst.value,
+                    solver_id,
+                )
             except Exception:
                 log.warning(
                     "unblock: failed to re-open %s (solver %s)",
