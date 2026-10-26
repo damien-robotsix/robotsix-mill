@@ -484,7 +484,7 @@ def _spawn_dependency_tickets(
             title,
             "\n".join(body_lines),
             source="review",
-            board_id=parent.board_id or None,
+            board_id=ctx.spawn_board_id(parent),
             priority=parent.priority,
         )
         ids.append(child.id)

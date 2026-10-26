@@ -103,6 +103,28 @@ class _CreateMixin(_ServiceBase):
         # is bound to), else self.board_id.
         effective_board = board_id if board_id is not None else self.board_id
 
+        # The synthetic "meta" board has no forge remote — nothing there
+        # can implement a change to repository files. An agent/stage that
+        # spawns a follow-up naming repo paths onto it (e.g. a review
+        # follow-up inheriting a meta-sourced parent's origin) strands the
+        # ticket at human approval. Reject it so the caller re-targets the
+        # parent's repo board. Meta-pass proposals (cross-repo extraction
+        # drafts) and operator-filed tickets stay allowed.
+        if effective_board == "meta" and source not in (
+            SourceKind.META,
+            SourceKind.USER,
+        ):
+            from ..dedup import _extract_paths
+
+            named = _extract_paths(description)
+            if named:
+                raise ValueError(
+                    "refusing to create a ticket naming repository files on "
+                    "the forge-less 'meta' board: file it on the owning "
+                    f"repo's board instead. (title={title!r}, "
+                    f"source={source!r}, paths={named[:5]!r})"
+                )
+
         # In multi-repo mode every ticket MUST belong to a board —
         # otherwise it ends up in the default mill.db and the UI
         # can't find it (the per-repo list endpoints filter by
