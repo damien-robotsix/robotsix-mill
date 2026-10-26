@@ -139,7 +139,7 @@ modules:
       - tests/vcs/test_clone_all_repos.py
       - tests/vcs/test_git_ops.py
       - tests/vcs/test_rebase_exempt_paths_in_step.py
-      - docs/vcs/**/*
+      - docs/scm/vcs/**/*
     dependencies: []
 
   - id: forge
@@ -185,7 +185,7 @@ modules:
       - tests/forge/test_gitlab_pagination.py
       - tests/forge/test_http.py
       - tests/forge/test_rate_limit.py
-      - docs/forge/**/*
+      - docs/scm/forge/**/*
     dependencies: [config, vcs]
 
   # -------------------------------------------------------------------

@@ -163,5 +163,5 @@ App). No additional forge credentials are needed.
 ## See also
 
 - [docs/config/configuration.md](../../config/configuration.md) — full configuration reference
-- [../forge/github-app.md](../../forge/github-app.md) — forge authentication setup
+- [../scm/forge/github-app.md](../../scm/forge/github-app.md) — forge authentication setup
 - [docker-architecture.md](../../docker-architecture.md) — sandbox network model
