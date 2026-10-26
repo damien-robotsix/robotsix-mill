@@ -45,6 +45,15 @@ If the parent is later resumed and the agent re-creates the same overflow files,
 
 The only case that still blocks on the cap is a rare infrastructure failure where the child ticket could not be created: the parent is then gracefully blocked with a clear note, since its overflow work has nowhere to go.
 
+## Operator resume notes after ESCALATE
+
+The gate judges the spec and the diff only, so an ESCALATE used to repeat word for word after the operator resumed the ticket with a note confirming the file. Now, before triaging, the gate reads the operator's answer to the latest ESCALATE:
+
+1. **Operator notes** are the `blocked → ready` resume notes (the `; override:` part of a `resumed from blocked` note counts) and operator/user comments newer than that ESCALATE. Automatic `[auto-resume …]` retries, and READY notes from other stages (review, rebase, ci-fix), are ignored.
+2. **Accepted files:** a note that names an escalated file (full path or basename) accepts it, unless the note reads as a rejection (e.g. "revert", "scope creep"). A note that names no file but says "in scope", "accepted" or "confirmed" accepts every escalated file.
+3. **Accepted files are expanded deterministically** and recorded as `scope-triage: \`<file>\` accepted by operator note <ts>`. They do not count against the EXPAND cap and do not reach the LLM.
+4. **Anything else** is passed to the classifier as operator context. If the gate ESCALATEs again, the block note includes the operator's resume note (`re-escalated despite operator resume note …`), so the loop is visible. To proceed, put the decision in the spec.
+
 ## Configuration
 
 | Knob | Env var | Default | Purpose |
