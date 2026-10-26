@@ -2214,3 +2214,165 @@ def test_convergence_empty_diff_after_review_terminates_done(
     assert out2.next_state is State.DONE
     assert "already satisfied" in out2.note.lower()
     assert "empty diff" in out2.note.lower()
+
+
+# --- operator resolution of a previous scope-triage ESCALATE --------------
+
+_ZIZMOR = ".github/zizmor.yml"
+_E710_ESCALATE = (
+    "scope-triage ESCALATE: .github/zizmor.yml … the operator should confirm "
+    f"this is the accepted path — out-of-scope: `{_ZIZMOR}`"
+)
+
+
+def _setup_escalated_ticket(ctx_factory, tmp_path, resume_note):
+    """Replay e710: spec without the decision, ESCALATE on zizmor.yml,
+    blocked → ready resume with *resume_note*, zizmor.yml still changed."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+    ctx.service.transition(t.id, State.BLOCKED, note=_E710_ESCALATE)
+    ctx.service.resume_blocked(t.id, note=resume_note)
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    (repo / ".github").mkdir(exist_ok=True)
+    (repo / _ZIZMOR).write_text("rules: {}\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "wip")
+    return ctx, ctx.service.get(t.id), repo
+
+
+def _run_guardrail(ctx, t, repo):
+    return ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=ctx.settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+
+def _escalating_triage(monkeypatch, calls):
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    def _fake(**kwargs):
+        calls.append(kwargs)
+        return ScopeTriageVerdict(
+            action="ESCALATE",
+            justification=".github/zizmor.yml … the operator should confirm",
+        )
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake)
+
+
+def test_scope_triage_operator_resume_note_expands_escalated_file(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Block on F, resume with a note naming F → EXPAND, not ESCALATE."""
+    ctx, t, repo = _setup_escalated_ticket(
+        ctx_factory,
+        tmp_path,
+        "Confirmed: .github/zizmor.yml is the accepted path, in scope.",
+    )
+    calls: list = []
+    _escalating_triage(monkeypatch, calls)
+
+    result = _run_guardrail(ctx, t, repo)
+
+    assert calls == [], "operator-accepted file must not reach the LLM"
+    assert result.action == "skip_iteration"
+    assert result.file_map is not None and _ZIZMOR in result.file_map
+    notes = [ev.note or "" for ev in ctx.service.history(t.id)]
+    assert any(
+        n.startswith(f"scope-triage: `{_ZIZMOR}` accepted by operator note")
+        for n in notes
+    )
+    # Not counted against the per-ticket EXPAND cap.
+    assert not any(n.startswith("scope-triage EXPAND") for n in notes)
+
+
+def test_scope_triage_auto_resume_is_not_operator_resolution(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """An automatic retry embeds the block note (file name included) but
+    is not an operator decision: the gate still asks the LLM."""
+    ctx, t, repo = _setup_escalated_ticket(
+        ctx_factory,
+        tmp_path,
+        f"[auto-resume 1/2] automatic retry; block note was: {_E710_ESCALATE}",
+    )
+    calls: list = []
+    _escalating_triage(monkeypatch, calls)
+
+    result = _run_guardrail(ctx, t, repo)
+
+    assert len(calls) == 1
+    assert "operator_resolution" not in calls[0]
+    assert result.outcome is not None
+    assert result.outcome.next_state is State.BLOCKED
+    assert "re-escalated despite operator resume note" not in result.outcome.note
+
+
+def test_scope_triage_re_escalate_after_resume_surfaces_note(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A non-accepting resume note reaches the LLM as context, and a
+    second ESCALATE carries the note in the block note (no silent loop)."""
+    ctx, t, repo = _setup_escalated_ticket(
+        ctx_factory, tmp_path, "please take another look"
+    )
+    calls: list = []
+    _escalating_triage(monkeypatch, calls)
+
+    result = _run_guardrail(ctx, t, repo)
+
+    assert len(calls) == 1
+    assert "please take another look" in calls[0]["operator_resolution"]
+    assert result.outcome is not None
+    assert result.outcome.next_state is State.BLOCKED
+    note = result.outcome.note
+    assert "re-escalated despite operator resume note" in note
+    assert "please take another look" in note
+    assert note.endswith(f"— out-of-scope: `{_ZIZMOR}`")
+
+
+def test_scope_triage_non_resume_ready_note_is_not_operator_resolution(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """A READY note from another stage (e.g. review REQUEST_CHANGES)
+    naming the escalated file is not an operator decision."""
+    ctx, t, repo = _setup_escalated_ticket(ctx_factory, tmp_path, "")
+    ctx.service.transition(t.id, State.CODE_REVIEW, note="review")
+    ctx.service.transition(t.id, State.READY, note="zizmor.yml needs a header comment")
+    t = ctx.service.get(t.id)
+    calls: list = []
+    _escalating_triage(monkeypatch, calls)
+
+    result = _run_guardrail(ctx, t, repo)
+
+    assert len(calls) == 1
+    assert "operator_resolution" not in calls[0]
+    assert result.outcome is not None
+    assert result.outcome.next_state is State.BLOCKED
+    assert "re-escalated despite operator resume note" not in result.outcome.note
+
+
+def test_operator_resolution_rejecting_note_does_not_accept():
+    from robotsix_mill.stages.implement.validation import _OperatorResolution
+
+    res = _OperatorResolution(
+        escalated_files=[_ZIZMOR, "b.txt"],
+        notes=[("ts1", "revert zizmor.yml, it is scope creep")],
+    )
+    assert res.accepted_files() == {}
+    res.notes.append(("ts2", "b.txt is fine"))
+    assert res.accepted_files() == {"b.txt": "ts2"}
+    res.notes.append(("ts3", "all confirmed in scope"))
+    assert res.accepted_files() == {"b.txt": "ts2", _ZIZMOR: "ts3"}

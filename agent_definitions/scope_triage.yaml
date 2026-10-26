@@ -31,6 +31,11 @@ system_prompt: |
   - The file_map (the declared scope)
   - The list of out-of-scope files
   - A short diff summary for each out-of-scope file
+  - Optionally, an `operator-resolution-of-previous-escalation` block:
+    the operator's resume note(s) answering an earlier ESCALATE on this
+    ticket. Treat it as authoritative scope guidance on par with the
+    spec — when it accepts a file, EXPAND it; do NOT re-escalate the
+    same question the operator already answered.
 
   Return one of three verdicts:
 
