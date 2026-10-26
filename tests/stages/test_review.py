@@ -2288,3 +2288,90 @@ def test_request_changes_cache_does_not_replay_across_rounds(ctx_factory, monkey
         "agent must be called again in round 1 — "
         "the cached round-0 verdict must not replay"
     )
+
+
+# --- operator ask_user answer requesting a change -----------------------
+
+
+def _verdict_review(verdict, comments="c"):
+    calls = []
+
+    def _fake_review(**kwargs):
+        calls.append(kwargs)
+        return ReviewVerdict(verdict=verdict, comments=comments)
+
+    return _fake_review, calls
+
+
+def _pause_and_answer(ctx, monkeypatch, t, answer):
+    fake, _ = _verdict_review("NEEDS_DISCUSSION", "Should defaults stay empty?")
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", fake)
+    out = ReviewStage().run(t, ctx)
+    assert out.next_state is State.AWAITING_USER_REPLY
+    ctx.service.transition(t.id, State.AWAITING_USER_REPLY, note=out.note)
+    ctx.service.answer_pending_question(t.id, answer, "robotsix-chat")
+    t = ctx.service.get(t.id)
+    assert t.state is State.CODE_REVIEW  # plain answer resumed review
+    return t
+
+
+def test_change_answer_on_unchanged_diff_requests_changes(ctx_factory, monkeypatch):
+    """Replay of 4582: the answer 'defaults must stay empty' on an
+    unchanged diff must bounce to implement, never 'gap already
+    addressed' — even when the reviewer would approve."""
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
+    t = _pause_and_answer(ctx, monkeypatch, _ticket(ctx), "defaults must stay empty")
+
+    fake, calls = _verdict_review("APPROVE", "gap already addressed")
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", fake)
+    out = ReviewStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert calls == []  # deterministic — the reviewer is not consulted
+    last = ctx.service.list_comments(t.id)[-1]
+    assert last.author == "review"
+    assert "defaults must stay empty" in last.body
+
+
+def test_change_answer_with_changed_diff_reviews_normally(ctx_factory, monkeypatch):
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
+    t = _pause_and_answer(ctx, monkeypatch, _ticket(ctx), "defaults must stay empty")
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    (repo_dir / "feature.txt").write_text("implemented, defaults empty")
+    _git(repo_dir, "commit", "-qam", "apply answer")
+
+    fake, calls = _verdict_review("APPROVE", "lgtm")
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", fake)
+    out = ReviewStage().run(t, ctx)
+
+    assert out.next_state is State.DOCUMENTING
+    assert len(calls) == 1
+
+
+def test_sign_off_answer_on_unchanged_diff_reviews_normally(ctx_factory, monkeypatch):
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
+    t = _pause_and_answer(ctx, monkeypatch, _ticket(ctx), "Looks good, fine as is.")
+
+    fake, calls = _verdict_review("APPROVE", "lgtm")
+    monkeypatch.setattr("robotsix_mill.stages.review.run_review_agent", fake)
+    out = ReviewStage().run(t, ctx)
+
+    assert out.next_state is State.DOCUMENTING
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        ("defaults must stay empty", True),
+        ("Stage-1 push also needs the retry", True),
+        ("Looks good, fine as is.", False),
+        ("approve", False),
+        ("Yes.", False),
+        ("", False),
+    ],
+)
+def test_answer_requests_change(answer, expected):
+    from robotsix_mill.stages._review_helpers import _answer_requests_change
+
+    assert _answer_requests_change(answer) is expected

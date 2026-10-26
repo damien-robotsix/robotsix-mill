@@ -40,6 +40,14 @@ was blocked *from* is recorded. You can recover in three ways:
 
   Use the generic transition endpoint or the board.
 
+- **Answer that requires a code change** (ticket paused in
+  `awaiting_user_reply` by an `[ASK_USER]` question): transition
+  `AWAITING_USER_REPLY → READY` directly, or answer with
+  `POST /tickets/{id}/answer` and `"requires_change": true`. The
+  transition note (or the answer body) becomes the implementer's top
+  feedback item, so the change is made instead of the review re-judging
+  the unchanged diff.
+
 - **Mark as done** (abandon the ticket from any non-terminal state):
   ```sh
   robotsix-mill ticket mark-done <id> --note "abandoned: no longer needed"

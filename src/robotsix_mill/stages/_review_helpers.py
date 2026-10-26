@@ -568,6 +568,93 @@ def _round_cap_directives(
     return review_asks, directive_lines
 
 
+#: Artifact recording the diff the review was looking at when it paused on
+#: an ``[ASK_USER]`` question (see :func:`_record_ask_user_diff`).
+_ASK_USER_DIFF_FILE = "review_ask_user_diff.json"
+
+# An operator answer "explicitly requests a diff change" when it carries a
+# directive verb/modal ("defaults must stay empty", "Stage-1 push also needs
+# the retry") and does not read as a sign-off ("looks good", "fine as is").
+_CHANGE_DIRECTIVE_RE = re.compile(
+    r"\b(must|should|needs?|has to|have to|also|add|remove|drop|delete|"
+    r"change|keep|stay|revert|rename|replace|use|make|fix|instead|"
+    r"don'?t|do not|never|always)\b",
+    re.IGNORECASE,
+)
+_NO_CHANGE_RE = re.compile(
+    r"\b(lgtm|looks good|approved?|ship it|no changes?( needed)?|"
+    r"(fine|good|ok|okay) as[- ]is|leave it( as[- ]is)?|as[- ]is)\b",
+    re.IGNORECASE,
+)
+
+
+def _diff_fingerprint(diff: str) -> str:
+    """Stable hash of the review diff."""
+    return hashlib.sha256(diff.encode("utf-8")).hexdigest()
+
+
+def _answer_requests_change(answer: str) -> bool:
+    """True when an operator ``[ASK_USER]`` answer explicitly asks for a
+    change to the diff (a directive), rather than signing it off.
+    """
+    if not answer.strip() or _NO_CHANGE_RE.search(answer):
+        return False
+    return bool(_CHANGE_DIRECTIVE_RE.search(answer))
+
+
+def _record_ask_user_diff(ws: Workspace, diff_hash: str) -> None:
+    """Remember the diff hash the review paused on, so the resumed review
+    can tell whether the operator's answer was acted on.
+    """
+    try:
+        (ws.artifacts_dir / _ASK_USER_DIFF_FILE).write_text(
+            json.dumps({"diff_hash": diff_hash}), encoding="utf-8"
+        )
+    except OSError:
+        log.warning("failed to record review ask_user diff hash", exc_info=True)
+
+
+def _unaddressed_change_answer(
+    ws: Workspace, diff_hash: str, ticket: Ticket, ctx: StageContext
+) -> str | None:
+    """Return the operator's answer to the review's last ``[ASK_USER]``
+    question when it requests a diff change the diff does not have yet.
+
+    Consumes the :func:`_record_ask_user_diff` marker (one shot): returns
+    ``None`` when there is no marker, the diff changed since the question
+    (the implementer acted — review normally), or the answer is not a
+    change directive.
+    """
+    path = ws.artifacts_dir / _ASK_USER_DIFF_FILE
+    if not path.exists():
+        return None
+    try:
+        recorded = json.loads(path.read_text(encoding="utf-8")).get("diff_hash")
+    except OSError, ValueError, AttributeError:
+        recorded = None
+    path.unlink(missing_ok=True)
+    if recorded != diff_hash:
+        return None
+    comments: list[Comment] = list(ctx.service.list_comments(ticket.id))
+    threads = [
+        c
+        for c in comments
+        if c.parent_id is None and (c.body or "").startswith(ASK_USER_MARKER)
+    ]
+    if not threads:
+        return None
+    thread = max(threads, key=lambda c: (c.created_at, c.id or 0))
+    answers = [
+        c.body.strip()
+        for c in comments
+        if c.parent_id == thread.id
+        and c.author not in ("review", "system", "mill")
+        and (c.body or "").strip()
+    ]
+    answer = "\n".join(answers)
+    return answer if _answer_requests_change(answer) else None
+
+
 def _build_prior_context(ticket, ctx, ws) -> str | None:
     """Assemble prior review comments and the implement agent's rebuttal
     from the last round into a ``prior-context`` fenced block.

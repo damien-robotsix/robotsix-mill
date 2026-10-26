@@ -452,7 +452,21 @@ def test_awaiting_user_reply_resume_via_paused_from():
 def test_awaiting_user_reply_no_paused_from_rejects():
     """Without paused_from, AWAITING_USER_REPLY → arbitrary state is
     rejected."""
-    assert can_transition(State.AWAITING_USER_REPLY, State.READY) is False
+    assert can_transition(State.AWAITING_USER_REPLY, State.DELIVERABLE) is False
+
+
+def test_awaiting_user_reply_to_ready_always_allowed():
+    """An operator answer that requires a code change sends the paused
+    ticket back to implement, whatever stage paused it."""
+    assert can_transition(State.AWAITING_USER_REPLY, State.READY) is True
+    assert (
+        can_transition(
+            State.AWAITING_USER_REPLY,
+            State.READY,
+            paused_from=State.CODE_REVIEW,
+        )
+        is True
+    )
 
 
 def test_awaiting_user_reply_wrong_paused_from_rejects():

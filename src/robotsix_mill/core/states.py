@@ -286,8 +286,12 @@ TRANSITIONS: dict[State, set[State]] = {
     },
     State.ANSWERED: set(),
     # paused mid-stage: operator reply resumes to originating state (paused_from);
-    # errored / blocked are the always-available escapes.
-    State.AWAITING_USER_REPLY: {State.ERRORED, State.BLOCKED},
+    # errored / blocked are the always-available escapes.  READY lets the
+    # operator send the ticket straight back to implement when the answer
+    # requires a code change (the answer endpoint's ``requires_change`` flag
+    # or a manual transition) — the transition note becomes the
+    # implementer's top feedback item.
+    State.AWAITING_USER_REPLY: {State.READY, State.ERRORED, State.BLOCKED},
     # epic states: open → closed or blocked; closed is terminal
     State.EPIC_OPEN: {State.EPIC_CLOSED, State.BLOCKED},
     State.EPIC_CLOSED: set(),

@@ -65,6 +65,14 @@ transition through states via `POST /tickets/{id}/transition`. The
 transition endpoint validates the requested state against the state
 machine and enqueues the ticket for worker processing.
 
+`POST /tickets/{id}/answer` answers the open `[ASK_USER]` question on a
+ticket in `awaiting_user_reply` (body `{"body": "...", "author": "..."}`).
+Set `"requires_change": true` when the answer demands a code change: the
+answer is still recorded on the thread, but the ticket moves to `ready`
+(implement, with the answer as its top feedback item) instead of
+resuming the paused stage such as `code_review`. A non-boolean
+`requires_change` returns 400.
+
 ## Langfuse status
 
 `GET /health/langfuse-status` returns recent Langfuse export failures

@@ -12,7 +12,7 @@ from typing import Any
 from ...agents.runners.pass_runner import load_memory
 from ...agents.testing import ENV_ERROR_PREFIX, diag_is_transient
 from ...config import effective_target_branch
-from ...core.constants import NON_FEEDBACK_AUTHORS
+from ...core.constants import ASK_USER_AUTO_RESUME_NOTE, NON_FEEDBACK_AUTHORS
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ...runtime.tracing import trace_phase
@@ -163,6 +163,32 @@ def _drop_gate_era_comments(
             cutoff.isoformat(),
         )
     return kept
+
+
+def _operator_answer_note(events: list[Any]) -> str | None:
+    """Return the operator's answer when the ticket was sent from
+    ``awaiting_user_reply`` straight back to ``ready`` because the answer
+    requires a code change, else ``None``.
+
+    The answer is the note of that ``awaiting_user_reply → ready`` event
+    (written by ``/answer`` with ``requires_change`` or a manual
+    transition).  It only applies to the implement round it opened: once
+    the ticket has left ``ready`` again the answer is history.  The
+    automatic resume after the implementer's own ``ask_user`` pause is
+    skipped — that answer is already in the thread and the resumed
+    conversation.
+    """
+    ordered = sorted(events, key=lambda e: _aware(e.at))
+    for idx in range(len(ordered) - 1, 0, -1):
+        cur, prev = ordered[idx], ordered[idx - 1]
+        if cur.state != State.READY:
+            return None
+        if prev.state == State.AWAITING_USER_REPLY:
+            note = (cur.note or "").strip()
+            if note and note != ASK_USER_AUTO_RESUME_NOTE:
+                return note
+            return None
+    return None
 
 
 def _aware(dt: datetime) -> datetime:
@@ -538,9 +564,8 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         # resume-blocked justification, not a gap to close.
         comments = ctx.service.list_comments(ticket.id)
         comments = [c for c in comments if c.author not in NON_FEEDBACK_AUTHORS]
-        comments = _drop_gate_era_comments(
-            comments, ctx.service.history(ticket.id), ticket.id
-        )
+        events = ctx.service.history(ticket.id)
+        comments = _drop_gate_era_comments(comments, events, ticket.id)
         if comments:
             open_threads = [
                 c for c in comments if c.parent_id is None and c.closed_at is None
@@ -561,6 +586,16 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                 for c in comments
             )
             feedback = review_feedback
+        # An operator answer that sent the ticket from awaiting_user_reply
+        # straight back to implement is the reason for this round: it
+        # goes first so it is never buried under older review threads.
+        operator_answer = _operator_answer_note(events)
+        if operator_answer:
+            top = (
+                "[OPERATOR ANSWER — requires a code change; address this "
+                f"first] {operator_answer}"
+            )
+            feedback = f"{top}\n{feedback}" if feedback else top
 
         previous_attempt_summary: str | None = None
         summary_path = ws.artifacts_dir / "implement_summary.md"

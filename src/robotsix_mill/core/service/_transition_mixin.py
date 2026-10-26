@@ -536,6 +536,21 @@ class _TransitionMixin(_ServiceBase):
             # leaving AWAITING_USER_REPLY (resume path), except when
             # escalating to BLOCKED — paused_from must survive so the
             # operator can answer and resume to the original state.
+            if ticket.state is State.AWAITING_USER_REPLY and dst is State.READY:
+                # Operator sends a paused ticket back to implement because
+                # the answer requires a code change.  The questions are
+                # answered, so close their threads (an open [ASK_USER]
+                # thread would later refuse the DONE transition) and,
+                # like BLOCKED → READY, clear the stale-spec guard: the
+                # answer is the new input.
+                now = datetime.now(UTC)
+                for t in self._has_open_ask_user_threads(ticket_id, s):
+                    t.closed_at = now
+                    s.add(t)
+                _clear_stale_implement_guard(
+                    self.workspace(ticket),
+                    reset_stall=bool(note and note.strip()),
+                )
             if dst is State.AWAITING_USER_REPLY:
                 # Preserve an existing paused_from (e.g. when resuming
                 # from BLOCKED back through AWAITING_USER_REPLY).
