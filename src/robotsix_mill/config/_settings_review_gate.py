@@ -7,8 +7,6 @@ model to keep ``settings.py`` under 800 lines. Assembled into the final
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, Field
 
 
@@ -245,21 +243,6 @@ class _ReviewGateSettings(BaseModel):
     pr_summary_enabled: bool = Field(
         description="When true, the deliver stage generates a structured PR body from the diff.",
         default=False,
-    )
-    # When True, Forge.create_repo() is permitted to create repositories
-    # via the forge API. Default False (opt-in) — the operator must
-    # explicitly enable this and ensure the GitHub App installation has
-    # the necessary repository-creation scope.
-    enable_repo_creation: bool = Field(
-        description="When true, Forge.create_repo() is permitted to create repositories via the forge API.",
-        default=False,
-    )
-    # Default visibility for newly created repositories.
-    # "public" — repos are public unless the caller specifies private=True.
-    # "private" — repos are private unless the caller specifies private=False.
-    repo_visibility_default: Literal["public", "private"] = Field(
-        default="public",
-        description="Default visibility for newly created repositories: public or private.",
     )
     # When True, the merge stage deletes the per-ticket head branch on the
     # forge after a ticket merges to DONE. Default True — cleans up

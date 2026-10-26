@@ -121,10 +121,6 @@ class Settings(
     """
 
     # --- Secrets (folded into Settings as SecretStr fields) ---
-    forge_repo_create_token: SecretStr | None = Field(
-        default=None,
-        description="A PAT used ONLY for repository creation (POST /user/repos). Falls back to forge_token if unset. GitHub App tokens cannot create repos — use a classic PAT with repo-creation scope.",
-    )
     sandbox_push_token: SecretStr | None = Field(
         default=None,
         description="Optional dedicated token for the sandbox git-push bridge. When set, github_push_token() prefers this over forge_token (PAT mode only; App mode always mints a fresh token). Use this to isolate the push-bridge credential surface from the general forge token — a broken push token then only blocks pushes, not PR creation or API calls.",
@@ -326,6 +322,11 @@ class Settings(
             # removed long ago; the setting bounded nothing and production
             # still pinned it (6) — dropped 2026-09-09 on operator request.
             "claude_max_concurrency",
+            # Repo creation / forking moved to robotsix-chat (2026-10-26);
+            # production still pins these and the dead PAT secret.
+            "enable_repo_creation",
+            "repo_visibility_default",
+            "forge_repo_create_token",
         }
         present = sorted(set(data) & removed)
         if not present:

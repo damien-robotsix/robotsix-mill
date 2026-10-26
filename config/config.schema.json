@@ -418,21 +418,6 @@
           "title": "Fleet Notify Url",
           "writeOnly": true
         },
-        "forge_repo_create_token": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "",
-          "format": "password",
-          "title": "Forge Repo Create Token",
-          "writeOnly": true
-        },
         "forge_token": {
           "anyOf": [
             {
@@ -1440,12 +1425,6 @@
           "title": "Empty Rollup Max Polls",
           "type": "integer"
         },
-        "enable_repo_creation": {
-          "default": false,
-          "description": "When true, Forge.create_repo() is permitted to create repositories via the forge API.",
-          "title": "Enable Repo Creation",
-          "type": "boolean"
-        },
         "epic_dedup_lookback_days": {
           "default": 7,
           "description": "Recency window (days) for advisory duplicate detection in epic decomposition.",
@@ -1578,21 +1557,6 @@
           "default": null,
           "description": "Git remote URL of the forge repository.",
           "title": "Forge Remote Url"
-        },
-        "forge_repo_create_token": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "A PAT used ONLY for repository creation (POST /user/repos). Falls back to forge_token if unset. GitHub App tokens cannot create repos \u2014 use a classic PAT with repo-creation scope.",
-          "title": "Forge Repo Create Token"
         },
         "forge_target_branch": {
           "default": "main",
@@ -2405,16 +2369,6 @@
           "description": "Seconds between repo-description-sync passes. 0 = disabled.",
           "title": "Repo Description Sync Interval Seconds",
           "type": "integer"
-        },
-        "repo_visibility_default": {
-          "default": "public",
-          "description": "Default visibility for newly created repositories: public or private.",
-          "enum": [
-            "public",
-            "private"
-          ],
-          "title": "Repo Visibility Default",
-          "type": "string"
         },
         "repos": {
           "anyOf": [

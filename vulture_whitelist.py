@@ -250,13 +250,6 @@ unmet_deps
 CommentRead
 
 # -- forge -------------------------------------------------------------------
-# enable_repo_creation, repo_visibility_default, forge_repo_create_token —
-# inert config keys left after repo creation/forking was removed from the
-# forge; still defined so pinned configs load. Drop these entries together
-# with the definitions (settings/secrets removal follow-up).
-enable_repo_creation
-repo_visibility_default
-forge_repo_create_token
 list_pr_reviews
 list_review_comments
 close_pr

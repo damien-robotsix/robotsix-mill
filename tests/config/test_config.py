@@ -544,10 +544,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ),
     # --- periodic state-sync ---
     ("state_sync_interval_seconds", "MILL_STATE_SYNC_INTERVAL_SECONDS", "43200", 43200),
-    # --- repo visibility default ---
-    ("repo_visibility_default", "MILL_REPO_VISIBILITY_DEFAULT", "private", "private"),
-    # --- enable_repo_creation ---
-    ("enable_repo_creation", "MILL_ENABLE_REPO_CREATION", "1", True),
     # --- meta_interval_seconds ---
     ("meta_interval_seconds", "MILL_META_INTERVAL_SECONDS", "43200", 43200),
     # --- web_knowledge_* ---
@@ -674,8 +670,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("max_memory_chars", "MILL_MAX_MEMORY_CHARS", "5000", 5000),
     # --- board_list_cache_ttl_seconds ---
     ("board_list_cache_ttl_seconds", "MILL_BOARD_LIST_CACHE_TTL_SECONDS", "5.0", 5.0),
-    # --- enable_repo_creation (string alias) ---
-    ("enable_repo_creation", "MILL_ENABLE_REPO_CREATION", "0", False),
     # --- progress log interval ---
 ]
 
@@ -1132,3 +1126,51 @@ def test_removed_claude_max_concurrency_pin_is_dropped_not_fatal(caplog):
         s = Settings(claude_max_concurrency=6)
     assert not hasattr(s, "claude_max_concurrency")
     assert "claude_max_concurrency" in caplog.text
+
+
+def test_removed_repo_creation_keys_are_dropped_not_fatal(
+    tmp_path, monkeypatch, caplog
+):
+    """Repo creation/forking moved to robotsix-chat (2026-10-26). The live
+    config.json still pins ``enable_repo_creation``,
+    ``repo_visibility_default`` and the dead ``forge_repo_create_token``
+    secret — a config carrying all three must still load under
+    ``extra="forbid"``, and the dropped keys are logged."""
+    from robotsix_mill.config import Secrets, Settings
+
+    cfg = tmp_path / "config.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "settings": {
+                    "enable_repo_creation": True,
+                    "repo_visibility_default": "public",
+                    "max_global_concurrency": 3,
+                },
+                "secrets": {"forge_repo_create_token": "ghp_dead"},
+                "repos": {},
+            }
+        )
+    )
+    monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
+
+    s = Settings()
+    assert s.max_global_concurrency == 3
+    assert not hasattr(s, "enable_repo_creation")
+    assert not hasattr(s, "repo_visibility_default")
+    assert not hasattr(Secrets(), "forge_repo_create_token")
+
+    # Raw keys reaching the model directly are stripped, not rejected.
+    with caplog.at_level("WARNING"):
+        s = Settings(
+            enable_repo_creation=True,
+            repo_visibility_default="public",
+            forge_repo_create_token="ghp_dead",
+        )
+    assert not hasattr(s, "forge_repo_create_token")
+    for key in (
+        "enable_repo_creation",
+        "repo_visibility_default",
+        "forge_repo_create_token",
+    ):
+        assert key in caplog.text
