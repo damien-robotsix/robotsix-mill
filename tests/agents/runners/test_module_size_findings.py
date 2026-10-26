@@ -133,6 +133,41 @@ def test_module_size_report_includes_findings_over_draft_cap(tmp_path):
     db.reset_engine()
 
 
+def test_module_size_pass_without_filed_child_leaves_no_rollup_epic(tmp_path):
+    repo, _ = _repo(tmp_path)
+    settings = Settings(data_dir=str(tmp_path / "data"))
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    # Zero findings: nothing filed, no epic.
+    run_agent_pass(
+        lambda **_: _Res([], []),
+        memory_file=tmp_path / "memory.md",
+        source_label=SourceKind.MODULE_SIZE,
+        service=service,
+        settings=settings,
+        repo_dir=repo,
+    )
+    assert service.list() == []
+
+    # Findings exist but none becomes a child (draft cap 0): the report
+    # must not create an empty rollup epic either.
+    titles = ["module size: split src/pkg/big.py (1200 lines, 3 top-level symbols)"]
+    result = run_agent_pass(
+        lambda **_: _Res(titles, ["Split big."]),
+        memory_file=tmp_path / "memory.md",
+        source_label=SourceKind.MODULE_SIZE,
+        service=service,
+        settings=settings,
+        max_drafts=0,
+        repo_dir=repo,
+    )
+    assert result.drafts_created == []
+    assert [t for t in service.list() if t.kind == TicketKind.EPIC] == []
+    db.reset_engine()
+
+
 def test_measure_refuses_paths_outside_repo(tmp_path):
     repo, _ = _repo(tmp_path)
     (tmp_path / "outside.py").write_text("x = 1\n", encoding="utf-8")
