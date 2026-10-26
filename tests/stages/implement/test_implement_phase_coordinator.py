@@ -829,6 +829,75 @@ def test_load_context_blocked_resume_skips_feedback(ctx_factory, monkeypatch):
     assert ic.open_thread_ids is not None
 
 
+def _paused_in_review(ctx):
+    t = _ticket(ctx)
+    ctx.service.transition(t.id, State.CODE_REVIEW)
+    ctx.service.add_comment(t.id, "older review nit", author="review")
+    ctx.service.transition(t.id, State.AWAITING_USER_REPLY)
+    ctx.service.add_comment(t.id, "[ASK_USER]\n\nKeep defaults?", author="review")
+    return t
+
+
+def test_load_context_operator_answer_is_top_feedback_item(ctx_factory, monkeypatch):
+    """An answer that sent the ticket awaiting_user_reply → ready (the
+    answer endpoint's ``requires_change``) leads the feedback block."""
+    ctx = ctx_factory()
+    t = _paused_in_review(ctx)
+    ctx.service.answer_pending_question(
+        t.id, "defaults must stay empty", "robotsix-chat", requires_change=True
+    )
+    t = ctx.service.get(t.id)
+    assert t.state is State.READY
+    monkeypatch.setattr(pc, "load_memory", lambda p: "")
+
+    ic = ImplementStage._load_implement_context(ctx, t, ctx.settings)
+
+    assert ic.feedback is not None
+    first = ic.feedback.splitlines()[0]
+    assert first.startswith("[OPERATOR ANSWER")
+    assert "defaults must stay empty" in first
+    assert "older review nit" in ic.feedback
+
+
+def test_load_context_operator_transition_note_is_feedback(ctx_factory, monkeypatch):
+    """A manual awaiting_user_reply → ready transition's note is fed too."""
+    ctx = ctx_factory()
+    t = _paused_in_review(ctx)
+    ctx.service.transition(t.id, State.READY, note="Stage-1 push also needs retry")
+    monkeypatch.setattr(pc, "load_memory", lambda p: "")
+
+    ic = ImplementStage._load_implement_context(
+        ctx, ctx.service.get(t.id), ctx.settings
+    )
+
+    assert ic.feedback.startswith("[OPERATOR ANSWER")
+    assert "Stage-1 push also needs retry" in ic.feedback.splitlines()[0]
+
+
+def test_operator_answer_note_scoping():
+    """Only the current ready round counts; the implementer's own ask_user
+    auto-resume is not an operator answer."""
+    from datetime import UTC, datetime, timedelta
+
+    from robotsix_mill.core.constants import ASK_USER_AUTO_RESUME_NOTE
+
+    t0 = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def ev(i, state, note=None):
+        return SimpleNamespace(at=t0 + timedelta(minutes=i), state=state, note=note)
+
+    answered = [ev(0, State.AWAITING_USER_REPLY), ev(1, State.READY, "fix it")]
+    assert pc._operator_answer_note(answered) == "fix it"
+    assert pc._operator_answer_note([*answered, ev(2, State.READY, "x")]) == "fix it"
+    assert pc._operator_answer_note([*answered, ev(2, State.CODE_REVIEW)]) is None
+    auto = [
+        ev(0, State.AWAITING_USER_REPLY),
+        ev(1, State.READY, ASK_USER_AUTO_RESUME_NOTE),
+    ]
+    assert pc._operator_answer_note(auto) is None
+    assert pc._operator_answer_note([ev(0, State.DRAFT), ev(1, State.READY)]) is None
+
+
 def test_load_context_memory_wiring(ctx_factory, monkeypatch):
     ctx = ctx_factory()
     t = _ticket(ctx)

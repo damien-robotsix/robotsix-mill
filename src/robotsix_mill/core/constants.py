@@ -51,6 +51,12 @@ NON_IMPLEMENTATION_CLOSE_PREFIXES: tuple[str, ...] = (
 # lifecycle transition guard still requires the normal branch/PR evidence.
 MARK_DONE_NOTE_PREFIX: str = "mark done"
 
+# Event note written when the last open ``[ASK_USER]`` thread closes and the
+# ticket auto-resumes to its ``paused_from`` state.  Implement reads it back to
+# tell an auto-resume apart from an operator's AWAITING_USER_REPLY -> READY
+# answer, whose note is fed to the implementer as top-priority feedback.
+ASK_USER_AUTO_RESUME_NOTE: str = "all ask_user threads closed — resuming"
+
 # File extensions that are likely binary — should be skipped during
 # text preview / log traversal.
 BINARY_EXTENSIONS: frozenset[str] = frozenset(

@@ -1096,6 +1096,78 @@ def test_answer_pending_question_no_ask_user_thread_409(client, service):
     assert r.status_code == 409
 
 
+def _review_paused_ticket(service, question="Keep the default?"):
+    """A ticket the review stage parked at awaiting_user_reply."""
+    t = service.create("Review paused")
+    service.transition(t.id, State.READY)
+    service.transition(t.id, State.CODE_REVIEW)
+    service.transition(t.id, State.AWAITING_USER_REPLY)
+    service.add_comment(t.id, f"[ASK_USER]\n\n{question}", author="review")
+    return t
+
+
+def test_answer_without_requires_change_resumes_review(client, service):
+    t = _review_paused_ticket(service)
+    r = client.post(
+        f"/tickets/{t.id}/answer",
+        json={"body": "Yes, fine as is.", "author": "robotsix-chat"},
+    )
+    assert r.status_code == 200
+    assert r.json()["state"] == State.CODE_REVIEW
+
+
+def test_answer_requires_change_routes_to_ready(client, service):
+    """requires_change records the answer AND sends the ticket to implement
+    (not back to code_review); the answer is the READY event note."""
+    t = _review_paused_ticket(service)
+    r = client.post(
+        f"/tickets/{t.id}/answer",
+        json={
+            "body": "defaults must stay empty",
+            "author": "robotsix-chat",
+            "requires_change": True,
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["state"] == State.READY
+    ticket = service.get(t.id)
+    assert ticket.paused_from is None
+    comments = service.list_comments(t.id)
+    reply = [c for c in comments if c.body == "defaults must stay empty"]
+    assert len(reply) == 1 and reply[0].parent_id is not None
+    # Every [ASK_USER] thread is closed.
+    assert all(
+        c.closed_at is not None
+        for c in comments
+        if c.parent_id is None and c.body.startswith("[ASK_USER]")
+    )
+    last = service.history(t.id)[-1]
+    assert last.state is State.READY
+    assert last.note == "defaults must stay empty"
+
+
+def test_answer_requires_change_must_be_bool(client, service):
+    t = _review_paused_ticket(service)
+    r = client.post(
+        f"/tickets/{t.id}/answer",
+        json={"body": "x", "requires_change": "yes"},
+    )
+    assert r.status_code == 400
+
+
+def test_transition_awaiting_user_reply_to_ready(client, service):
+    """The operator can send a paused ticket back to implement directly;
+    open [ASK_USER] threads are closed so they cannot block DONE later."""
+    t = _review_paused_ticket(service)
+    r = client.post(
+        f"/tickets/{t.id}/transition",
+        json={"state": "ready", "note": "Stage-1 push also needs the retry"},
+    )
+    assert r.status_code == 200
+    assert r.json()["state"] == State.READY
+    assert all(c.closed_at is not None for c in service.list_comments(t.id))
+
+
 # --- reset-fingerprint endpoint tests ---
 
 

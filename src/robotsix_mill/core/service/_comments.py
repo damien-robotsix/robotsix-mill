@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from sqlmodel import select
 
 from .. import db
+from ..constants import ASK_USER_AUTO_RESUME_NOTE
 from ..db import retry_on_db_full
 from ..models import Comment, Ticket, TicketEvent
 from ..states import ASK_USER_MARKER, State
@@ -191,6 +192,7 @@ class _CommentMixin(_ServiceBase):
         ticket_id: str,
         body: str,
         author: str,
+        requires_change: bool = False,
     ) -> Comment:
         """Answer an open ``[ASK_USER]`` question on a ticket in
         ``AWAITING_USER_REPLY``, or on a ``BLOCKED`` ticket that was
@@ -206,6 +208,13 @@ class _CommentMixin(_ServiceBase):
         the answer transitions the ticket back to
         ``AWAITING_USER_REPLY`` first, then triggers the standard
         auto-resume path.
+
+        When *requires_change* is set the answer demands a code change,
+        so instead of resuming to ``paused_from`` (typically
+        ``code_review``, which would just re-review the unchanged diff)
+        the ticket transitions to ``READY`` with the answer as the event
+        note — the implement stage feeds that note to the implementer as
+        its top feedback item.
 
         Raises ``KeyError`` if the ticket does not exist.
         Raises ``ValueError`` if the ticket is not in an answerable
@@ -273,12 +282,23 @@ class _CommentMixin(_ServiceBase):
                 note="operator answered — resuming from ask_user timeout block",
             )
             # Add a system comment documenting the resume.
+            target = (
+                State.READY.value
+                if requires_change
+                else updated.paused_from or "originating state"
+            )
             self.add_comment(
                 ticket_id,
                 f"Operator answered the [ASK_USER] question — resuming "
-                f"from BLOCKED back to {updated.paused_from or 'originating state'}.",
+                f"from BLOCKED back to {target}.",
                 author="system",
             )
+
+        if requires_change:
+            # The answer changes the required diff: route to implement
+            # rather than auto-resuming the paused stage.
+            self.transition(ticket_id, State.READY, note=body)
+            return reply
 
         # Post-close: auto-resume if all [ASK_USER] threads are closed.
         self._maybe_resume_awaiting_user_reply(ticket_id, board)
@@ -359,7 +379,7 @@ class _CommentMixin(_ServiceBase):
                     s,
                     ticket_id=ticket_id,
                     state=dst,
-                    note="all ask_user threads closed — resuming",
+                    note=ASK_USER_AUTO_RESUME_NOTE,
                 )
             )
             s.commit()

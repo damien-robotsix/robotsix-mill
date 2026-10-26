@@ -34,15 +34,18 @@ from ._review_helpers import (
     _build_prior_context,
     _collapse_comments,
     _detect_convergence,
+    _diff_fingerprint,
     _file_in_scope,  # noqa: F401 — re-export for test imports
     _gaps_already_addressed,
     _load_file_map,
     _maybe_cache,
+    _record_ask_user_diff,
     _reusable_workflow_sha_refs_from_diff,
     _round_cap_directives,
     _sanitize_comments,
     _spawn_dependency_tickets,
     _split_asks,
+    _unaddressed_change_answer,
     _validate_action_refs,
     _verify_action_sha,
     _verify_already_addressed_asks,
@@ -72,6 +75,7 @@ class _DiffMeta:
         "action_refs",
         "changed_line_ranges",
         "diff",
+        "diff_hash",
         "gh_token",
         "head_sha",
         "input_hash",
@@ -93,8 +97,10 @@ class _DiffMeta:
         action_refs: list[tuple[str, str, str, str]],
         reusable_workflow_refs: list[tuple[str, str, str, str]],
         gh_token: str | None,
+        diff_hash: str = "",
     ) -> None:
         self.diff = diff
+        self.diff_hash = diff_hash
         self.head_sha = head_sha
         self.input_hash = input_hash
         self.repo_dir = repo_dir
@@ -204,7 +210,7 @@ class ReviewStage(Stage):
         )
 
         # 7. Route verdict to the next stage.
-        return self._handle_review_verdict(
+        outcome = self._handle_review_verdict(
             verdict,
             ticket,
             ctx,
@@ -214,6 +220,12 @@ class ReviewStage(Stage):
             dm.modified_paths,
             dm.repo_dir,
         )
+        if outcome.next_state is State.AWAITING_USER_REPLY:
+            # Remember the diff the question was asked about: if the
+            # answer requests a change and the diff is still identical on
+            # resume, the review must bounce back to implement.
+            _record_ask_user_diff(ws, dm.diff_hash)
+        return outcome
 
     # ── private helpers ─────────────────────────────────────────────
 
@@ -264,6 +276,33 @@ class ReviewStage(Stage):
         # (stage cache, auto-merge eligibility) can detect when a later
         # rebase or force-push has made this review stale.
         head_sha = git_ops.head_sha(Path(repo_dir))
+
+        # --- operator answer requesting a change the diff lacks ---
+        # When the review paused on an [ASK_USER] question and the
+        # operator's answer explicitly requests a diff change, an
+        # unchanged diff cannot satisfy it: return REQUEST_CHANGES
+        # (→ implement) instead of letting the reviewer re-judge the same
+        # diff as "gap already addressed" (tickets 4582, 92be).
+        diff_hash = _diff_fingerprint(diff)
+        answer = _unaddressed_change_answer(ws, diff_hash, ticket, ctx)
+        if answer is not None:
+            log.info(
+                "%s: ask_user answer requests a change but the diff is "
+                "unchanged since the question — REQUEST_CHANGES",
+                ticket.id,
+            )
+            ctx.service.set_review_rounds(ticket.id, ticket.review_rounds + 1)
+            body = (
+                "[REQUEST_CHANGES] The operator's answer to the review's "
+                "[ASK_USER] question requests a change, but the diff is "
+                "unchanged since the question was asked. Implement the "
+                f"operator's answer:\n\n{answer}"
+            )
+            ctx.service.add_comment(ticket.id, body, author="review")
+            return Outcome(
+                State.READY,
+                "review: operator answer requests a change; diff unchanged",
+            )
 
         # --- stage-outcome cache: short-circuit when input is unchanged ---
         from ._stage_cache import _check, review_input_hash
@@ -330,6 +369,7 @@ class ReviewStage(Stage):
             action_refs=action_refs,
             reusable_workflow_refs=reusable_workflow_refs,
             gh_token=gh_token,
+            diff_hash=diff_hash,
         )
 
     def _clone_cross_repo_workflows(

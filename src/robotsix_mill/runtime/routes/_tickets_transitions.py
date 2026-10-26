@@ -259,7 +259,7 @@ def resume_blocked(
 def answer_pending_question(
     ticket_id: str,
     request: Request,
-    body: dict[str, str] = Body({}),
+    body: dict[str, Any] = Body({}),
     svc: TicketService = Depends(get_service),
     worker: Worker = Depends(get_worker),
     settings: Settings = Depends(get_settings),
@@ -274,7 +274,13 @@ def answer_pending_question(
 
     Body::
 
-        {"body": "<answer text>", "author": "robotsix-chat"}
+        {"body": "<answer text>", "author": "robotsix-chat",
+         "requires_change": false}
+
+    Set ``requires_change: true`` when the answer demands a code change:
+    the answer is still recorded on the thread, but the ticket moves to
+    ``ready`` (implement, with the answer as its top feedback item)
+    instead of resuming the paused stage (e.g. ``code_review``).
 
     Raises 404 if the ticket does not exist, 409 if the ticket is not
     in ``awaiting_user_reply`` or has no open ``[ASK_USER]`` thread.
@@ -296,9 +302,14 @@ def answer_pending_question(
     if not answer_body.strip():
         raise HTTPException(400, "body must not be empty")
     author = str(body.get("author", "robotsix-chat"))
+    requires_change = body.get("requires_change", False)
+    if not isinstance(requires_change, bool):
+        raise HTTPException(400, "requires_change must be a boolean")
 
     try:
-        svc.answer_pending_question(ticket_id_u, answer_body, author)
+        svc.answer_pending_question(
+            ticket_id_u, answer_body, author, requires_change=requires_change
+        )
     except KeyError:
         raise HTTPException(404, "ticket not found") from None
     except ValueError as e:
