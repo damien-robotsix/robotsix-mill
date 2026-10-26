@@ -110,6 +110,66 @@ _SCOPE_TRIAGE_STAGE_PHRASE_RE = re.compile(
 # repo-awareness gate must not reject it as a mis-route.
 _ROBOTSIX_MILL_LOCAL_PATH_RE = re.compile(r"\.robotsix-mill/", re.IGNORECASE)
 
+# File-path-shaped tokens a draft may name (``.github/workflows/x.yml``,
+# ``docker-release.yml``).  When one of them exists in the target repo's
+# tree, the requested change demonstrably targets this repo and the
+# vocabulary heuristic below is skipped.
+_SCOPE_TRIAGE_PATH_RE = re.compile(r"[\w./-]*\w\.[A-Za-z][A-Za-z0-9]{0,9}\b")
+
+# Narrative sentences that say WHO reported a gap or WHICH stage spawned
+# the ticket ("Reported by the implement agent", "filed by the review
+# agent's report_issue").  Pipeline vocabulary there is provenance, not
+# the requested change, so these sentences are ignored when extracting
+# mill-domain terms.
+_SCOPE_TRIAGE_NARRATIVE_RE = re.compile(
+    r"\b(?:reported|re-filed|filed|spawned|raised|surfaced|lineage|"
+    r"report_issue|on behalf of|follow-up)\b",
+    re.IGNORECASE,
+)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")
+
+# Board suggested in a parked wrong-board verdict: mill-internal
+# concepts belong on the mill's own board.
+_SCOPE_TRIAGE_SUSPECTED_BOARD = "robotsix-mill"
+
+
+def _named_path_in_repo(text: str, repo_dir: Path) -> str | None:
+    """Return the first path named in *text* that exists in *repo_dir*.
+
+    A bare file name (``docker-release.yml``) matches any tracked file
+    with that basename; a path with a directory part must match a
+    tracked path exactly (or as a suffix).  Only ``git ls-files`` output
+    is compared — the draft's text never reaches the filesystem.
+    """
+    candidates = {
+        m.group(0).removeprefix("./") for m in _SCOPE_TRIAGE_PATH_RE.finditer(text)
+    }
+    candidates.discard("")
+    if not candidates:
+        return None
+    result = subprocess.run(
+        ["git", "-C", str(repo_dir), "ls-files", "-z"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    tracked = [f for f in result.stdout.split("\0") if f]
+    for cand in sorted(candidates):
+        for f in tracked:
+            if f == cand or f.endswith("/" + cand):
+                return cand
+    return None
+
+
+def _requested_change_text(text: str) -> str:
+    """Drop provenance/narrative sentences, keeping the requested change."""
+    return "\n".join(
+        sentence
+        for sentence in _SENTENCE_SPLIT_RE.split(text)
+        if not _SCOPE_TRIAGE_NARRATIVE_RE.search(sentence)
+    )
+
 
 class RefineGatesMixin:
     """Pre-refine gate staticmethods mixed into :class:`RefineStage`."""
@@ -343,9 +403,21 @@ class RefineGatesMixin:
         ``<stage> agent`` phrases are checked, so a draft about adding
         a new feature or fixing a bug passes through untouched.
 
+        Concrete paths the draft names are checked first: when one of
+        them exists in the repo tree the change targets this repo and
+        the gate passes.  Pipeline vocabulary in narrative sentences
+        (who reported the gap, which stage spawned the ticket) is
+        neutral — only the requested change is scanned.
+
+        A wrong-board verdict closes a user-filed ticket (DONE) but
+        parks an agent-filed one (``report_issue``, review follow-ups —
+        any ``source != user``) at ``HUMAN_ISSUE_APPROVAL`` naming the
+        suspected board, so a heuristic miss never silently discards it.
+
         Returns ``None`` when no domain term is detected, the repo
-        cannot be grepped, or every detected term is present in the
-        repo (fall through to normal refine).
+        cannot be grepped, a named path exists in the repo, or every
+        detected term is present in the repo (fall through to normal
+        refine).
         """
         # Meta-board tickets are cross-repo by design: the mill concepts
         # they cite legitimately live in one of the OTHER cloned repos,
@@ -364,19 +436,34 @@ class RefineGatesMixin:
         if _ROBOTSIX_MILL_LOCAL_PATH_RE.search(text):
             return None
 
-        needles: list[str] = []
-        for token in _SCOPE_TRIAGE_DOMAIN_TOKENS:
-            if re.search(rf"\b{re.escape(token)}\b", text, re.IGNORECASE):
-                needles.append(token)
-        needles.extend(m.group(0) for m in _SCOPE_TRIAGE_STAGE_PHRASE_RE.finditer(text))
-
-        if not needles:
-            return None
-
         # Cannot prove a mis-route without a repo to grep — fall through
         # and let the triage classifier (which has explore/read_file
         # tools) handle grounding verification.
         if repo_dir is None or not (repo_dir / ".git").exists():
+            return None
+
+        # Concrete paths beat vocabulary: a draft naming a file that
+        # exists in this repo targets this repo.
+        named = _named_path_in_repo(text, repo_dir)
+        if named is not None:
+            log.debug(
+                "%s: scope-triage repo-awareness gate — named path %r exists "
+                "in the repo; in scope",
+                ticket.id,
+                named,
+            )
+            return None
+
+        change_text = _requested_change_text(text)
+        needles: list[str] = []
+        for token in _SCOPE_TRIAGE_DOMAIN_TOKENS:
+            if re.search(rf"\b{re.escape(token)}\b", change_text, re.IGNORECASE):
+                needles.append(token)
+        needles.extend(
+            m.group(0) for m in _SCOPE_TRIAGE_STAGE_PHRASE_RE.finditer(change_text)
+        )
+
+        if not needles:
             return None
 
         for needle in needles:
@@ -394,6 +481,19 @@ class RefineGatesMixin:
                     ticket.id,
                     needle,
                 )
+                if ticket.source != SourceKind.USER:
+                    # Agent-filed tickets (report_issue, review
+                    # follow-ups) park for a human instead of closing:
+                    # DONE is terminal, and a heuristic miss would
+                    # silently discard an in-scope change.
+                    return Outcome(
+                        State.HUMAN_ISSUE_APPROVAL,
+                        f"{SCOPE_TRIAGE_REPO_AWARENESS_GATE_PREFIX} {needle!r} "
+                        "is a mill pipeline concept that does not appear in "
+                        "this repository — suspected wrong board (suspected "
+                        f"board: {_SCOPE_TRIAGE_SUSPECTED_BOARD}); parked for "
+                        "human review",
+                    )
                 return Outcome(
                     State.DONE,
                     f"{SCOPE_TRIAGE_REPO_AWARENESS_GATE_PREFIX} {needle!r} is a "
