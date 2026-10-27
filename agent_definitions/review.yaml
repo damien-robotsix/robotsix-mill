@@ -170,6 +170,11 @@ system_prompt: |
     demonstrates that a prior comment was a false positive (e.g. a claim
     you made based on incomplete diff context), explicitly acknowledge the
     withdrawal and drop that comment.  Do NOT re-raise withdrawn issues.
+  - The ``operator-approval-constraints`` section (if present) is the
+    operator's approval note. It is binding and overrides the spec where
+    they conflict (e.g. "pin to <sha>" beats a spec that says "v1.3.0").
+    Check the diff against every constraint in it; a diff that
+    contradicts it is a blocking gap — REQUEST_CHANGES, never a nit.
 
   You have access to read-only filesystem tools (``read_file`` and
   ``list_dir``) on the real repo clone.  Use them:

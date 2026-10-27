@@ -2476,3 +2476,47 @@ def test_finalize_genuine_no_diff_increments_zero_diff_count(
         ctx, t, repo_dir, "mill/x", "did work", ok=True, transient=False
     )
     assert read_zero_diff_count(ws.artifacts_dir) == 0
+
+
+def test_load_context_approval_note_leads_feedback(ctx_factory, monkeypatch):
+    """The human_issue_approval → ready note carries binding constraints
+    the spec text may contradict (ticket 9fb5): it leads the feedback."""
+    ctx = ctx_factory()
+    t = ctx.service.create("Pin workflows", "Pin the shared workflows to v1.3.0.")
+    ctx.service.transition(t.id, State.HUMAN_ISSUE_APPROVAL)
+    ctx.service.transition(
+        t.id, State.READY, note="pin to 92c11fd2, do NOT resolve the v1.3.0 tag"
+    )
+    monkeypatch.setattr(pc, "load_memory", lambda p: "")
+
+    ic = ImplementStage._load_implement_context(
+        ctx, ctx.service.get(t.id), ctx.settings
+    )
+
+    first = ic.feedback.splitlines()[0]
+    assert first.startswith("[OPERATOR APPROVAL CONSTRAINTS")
+    assert "pin to 92c11fd2" in first
+
+
+def test_operator_approval_note_scoping():
+    """Implement: only the round the approval opened; review: the most
+    recent approval note. Empty and auto-resume notes are skipped."""
+    from datetime import UTC, datetime, timedelta
+
+    t0 = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def ev(i, state, note=None):
+        return SimpleNamespace(at=t0 + timedelta(minutes=i), state=state, note=note)
+
+    approved = [ev(0, State.HUMAN_ISSUE_APPROVAL), ev(1, State.READY, "pin it")]
+    assert pc._operator_approval_note(approved) == "pin it"
+    later = [*approved, ev(2, State.CODE_REVIEW), ev(3, State.READY)]
+    assert pc._operator_approval_note(later) is None
+    assert pc._operator_approval_note(later, current_round_only=False) == "pin it"
+    resumed = [ev(0, State.BLOCKED), ev(1, State.READY, "override: keep X")]
+    assert pc._operator_approval_note(resumed) == "override: keep X"
+    auto = [ev(0, State.BLOCKED), ev(1, State.READY, "[auto-resume 1/3] retry")]
+    assert pc._operator_approval_note(auto) is None
+    empty = [ev(0, State.HUMAN_ISSUE_APPROVAL), ev(1, State.READY)]
+    assert pc._operator_approval_note(empty) is None
+    assert pc._operator_approval_note([ev(0, State.DRAFT), ev(1, State.READY)]) is None

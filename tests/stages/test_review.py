@@ -1428,6 +1428,31 @@ def test_prior_context_drops_gate_era_escalation_comment(ctx_factory):
     assert "please rename the helper" in block
 
 
+def test_prior_context_includes_operator_approval_note(ctx_factory):
+    """The approval note's binding constraints reach review so a diff that
+    follows the spec ("v1.3.0") but contradicts the note ("pin to <sha>")
+    is flagged (ticket 9fb5)."""
+    import time as _time
+
+    from robotsix_mill.stages.review import _build_prior_context
+
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
+    t = ctx.service.create("Pin workflows", "Pin the shared workflows to v1.3.0.")
+    ws = ctx.service.workspace(t)
+    ws.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    ctx.service.transition(t.id, State.HUMAN_ISSUE_APPROVAL)
+    _time.sleep(0.01)
+    ctx.service.transition(t.id, State.READY, note="pin to 92c11fd2, not v1.3.0")
+    _time.sleep(0.01)
+    ctx.service.transition(t.id, State.CODE_REVIEW)
+
+    block = _build_prior_context(t, ctx, ws)
+    assert block is not None
+    assert "operator-approval-constraints" in block
+    assert "pin to 92c11fd2, not v1.3.0" in block
+    assert "blocking" in block
+
+
 def test_prior_context_keeps_comments_without_approval_transition(ctx_factory):
     """No human_issue_approval → ready transition: nothing is dropped."""
     from robotsix_mill.stages.review import _build_prior_context
