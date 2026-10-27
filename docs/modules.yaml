@@ -318,6 +318,7 @@ modules:
       - src/robotsix_mill/stages/ci_fix_analysis.py
       - src/robotsix_mill/stages/ci_fix_helpers.py
       - src/robotsix_mill/stages/ci_fix_codeql.py
+      - src/robotsix_mill/stages/ci_fix_report.py
       - src/robotsix_mill/stages/ci_infra_block.py
       - src/robotsix_mill/stages/ci_transient.py
       - src/robotsix_mill/stages/ci_stale_gate.py
@@ -383,6 +384,7 @@ modules:
       - tests/stages/test_ci_fix.py
       - tests/stages/test_ci_fix_checkpoint.py
       - tests/stages/test_ci_fix_parsing.py
+      - tests/stages/test_ci_fix_report.py
       - tests/stages/test_ci_fix_guards.py
       - tests/stages/test_ci_fix_out_of_scope.py
       - tests/stages/test_ci_fix_helpers.py

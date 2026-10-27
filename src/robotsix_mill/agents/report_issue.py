@@ -216,6 +216,23 @@ def make_report_issue_tool(
             # Step 2: coerce category
             cat = category if category in _CATEGORIES else "other"
 
+            # Step 2b: ci_fix CI-failure reports are deduped by
+            # (repo, workflow, run id) and routed by cause — one session
+            # must not file a ticket per sighting of the same broken run.
+            if agent_name == "ci_fix":
+                from ..stages.ci_fix_report import handle_ci_fix_report
+
+                handled = handle_ci_fix_report(
+                    settings,
+                    board_id=board_id,
+                    title=title,
+                    body=body,
+                    category=cat,
+                    evidence=evidence,
+                )
+                if handled is not None:
+                    return handled
+
             # Step 3: dedup
             service = TicketService(settings, board_id=board_id)
             dup = _check_duplicate(title, body, service)
