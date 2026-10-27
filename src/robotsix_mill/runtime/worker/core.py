@@ -66,6 +66,19 @@ _CAP_GATED_STATES: frozenset[State] = frozenset({State.READY, State.DRAFT})
 # STAGE_FOR_STATE so unknown/side states (BLOCKED etc.) never match.
 _DRAIN_HEAVY_STAGES: frozenset[str] = frozenset({"implement", "ci_fix", "refine"})
 
+# Merge-poll states run on their own lane: they bypass the global
+# concurrency gate entirely. These paths (CI poll, server-side branch
+# refresh, promotion to human_mr_approval, auto-merge) are forge-API
+# bound and never start an agent of their own, yet when they shared the
+# non-classify slots with hour-scale implement/ci_fix runs, green PRs sat
+# at implement_complete for hours and operators merged them by hand.
+# REBASING / ADDRESSING_REVIEW also map to the merge stage but DO run an
+# agent, so they stay gated. Any sandbox an agent opens is still capped
+# by the sandbox slot gate.
+_MERGE_LANE_STATES: frozenset[State] = frozenset(
+    {State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.WAITING_AUTO_MERGE}
+)
+
 # Fail-open TTL (seconds) for the drain flag when the POST body omits
 # ttl_seconds. The flag is also cleared by restart (in-memory only), so
 # a stale flag whose caretaker has disappeared can never wedge intake
@@ -746,7 +759,10 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 if claimed is None:
                     continue  # a live run already covers this ticket+stage
 
-                if self._global_semaphore is not None:
+                if (
+                    self._global_semaphore is not None
+                    and before_state not in _MERGE_LANE_STATES
+                ):
                     if self._global_semaphore.locked():
                         log.debug(
                             "global concurrency cap (%d) saturated, %d queued; "
@@ -1067,8 +1083,36 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         if svc.unmet_dependencies(t):
                             continue
                         self.enqueue(t.id)
+                self._log_merge_poll_starvation()
             except Exception:
                 log.exception("reconcile sweep failed")
+
+    def _log_merge_poll_starvation(self) -> int:
+        """Log how many implement_complete tickets are queued but not
+        running while the global gate is saturated, so the "merge poll
+        starved behind heavy stages" class stays visible per tick.
+
+        Merge-poll states bypass the gate (see ``_MERGE_LANE_STATES``),
+        so a non-zero count here means the board's own consumer pool is
+        busy, not the global cap. Returns the count (0 when the gate has
+        free slots).
+        """
+        gate = self._global_semaphore
+        if gate is None or not gate.locked():
+            return 0
+        waiting = 0
+        for tid in self._pending - self._in_flight:
+            # Same lookup enqueue() uses to route a ticket to its board.
+            t = self.ctx.service.get(tid)
+            if t is not None and t.state is State.IMPLEMENT_COMPLETE:
+                waiting += 1
+        if waiting:
+            log.warning(
+                "merge poll starved: %d tickets at implement_complete queued "
+                "while slots full",
+                waiting,
+            )
+        return waiting
 
     def start(self) -> None:
         """Start all worker tasks: per-repo consumer pools, health monitoring,

@@ -850,6 +850,118 @@ async def test_drain_gate_defers_heavy_stage_until_cleared(ctx, service, monkeyp
         await w.stop()
 
 
+async def test_merge_poll_not_starved_by_full_slots(ctx, service, monkeypatch):
+    """A green implement_complete ticket reaches human_mr_approval while
+    two implements hold every non-classify slot (cap 3, 1 reserved):
+    merge-poll states bypass the global gate."""
+    import threading
+
+    release = threading.Event()
+    started = {"n": 0}
+    lock = threading.Lock()
+
+    class BlockingImplement(Stage):
+        name = "implement"
+        input_state = State.READY
+
+        def run(self, _t, _c):
+            with lock:
+                started["n"] += 1
+            release.wait(timeout=10)
+            return Outcome(State.BLOCKED, "implemented")
+
+    class GreenMerge(Stage):
+        name = "merge"
+        input_state = State.IMPLEMENT_COMPLETE
+
+        def run(self, t, _c):
+            # IC -> HMA, then a same-state no-op from HMA ends the chain.
+            return Outcome(State.HUMAN_MR_APPROVAL, "green")
+
+    monkeypatch.setitem(registry.STAGES, "implement", BlockingImplement())
+    monkeypatch.setitem(registry.STAGES, "merge", GreenMerge())
+    ctx.settings.max_global_concurrency = 3
+    ctx.settings.classify_reserved_slots = 1
+
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+
+    fake_repos = ReposRegistry(
+        repos={
+            "test-repo": RepoConfig(
+                repo_id="test-repo",
+                board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+                max_concurrency=3,
+            ),
+        }
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.get_repos_config",
+        lambda: fake_repos,
+    )
+
+    impls = []
+    for i in range(2):
+        t = service.create(f"impl {i}")
+        service.transition(t.id, State.READY, note="ready")
+        impls.append(t.id)
+    green = service.create("green PR")
+    service.transition(green.id, State.READY, note="ready")
+    service.transition(green.id, State.DELIVERABLE, note="delivered")
+    service.transition(green.id, State.IMPLEMENT_COMPLETE, note="gates")
+
+    w = Worker(ctx)
+    w.start()
+    try:
+        for tid in impls:
+            w.enqueue(tid)
+        for _ in range(100):
+            if started["n"] == 2:
+                break
+            await asyncio.sleep(0.02)
+        assert started["n"] == 2
+        assert w._global_semaphore.locked() is False  # reserved slot left
+        # Non-classify slots are full: only the reserved one remains.
+        assert w._global_semaphore._can_admit(False) is False
+
+        w.enqueue(green.id)
+        for _ in range(100):
+            if service.get(green.id).state is State.HUMAN_MR_APPROVAL:
+                break
+            await asyncio.sleep(0.02)
+        assert service.get(green.id).state is State.HUMAN_MR_APPROVAL
+        assert all(service.get(t).state is State.READY for t in impls)
+    finally:
+        release.set()
+        await asyncio.wait_for(w.queue_join(), timeout=10)
+        await w.stop()
+
+
+async def test_merge_poll_starvation_logged(ctx, service, caplog):
+    """The per-tick metric counts queued implement_complete tickets while
+    the global gate is saturated."""
+    import logging
+
+    from robotsix_mill.runtime.worker._gate import PriorityGate
+
+    t = service.create("green")
+    service.transition(t.id, State.READY, note="ready")
+    service.transition(t.id, State.DELIVERABLE, note="delivered")
+    service.transition(t.id, State.IMPLEMENT_COMPLETE, note="gates")
+
+    w = Worker(ctx)
+    w._global_semaphore = PriorityGate(1)
+    w._pending.add(t.id)
+    assert w._log_merge_poll_starvation() == 0  # slot still free
+
+    await w._global_semaphore.acquire()
+    with caplog.at_level(logging.WARNING, logger="robotsix_mill.runtime.worker.core"):
+        assert w._log_merge_poll_starvation() == 1
+    assert "merge poll starved: 1 tickets at implement_complete" in caplog.text
+
+
 async def test_start_creates_per_repo_consumer_pools(ctx, monkeypatch):
     """One consumer task per repo per its max_concurrency, plus a
     single fallback consumer for the default (no-repo) queue."""
