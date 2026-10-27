@@ -249,6 +249,89 @@ def test_success_pushes_and_opens_pr(tmp_path, monkeypatch):
     assert (ctx.service.workspace(t).artifacts_dir / "deliver.md").exists()
 
 
+_PUSH_403 = (
+    "remote: Permission to o/r.git denied to robotsix-mill[bot].\n"
+    "fatal: unable to access 'https://github.com/o/r.git/': "
+    "The requested URL returned error: 403"
+)
+
+
+def _push_retry_setup(tmp_path, monkeypatch, failures: int):
+    """Fake a push that 403s *failures* times; count invalidations/mints."""
+    from robotsix_mill.scm.forge import auth
+
+    remote, _ = _bare(tmp_path)
+    ctx = _ctx(tmp_path, forge_kind="github", forge_remote_url=remote, FORGE_TOKEN="t")
+    calls = {"push": [], "invalidate": 0, "mint": 0}
+
+    def fake_push(repo, branch, remote_url, token):
+        calls["push"].append(token)
+        if len(calls["push"]) <= failures:
+            raise subprocess.CalledProcessError(128, ["git", "push"], "", _PUSH_403)
+
+    def fake_invalidate(settings, repo_config=None):
+        calls["invalidate"] += 1
+
+    def fake_mint(settings, repo_config=None):
+        calls["mint"] += 1
+        return "fresh"
+
+    monkeypatch.setattr(git_ops, "push", fake_push)
+    monkeypatch.setattr(auth, "invalidate_github_token", fake_invalidate)
+    monkeypatch.setattr(auth, "github_push_token", fake_mint)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "open_merge_request",
+        lambda self, **kw: "https://github.com/o/r/pull/42",
+    )
+    t, _ = _ticket_with_branch(ctx, remote)
+    return ctx, t, calls
+
+
+def test_push_403_retries_once_with_fresh_token(tmp_path, monkeypatch, caplog):
+    ctx, t, calls = _push_retry_setup(tmp_path, monkeypatch, failures=1)
+
+    with caplog.at_level("WARNING"):
+        out = DeliverStage().run(t, ctx)
+
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert calls["invalidate"] == 1
+    assert calls["mint"] == 1
+    assert calls["push"] == ["t", "fresh"]
+    assert "push token was stale" in caplog.text
+
+
+def test_push_403_twice_blocks_with_retried_note(tmp_path, monkeypatch):
+    ctx, t, calls = _push_retry_setup(tmp_path, monkeypatch, failures=2)
+
+    out = DeliverStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert out.note.startswith("push retried once with a fresh token")
+    assert "push failed for" in out.note
+    assert "resumable" in out.note
+    assert calls["invalidate"] == 1
+    assert len(calls["push"]) == 2
+
+
+def test_push_non_auth_failure_blocks_without_retry(tmp_path, monkeypatch):
+    ctx, t, calls = _push_retry_setup(tmp_path, monkeypatch, failures=0)
+
+    def fail(repo, branch, remote_url, token):
+        calls["push"].append(token)
+        raise subprocess.CalledProcessError(
+            1, ["git", "push"], "", "rejected (fetch first)"
+        )
+
+    monkeypatch.setattr(git_ops, "push", fail)
+    out = DeliverStage().run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    assert out.note.startswith("push failed for")
+    assert calls["invalidate"] == 0
+    assert len(calls["push"]) == 1
+
+
 def test_pr_api_error_blocks_resumable(tmp_path, monkeypatch):
     remote, _ = _bare(tmp_path)
     ctx = _ctx(
