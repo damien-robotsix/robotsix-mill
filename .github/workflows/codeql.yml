@@ -24,7 +24,10 @@ jobs:
       security-events: write  # upload the CodeQL SARIF to code scanning
     # Shared fleet CodeQL workflow (same as cost-monitor/calendar/auto-mail).
     # Python needs no build; the reusable's autobuild step is a no-op here.
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/codeql.yml@b9388c432eeba3c83f21cc588935cdeea6f8c218  # main
+    # Pinned to the last shared-workflow commit whose codeql-action
+    # init/autobuild/analyze pins all match (v4.38.2); newer commits mix
+    # versions, which codeql-action rejects at the autobuild step.
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/codeql.yml@f167941e3207558e75293102882db3b683162d0a  # main
     with:
       languages: python
       config-file: ./.github/codeql/codeql-config.yml
