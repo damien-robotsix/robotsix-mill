@@ -2487,3 +2487,68 @@ def test_infra_account_block_parks_without_running_agent(tmp_path, monkeypatch):
 
     assert out.next_state is State.BLOCKED
     assert INFRA_ACCOUNT_BLOCK_MARKER in (out.note or "")
+
+
+# --- Rebase push retries once on a stale installation token ---------------
+
+_PUSH_403 = "remote: Permission to o/r.git denied to mill[bot].\nfatal: 403"
+
+
+def _rebase_push_retry_setup(tmp_path, monkeypatch, *, failures):
+    from robotsix_mill.scm.forge import auth
+
+    ctx = _gh(tmp_path)
+    calls = {"push": [], "invalidate": 0}
+
+    def fake_push(repo, branch, remote_url, token):
+        calls["push"].append(token)
+        if len(calls["push"]) <= failures:
+            raise subprocess.CalledProcessError(128, ["git", "push"], "", _PUSH_403)
+
+    def fake_invalidate(settings, repo_config=None):
+        calls["invalidate"] += 1
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.try_rebase_onto", lambda *a, **k: True
+    )
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.git_ops.push", fake_push)
+    monkeypatch.setattr(auth, "invalidate_github_token", fake_invalidate)
+    monkeypatch.setattr(auth, "github_push_token", lambda s, repo_config=None: "fresh")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "success",
+            "failing": [],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    return ctx, t, calls
+
+
+def test_rebase_push_auth_failure_retries_with_fresh_token(tmp_path, monkeypatch):
+    ctx, t, calls = _rebase_push_retry_setup(tmp_path, monkeypatch, failures=1)
+
+    out = CIFixStage().run(t, ctx)
+
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert calls["invalidate"] == 1
+    assert calls["push"] == ["t", "fresh"]
+
+
+def test_rebase_push_two_auth_failures_falls_through(tmp_path, monkeypatch, caplog):
+    ctx, t, calls = _rebase_push_retry_setup(tmp_path, monkeypatch, failures=2)
+
+    with caplog.at_level("WARNING"):
+        out = CIFixStage().run(t, ctx)
+
+    # Existing failure path: rebase step logged, stage proceeds.
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert calls["push"] == ["t", "fresh"]
+    assert "rebase step failed" in caplog.text

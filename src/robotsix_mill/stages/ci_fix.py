@@ -34,6 +34,7 @@ from ..scm.forge.auth import (
     github_push_token,
     github_token,
     invalidate_github_token,
+    push_with_token_retry,
 )
 from ..scm.vcs import git_ops
 from . import dependency_fix
@@ -540,7 +541,13 @@ class CIFixStage(Stage):
                 token=_token,
             )
             if _did_rebase:
-                git_ops.push(Path(repo_dir), branch, _remote_url, _token)
+                _token = push_with_token_retry(
+                    lambda t: git_ops.push(Path(repo_dir), branch, _remote_url, t),
+                    _token,
+                    s,
+                    ctx.repo_config,
+                    label=ticket.id,
+                )
                 log.info(
                     "%s: rebased onto %s and pushed before CI scan",
                     ticket.id,

@@ -278,3 +278,69 @@ class TestCreateOrUpdateEpics:
         )
         assert len(updated) == 1
         assert updated[0]["fields"] == ["title"]
+
+
+# ---------------------------------------------------------------------------
+# Marker write-back push: stale-token retry
+# ---------------------------------------------------------------------------
+
+_PUSH_403 = "remote: Permission to o/r.git denied to mill[bot].\nfatal: 403"
+
+
+def _push_retry_setup(tmp_path, monkeypatch, *, failures):
+    import subprocess
+
+    from robotsix_mill.agents.runners import roadmap_sync_runner as mod
+    from robotsix_mill.scm.forge import auth
+
+    calls = {"push": [], "invalidate": 0, "pr": 0}
+
+    def fake_push(repo, branch, remote_url, token):
+        calls["push"].append(token)
+        if len(calls["push"]) <= failures:
+            raise subprocess.CalledProcessError(128, ["git", "push"], "", _PUSH_403)
+
+    def fake_invalidate(settings, repo_config=None):
+        calls["invalidate"] += 1
+
+    class _Forge:
+        def open_merge_request(self, **kw):
+            calls["pr"] += 1
+            return "https://github.com/o/r/pull/1"
+
+    monkeypatch.setattr(mod, "_resolve_remote_url", lambda s, rc: "https://r")
+    monkeypatch.setattr(mod, "github_push_token", lambda s, repo_config=None: "t")
+    monkeypatch.setattr(mod.git_ops, "create_branch", lambda *a, **k: None)
+    monkeypatch.setattr(mod.git_ops, "commit_all", lambda *a, **k: None)
+    monkeypatch.setattr(mod.git_ops, "push", fake_push)
+    monkeypatch.setattr(mod, "get_forge", lambda s, repo_config=None: _Forge())
+    monkeypatch.setattr(auth, "invalidate_github_token", fake_invalidate)
+    monkeypatch.setattr(auth, "github_push_token", lambda s, repo_config=None: "fresh")
+    settings = Settings(data_dir=str(tmp_path / "data"))
+    return mod, settings, calls
+
+
+def test_commit_and_open_pr_push_retries_stale_token(tmp_path, monkeypatch):
+    mod, settings, calls = _push_retry_setup(tmp_path, monkeypatch, failures=1)
+
+    url = mod._commit_and_open_pr(
+        settings, None, tmp_path, [{"id": "e1", "title": "E"}]
+    )
+
+    assert url == "https://github.com/o/r/pull/1"
+    assert calls["push"] == ["t", "fresh"]
+    assert calls["invalidate"] == 1
+
+
+def test_commit_and_open_pr_push_fails_twice_leaves_markers_local(
+    tmp_path, monkeypatch
+):
+    mod, settings, calls = _push_retry_setup(tmp_path, monkeypatch, failures=2)
+
+    url = mod._commit_and_open_pr(
+        settings, None, tmp_path, [{"id": "e1", "title": "E"}]
+    )
+
+    assert url is None
+    assert calls["push"] == ["t", "fresh"]
+    assert calls["pr"] == 0

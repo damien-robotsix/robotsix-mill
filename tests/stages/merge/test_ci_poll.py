@@ -9,6 +9,7 @@ Covers:
 """
 
 import datetime
+import subprocess
 
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
@@ -1825,3 +1826,67 @@ def test_human_mr_approval_no_timestamp_allows_rebase(tmp_path, monkeypatch):
     # No last_rebase_at.txt written — cooldown has no reference point.
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.REBASING
+
+
+# === Refresh push retries once on a stale installation token ===============
+
+_REFRESH_PUSH_403 = "remote: Permission to o/r.git denied to mill[bot].\nfatal: 403"
+
+
+def _refresh_push_retry_setup(tmp_path, monkeypatch, *, failures):
+    from robotsix_mill.scm.forge import auth
+    from robotsix_mill.stages.merge import _shared as shared_mod
+
+    calls = {"push": [], "invalidate": 0}
+
+    def fake_push(repo, branch, url, token):
+        calls["push"].append(token)
+        if len(calls["push"]) <= failures:
+            raise subprocess.CalledProcessError(
+                128, ["git", "push"], "", _REFRESH_PUSH_403
+            )
+
+    def fake_invalidate(settings, repo_config=None):
+        calls["invalidate"] += 1
+
+    monkeypatch.setattr(shared_mod.git_ops, "try_rebase_onto", lambda *a, **k: True)
+    monkeypatch.setattr(shared_mod.git_ops, "push", fake_push)
+    monkeypatch.setattr(auth, "invalidate_github_token", fake_invalidate)
+    monkeypatch.setattr(auth, "github_push_token", lambda s, repo_config=None: "fresh")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    return str(repo), calls
+
+
+def test_refresh_rebase_push_retries_stale_token(tmp_path, monkeypatch):
+    from robotsix_mill.stages.merge._shared import _refresh_branch_for_ci
+
+    repo, calls = _refresh_push_retry_setup(tmp_path, monkeypatch, failures=1)
+    s = Settings(data_dir=str(tmp_path / "data"))
+
+    assert _refresh_branch_for_ci(
+        repo, "br", "main", "https://remote", "tok", "tid", settings=s
+    )
+    assert calls["push"] == ["tok", "fresh"]
+    assert calls["invalidate"] == 1
+
+
+def test_refresh_rebase_push_two_failures_returns_false(tmp_path, monkeypatch):
+    from robotsix_mill.stages.merge import _shared as shared_mod
+    from robotsix_mill.stages.merge._shared import _refresh_branch_for_ci
+
+    repo, calls = _refresh_push_retry_setup(tmp_path, monkeypatch, failures=2)
+    # Remote unreachable → empty-commit path skipped after the failed rebase push.
+    monkeypatch.setattr(shared_mod.git_ops, "head_sha", lambda repo: "a")
+    monkeypatch.setattr(
+        shared_mod.git_ops, "ls_remote_sha", lambda remote_url, ref, token=None: None
+    )
+    s = Settings(data_dir=str(tmp_path / "data"))
+
+    assert (
+        _refresh_branch_for_ci(
+            repo, "br", "main", "https://remote", "tok", "tid", settings=s
+        )
+        is False
+    )
+    assert calls["push"] == ["tok", "fresh"]

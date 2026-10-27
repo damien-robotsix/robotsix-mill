@@ -153,6 +153,8 @@ class CIPollMixin(_MergeStageBase):
                         ctx.service.workspace(ticket).artifacts_dir
                         / _CI_POLL_REFRESH_SHA
                     ),
+                    settings=s,
+                    repo_config=ctx.repo_config,
                 )
 
     def _handle_ci_failure_route(

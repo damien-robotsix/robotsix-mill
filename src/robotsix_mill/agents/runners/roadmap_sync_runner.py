@@ -37,7 +37,12 @@ from ...config import RepoConfig, Settings, target_branch_for
 from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.service import TicketService
 from ...scm.forge import get_forge
-from ...scm.forge.auth import _resolve_remote_url, github_push_token, github_token
+from ...scm.forge.auth import (
+    _resolve_remote_url,
+    github_push_token,
+    github_token,
+    push_with_token_retry,
+)
 from ...scm.vcs import git_ops
 
 log = logging.getLogger("robotsix_mill.roadmap_sync")
@@ -287,7 +292,13 @@ def _commit_and_open_pr(
         return None
 
     try:
-        git_ops.push(repo_dir, branch, remote_url, token)
+        push_with_token_retry(
+            lambda t: git_ops.push(repo_dir, branch, remote_url, t),
+            token,
+            settings,
+            repo_config,
+            label="roadmap-sync",
+        )
     except subprocess.CalledProcessError as e:
         log.warning(
             "roadmap-sync: git push failed (%s) — markers left local",

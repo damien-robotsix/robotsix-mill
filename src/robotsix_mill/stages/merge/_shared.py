@@ -21,7 +21,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from ...config import ConfigError, RepoConfig, get_repo_config
+from ...config import ConfigError, RepoConfig, Settings, get_repo_config
 from ...core.states import State
 from ...core.workspace import (
     read_counter as _read_counter,
@@ -29,6 +29,7 @@ from ...core.workspace import (
 from ...core.workspace import (
     write_counter as _write_counter,
 )
+from ...scm.forge.auth import push_with_token_retry
 from ...scm.vcs import git_ops
 from ..base import Outcome
 
@@ -383,6 +384,8 @@ def _refresh_branch_for_ci(
     token: str | None,
     ticket_id: str,
     sentinel_path: Path | None = None,
+    settings: Settings | None = None,
+    repo_config: RepoConfig | None = None,
 ) -> bool:
     """Force a fresh CI run by rebasing onto *target* or pushing an empty commit.
 
@@ -401,12 +404,29 @@ def _refresh_branch_for_ci(
     the last refresh, so the next call is a no-op until something real
     pushes and moves the branch on.
 
+    When *settings* is given (and *token* came from ``github_push_token``),
+    each push retries once with a freshly minted token on an auth-shaped
+    rejection (see ``push_with_token_retry``).
+
     Returns ``True`` when a commit was pushed (new CI run triggered).
     Errors are logged and return ``False`` (caller proceeds with existing
     HEAD).
     """
     repo_path = Path(repo_dir)
     pushed = False
+
+    def _push() -> None:
+        nonlocal token
+        if settings is None or token is None:
+            git_ops.push(repo_path, branch, remote_url, token)
+            return
+        token = push_with_token_retry(
+            lambda t: git_ops.push(repo_path, branch, remote_url, t),
+            token,
+            settings,
+            repo_config,
+            label=ticket_id,
+        )
 
     if sentinel_path is not None:
         try:
@@ -435,7 +455,7 @@ def _refresh_branch_for_ci(
             token=token,
         )
         if did_rebase:
-            git_ops.push(repo_path, branch, remote_url, token)
+            _push()
             pushed = True
             log.info(
                 "%s: rebased onto %s and pushed before CI scan",
@@ -475,7 +495,7 @@ def _refresh_branch_for_ci(
                     repo_path,
                     "ci: trigger fresh CI run (no-op commit to un-stick transient failure)",
                 )
-                git_ops.push(repo_path, branch, remote_url, token)
+                _push()
                 pushed = True
                 log.info(
                     "%s: pushed empty commit to force fresh CI run "
