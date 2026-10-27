@@ -92,6 +92,8 @@ class MultiRepoCiFixMixin(_MergeStageBase):
                 _token,
                 ticket.id,
                 sentinel_path=(ws.artifacts_dir / _CI_FIX_MIXIN_REFRESH_SHA),
+                settings=s,
+                repo_config=rc,
             )
         except Exception:
             log.warning(
