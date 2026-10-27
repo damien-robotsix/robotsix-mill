@@ -2487,6 +2487,62 @@ def test_pin_not_older_than_approval_sha_keeps_verdict(ctx_factory, monkeypatch)
     assert out.next_state is State.DOCUMENTING
 
 
+def test_pin_unverifiable_when_fetch_fails_is_sent_back(ctx_factory, monkeypatch):
+    """A failed ancestry lookup (GitHub outage, bad token, 403) must fail
+    closed: the pin is unverified, so the verdict cannot stay APPROVE."""
+    from robotsix_mill.stages import _review_helpers
+
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
+    t = _approved_pin_ticket(ctx, f"never older than {_FLOOR}")
+    # Keep the real ancestry check; make only its `git fetch` fail.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review._verify_action_sha", lambda *a, **k: True
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.run_review_agent",
+        lambda **_kw: ReviewVerdict(verdict="APPROVE", comments="lgtm"),
+    )
+    real_run = subprocess.run
+    fetches: list[list[str]] = []
+
+    def _run(cmd, **kw):
+        if (
+            isinstance(cmd, list)
+            and "fetch" in cmd
+            and any("github.com" in str(c) for c in cmd)
+        ):
+            fetches.append(cmd)
+            return subprocess.CompletedProcess(cmd, 128, "", "fatal: 403")
+        return real_run(cmd, **kw)
+
+    monkeypatch.setattr(_review_helpers.subprocess, "run", _run)
+
+    out = ReviewStage().run(t, ctx)
+
+    assert fetches, "the ancestry check must have attempted a fetch"
+    assert out.next_state is State.READY
+    review_md = (ctx.service.workspace(t).artifacts_dir / "review.md").read_text()
+    assert "verdict: REQUEST_CHANGES" in review_md
+    assert "could not be checked" in review_md
+
+
+def test_enforce_approval_pins_unverifiable_requests_changes(monkeypatch):
+    from robotsix_mill.stages._review_helpers import (
+        _enforce_approval_constraint_pins,
+    )
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages._review_helpers._sha_is_older_than",
+        lambda *_a, **_k: None,
+    )
+    refs = [("ci.yml", "o/r/.github/workflows/x.yml", _OLD_PIN, "")]
+    v = ReviewVerdict(verdict="APPROVE", comments="ok")
+    out = _enforce_approval_constraint_pins(v, f"never older than {_FLOOR}", refs, None)
+    assert out.verdict == "REQUEST_CHANGES"
+    assert out.auto_merge_eligible is False
+    assert "could not run" in out.request_changes[0].description
+
+
 def test_enforce_approval_pins_noop_without_named_sha(monkeypatch):
     from robotsix_mill.stages._review_helpers import (
         _enforce_approval_constraint_pins,
@@ -2529,3 +2585,40 @@ def test_sha_is_older_than_uses_merge_base(monkeypatch):
     monkeypatch.setattr(_review_helpers.subprocess, "run", _run)
     assert _review_helpers._sha_is_older_than("o/r", _OLD_PIN, _FLOOR) is True
     assert _review_helpers._sha_is_older_than("o/r", _OLD_PIN, "nothex!") is None
+
+
+def test_sha_is_older_than_floor_not_in_repo_is_false(monkeypatch):
+    """A floor that is not a commit of the pinned repo (e.g. the note names
+    a floor for another action) is a definite "does not apply", not an
+    unverifiable check — otherwise unrelated pins would block forever."""
+    from robotsix_mill.stages import _review_helpers
+
+    def _run(cmd, **_kw):
+        if "rev-parse" in cmd:
+            return subprocess.CompletedProcess(cmd, 1, "", "")
+        if "merge-base" in cmd:
+            raise AssertionError("must not reach merge-base")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(_review_helpers.subprocess, "run", _run)
+    assert _review_helpers._sha_is_older_than("o/r", _OLD_PIN, _FLOOR) is False
+
+
+def test_enforce_approval_pins_floor_of_other_repo_keeps_verdict(monkeypatch):
+    """Note names a floor for one repo; the diff also SHA-pins an unrelated
+    action. The unrelated pin must not be forced to REQUEST_CHANGES."""
+    from robotsix_mill.stages import _review_helpers
+
+    def _run(cmd, **_kw):
+        if "rev-parse" in cmd:
+            return subprocess.CompletedProcess(cmd, 1, "", "")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(_review_helpers.subprocess, "run", _run)
+    refs = [("ci.yml", "actions/checkout", _OLD_PIN, "v4")]
+    v = ReviewVerdict(verdict="APPROVE", comments="ok")
+    out = _review_helpers._enforce_approval_constraint_pins(
+        v, f"never older than {_FLOOR}", refs, None
+    )
+    assert out.verdict == "APPROVE"
+    assert out.request_changes == []

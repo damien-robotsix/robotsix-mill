@@ -374,9 +374,11 @@ def _sha_is_older_than(
     Fetches the remote ``HEAD`` and *sha* (commit graph only,
     ``--filter=tree:0``) into a scratch repo, resolves the (possibly
     abbreviated) *floor* there and asks ``git merge-base --is-ancestor``.
-    Returns ``True`` (older than the floor), ``False`` (equal, newer or
-    unrelated) or ``None`` when it could not be decided — malformed
-    input, network failure, or *floor* not a commit of this repo.
+    Returns ``True`` (older than the floor), ``False`` (equal, newer,
+    unrelated, or *floor* is not a commit of this repo — the note names
+    a SHA of some other repo, so the constraint does not apply here) or
+    ``None`` when it could not be decided — malformed input or a
+    fetch/network/auth failure.
     """
     if not (
         _OWNER_REPO_RE.match(owner_repo)
@@ -412,12 +414,63 @@ def _scratch_is_ancestor(tmp: str, url: str, sha: str, floor: str) -> bool | Non
         return None
     resolved = _git("rev-parse", "--verify", "--quiet", f"{floor}^{{commit}}")
     if resolved.returncode != 0:
-        return None  # floor is not a commit of this repo
+        # Fetch succeeded, so this is a definite answer: the floor is not
+        # a commit of this repo (e.g. a floor for another action, or a
+        # SHA of the mill repo itself) and does not constrain this pin.
+        return False
     floor_full = resolved.stdout.strip()
     if floor_full == sha:
         return False
     rc = _git("merge-base", "--is-ancestor", sha, floor_full).returncode
     return {0: True, 1: False}.get(rc)
+
+
+def _pin_constraint_ask(
+    file_path: str,
+    slug: str,
+    ref: str,
+    floor: str,
+    approval: str,
+    older: bool | None,
+) -> ReviewAsk | None:
+    """Build the ask for a pin vs. an approval-note *floor*, or ``None``.
+
+    *older* is :func:`_sha_is_older_than`'s result. ``None`` (the check
+    could not run: fetch failure, bad token) fails closed — an
+    unverified pin must not pass review silently. A floor that is not a
+    commit of the pinned repo yields ``False`` upstream, not ``None``.
+    """
+    name = slug.split("/")[-1]
+    if older is None:
+        return ReviewAsk(
+            title=f"Verify {name} pin vs approval constraint"[:80],
+            description=(
+                f"`{file_path}` pins `{slug}@{ref}`, but review could not "
+                f"verify it is not older than `{floor}` named in the "
+                "operator's approval note (binding) — the ancestry check "
+                "could not run (fetch failed, or missing/expired "
+                f"token):\n\n{approval}\n\n"
+                f"Pin a commit at or after `{floor}`. If you believe the "
+                "constraint cannot be satisfied, call `ask_user` with the "
+                "constraint, your reason and the alternative, and stop."
+            ),
+            files_touched=[file_path],
+        )
+    if older:
+        return ReviewAsk(
+            title=f"Pin {name} per approval constraint"[:80],
+            description=(
+                f"`{file_path}` pins `{slug}@{ref}`, which is older "
+                f"than `{floor}` named in the operator's approval "
+                f"note (binding):\n\n{approval}\n\n"
+                "Satisfy the constraint. If you believe it cannot "
+                "be satisfied, do NOT re-commit the deviation: call "
+                "`ask_user` with the constraint, your reason and "
+                "the alternative, and stop."
+            ),
+            files_touched=[file_path],
+        )
+    return None
 
 
 def _enforce_approval_constraint_pins(
@@ -454,29 +507,23 @@ def _enforce_approval_constraint_pins(
         for floor in floors:
             if ref.startswith(floor) or floor.startswith(ref):
                 continue
-            if _sha_is_older_than(owner_repo, ref, floor, gh_token) is True:
-                asks.append(
-                    ReviewAsk(
-                        title=f"Pin {slug.split('/')[-1]} per approval constraint"[:80],
-                        description=(
-                            f"`{file_path}` pins `{slug}@{ref}`, which is older "
-                            f"than `{floor}` named in the operator's approval "
-                            f"note (binding):\n\n{approval}\n\n"
-                            "Satisfy the constraint. If you believe it cannot "
-                            "be satisfied, do NOT re-commit the deviation: call "
-                            "`ask_user` with the constraint, your reason and "
-                            "the alternative, and stop."
-                        ),
-                        files_touched=[file_path],
-                    )
-                )
+            ask = _pin_constraint_ask(
+                file_path,
+                slug,
+                ref,
+                floor,
+                approval,
+                _sha_is_older_than(owner_repo, ref, floor, gh_token),
+            )
+            if ask is not None:
+                asks.append(ask)
                 break
     if not asks:
         return verdict
     header = (
-        "Operator approval constraint violated: the diff pins a SHA older "
-        "than one the approval note names (see request_changes entries "
-        "below)."
+        "Operator approval constraint violated or unverifiable: the diff "
+        "pins a SHA that is older than, or could not be checked against, "
+        "one the approval note names (see request_changes entries below)."
     )
     verdict.verdict = "REQUEST_CHANGES"
     verdict.auto_merge_eligible = False
