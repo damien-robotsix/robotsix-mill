@@ -9,19 +9,13 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  UV_MALWARE_CHECK: "1"
-
 jobs:
   dependency-review:
     name: Dependency review
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          # Read-only manifest comparison; no git push.
-          persist-credentials: false
-
-      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v5.0.0
-        with:
-          fail-on-severity: moderate
+    permissions:
+      contents: read
+      pull-requests: write  # comment-summary-in-pr
+    # Shared fleet dependency-review workflow (robotsix-github-workflows #252).
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/dependency-review.yml@47523e8aa2d34d41da060d29b57f75ab262cb840  # v1.4.0
+    with:
+      fail-on-severity: moderate
