@@ -1,8 +1,9 @@
 """Meta-pass integration runner.
 
 Wires together the cross-repo clone primitive, the meta-agent,
-board routing (extraction → meta board, alignment → per-repo
-board), the cross-repo memory ledger, and mill-pinned tracing.
+board routing (extraction → receiving repo's board, or the meta
+board when no receiving repo is known; alignment → per-repo board),
+the cross-repo memory ledger, and mill-pinned tracing.
 """
 
 from __future__ import annotations
@@ -91,26 +92,72 @@ def _build_body_with_gap_id(body: str, gap_id: str) -> str:
     return body + f"<!-- {SourceKind.META}-gap-id: {gap_id} -->"
 
 
+_CALLER_MIGRATION_NOTE = (
+    "Caller migrations are out of scope for this ticket: once the shared "
+    "implementation exists, the next meta pass files them as alignment "
+    "drafts on each consuming repo's board."
+)
+
+
 def _file_extraction_drafts(
     drafts: list[Any],
     settings: Settings,
     session_id: str,
 ) -> list[dict[str, Any]]:
-    """File extraction drafts to the meta board.  Best-effort."""
+    """File extraction drafts on the board of the repo that RECEIVES the
+    extracted code (``draft.target_repo_id``).  Best-effort.
+
+    Falls back to the meta board when the draft names no receiving repo
+    (pure fleet-wide pattern documentation) or the target is unknown /
+    ``meta_exclude`` — the meta board has no forge remote, so only
+    targeted drafts are implementable.
+    """
     created: list[dict[str, Any]] = []
-    meta_service = TicketService(settings, board_id="meta")
+    repos_config = get_repos_config()
     for draft in drafts:
+        board_id = "meta"
+        draft_body = draft.body
+        target_id = draft.target_repo_id
+        if target_id:
+            target_rc = repos_config.repos.get(target_id)
+            if target_rc is None:
+                log.warning(
+                    "meta_pass: extraction draft %r targets unknown repo_id %r "
+                    "— filing on meta board",
+                    draft.title,
+                    target_id,
+                )
+            elif target_rc.meta_exclude:
+                log.warning(
+                    "meta_pass: extraction draft %r targets meta_exclude repo "
+                    "%r — filing on meta board",
+                    draft.title,
+                    target_id,
+                )
+            else:
+                board_id = target_rc.board_id
+                if _CALLER_MIGRATION_NOTE not in draft_body:
+                    draft_body = (
+                        f"{draft_body}\n\n{_CALLER_MIGRATION_NOTE}"
+                        if draft_body
+                        else _CALLER_MIGRATION_NOTE
+                    )
         gap_id = _slugify_title(draft.title)
-        body = _build_body_with_gap_id(draft.body, gap_id)
+        body = _build_body_with_gap_id(draft_body, gap_id)
         try:
-            ticket = meta_service.create(
+            service = TicketService(settings, board_id=board_id)
+            ticket = service.create(
                 title=draft.title,
                 description=body,
                 source=SourceKind.META,
                 origin_session=session_id,
             )
             created.append({"id": ticket.id, "title": ticket.title})
-            log.info("meta pass: filed extraction draft %r", ticket.id)
+            log.info(
+                "meta pass: filed extraction draft %r on board %r",
+                ticket.id,
+                board_id,
+            )
         except Exception:
             log.exception(
                 "meta pass: failed to create extraction draft %r",
@@ -244,8 +291,9 @@ def run_meta_pass(session_id: str) -> MetaPassResult:
     4. Load the meta memory ledger.
     5. Gather prior meta proposals from all relevant boards.
     6. Invoke the meta-agent.
-    7. File extraction drafts to the meta board and alignment + TODO
-       drafts to their target repo boards.
+    7. File extraction drafts to their receiving repo's board (meta
+       board when untargeted) and alignment + TODO drafts to their
+       target repo boards.
     8. Persist updated memory.
     """
     # 1. Instantiate settings

@@ -784,3 +784,67 @@ class TestRunMetaPass:
         assert repo_a_tickets[0].title == "Align repo-a"
 
         db.reset_engine()
+
+
+class TestFileExtractionDrafts:
+    def test_targeted_draft_goes_to_receiving_repo_board(self, tmp_path, monkeypatch):
+        """An extraction draft with a known ``target_repo_id`` is filed on
+        that repo's board (with the caller-migration note); one without a
+        target still goes to the meta board."""
+        from robotsix_mill.meta.runner import (
+            _CALLER_MIGRATION_NOTE,
+            _file_extraction_drafts,
+        )
+
+        settings = _make_settings(tmp_path)
+        db.reset_engine()
+        db.init_db(settings, board_id="meta")
+        db.init_db(settings, board_id="gh-wf")
+
+        reg = ReposRegistry(
+            repos={
+                "robotsix-github-workflows": _repo_cfg(
+                    "robotsix-github-workflows", board_id="gh-wf"
+                ),
+            }
+        )
+        monkeypatch.setattr("robotsix_mill.meta.runner.get_repos_config", lambda: reg)
+
+        created = _file_extraction_drafts(
+            [
+                DraftProposal(
+                    title="Add reusable dependency-review.yml",
+                    body="Ship a reusable workflow.",
+                    target_repo_id="robotsix-github-workflows",
+                ),
+                DraftProposal(
+                    title="Document fleet pattern",
+                    body="Pure docs.",
+                    target_repo_id=None,
+                ),
+                DraftProposal(
+                    title="Extract to unknown",
+                    body="body",
+                    target_repo_id="no-such-repo",
+                ),
+            ],
+            settings,
+            "sess",
+        )
+        assert len(created) == 3
+
+        wf_tickets = TicketService(settings, board_id="gh-wf").list()
+        assert [t.title for t in wf_tickets] == ["Add reusable dependency-review.yml"]
+        assert wf_tickets[0].source == "meta"
+        desc = Workspace(
+            settings.workspaces_dir_for("gh-wf"), wf_tickets[0].id
+        ).read_description()
+        assert _CALLER_MIGRATION_NOTE in desc
+        assert "<!-- meta-gap-id: add-reusable-dependency-review-yml -->" in desc
+
+        meta_titles = sorted(
+            t.title for t in TicketService(settings, board_id="meta").list()
+        )
+        assert meta_titles == ["Document fleet pattern", "Extract to unknown"]
+
+        db.reset_engine()
