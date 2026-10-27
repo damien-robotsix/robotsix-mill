@@ -55,6 +55,23 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
 
         s = ctx.settings
 
+        # --- stale-CI gate: a ``CI failure: <wf> on main`` ticket already
+        # fixed on main is closed, an upstream-only failure is blocked —
+        # deterministic forge checks, before any clone or LLM budget and
+        # before the stage cache (forge state changes, the draft does not).
+        if ticket.board_id != "meta":
+            from ..ci_stale_gate import check_ticket
+
+            verdict = check_ticket(s, ctx.repo_config, ticket, draft)
+            if verdict is not None:
+                log.info(
+                    "%s: stale-CI gate %s — %s", ticket.id, verdict.action, verdict.note
+                )
+                return Outcome(
+                    State.DONE if verdict.action == "close" else State.BLOCKED,
+                    verdict.note,
+                )
+
         # --- stage-outcome cache: short-circuit when input is unchanged ---
         from .._stage_cache import _check, refine_input_hash
 

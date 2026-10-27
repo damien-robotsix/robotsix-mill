@@ -28,6 +28,9 @@ SCOPE_TRIAGE_REPO_AWARENESS_GATE_PREFIX: str = "scope-triage repo awareness gate
 DEPENDENCY_BLOCKED_PREFIX: str = "dependency gate:"
 EXTERNAL_SCOPE_PREFIX: str = "external scope gate:"
 NO_CHANGE_NEEDED_PREFIX: str = "no change needed"
+# Written by the stale-CI gate (``stages/ci_stale_gate.py``) when a
+# ``CI failure: <wf> on main`` ticket is already fixed on main.
+STALE_CI_FAILURE_PREFIX: str = "Stale CI failure:"
 NON_IMPLEMENTATION_CLOSE_PREFIXES: tuple[str, ...] = (
     DEDUP_DUPLICATE_PREFIX,
     DEDUP_ALREADY_DONE_PREFIX,
@@ -39,6 +42,7 @@ NON_IMPLEMENTATION_CLOSE_PREFIXES: tuple[str, ...] = (
     DEPENDENCY_BLOCKED_PREFIX,
     EXTERNAL_SCOPE_PREFIX,
     NO_CHANGE_NEEDED_PREFIX,
+    STALE_CI_FAILURE_PREFIX,
 )
 
 # Prefix of the DONE event note written by an operator ``mark done``

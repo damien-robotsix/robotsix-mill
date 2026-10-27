@@ -2333,6 +2333,43 @@ def test_get_workflow_triggers_error_returns_none(tmp_path, monkeypatch):
     assert forge.get_workflow_triggers(path="missing.yml") is None
 
 
+def test_get_workflow_file_decodes_base64(tmp_path, monkeypatch):
+    get_map = {
+        "contents": _make_response(
+            200, {"content": _b64("name: CI\njobs: {}\n"), "encoding": "base64"}
+        )
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.get_workflow_file(path="ci.yml") == "name: CI\njobs: {}\n"
+
+
+def test_get_workflow_file_error_returns_none(tmp_path, monkeypatch):
+    _mock_httpx(monkeypatch, get_map={"contents": _make_response(404, {})})
+    assert _forge(tmp_path).get_workflow_file(path="missing.yml") is None
+
+
+def test_list_path_commits_since_returns_shas(tmp_path, monkeypatch):
+    get_map = {"/commits": _make_response(200, [{"sha": "abc"}, {"sha": "def"}])}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.list_path_commits_since(
+        path=".github/workflows/ci.yml", branch="main", since="2026-01-01T00:00:00Z"
+    ) == ["abc", "def"]
+
+
+def test_list_path_commits_since_error_returns_none(tmp_path, monkeypatch):
+    _mock_httpx(monkeypatch, get_map={"/commits": _make_response(500, [])})
+    assert (
+        _forge(tmp_path).list_path_commits_since(
+            path="ci.yml", branch="main", since="2026-01-01T00:00:00Z"
+        )
+        is None
+    )
+
+
 def test_dispatch_workflow_success(tmp_path, monkeypatch):
     captured = _mock_httpx(monkeypatch, post_response=_make_response(204, {}))
 

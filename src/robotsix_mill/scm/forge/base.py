@@ -502,6 +502,28 @@ class Forge(ABC):
         """
         return None
 
+    def get_workflow_file(self, *, path: str) -> str | None:
+        """Raw text of the workflow file at *path* on the default branch.
+
+        Returns ``None`` when the file cannot be read (unsupported forge,
+        missing file, transport error).  Used by the stale-CI gate to tell
+        whether a failing job/step lives inside a shared reusable workflow
+        or composite action.  Default returns ``None``.  Must NEVER raise.
+        """
+        return None
+
+    def list_path_commits_since(
+        self, *, path: str, branch: str, since: str
+    ) -> list[str] | None:
+        """SHAs of commits on *branch* that touched *path* after *since*.
+
+        *since* is an ISO-8601 timestamp.  Returns ``None`` when the
+        history cannot be determined (unsupported forge, transport error).
+        Used by the stale-CI gate to detect a workflow file edited after an
+        old failing run.  Default returns ``None``.  Must NEVER raise.
+        """
+        return None
+
     def dispatch_workflow(
         self,
         *,

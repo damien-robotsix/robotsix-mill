@@ -952,6 +952,13 @@
           "title": "Ci Prevention Rules Max Events",
           "type": "integer"
         },
+        "ci_stale_failure_days": {
+          "default": 14,
+          "description": "Age in days after which a failing CI run whose workflow file changed on main since is treated as stale.",
+          "minimum": 1,
+          "title": "Ci Stale Failure Days",
+          "type": "integer"
+        },
         "ci_tooling_proposal_default": {
           "default": "escalate",
           "description": "Route for a CI/dev-tooling proposal whose class is not in ci_tooling_proposal_policy: \"escalate\" (human gate \u2014 default) or \"auto-decline\" (auto-close).",
