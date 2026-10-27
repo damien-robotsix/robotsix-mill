@@ -19,28 +19,14 @@ permissions:
 jobs:
   analyze:
     name: Analyze
-    runs-on: ubuntu-latest
     permissions:
-      actions: read  # CodeQL reads workflow-run metadata for the analysis
       contents: read
       security-events: write  # upload the CodeQL SARIF to code scanning
-    strategy:
-      matrix:
-        language: [python]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          # CodeQL only reads the checked-out source; no git push.
-          persist-credentials: false
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4.39.1
-        with:
-          languages: ${{ matrix.language }}
-          config-file: ./.github/codeql/codeql-config.yml
-          build-mode: none
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4.39.1
-        with:
-          category: "/language:${{ matrix.language }}"
+    # Shared fleet CodeQL workflow (same as cost-monitor/calendar/auto-mail).
+    # Python needs no build; the reusable's autobuild step is a no-op here.
+    # Pinned to github-workflows main after #251 unified the codeql-action
+    # init/autobuild/analyze pins on v4.39.1 (never pin older than 92c11fd).
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/codeql.yml@464cc48d10a2f4f71fc267c3a4937bb999bcaed3  # main 2026-10-27
+    with:
+      languages: python
+      config-file: ./.github/codeql/codeql-config.yml
