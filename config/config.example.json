@@ -404,7 +404,7 @@
         "trace_review_obs_multiplier": 3.0,
         "trace_review_per_obs_cost_threshold": 0.001,
         "trace_review_restart_correlation_window_seconds": 60,
-        "trace_review_target_repo_id": "",
+        "trace_review_target_repo_id": "robotsix-mill",
         "trace_review_tool_request_limit": 15,
         "triage_boilerplate_interval_seconds": 604800,
         "triage_request_limit": 8,

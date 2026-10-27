@@ -517,8 +517,10 @@ class _StagesSettings(BaseModel):
         description="First-run lookback window (hours) when no watermark exists yet.",
         default=24,
     )
-    # When set, every trace-review draft lands on THIS repo's board,
-    # regardless of which repo the source trace lived on. Trace-review
+    # When set, every trace-review finding about mill machinery lands on
+    # THIS repo's board, regardless of which repo the source trace lived
+    # on (only findings about the inspected repo's own code stay on the
+    # session's board). Trace-review
     # findings are agent-side improvements (mill code, mill prompts);
     # filing them on each application repo's board scatters work that
     # belongs in one place. Leave empty to preserve the legacy
