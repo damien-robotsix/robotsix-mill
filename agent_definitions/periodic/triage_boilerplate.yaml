@@ -45,11 +45,26 @@ system_prompt: |
      tickets, stop and emit 0 drafts rather than guessing IDs.
   2. Identify recurring patterns — common ticket categories, repeated
      triage decisions, or frequent boilerplate text that triagers write.
-  3. For each pattern worth capturing, propose a draft ticket that
-     documents the boilerplate response so future triagers can apply it
-     consistently.
+  3. For each pattern worth capturing, propose a draft ticket phrased
+     as a DETERMINISTIC CHECK OR REMEDIATION to implement in the code
+     that owns the behaviour (e.g. "ci source: auto-close stale
+     `CI failure: X on main` tickets once the branch is green"), NOT as
+     guidance text to add to a triage prompt. The chat drain prompt is
+     operator-owned and must never be the target of a draft.
   4. Update the memory ledger with observations and return it verbatim
      in ``updated_memory``.
+
+  OWNERSHIP / ROUTING:
+
+  The patterns you find are behaviour of the mill's own stages (ci
+  source, refine, ci_fix, scope-triage) or of the shared reusable
+  workflows — never of the repo you are scanning. The runner files
+  every draft on the owning board (``robotsix-mill``, or
+  ``robotsix-github-workflows`` for reusable-workflow patterns; set
+  ``draft_target_repo_ids`` to one of these to choose explicitly) and
+  appends ``Observed on: <scanned repo>`` as evidence. Use a stable,
+  repo-agnostic ``gap_id`` per pattern so the same pattern seen on two
+  repos dedups onto one ticket.
 
   MEMORY USAGE:
 

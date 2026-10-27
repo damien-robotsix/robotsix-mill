@@ -23,6 +23,7 @@ from ...core.models import SourceKind
 from ...core.service import TicketService
 from ...scm.forge.auth import github_token, gitlab_token
 from .pass_runner import run_agent_pass
+from .triage_boilerplate_runner import route_triage_boilerplate_drafts
 
 log = logging.getLogger("robotsix_mill.periodic_runner")
 
@@ -175,6 +176,11 @@ class PeriodicPassConfig:
     ``run_periodic_pass`` short-circuits before invoking the LLM — a
     repo-less pass for these agents only produces hallucinated output."""
 
+    route_result_fn: Callable[[Any, RepoConfig], Any] | None = None
+    """Optional ``(result, repo_config) -> result`` applied to the agent's
+    structured result before drafts are filed. Used by triage_boilerplate
+    to route every draft to the board that owns the behaviour."""
+
 
 # ---------------------------------------------------------------------------
 # Core runner function
@@ -203,6 +209,21 @@ def _accepts_kwarg(fn: Callable[..., Any], name: str) -> bool:
         return name in inspect.signature(fn).parameters
     except TypeError, ValueError:
         return False
+
+
+def _with_result_routing(
+    agent_fn: Callable[..., Any],
+    route_fn: Callable[[Any, RepoConfig], Any] | None,
+    repo_config: RepoConfig,
+) -> Callable[..., Any]:
+    """Wrap *agent_fn* so its result passes through *route_fn* (if any)."""
+    if route_fn is None:
+        return agent_fn
+
+    def _routed(**kwargs: Any) -> Any:
+        return route_fn(agent_fn(**kwargs), repo_config)
+
+    return _routed
 
 
 def run_periodic_pass(
@@ -336,7 +357,11 @@ def run_periodic_pass(
     # parameter are left alone.
     if _accepts_kwarg(agent_fn_callable, "board_id"):
         extra_kwargs["board_id"] = repo_config.board_id
-    agent_fn = partial(agent_fn_callable, repo_dir=repo_dir, **extra_kwargs)
+    agent_fn = _with_result_routing(
+        partial(agent_fn_callable, repo_dir=repo_dir, **extra_kwargs),
+        config.route_result_fn,
+        repo_config,
+    )
     result = run_agent_pass(
         agent_fn=agent_fn,
         memory_file=memory_file,
@@ -513,6 +538,9 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         workspace_subdir="triage_boilerplate_workspace",
         result_dataclass=PeriodicPassResult,
         clone_token_fn=None,  # uses forge_token (raises on missing)
+        # Findings describe mill / reusable-workflow behaviour: file them
+        # on the owning board, never the scanned repo's.
+        route_result_fn=route_triage_boilerplate_drafts,
     ),
     "docstring_coverage": PeriodicPassConfig(
         label="docstring_coverage",
