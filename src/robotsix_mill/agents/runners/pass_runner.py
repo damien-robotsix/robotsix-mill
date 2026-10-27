@@ -905,6 +905,47 @@ def _maybe_collapse_scanner_rollup(
     return gap_ids, limit
 
 
+_OBSERVED_ON_RE = re.compile(r"^Observed on:\s*(\S+)\s*$", re.MULTILINE)
+
+
+def _add_observed_on_evidence(
+    target_service: TicketService,
+    settings: Settings,
+    ticket_id: str,
+    body: str,
+    source_label: SourceKind,
+) -> None:
+    """Record new ``Observed on: <repo>`` evidence on an existing ticket.
+
+    A pattern seen on several repos dedups (by gap-id) onto one owner-board
+    ticket; each additional repo is appended as a comment so the ticket
+    keeps every scanned repo as evidence. Best-effort.
+    """
+    repos = _OBSERVED_ON_RE.findall(body)
+    if not repos:
+        return
+    try:
+        texts = [
+            Workspace(
+                settings.workspaces_dir_for(target_service.board_id), ticket_id
+            ).read_description()
+        ]
+        comments: list[Any] = list(target_service.list_comments(ticket_id) or [])
+        texts.extend(c.body for c in comments)
+        known = set(_OBSERVED_ON_RE.findall("\n".join(texts)))
+        for repo in repos:
+            if repo in known:
+                continue
+            known.add(repo)
+            target_service.add_comment(
+                ticket_id, f"Observed on: {repo}", author=str(source_label)
+            )
+    except Exception:
+        log.exception(
+            "%s: failed to record observed-on evidence on %s", source_label, ticket_id
+        )
+
+
 def _create_one_draft(
     i: int,
     res: Any,
@@ -974,6 +1015,13 @@ def _create_one_draft(
             target_board_id,
             target_verified[gap_id]["ticket_id"],
             target_verified[gap_id]["state"],
+        )
+        _add_observed_on_evidence(
+            target_service,
+            settings,
+            target_verified[gap_id]["ticket_id"],
+            body,
+            source_label,
         )
         return None, ""
 
