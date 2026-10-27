@@ -31,7 +31,11 @@ from robotsix_mill.deps.internal_graph import (
     build_internal_dep_graph,
 )
 from robotsix_mill.scm.forge import Forge, get_forge, rate_limit
-from robotsix_mill.scm.forge.auth import github_push_token, github_token
+from robotsix_mill.scm.forge.auth import (
+    github_push_token,
+    github_token,
+    push_with_token_retry,
+)
 from robotsix_mill.scm.vcs import git_ops
 
 log = logging.getLogger(__name__)
@@ -441,6 +445,7 @@ def _bump_pins_for_repos(
         )
         for dep_name, pin in ordered:
             _bump_one_pin(
+                settings=settings,
                 repo_id=repo_id,
                 rc=rc,
                 dep_name=dep_name,
@@ -459,6 +464,7 @@ def _bump_pins_for_repos(
 
 def _bump_one_pin(
     *,
+    settings: Settings,
     repo_id: str,
     rc: RepoConfig,
     dep_name: str,
@@ -494,6 +500,7 @@ def _bump_one_pin(
     )
 
     _apply_one_bump(
+        settings=settings,
         repo_id=repo_id,
         rc=rc,
         dep_name=dep_name,
@@ -671,6 +678,7 @@ def _reconcile_and_check_cap(
 
 def _apply_one_bump(
     *,
+    settings: Settings,
     repo_id: str,
     rc: RepoConfig,
     dep_name: str,
@@ -770,11 +778,14 @@ def _apply_one_bump(
             return
 
         try:
-            git_ops.push(
-                tmp_path,
-                branch_name,
-                rc.forge_remote_url or "",
+            push_with_token_retry(
+                lambda t: git_ops.push(
+                    tmp_path, branch_name, rc.forge_remote_url or "", t
+                ),
                 push_token,
+                settings,
+                rc,
+                label=repo_id,
             )
         except Exception as exc:
             log.warning(

@@ -63,7 +63,13 @@ from ..core.models import Ticket
 from ..core.states import State
 from ..core.workspace import read_counter, write_counter
 from ..scm.forge import get_forge
-from ..scm.forge.auth import _resolve_remote_url, github_push_token, github_token
+from ..scm.forge.auth import (
+    PushRetriedError,
+    _resolve_remote_url,
+    github_push_token,
+    github_token,
+    push_with_token_retry,
+)
 from ..scm.forge.github import _parse_owner_repo
 from ..scm.vcs import git_ops
 from ._conventional import conventional_subject
@@ -740,11 +746,23 @@ class DeliverStage(Stage):
             )
 
         try:
-            git_ops.push(repo_dir, branch, remote_url, token)
+            token = push_with_token_retry(
+                lambda t: git_ops.push(repo_dir, branch, remote_url, t),
+                token,
+                s,
+                repo_config,
+                label=repo_label,
+            )
         except subprocess.CalledProcessError as e:
+            retried = (
+                "push retried once with a fresh token; "
+                if isinstance(e, PushRetriedError)
+                else ""
+            )
             return None, Outcome(
                 State.BLOCKED,
-                f"push failed for {repo_label} — resumable: {(e.stderr or '')[:300]}",
+                f"{retried}push failed for {repo_label} — resumable: "
+                f"{(e.stderr or '')[:300]}",
             )
 
         # Conventional subject: with squash_merge_commit_title =

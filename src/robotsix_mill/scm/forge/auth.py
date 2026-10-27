@@ -21,7 +21,10 @@ installation tokens for their respective remotes.
 from __future__ import annotations
 
 import logging
+import re
+import subprocess
 import time
+from collections.abc import Callable
 
 import robotsix_github_auth as rga
 
@@ -143,6 +146,56 @@ def invalidate_and_backoff(
     """
     invalidate_github_token(settings, repo_config)
     time.sleep(2)
+
+
+# stderr of a ``git push`` rejected for an auth reason (dead token).
+_PUSH_AUTH_ERROR_RE = re.compile(
+    r"denied to .*\[bot\]|403|401|Invalid username or token"
+)
+
+
+class PushRetriedError(subprocess.CalledProcessError):
+    """A push that still failed after one retry with a freshly minted token."""
+
+
+def push_with_token_retry(
+    push_fn: Callable[[str], None],
+    token: str,
+    settings: Settings,
+    repo_config: RepoConfig | None = None,
+    *,
+    label: str = "",
+) -> str:
+    """Run ``push_fn(token)``; on an auth-shaped push failure, retry ONCE.
+
+    GitHub invalidates every installation token of an installation when
+    its permissions change or the App key rotates, regardless of
+    ``expires_at`` — so a cached push token can die mid-life.  On a
+    ``CalledProcessError`` whose stderr looks like an auth rejection,
+    drop the cached token, mint a fresh ``github_push_token`` and push
+    once more.  A second failure raises :class:`PushRetriedError` (a
+    ``CalledProcessError``).  Non-auth failures, or a failed re-mint,
+    re-raise the original error.  Returns the token that succeeded.
+    """
+    try:
+        push_fn(token)
+        return token
+    except subprocess.CalledProcessError as e:
+        if not _PUSH_AUTH_ERROR_RE.search(e.stderr or ""):
+            raise
+        first = e
+    invalidate_github_token(settings, repo_config)
+    try:
+        fresh = github_push_token(settings, repo_config=repo_config)
+    except Exception:
+        logger.warning("push token re-mint failed for %s", label, exc_info=True)
+        raise first from None
+    try:
+        push_fn(fresh)
+    except subprocess.CalledProcessError as e2:
+        raise PushRetriedError(e2.returncode, e2.cmd, e2.output, e2.stderr) from e2
+    logger.warning("push token was stale: minted fresh token for %s", label)
+    return fresh
 
 
 def github_push_token(settings: Settings, repo_config: RepoConfig | None = None) -> str:
