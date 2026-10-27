@@ -485,6 +485,36 @@ class PollLoopsCiMixin(_WorkerBase):
     # _poll_one_repo_ci — coordinator
     # ------------------------------------------------------------------
 
+    def _apply_stale_ci_gate(
+        self, service: TicketService, forge: Forge, ticket: Ticket, body: str
+    ) -> None:
+        """Run the stale-CI gate on a freshly filed draft (best-effort)."""
+        from ...stages.ci_stale_gate import evaluate_stale_ci
+
+        try:
+            verdict = evaluate_stale_ci(
+                forge,
+                ticket,
+                body,
+                stale_days=self.ctx.settings.ci_stale_failure_days,
+            )
+            if verdict is None:
+                return
+            log.info(
+                "CI monitor: stale-CI gate %s %s — %s",
+                verdict.action,
+                ticket.id,
+                verdict.note,
+            )
+            if verdict.action == "close":
+                service.mark_done(ticket.id, note=verdict.note, author="ci-stale-gate")
+            else:
+                service.transition(ticket.id, State.BLOCKED, note=verdict.note)
+        except Exception:
+            log.warning(
+                "CI monitor: stale-CI gate failed for %s", ticket.id, exc_info=True
+            )
+
     async def _poll_one_repo_ci(
         self,
         rc: RepoConfig,
@@ -757,6 +787,12 @@ class PollLoopsCiMixin(_WorkerBase):
                     run_id_val,
                 )
                 continue
+
+            # 7b. Stale-CI gate: close an already-fixed failure / block an
+            # upstream-only one before it can reach ``ready``.
+            await asyncio.to_thread(
+                self._apply_stale_ci_gate, service, forge, ticket, body
+            )
 
             # Mark as seen and clear any deferral bookkeeping.
             seen[key] = now

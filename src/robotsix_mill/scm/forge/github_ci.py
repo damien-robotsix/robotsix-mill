@@ -666,6 +666,30 @@ class GitHubForgeCIMixin:
         except Exception:
             return None
 
+    def get_workflow_file(self, *, path: str) -> str | None:
+        """Return the raw text of the workflow file at *path*, or ``None``
+        on any error.  Must NEVER raise.
+        """
+        try:
+            owner, repo = self._owner_repo  # type: ignore[attr-defined]
+            return self._get_workflow_file(owner=owner, repo=repo, path=path)
+        except Exception:
+            return None
+
+    def list_path_commits_since(
+        self, *, path: str, branch: str, since: str
+    ) -> list[str] | None:
+        """Return SHAs of commits on *branch* touching *path* after *since*,
+        or ``None`` on any error.  Must NEVER raise.
+        """
+        try:
+            owner, repo = self._owner_repo  # type: ignore[attr-defined]
+            return self._list_path_commits_since(
+                owner=owner, repo=repo, path=path, branch=branch, since=since
+            )
+        except Exception:
+            return None
+
     def dispatch_workflow(
         self,
         *,
@@ -1063,6 +1087,10 @@ class GitHubForgeCIMixin:
                     "name": j.get("name", ""),
                     "status": j.get("status"),
                     "conclusion": j.get("conclusion"),
+                    "steps": [
+                        {"name": st.get("name", ""), "conclusion": st.get("conclusion")}
+                        for st in j.get("steps") or []
+                    ],
                 }
                 for j in jobs
             ]
@@ -1109,6 +1137,29 @@ class GitHubForgeCIMixin:
         if on is None:
             on = data.get(True)
         return _trigger_event_names(on)
+
+    def _get_workflow_file(self, *, owner: str, repo: str, path: str) -> str:
+        """GET /repos/{owner}/{repo}/contents/{path}; return the decoded text."""
+        r = self._http.get(  # type: ignore[attr-defined]
+            f"/repos/{owner}/{repo}/contents/{path}",
+        )
+        r.raise_for_status()
+        payload = r.json()
+        raw = payload.get("content") or ""
+        if payload.get("encoding") == "base64":
+            return base64.b64decode(raw).decode("utf-8", "replace")
+        return raw
+
+    def _list_path_commits_since(
+        self, *, owner: str, repo: str, path: str, branch: str, since: str
+    ) -> list[str]:
+        """GET /repos/{owner}/{repo}/commits?path=&sha=&since= → commit SHAs."""
+        r = self._http.get(  # type: ignore[attr-defined]
+            f"/repos/{owner}/{repo}/commits",
+            params={"path": path, "sha": branch, "since": since, "per_page": 20},
+        )
+        r.raise_for_status()
+        return [c.get("sha", "") for c in r.json() if c.get("sha")]
 
     def _dispatch_workflow(
         self,

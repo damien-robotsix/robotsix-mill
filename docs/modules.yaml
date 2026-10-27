@@ -320,6 +320,7 @@ modules:
       - src/robotsix_mill/stages/ci_fix_codeql.py
       - src/robotsix_mill/stages/ci_infra_block.py
       - src/robotsix_mill/stages/ci_transient.py
+      - src/robotsix_mill/stages/ci_stale_gate.py
       - src/robotsix_mill/stages/pause.py
       - src/robotsix_mill/stages/retrospect.py
       - src/robotsix_mill/stages/short_circuit_verify.py
@@ -331,6 +332,7 @@ modules:
       - tests/stages/test_dependency_fix.py
       - tests/stages/test_registry.py
       - tests/stages/test_classify.py
+      - tests/stages/test_ci_stale_gate.py
       - tests/stages/implement/test_checkpoint.py
       - tests/stages/implement/test_budget_cap_autosplit.py
       - tests/stages/implement/test_budget_cap_convergence.py

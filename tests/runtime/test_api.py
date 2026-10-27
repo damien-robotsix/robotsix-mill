@@ -642,6 +642,45 @@ def test_approve_transitions_human_issue_approval_to_ready(client, service):
     assert data["state"] == State.READY
 
 
+def test_approve_closes_already_green_ci_failure(client, service, monkeypatch):
+    """An already-green ``CI failure`` ticket is closed on approval, never READY."""
+    import robotsix_mill.scm.forge as forge_mod
+    from robotsix_mill.core.models import SourceKind
+
+    sha = "a" * 40
+
+    class _Forge:
+        def list_workflow_runs(self, **kw):
+            return [
+                {
+                    "id": 2,
+                    "name": "CI",
+                    "head_sha": "b" * 40,
+                    "conclusion": "success",
+                    "created_at": "2026-10-26T12:00:00Z",
+                    "html_url": "https://x/runs/2",
+                },
+                {
+                    "id": 1,
+                    "name": "CI",
+                    "head_sha": sha,
+                    "conclusion": "failure",
+                    "created_at": "2026-10-26T10:00:00Z",
+                    "html_url": "https://x/runs/1",
+                },
+            ]
+
+    monkeypatch.setattr(forge_mod, "get_forge", lambda *a, **kw: _Forge())
+    body = f"**Workflow:** CI\n**Branch:** main\n**Commit:** `{sha}`\n"
+    t = service.create("CI failure: CI on main", description=body, source=SourceKind.CI)
+    service.transition(t.id, State.HUMAN_ISSUE_APPROVAL, note="refined")
+
+    r = client.post(f"/tickets/{t.id}/approve")
+    assert r.status_code == 200
+    assert r.json()["state"] == State.DONE
+    assert service.get(t.id).state is State.DONE
+
+
 def test_approve_missing_ticket_404(client):
     """POST /tickets/{id}/approve with bogus id returns 404."""
     r = client.post("/tickets/nonexistent/approve")

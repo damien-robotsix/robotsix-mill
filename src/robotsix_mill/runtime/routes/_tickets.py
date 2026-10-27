@@ -818,6 +818,23 @@ def approve_ticket(
     ticket does not exist.
     """
     ticket_id = resolve_ticket_id(ticket_id, svc)
+    current = svc.get(ticket_id)
+    if current is not None and current.state is State.HUMAN_ISSUE_APPROVAL:
+        # Stale-CI gate: an already-fixed / upstream-only CI failure never
+        # reaches READY (and so never burns an empty implement pass).
+        from ...stages.ci_stale_gate import check_ticket
+
+        repo_config = _repo_config_for_ticket(current, request.app.state.repos)
+        body = svc.workspace(current).read_description() or ""
+        verdict = check_ticket(settings, repo_config, current, body)
+        if verdict is not None:
+            if verdict.action == "close":
+                _, ticket = svc.mark_done(
+                    ticket_id, note=verdict.note, author="ci-stale-gate"
+                )
+            else:
+                ticket = svc.transition(ticket_id, State.BLOCKED, note=verdict.note)
+            return enrich_ticket_read(ticket, settings, svc, repo_config=repo_config)
     try:
         ticket = svc.transition(ticket_id, State.READY, note="approved by human")
     except KeyError:

@@ -621,6 +621,17 @@ class _PeriodicSettings(BaseModel):
         default=900,
         description="Seconds between CI-failure auto-close passes. 0 = disabled.",
     )
+    # Stale-CI gate (stages/ci_stale_gate.py): a ``CI failure`` ticket whose
+    # failing run is older than this many days AND whose workflow file changed
+    # on main since is closed before it can reach ``ready``.
+    ci_stale_failure_days: int = Field(
+        default=14,
+        ge=1,
+        description=(
+            "Age in days after which a failing CI run whose workflow file "
+            "changed on main since is treated as stale."
+        ),
+    )
 
     # --- diagnostic event store ---
     # Explicit file path for the JSONL diagnostic event store.  When
