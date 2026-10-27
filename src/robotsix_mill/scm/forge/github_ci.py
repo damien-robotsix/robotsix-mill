@@ -7,7 +7,9 @@ Split from ``github.py``.  Defines ``GitHubForgeCIMixin`` that
 from __future__ import annotations
 
 import base64
+import functools
 import re
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -353,8 +355,104 @@ def _latest_failing_workflow_runs(
     ]
 
 
+def _fetch_run_job_failures(
+    client: httpx.Client,
+    api: str,
+    owner: str,
+    repo: str,
+    headers: dict[str, Any],
+    run_id: Any,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Best-effort ``(failed_jobs, annotations)`` for a workflow run.
+
+    Lists the run's jobs (``GET .../actions/runs/{id}/jobs``) and, for each
+    job that concluded a failure, its check-run annotations
+    (``GET .../check-runs/{job_id}/annotations``). A job refused before it
+    started (GitHub billing / spending-limit block) has an empty ``steps``
+    array and carries the refusal reason ONLY as such an annotation. Any
+    error resolves to empty lists so a flaky API never breaks the gate.
+    """
+    if run_id is None:
+        return [], []
+    try:
+        r = client.get(
+            f"{api}/repos/{owner}/{repo}/actions/runs/{run_id}/jobs",
+            headers=headers,
+        )
+        r.raise_for_status()
+        raw_jobs = r.json().get("jobs") or []
+    except Exception:
+        return [], []
+    failed = [
+        j
+        for j in raw_jobs
+        if isinstance(j, dict) and j.get("conclusion") in _WORKFLOW_FAILING_CONCLUSIONS
+    ]
+    annotations: list[dict[str, Any]] = []
+    for job in failed:
+        job_id = job.get("id")
+        if job_id is None:
+            continue
+        raw_anns: Any = []
+        try:
+            ar = client.get(
+                f"{api}/repos/{owner}/{repo}/check-runs/{job_id}/annotations",
+                headers=headers,
+            )
+            ar.raise_for_status()
+            raw_anns = ar.json() or []
+        except Exception:
+            pass  # annotation fetch is best-effort
+        if not isinstance(raw_anns, list):
+            continue
+        for a in raw_anns:
+            if isinstance(a, dict) and a.get("message"):
+                annotations.append(
+                    {
+                        "path": a.get("path", ""),
+                        "start_line": a.get("start_line"),
+                        "message": a.get("message", ""),
+                        "level": a.get("annotation_level", "failure"),
+                    }
+                )
+    return failed, annotations[:20]
+
+
+def _synthesized_run_summary(
+    run: dict[str, Any],
+    failed_jobs: list[dict[str, Any]],
+    annotations: list[dict[str, Any]],
+) -> str:
+    """Summary for a failing workflow run that registered no check-run."""
+    url = run.get("html_url", "")
+    conclusion = run.get("conclusion")
+    if annotations:
+        messages = " | ".join(a["message"] for a in annotations)
+        summary = f"Workflow run concluded {conclusion!r}: {messages} {url}"
+    elif failed_jobs and all(not j.get("steps") for j in failed_jobs):
+        summary = (
+            f"Workflow run concluded {conclusion!r}: its jobs never started "
+            f"(no steps, no annotations). {url}"
+        )
+    else:
+        summary = (
+            f"Workflow run concluded {conclusion!r} but registered no "
+            "check-run — likely a workflow parse failure (invalid "
+            f"uses:/YAML). {url}"
+        )
+    summary = summary.strip()
+    if len(summary) > 2000:
+        summary = summary[:1999] + "…"
+    return summary
+
+
 def _merge_workflow_run_failures(
-    result: dict[str, Any], runs: list[dict[str, Any]]
+    result: dict[str, Any],
+    runs: list[dict[str, Any]],
+    fetch_job_failures: Callable[
+        [Any], tuple[list[dict[str, Any]], list[dict[str, Any]]]
+    ]
+    | None = None,
 ) -> None:
     """Fold Actions-API workflow-run failures into a check-runs *result*.
 
@@ -370,6 +468,12 @@ def _merge_workflow_run_failures(
     per-job detail there is richer, so *result* is left untouched. Otherwise
     a failing entry is synthesized per uncaught workflow (named by its
     ``name``, which for a parse failure is the workflow file path).
+
+    *fetch_job_failures* (``run_id -> (failed_jobs, annotations)``) enriches
+    each synthesized entry with the run's job annotations: a run whose jobs
+    were refused before starting (GitHub billing block) carries its reason
+    only there, and ``classify_ci_run`` needs it to detect
+    ``INFRA_ACCOUNT_BLOCKED``.
     """
     failing_runs = _latest_failing_workflow_runs(runs)
     if not failing_runs:
@@ -382,17 +486,16 @@ def _merge_workflow_run_failures(
         if name in existing:
             continue
         existing.add(name)
+        failed_jobs: list[dict[str, Any]] = []
+        annotations: list[dict[str, Any]] = []
+        if fetch_job_failures is not None:
+            failed_jobs, annotations = fetch_job_failures(run.get("id"))
         result.setdefault("failing", []).append(
             {
                 "name": name,
-                "summary": (
-                    f"Workflow run concluded {run.get('conclusion')!r} but "
-                    "registered no check-run — likely a workflow parse "
-                    "failure (invalid uses:/YAML). "
-                    f"{run.get('html_url', '')}"
-                ).strip(),
+                "summary": _synthesized_run_summary(run, failed_jobs, annotations),
                 "text": None,
-                "annotations": [],
+                "annotations": annotations,
                 "conclusion": run.get("conclusion"),
             }
         )
@@ -723,6 +826,9 @@ class GitHubForgeCIMixin:
                 wf_runs
                 if wf_runs is not None
                 else self._safe_list_workflow_runs(owner, repo, sha),
+                functools.partial(
+                    _fetch_run_job_failures, c, api, owner, repo, headers
+                ),
             )
             result["_sha"] = sha
             return result
