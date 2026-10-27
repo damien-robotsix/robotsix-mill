@@ -37,6 +37,7 @@ from ...core.models import TicketEvent
 from ...core.service import TicketService
 from ...core.states import State
 from ...stages.ci_fix_helpers import UPSTREAM_CI_BLOCK_MARKER
+from ...stages.ci_infra_block import REPO_SETTING_BLOCK_MARKER
 from .timeout_escalation_runner import _boards_to_scan
 
 if TYPE_CHECKING:
@@ -57,6 +58,7 @@ CYCLE_MARKER = "[cycle-detected]"
 _HARD_EXCLUDES = (
     "spec unchanged",  # implement fingerprint guard — description must change
     UPSTREAM_CI_BLOCK_MARKER,  # upstream_ci_recovery_runner owns these
+    REPO_SETTING_BLOCK_MARKER,  # needs an operator to flip a GitHub setting
     "refusing to close",  # retrospect: PRs not merged
     "not merged",
 )

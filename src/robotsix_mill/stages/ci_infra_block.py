@@ -151,3 +151,108 @@ def infra_account_block_note() -> str:
         "account-scoped infrastructure block, not a code defect — ci_fix "
         "was skipped. Auto-resumes once a hosted run on this repo succeeds."
     )
+
+
+# ---------------------------------------------------------------------------
+# Repository-setting block
+# ---------------------------------------------------------------------------
+#
+# Some CI checks fail because a GitHub *repository setting* is off — e.g.
+# ``actions/dependency-review-action`` refuses to run unless the Dependency
+# graph is enabled, and ``codeql-action/upload-sarif`` is refused unless
+# code scanning / Advanced Security is enabled.  No code edit fixes that,
+# and no fleet credential may flip the setting (operator decision
+# 2026-10-22: no admin GitHub credential in the fleet).  ci_fix therefore
+# skips its fix iterations, BLOCKS with a note starting
+# :data:`REPO_SETTING_BLOCK_MARKER` that names the setting, and raises one
+# operator escalation.  The block is NOT auto-resumable: the operator flips
+# the setting and resumes the ticket, which re-enters ci_fix and re-polls CI.
+
+# Stable prefix of the ``BLOCKED`` note.  ``blocked_auto_resume_runner``
+# hard-excludes it, so it must not be reworded without updating that file.
+REPO_SETTING_BLOCK_MARKER = "repo setting required:"
+
+_DEPENDENCY_GRAPH = "Dependency graph"
+_CODE_SCANNING = "Code scanning (GitHub Advanced Security)"
+
+# (setting name, pattern) — matched case-insensitively against job-log text.
+_REPO_SETTING_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        _DEPENDENCY_GRAPH,
+        re.compile(
+            r"Dependency review is not supported on this repository", re.IGNORECASE
+        ),
+    ),
+    (
+        _DEPENDENCY_GRAPH,
+        re.compile(r"Please ensure that Dependency graph is enabled", re.IGNORECASE),
+    ),
+    (
+        _CODE_SCANNING,
+        re.compile(r"Code scanning is not enabled for this repository", re.IGNORECASE),
+    ),
+    (
+        _CODE_SCANNING,
+        re.compile(
+            r"Advanced Security must be enabled for this repository to use "
+            r"code scanning",
+            re.IGNORECASE,
+        ),
+    ),
+)
+
+# ``Resource not accessible by integration`` is a generic token-permission
+# error; it only names the code-scanning setting when it comes from
+# ``upload-sarif``.
+_UPLOAD_SARIF_RE = re.compile(r"upload-sarif", re.IGNORECASE)
+_NOT_ACCESSIBLE_RE = re.compile(
+    r"Resource not accessible by integration", re.IGNORECASE
+)
+
+
+def _setting_scan_text(failing: list[dict[str, Any]], log_text: str) -> str:
+    """Job-log text plus every failing check's name/annotations/summary."""
+    texts = [log_text] if log_text else []
+    for check in failing:
+        if not isinstance(check, dict):
+            continue
+        name = check.get("name")
+        if isinstance(name, str):
+            texts.append(name)
+        texts.extend(_messages_from_check(check))
+    return "\n".join(texts)
+
+
+def classify_repo_setting_block(
+    failing: list[dict[str, Any]], log_text: str = ""
+) -> str | None:
+    """Return the GitHub setting a CI failure needs enabled, or ``None``.
+
+    *log_text* is the job-log text (the ci_fix failing summary embeds it);
+    *failing* is the failing-check list whose names/annotations/summaries
+    are scanned too.
+    """
+    text = _setting_scan_text(failing, log_text)
+    for setting, pattern in _REPO_SETTING_PATTERNS:
+        if pattern.search(text):
+            return setting
+    if _NOT_ACCESSIBLE_RE.search(text) and _UPLOAD_SARIF_RE.search(text):
+        return _CODE_SCANNING
+    return None
+
+
+def repo_settings_url(repo: str) -> str:
+    """Settings page holding the Dependency graph / code-scanning toggles."""
+    return f"https://github.com/{repo}/settings/security_analysis"
+
+
+def repo_setting_block_note(repo: str, setting: str) -> str:
+    """The ``BLOCKED`` note for a ticket parked on a repo-setting failure."""
+    return (
+        f"{REPO_SETTING_BLOCK_MARKER} enable '{setting}' on {repo} "
+        f"({repo_settings_url(repo)}, Settings > Code security). A CI check "
+        "fails because this repository setting is off; no code change can "
+        "fix it and the fleet has no admin credential to flip it, so ci_fix "
+        "was skipped. Not auto-resumed: enable the setting, then resume the "
+        "ticket (/transition ready) to re-run ci_fix and re-poll CI."
+    )

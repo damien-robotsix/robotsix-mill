@@ -24,6 +24,7 @@ from typing import Any
 from ..agents.ci_fixing import CiFixResult, run_ci_fix_agent
 from ..agents.runners.diagnostic_events import emit_diagnostic_event
 from ..agents.runners.pass_runner import load_memory, persist_memory
+from ..agents.runners.repo_setting_block_runner import escalate_repo_setting_block
 from ..config import target_branch_for
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
@@ -36,6 +37,7 @@ from ..scm.forge.auth import (
     invalidate_github_token,
     push_with_token_retry,
 )
+from ..scm.forge.github import _parse_owner_repo
 from ..scm.vcs import git_ops
 from . import dependency_fix
 from ._ci_fix_checkpoint import (
@@ -83,7 +85,9 @@ from .ci_fix_helpers import (
 from .ci_infra_block import (
     INFRA_ACCOUNT_BLOCKED,
     classify_ci_run,
+    classify_repo_setting_block,
     infra_account_block_note,
+    repo_setting_block_note,
 )
 
 log = logging.getLogger("robotsix_mill.stages.ci_fix")
@@ -371,6 +375,17 @@ class CIFixStage(Stage):
         # bucketed diagnostic event so the ci_prevention_rules pass can
         # distil recurring failure classes into implement-ledger rules.
         _emit_ci_failure_event(ticket, ctx, failing, failing_summary)
+
+        # --- Repository-setting gate (before spending any attempt) ---
+        # A check refused because a GitHub repo setting is off (Dependency
+        # graph, code scanning) cannot be fixed by code, and the fleet has no
+        # admin credential to flip it. Block immediately with the setting
+        # named (not auto-resumable) and escalate once to the operator.
+        setting_outcome = self._handle_repo_setting_block(
+            ticket, ctx, failing, failing_summary
+        )
+        if setting_outcome is not None:
+            return setting_outcome
 
         # --- Upstream CI breakage check ---
         # Before consuming any ci-fix attempts, check whether the target
@@ -841,6 +856,36 @@ class CIFixStage(Stage):
         fp_path.parent.mkdir(parents=True, exist_ok=True)
         fp_path.write_text(current_fp, encoding="utf-8")
         return None
+
+    def _handle_repo_setting_block(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        failing: list[dict[str, Any]],
+        failing_summary: str,
+    ) -> Outcome | None:
+        """BLOCK (and escalate once) when CI needs a GitHub repo setting on."""
+        setting = classify_repo_setting_block(failing, failing_summary)
+        if setting is None:
+            return None
+        repo = ""
+        try:
+            owner, name = _parse_owner_repo(
+                _resolve_remote_url(ctx.settings, ctx.repo_config)
+            )
+            repo = f"{owner}/{name}"
+        except Exception:
+            repo = (ctx.repo_config.board_id if ctx.repo_config else "") or (
+                ticket.board_id or "<owner>/<repo>"
+            )
+        log.warning(
+            "%s: CI needs repo setting %r enabled on %s — BLOCKED without ci_fix",
+            ticket.id,
+            setting,
+            repo,
+        )
+        escalate_repo_setting_block(ctx.settings, repo, setting, ticket.id)
+        return Outcome(State.BLOCKED, repo_setting_block_note(repo, setting))
 
     def _handle_non_code_fixable_failure(
         self,
