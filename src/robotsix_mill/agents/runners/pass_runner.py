@@ -139,6 +139,34 @@ def is_policy_addition(title: str, body: str) -> bool:
     )
 
 
+def _match_open_scanner_epic(
+    tickets: list[Ticket], board_id: str, rollup_title: str
+) -> str | None:
+    """Return the id of the EPIC_OPEN rollup titled *rollup_title* on
+    *board_id* among *tickets*, or ``None``.
+    """
+    for t in tickets:
+        if (
+            t.board_id == board_id
+            and t.title == rollup_title
+            and t.state == State.EPIC_OPEN
+            and t.kind == TicketKind.EPIC
+        ):
+            return t.id
+    return None
+
+
+def _find_scanner_epic(
+    service: TicketService, board_id: str, source_label: SourceKind
+) -> str | None:
+    """Find (never create) the open rollup epic for *source_label* on
+    *board_id*; ``None`` when there is none.
+    """
+    return _match_open_scanner_epic(
+        service.list(), board_id, f"{_ROLLUP_EPIC_TITLE_PREFIX}{source_label}"
+    )
+
+
 def _find_or_create_scanner_epic(
     service: TicketService,
     board_id: str,
@@ -173,14 +201,9 @@ def _find_or_create_scanner_epic(
         )
         return epic.id
 
-    for t in all_tickets:
-        if (
-            t.board_id == board_id
-            and t.title == rollup_title
-            and t.state == State.EPIC_OPEN
-            and t.kind == TicketKind.EPIC
-        ):
-            return t.id
+    existing = _match_open_scanner_epic(all_tickets, board_id, rollup_title)
+    if existing is not None:
+        return existing
 
     epic = service.create(
         title=rollup_title,
@@ -1117,12 +1140,20 @@ def _post_module_size_report(
 
     *limit* is the total finding count, NOT the per-run draft cap —
     findings above the cap still appear (marked "no child filed").
+    The epic is only looked up, never created here: it is created
+    lazily when the first child draft is filed, so a pass that files
+    nothing must not leave an empty rollup card on the board.
     Best-effort: a comment failure must never abort the pass.
     """
     try:
-        epic_id = _find_or_create_scanner_epic(
-            service, service.board_id, SourceKind.MODULE_SIZE, settings
-        )
+        epic_id = _find_scanner_epic(service, service.board_id, SourceKind.MODULE_SIZE)
+        if epic_id is None:
+            log.info(
+                "module_size: no rollup epic on board %s (no child filed) "
+                "— skipping scan report",
+                service.board_id,
+            )
+            return
         report = module_size_findings.render_report(
             res.draft_titles[:limit], res.draft_bodies[:limit], created
         )

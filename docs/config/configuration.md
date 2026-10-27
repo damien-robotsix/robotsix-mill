@@ -882,7 +882,12 @@ field beyond the generic periodic pattern controls its request budget:
 The `module_size` periodic agent scans the repository for oversized files
 (modules exceeding a reasonable line-count threshold) and files draft tickets
 when files warrant splitting. Five extra fields beyond the generic periodic
-pattern control its request budget and tool-call guardrails:
+pattern control its request budget and tool-call guardrails.
+
+The `Rollup: module_size` epic is created lazily, when the first child
+draft of a pass is filed. A pass that files nothing leaves no rollup card on
+the board. When a rollup epic already exists, the full report is posted on it
+as a comment.
 
 | Env var | Default | Description |
 |---------|---------|-------------|
