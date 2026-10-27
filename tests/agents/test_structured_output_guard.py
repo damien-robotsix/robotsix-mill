@@ -463,3 +463,84 @@ def test_keyboard_interrupt_not_swallowed(monkeypatch):
             what="implement",
             require_no_tool_calls=False,
         )
+
+
+# ---------------------------------------------------------------------------
+# workspace_has_changes probe: edits already on disk suppress the re-prompt
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "output", [ImplementResult(summary="done"), "x" * 12_000, "short prose"]
+)
+def test_zero_tool_calls_with_workspace_changes_skips_reprompt(monkeypatch, output):
+    """No tool calls in history but the diff is non-empty → the work is
+    already done; return the original result without re-prompting."""
+    initial = _FakeResult(output, messages=[_msg_with_parts("text")])
+    stub, calls = _stub_run_agent_returning(_FakeResult("unused"))
+    _install_run_agent_stub(monkeypatch, stub)
+
+    out = reprompt_if_unstructured(
+        result=initial,
+        agent=object(),
+        expected_type=ImplementResult,
+        reprompt_message="use tools!",
+        settings=object(),
+        what="implement",
+        require_no_tool_calls=True,
+        workspace_has_changes=lambda: True,
+    )
+    assert out is initial
+    assert calls == []
+
+
+@pytest.mark.parametrize("probe_returns", [False, RuntimeError("git broke")])
+def test_zero_tool_calls_without_workspace_changes_still_reprompts(
+    monkeypatch, probe_returns
+):
+    """An empty diff (or a failing probe) keeps the re-prompt firing."""
+    initial = _FakeResult("prose", messages=[_msg_with_parts("text")])
+    new = _FakeResult(ImplementResult(summary="retried"))
+    stub, calls = _stub_run_agent_returning(new)
+    _install_run_agent_stub(monkeypatch, stub)
+
+    def probe():
+        if isinstance(probe_returns, Exception):
+            raise probe_returns
+        return probe_returns
+
+    out = reprompt_if_unstructured(
+        result=initial,
+        agent=object(),
+        expected_type=ImplementResult,
+        reprompt_message="use tools!",
+        settings=object(),
+        what="implement",
+        require_no_tool_calls=True,
+        workspace_has_changes=probe,
+    )
+    assert out is new
+    assert len(calls) == 1
+
+
+def test_workspace_probe_not_called_when_tool_calls_present(monkeypatch):
+    """The probe (a git diff) only runs when the gate would otherwise fire."""
+    initial = _FakeResult(
+        ImplementResult(summary="ok"), messages=[_msg_with_parts("tool-call")]
+    )
+    stub, _ = _stub_run_agent_returning(_FakeResult("unused"))
+    _install_run_agent_stub(monkeypatch, stub)
+    probed: list[bool] = []
+
+    out = reprompt_if_unstructured(
+        result=initial,
+        agent=object(),
+        expected_type=ImplementResult,
+        reprompt_message="ignored",
+        settings=object(),
+        what="implement",
+        require_no_tool_calls=True,
+        workspace_has_changes=lambda: probed.append(True) or True,
+    )
+    assert out is initial
+    assert probed == []
