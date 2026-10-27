@@ -90,3 +90,41 @@ def test_block_note_carries_marker():
     note = infra_account_block_note()
     assert note.startswith(INFRA_ACCOUNT_BLOCK_MARKER)
     assert "hosted" in note.lower()
+
+
+def test_repo_setting_block_classifier():
+    from robotsix_mill.stages.ci_infra_block import (
+        REPO_SETTING_BLOCK_MARKER,
+        classify_repo_setting_block,
+        repo_setting_block_note,
+    )
+
+    assert (
+        classify_repo_setting_block(
+            [], "Please ensure that Dependency graph is enabled"
+        )
+        == "Dependency graph"
+    )
+    assert classify_repo_setting_block(
+        [
+            {
+                "name": "CodeQL",
+                "annotations": ["Code scanning is not enabled for this repository"],
+            }
+        ]
+    ).startswith("Code scanning")
+    assert classify_repo_setting_block(
+        [{"name": "upload-sarif", "annotations": []}],
+        "Resource not accessible by integration",
+    ).startswith("Code scanning")
+    # Generic permission error without upload-sarif is not a setting block.
+    assert (
+        classify_repo_setting_block(
+            [{"name": "release"}], "Resource not accessible by integration"
+        )
+        is None
+    )
+    assert classify_repo_setting_block([{"name": "tests"}], "AssertionError") is None
+    note = repo_setting_block_note("o/r", "Dependency graph")
+    assert note.startswith(REPO_SETTING_BLOCK_MARKER)
+    assert "https://github.com/o/r/settings/security_analysis" in note

@@ -2552,3 +2552,61 @@ def test_rebase_push_two_auth_failures_falls_through(tmp_path, monkeypatch, capl
     assert out.next_state is State.IMPLEMENT_COMPLETE
     assert calls["push"] == ["t", "fresh"]
     assert "rebase step failed" in caplog.text
+
+
+def test_repo_setting_block_parks_and_escalates_once(tmp_path, monkeypatch):
+    """Dependency-graph job-log text → BLOCKED ``repo setting required:``,
+    no ci_fix agent iteration, one operator escalation across re-blocks."""
+    from robotsix_mill.agents.runners import repo_setting_block_runner as rsb
+    from robotsix_mill.agents.runners.blocked_auto_resume_runner import _matches
+    from robotsix_mill.stages.ci_fix_helpers import _FailingContext
+
+    ctx = _gh(tmp_path)
+    t = _fixing_ci(ctx)
+    stage = CIFixStage()
+
+    log_text = (
+        "Run actions/dependency-review-action\n"
+        "Error: Dependency review is not supported on this repository. "
+        "Please ensure that Dependency graph is enabled along with GitHub "
+        "Advanced Security on private repositories"
+    )
+    fctx = _FailingContext(
+        repo_dir=str(tmp_path),
+        branch=t.branch,
+        failing_summary="## ❌ FAILED: dependency-review\n**Job logs:**\n" + log_text,
+        failing=[{"name": "dependency-review", "annotations": []}],
+    )
+    monkeypatch.setattr(stage, "_resolve_clone_and_status", lambda ticket, c: fctx)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix._emit_ci_failure_event", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix._resolve_remote_url",
+        lambda *a, **k: "https://github.com/acme/widget.git",
+    )
+
+    def _boom(*a, **k):
+        raise AssertionError("no ci_fix iteration for a repo-setting block")
+
+    monkeypatch.setattr(stage, "_run_agent_and_finalize", _boom)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix._check_upstream_ci_breakage", _boom
+    )
+    calls: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(rsb, "_default_escalate", lambda *a: calls.append(a))
+
+    out = stage.run(t, ctx)
+    out2 = stage.run(t, ctx)
+
+    assert out.next_state is State.BLOCKED
+    note = out.note or ""
+    assert note.startswith("repo setting required:")
+    assert "Dependency graph" in note
+    assert "https://github.com/acme/widget/settings/security_analysis" in note
+    assert out2.next_state is State.BLOCKED
+    assert calls == [("acme/widget", "Dependency graph", t.id)]
+    # Not auto-resumable even with the default pattern list.
+    from robotsix_mill.config import Settings
+
+    assert not _matches(note, list(Settings().blocked_auto_resume_patterns))
