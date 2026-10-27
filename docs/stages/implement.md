@@ -158,6 +158,19 @@ agent to implement the listed items. If the agent defers items again on
 that retry, the ticket is `BLOCKED` for human review (resumable). A
 deferral mentioned only in the summary does not count.
 
+### Operator approval constraints
+
+The note the operator writes on the `human_issue_approval → ready` (or
+`blocked → ready`) transition is fed to the implement agent as an
+`[OPERATOR APPROVAL CONSTRAINTS — binding, override the spec where they
+conflict]` block at the top of the feedback, and to review as an
+`operator-approval-constraints` section. Approval notes often carry hard
+constraints (e.g. "pin to `<sha>`, do NOT resolve the v1.3.0 tag"), so
+where the spec text and the note disagree the note wins. Review treats a
+diff that contradicts the note as a blocking gap, not a nit. The note
+applies to the implement round that `ready` opened; empty notes and
+automatic resumes (`[auto-resume …]`) are ignored.
+
 ### Test gate
 
 After the agent produces a diff, the stage runs the project's test

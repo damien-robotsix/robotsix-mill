@@ -755,7 +755,9 @@ def run_coordinator(
                 + "\n\n"
             ) + user_prompt
         if feedback:
-            if feedback.startswith(("[REVIEW", "[OPERATOR ANSWER")):
+            if feedback.startswith(
+                ("[REVIEW", "[OPERATOR ANSWER", "[OPERATOR APPROVAL")
+            ):
                 # Review feedback (led by an operator answer that sent the
                 # ticket back from awaiting_user_reply, when present) —
                 # prepend to the spec so the coordinator addresses the

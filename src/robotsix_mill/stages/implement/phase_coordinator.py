@@ -191,6 +191,51 @@ def _operator_answer_note(events: list[Any]) -> str | None:
     return None
 
 
+# Transitions into ``ready`` whose note is the operator's go-ahead and
+# routinely carries hard constraints ("pin to <sha>", "do not touch X").
+_APPROVAL_FROM_STATES = (State.HUMAN_ISSUE_APPROVAL, State.BLOCKED)
+# Mirrors blocked_auto_resume_runner.AUTO_RESUME_MARKER: an automatic
+# retry is not an operator decision.
+_AUTO_RESUME_MARKER = "[auto-resume"
+
+
+def _approval_note_text(event: Any) -> str | None:
+    note = (event.note or "").strip()
+    if not note or note == ASK_USER_AUTO_RESUME_NOTE or _AUTO_RESUME_MARKER in note:
+        return None
+    return note
+
+
+def _operator_approval_note(
+    events: list[Any], *, current_round_only: bool = True
+) -> str | None:
+    """Return the operator's note on the ``human_issue_approval → ready``
+    (or ``blocked → ready``) transition, else ``None``.
+
+    That note is the operator's approval and routinely carries binding
+    constraints the spec text does not (ticket 9fb5: "pin to 92c11fd2,
+    do NOT resolve the v1.3.0 tag" — implement pinned the tag anyway).
+
+    With *current_round_only* (implement) the note only applies to the
+    implement round that ``ready`` opened, same rule as
+    :func:`_operator_answer_note`.  Without it (review, which runs after
+    the ticket left ``ready``) the most recent such note is returned.
+    Empty notes and automatic resumes are skipped.
+    """
+    ordered = sorted(events, key=lambda e: _aware(e.at))
+    for idx in range(len(ordered) - 1, 0, -1):
+        cur, prev = ordered[idx], ordered[idx - 1]
+        if cur.state != State.READY:
+            if current_round_only:
+                return None
+            continue
+        if prev.state in _APPROVAL_FROM_STATES:
+            note = _approval_note_text(cur)
+            if note or current_round_only:
+                return note
+    return None
+
+
 def _aware(dt: datetime) -> datetime:
     """SQLite round-trips can hand back naive datetimes; compare in UTC."""
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
@@ -594,6 +639,16 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
             top = (
                 "[OPERATOR ANSWER — requires a code change; address this "
                 f"first] {operator_answer}"
+            )
+            feedback = f"{top}\n{feedback}" if feedback else top
+        # The operator's approval note (human_issue_approval/blocked →
+        # ready) carries binding constraints the spec may contradict:
+        # it goes on top of everything.
+        approval = _operator_approval_note(events)
+        if approval:
+            top = (
+                "[OPERATOR APPROVAL CONSTRAINTS — binding, override the spec "
+                f"where they conflict] {approval}"
             )
             feedback = f"{top}\n{feedback}" if feedback else top
 

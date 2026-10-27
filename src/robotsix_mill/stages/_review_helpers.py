@@ -678,6 +678,26 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
             return tail_keep(text, max_chars, label=label)
         return text
 
+    # The operator's approval note (human_issue_approval/blocked → ready)
+    # carries binding constraints the spec text may contradict (ticket
+    # 9fb5: "pin to 92c11fd2, NOT the v1.3.0 tag" — the diff pinned the
+    # tag and review, checking the spec only, passed it).
+    from .implement.phase_coordinator import _operator_approval_note
+
+    history = ctx.service.history(ticket.id)
+    approval = _operator_approval_note(history, current_round_only=False)
+    if approval:
+        parts.append(
+            section(
+                "operator-approval-constraints",
+                "The operator approved this ticket with the note below. "
+                "It is binding and overrides the spec where they conflict. "
+                "Verify the diff against it: any deviation is a blocking "
+                "gap (REQUEST_CHANGES), never a nit.\n"
+                + _cap(approval, "operator-approval-constraints"),
+            )
+        )
+
     prior_comments = ctx.service.list_comments(ticket.id)
     if prior_comments:
         # Gate-era discussion — a chat drain's "ESCALATED to operator … do
@@ -692,9 +712,7 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
         # approval and are unaffected.
         from .implement.phase_coordinator import _drop_gate_era_comments
 
-        prior_comments = _drop_gate_era_comments(
-            prior_comments, ctx.service.history(ticket.id), ticket.id
-        )
+        prior_comments = _drop_gate_era_comments(prior_comments, history, ticket.id)
     if prior_comments:
         # Closed threads are normally skipped (resolved REQUEST_CHANGES
         # feedback the implement agent already addressed). EXCEPTION: a
