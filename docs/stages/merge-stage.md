@@ -152,6 +152,31 @@ implement agent, scoped to the ticket's clone. It never pushes, opens
 PRs, or interacts with the forge. The agent does **NOT** have web-search
 access — it works only from the failing summary and local files.
 
+### Deterministic dependency-audit remediation
+
+When the failing check is a `uv audit` / `pip-audit` CVE gate (log lines
+of the form `<pkg> <version> … GHSA-…` / `PYSEC-…`, or
+`Found N known vulnerabilities`), the stage remediates it before any
+ci-fix agent turn, with no LLM call:
+
+- Runs `uv lock --upgrade-package <pkg>` for each flagged package, then
+  `uv lock --check` and `uv sync --frozen --group dev`.
+- Commits the lockfile with the note `CI Security Audit failed on <advisories>
+  in transitive dep(s) <pkgs>; remediated via uv lock --upgrade-package; no
+  source changes.` and pushes the ticket branch. No doc agent runs.
+- The ticket is returned to `IMPLEMENT_COMPLETE` only when the audit gate
+  was the **sole** failing step. If another check is still failing, the bump
+  is pushed, the history note says so, and the remaining failure goes to the
+  ci-fix agent. A dependency bump never closes a ticket whose other failing
+  step is still open.
+- If the upgrade fails or changes nothing, the tree is reset and the normal
+  agent path runs.
+
+Failing-job log excerpts in the CI-monitor ticket body are narrowed to the
+failing step (the step's `conclusion: failure` time range), and the body
+names that step, with a link to the job, so the cause is visible without
+opening the run.
+
 ### Stale-branch refresh (out-of-scope failures)
 
 When the ci-fix agent classifies a failure as **out-of-scope** (i.e., the
