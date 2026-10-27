@@ -930,7 +930,8 @@ def _add_observed_on_evidence(
                 settings.workspaces_dir_for(target_service.board_id), ticket_id
             ).read_description()
         ]
-        texts.extend(c.body for c in target_service.list_comments(ticket_id))
+        comments: list[Any] = list(target_service.list_comments(ticket_id) or [])
+        texts.extend(c.body for c in comments)
         known = set(_OBSERVED_ON_RE.findall("\n".join(texts)))
         for repo in repos:
             if repo in known:
