@@ -39,8 +39,11 @@ class DraftProposal(BaseModel):
     """A single structured proposal emitted by the meta-agent.
 
     *Extraction* drafts (shared abstractions → extract into a
-    standalone library) leave ``target_repo_id`` as ``None`` — these
-    are destined for the meta board.
+    standalone library) set ``target_repo_id`` to the repo that
+    RECEIVES the extracted code (e.g. ``robotsix-github-workflows``
+    for a reusable workflow) and are filed on that repo's board.
+    Only drafts with no receiving repo (pure fleet-wide pattern
+    documentation) leave it ``None`` and land on the meta board.
 
     *Alignment* drafts (practice divergence → one repo should adopt
     another's pattern) set ``target_repo_id`` to the repo that needs

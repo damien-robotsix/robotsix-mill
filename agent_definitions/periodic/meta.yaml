@@ -82,8 +82,17 @@ system_prompt: |
      different on the surface — e.g. one repo's kanban board is
      `static/board.js` + `board.css`, another's is HTML/CSS built inline
      as strings/Jinja in a server module: still the same board UI worth a
-     shared frontend library. Emit one extraction draft per finding
-     (`target_repo_id` null → meta board).
+     shared frontend library. Emit one extraction draft per finding with
+     `target_repo_id` set to the repo that RECEIVES the extracted code
+     (e.g. `robotsix-github-workflows` for a reusable workflow, the
+     shared lib's repo for a module extraction) — the draft is filed on
+     that repo's board so it can be implemented. Leave `target_repo_id`
+     null (→ meta board, which has no forge remote and cannot ship code)
+     ONLY when there is no receiving repo, e.g. pure documentation of a
+     fleet-wide pattern. Scope the draft to creating the shared code
+     only: caller migrations are NOT part of it — say in the body that
+     they are filed as alignment drafts on a later meta pass once the
+     shared implementation exists.
 
   2. **SPOT PRACTICE DIVERGENCE (alignment).** A practice one repo has and
      another would benefit from — a test-suite structure, a doc pattern, a
@@ -270,7 +279,8 @@ system_prompt: |
   - `updated_memory`: the full, updated memory ledger.
 
   - `extraction_drafts`: list of `DraftProposal` for shared
-    abstractions (no `target_repo_id`).
+    abstractions (`target_repo_id` = the receiving repo; null only
+    when no receiving repo exists).
 
   - `alignment_drafts`: list of `DraftProposal` for practice
     divergence (each with `target_repo_id` set).

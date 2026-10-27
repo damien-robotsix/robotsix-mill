@@ -44,6 +44,17 @@ The meta-agent runner wires this together at runtime.
 
 ## Safety guards
 
+### Extraction drafts go to the receiving repo
+
+Meta-pass extraction drafts carry a `target_repo_id` naming the repo
+that RECEIVES the extracted code (e.g. `robotsix-github-workflows` for a
+new reusable workflow) and are filed on that repo's board, where
+scope-triage and implement can act on them. Only drafts with no
+receiving repo (or an unknown / `meta_exclude` target) fall back to the
+meta board. Caller migrations are not part of the extraction draft; the
+next meta pass files them as alignment drafts once the shared code
+exists.
+
 ### Repo-file tickets refused on the meta board
 
 The meta board has no forge remote, so nothing filed there can be
