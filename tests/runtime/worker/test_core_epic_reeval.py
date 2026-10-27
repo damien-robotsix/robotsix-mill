@@ -950,7 +950,9 @@ async def test_cap_blocks_ready_when_at_limit(ctx, service, monkeypatch):
 
     invoked = []
 
-    async def fake_process_ticket(ticket_id, p_ctx, active_map=None):
+    async def fake_process_ticket(
+        ticket_id, p_ctx, active_map=None, allowed_states=None
+    ):
         invoked.append(ticket_id)
 
     monkeypatch.setattr(
@@ -1002,7 +1004,9 @@ async def test_cap_blocks_draft_when_at_limit(ctx, service, monkeypatch):
 
     invoked = []
 
-    async def fake_process_ticket(ticket_id, p_ctx, active_map=None):
+    async def fake_process_ticket(
+        ticket_id, p_ctx, active_map=None, allowed_states=None
+    ):
         invoked.append(ticket_id)
 
     monkeypatch.setattr(
@@ -1055,7 +1059,7 @@ async def test_cap_allows_ready_when_below_limit(ctx, service, monkeypatch):
 
     invoked = []
 
-    async def fake_process_ticket(ticket_id, ctx, active_map=None):
+    async def fake_process_ticket(ticket_id, ctx, active_map=None, allowed_states=None):
         invoked.append(ticket_id)
 
     monkeypatch.setattr(
@@ -1110,7 +1114,7 @@ async def test_cap_disabled_when_zero(ctx, service, monkeypatch):
 
     invoked = []
 
-    async def fake_process_ticket(ticket_id, ctx, active_map=None):
+    async def fake_process_ticket(ticket_id, ctx, active_map=None, allowed_states=None):
         invoked.append(ticket_id)
 
     monkeypatch.setattr(
@@ -1168,7 +1172,7 @@ async def test_merge_pipeline_always_processed_at_cap(ctx, service, monkeypatch)
 
     invoked = []
 
-    async def fake_process_ticket(ticket_id, ctx, active_map=None):
+    async def fake_process_ticket(ticket_id, ctx, active_map=None, allowed_states=None):
         invoked.append(ticket_id)
 
     monkeypatch.setattr(
@@ -1233,7 +1237,9 @@ async def test_cap_excludes_human_mr_approval_from_count(ctx, service, monkeypat
 
     invoked = []
 
-    async def fake_process_ticket(ticket_id, p_ctx, active_map=None):
+    async def fake_process_ticket(
+        ticket_id, p_ctx, active_map=None, allowed_states=None
+    ):
         invoked.append(ticket_id)
 
     monkeypatch.setattr(

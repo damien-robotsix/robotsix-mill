@@ -50,6 +50,18 @@ emit ticket → API inserts row + enqueues → worker chains stages
   stages within a single ticket are always serial.
 - A **deduplication set** prevents the same ticket from being processed
   twice simultaneously.
+- **Merge-poll lane:** tickets in `implement_complete`,
+  `human_mr_approval`, and `waiting_auto_merge` bypass the global
+  concurrency gate (`MILL_MAX_GLOBAL_CONCURRENCY`). Their work is
+  forge-API bound and never starts an agent, so a green PR is promoted
+  and auto-merged within one poll interval even while implement and
+  ci_fix stages hold every non-classify slot. If such a run moves the
+  ticket to an agent stage (e.g. `fixing_ci`, `rebasing`), that stage
+  waits for a normal gate slot.
+- Each worker tick logs `merge poll starved: N tickets at
+  implement_complete queued while slots full` when the gate is saturated
+  and implement_complete tickets are queued behind their board's own
+  consumer pool.
 
 ### Epic handling (`worker/epic.py`)
 

@@ -280,11 +280,18 @@ async def process_ticket(
     ticket_id: str,
     ctx: StageContext,
     active_map: dict[tuple[str, str], Any] | None = None,
+    allowed_states: frozenset[State] | None = None,
 ) -> None:
     """Drive one ticket through as many stages as possible, in order,
     until it reaches a terminal/waiting state or a stub stops the chain.
+
+    When *allowed_states* is given, the chain also stops as soon as the
+    ticket leaves those states (the caller re-enqueues it so the next
+    stage goes through normal admission).
     """
-    await _process_ticket_inner(ticket_id, ctx, active_map=active_map)
+    await _process_ticket_inner(
+        ticket_id, ctx, active_map=active_map, allowed_states=allowed_states
+    )
 
 
 async def _block_ticket_and_notify(
@@ -715,6 +722,7 @@ async def _process_ticket_inner(
     ticket_id: str,
     ctx: StageContext,
     active_map: dict[tuple[str, str], Any] | None = None,
+    allowed_states: frozenset[State] | None = None,
 ) -> None:
     dispatch_counts: Counter[str] = Counter()
     while True:
@@ -723,6 +731,8 @@ async def _process_ticket_inner(
             log.warning("ticket %s vanished", ticket_id)
             return
         if ticket.state in _TERMINAL:
+            return
+        if allowed_states is not None and ticket.state not in allowed_states:
             return
         # Paused mid-stage awaiting operator reply — do NOT dispatch to
         # any stage runner. The resume path (child 4) will re-enqueue

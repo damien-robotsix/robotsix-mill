@@ -97,6 +97,12 @@ On success the ticket transitions directly to `done` and retrospect runs.
 If the forge rejects the merge (branch protection, conflicts, etc.), the
 endpoint returns 409 and the ticket remains in `human_mr_approval`.
 
+`merge-now` is also accepted from `implement_complete` when the live
+merge-status reports `can_merge: true` and CI is confirmed `success`, so
+a green PR the merge poll has not promoted yet can be merged directly.
+Any other state, or a PR that is not mergeable or whose CI is not
+confirmed green, still returns 409.
+
 The drawer performs a **live merge-status check** before rendering the
 Merge button. When the ticket drawer opens it calls
 `GET /tickets/{id}/merge-status`, which queries the forge for the PR's

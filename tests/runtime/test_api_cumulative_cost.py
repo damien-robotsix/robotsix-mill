@@ -458,6 +458,66 @@ def test_merge_now_wrong_state_409(client, service, monkeypatch):
     assert len(fake.merge_calls) == 0
 
 
+class _CIForge(_FakeForge):
+    """_FakeForge with a configurable CI conclusion for merge-status."""
+
+    def __init__(self, ci_conclusion: str, **kw):
+        super().__init__(**kw)
+        self._ci_conclusion = ci_conclusion
+
+    def check_status(self, *, source_branch: str) -> dict:
+        return {"conclusion": self._ci_conclusion}
+
+
+def test_merge_now_mergeable_implement_complete_merges(client, service, monkeypatch):
+    """merge-now on implement_complete merges directly when merge-status
+    reports can_merge (the merge poll has not promoted it yet)."""
+    fake = _CIForge("success")
+    _patch_forge(monkeypatch, fake)
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.routes._tickets_merge._verify_merge_ancestor",
+        lambda *a, **k: True,
+    )
+
+    t = _to_merge_relevant_state(service, "Green IC", State.IMPLEMENT_COMPLETE)
+    r = client.post(f"/tickets/{t.id}/merge-now")
+    assert r.status_code == 200, f"Got {r.status_code}: {r.text}"
+    assert service.get(t.id).state is State.DONE
+    assert fake.merge_calls == [{"source_branch": t.branch}]
+
+
+def test_merge_now_unmergeable_implement_complete_409(client, service, monkeypatch):
+    """merge-now on implement_complete still 409s when CI is failing."""
+    fake = _CIForge("failure")
+    _patch_forge(monkeypatch, fake)
+
+    t = _to_merge_relevant_state(service, "Red IC", State.IMPLEMENT_COMPLETE)
+    r = client.post(f"/tickets/{t.id}/merge-now")
+    assert r.status_code == 409
+    assert "ci checks are failing" in r.text.lower()
+    assert fake.merge_calls == []
+    assert service.get(t.id).state is State.IMPLEMENT_COMPLETE
+
+
+def test_merge_now_implement_complete_unknown_ci_409(client, service, monkeypatch):
+    """merge-now on implement_complete refuses when CI status is unknown
+    (forge error), even though merge-status stays optimistic."""
+
+    class _CIErrorForge(_FakeForge):
+        def check_status(self, *, source_branch: str) -> dict:
+            raise RuntimeError("forge down")
+
+    fake = _CIErrorForge()
+    _patch_forge(monkeypatch, fake)
+
+    t = _to_merge_relevant_state(service, "Unknown IC", State.IMPLEMENT_COMPLETE)
+    r = client.post(f"/tickets/{t.id}/merge-now")
+    assert r.status_code == 409
+    assert "ci success not confirmed" in r.text.lower()
+    assert fake.merge_calls == []
+    assert service.get(t.id).state is State.IMPLEMENT_COMPLETE
+
+
 def test_merge_now_missing_ticket_404(client, monkeypatch):
     """POST /tickets/{id}/merge-now with a bogus id returns 404."""
     fake = _FakeForge()

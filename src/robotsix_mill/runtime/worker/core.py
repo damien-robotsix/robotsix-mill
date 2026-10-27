@@ -66,6 +66,21 @@ _CAP_GATED_STATES: frozenset[State] = frozenset({State.READY, State.DRAFT})
 # STAGE_FOR_STATE so unknown/side states (BLOCKED etc.) never match.
 _DRAIN_HEAVY_STAGES: frozenset[str] = frozenset({"implement", "ci_fix", "refine"})
 
+# Merge-poll states run on their own lane: they bypass the global
+# concurrency gate entirely. These paths (CI poll, server-side branch
+# refresh, promotion to human_mr_approval, auto-merge) are forge-API
+# bound and never start an agent of their own, yet when they shared the
+# non-classify slots with hour-scale implement/ci_fix runs, green PRs sat
+# at implement_complete for hours and operators merged them by hand.
+# REBASING / ADDRESSING_REVIEW also map to the merge stage but DO run an
+# agent, so they stay gated: an ungated run stops as soon as the ticket
+# leaves these states (process_ticket's allowed_states) and is re-enqueued
+# through the gate, so FIXING_CI / REBASING / DONE (retrospect) agents
+# never run on the lane.
+_MERGE_LANE_STATES: frozenset[State] = frozenset(
+    {State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.WAITING_AUTO_MERGE}
+)
+
 # Fail-open TTL (seconds) for the drain flag when the POST body omits
 # ttl_seconds. The flag is also cleared by restart (in-memory only), so
 # a stale flag whose caretaker has disappeared can never wedge intake
@@ -537,6 +552,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         while True:
             popped_prio, popped_stage, _seq, ticket_id = await queue.get()
             claimed: tuple[str, str] | None = None
+            requeue_after = False
             try:
                 before = board_service.get(ticket_id)
                 before_state = before.state if before else None
@@ -746,7 +762,10 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 if claimed is None:
                     continue  # a live run already covers this ticket+stage
 
-                if self._global_semaphore is not None:
+                if (
+                    self._global_semaphore is not None
+                    and before_state not in _MERGE_LANE_STATES
+                ):
                     if self._global_semaphore.locked():
                         log.debug(
                             "global concurrency cap (%d) saturated, %d queued; "
@@ -764,10 +783,24 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                                 ticket_id, per_ticket_ctx, active_map=self._active
                             )
                 else:
+                    # Ungated: stop the chain the moment the ticket leaves
+                    # the merge lane (CI red -> FIXING_CI, conflict ->
+                    # REBASING, merged -> DONE/retrospect) and re-enqueue
+                    # it, so those agent stages wait for a gate slot.
+                    lane = (
+                        _MERGE_LANE_STATES
+                        if self._global_semaphore is not None
+                        else None
+                    )
                     with _ticket_sandbox_rank(admission_rank):
                         await process_ticket(
-                            ticket_id, per_ticket_ctx, active_map=self._active
+                            ticket_id,
+                            per_ticket_ctx,
+                            active_map=self._active,
+                            allowed_states=lane,
                         )
+                    if lane is not None:
+                        requeue_after = True
                 after = board_service.get(ticket_id)
                 # _check_progress calls session_cost/session_traces, which
                 # hit Langfuse via a synchronous httpx.Client (20s timeout).
@@ -795,6 +828,10 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                     self._in_flight.discard(claimed[0])
                     self._active.pop(claimed, None)
                 queue.task_done()
+                if requeue_after:
+                    # A merge-lane run that left the lane hands the next
+                    # stage back to gated admission.
+                    self._requeue_if_left_lane(board_service, ticket_id)
 
     def _maybe_sweep_orphaned_epic(self, epic, svc) -> None:
         """Deterministically close an EPIC_OPEN epic whose children are ALL
@@ -1067,8 +1104,50 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                         if svc.unmet_dependencies(t):
                             continue
                         self.enqueue(t.id)
+                self._log_merge_poll_starvation()
             except Exception:
                 log.exception("reconcile sweep failed")
+
+    def _requeue_if_left_lane(self, svc: TicketService, ticket_id: str) -> None:
+        """Re-enqueue a ticket whose ungated merge-lane run stopped because
+        it moved to a stage outside the lane (FIXING_CI, REBASING, DONE...),
+        so that stage runs under the global gate instead of waiting for
+        the next reconcile sweep.
+        """
+        t = svc.get(ticket_id)
+        if (
+            t is not None
+            and t.state not in _MERGE_LANE_STATES
+            and t.state in STAGE_FOR_STATE
+        ):
+            self.enqueue(ticket_id)
+
+    def _log_merge_poll_starvation(self) -> int:
+        """Log how many implement_complete tickets are queued but not
+        running while the global gate is saturated, so the "merge poll
+        starved behind heavy stages" class stays visible per tick.
+
+        Merge-poll states bypass the gate (see ``_MERGE_LANE_STATES``),
+        so a non-zero count here means the board's own consumer pool is
+        busy, not the global cap. Returns the count (0 when the gate has
+        free slots).
+        """
+        gate = self._global_semaphore
+        if gate is None or not gate.locked():
+            return 0
+        waiting = 0
+        for tid in self._pending - self._in_flight:
+            # Same lookup enqueue() uses to route a ticket to its board.
+            t = self.ctx.service.get(tid)
+            if t is not None and t.state is State.IMPLEMENT_COMPLETE:
+                waiting += 1
+        if waiting:
+            log.warning(
+                "merge poll starved: %d tickets at implement_complete queued "
+                "while slots full",
+                waiting,
+            )
+        return waiting
 
     def start(self) -> None:
         """Start all worker tasks: per-repo consumer pools, health monitoring,

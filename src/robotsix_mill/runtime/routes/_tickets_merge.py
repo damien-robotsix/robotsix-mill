@@ -42,7 +42,9 @@ def merge_now(
     """Merge the PR for a ticket in human_mr_approval directly via the
     forge API, then transition to done.  This is the explicit human
     merge path — it bypasses auto-merge eligibility and calls the
-    forge's merge endpoint immediately.
+    forge's merge endpoint immediately.  A ticket still in
+    implement_complete is merged too when the merge-status route reports
+    ``can_merge: true`` (the merge poll has not promoted it yet).
 
     For multi-repo (meta-board) tickets — those whose deliver stage
     wrote ``pr_urls.json`` — this merges the PR of *every* repo listed
@@ -51,7 +53,8 @@ def merge_now(
     idempotent; only when every repo is merged does the ticket advance
     to done.
 
-    Returns 409 when the ticket is not in human_mr_approval, when the
+    Returns 409 when the ticket is not in human_mr_approval (or a
+    mergeable implement_complete), when the
     manifest is corrupt, or when the forge rejects a merge (branch
     protection, conflict, etc.).
     """
@@ -59,7 +62,19 @@ def merge_now(
     ticket = svc.get(ticket_id)
     if ticket is None:
         raise HTTPException(404, "ticket not found")
-    if ticket.state is not State.HUMAN_MR_APPROVAL:
+    if ticket.state is State.IMPLEMENT_COMPLETE:
+        # The merge poll may lag behind (green PR not yet promoted to
+        # human_mr_approval). The operator already read the diff, so merge
+        # directly when the live merge status says the PR is mergeable.
+        # merge-status is optimistic on forge errors (can_merge stays true
+        # with CI unknown), so this path also requires a confirmed green CI.
+        status = get_merge_status(ticket_id, request, svc, settings)
+        if not status.get("can_merge") or status.get("ci_conclusion") != "success":
+            reason = status.get("reason") or "CI success not confirmed"
+            raise HTTPException(
+                409, f"ticket is in implement_complete and not mergeable: {reason}"
+            )
+    elif ticket.state is not State.HUMAN_MR_APPROVAL:
         raise HTTPException(409, "ticket is not in human_mr_approval")
 
     repo_config = _repo_config_for_ticket(ticket, request.app.state.repos)
