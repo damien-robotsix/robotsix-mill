@@ -133,6 +133,15 @@ output and applies minimal fixes.
   `IMPLEMENT_COMPLETE` for the next poll to re-verify both gates).
 - On failure the ticket escalates to `BLOCKED` (resumable) — no
   half-fixed state is ever pushed.
+- **Repository-setting gate.** When a failing check is refused because a
+  GitHub repository setting is off (Dependency graph for
+  `dependency-review`, or code scanning / Advanced Security for
+  `upload-sarif`), the stage skips the ci-fix agent entirely. The ticket
+  parks `BLOCKED` with a note starting `repo setting required:` that names
+  the setting and links `https://github.com/<owner>/<repo>/settings/security_analysis`.
+  The block is **not** auto-resumable. The operator is escalated once per
+  `(repo, setting)`. After enabling the setting, resume the ticket
+  (`/transition ready`) to re-enter `FIXING_CI` and re-poll CI.
 
 | Variable | Default | Description |
 |---|---|---|
