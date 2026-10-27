@@ -66,9 +66,11 @@ def merge_now(
         # The merge poll may lag behind (green PR not yet promoted to
         # human_mr_approval). The operator already read the diff, so merge
         # directly when the live merge status says the PR is mergeable.
+        # merge-status is optimistic on forge errors (can_merge stays true
+        # with CI unknown), so this path also requires a confirmed green CI.
         status = get_merge_status(ticket_id, request, svc, settings)
-        if not status.get("can_merge"):
-            reason = status.get("reason") or "can_merge is false"
+        if not status.get("can_merge") or status.get("ci_conclusion") != "success":
+            reason = status.get("reason") or "CI success not confirmed"
             raise HTTPException(
                 409, f"ticket is in implement_complete and not mergeable: {reason}"
             )

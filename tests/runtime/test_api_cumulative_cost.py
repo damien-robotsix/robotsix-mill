@@ -499,6 +499,25 @@ def test_merge_now_unmergeable_implement_complete_409(client, service, monkeypat
     assert service.get(t.id).state is State.IMPLEMENT_COMPLETE
 
 
+def test_merge_now_implement_complete_unknown_ci_409(client, service, monkeypatch):
+    """merge-now on implement_complete refuses when CI status is unknown
+    (forge error), even though merge-status stays optimistic."""
+
+    class _CIErrorForge(_FakeForge):
+        def check_status(self, *, source_branch: str) -> dict:
+            raise RuntimeError("forge down")
+
+    fake = _CIErrorForge()
+    _patch_forge(monkeypatch, fake)
+
+    t = _to_merge_relevant_state(service, "Unknown IC", State.IMPLEMENT_COMPLETE)
+    r = client.post(f"/tickets/{t.id}/merge-now")
+    assert r.status_code == 409
+    assert "ci success not confirmed" in r.text.lower()
+    assert fake.merge_calls == []
+    assert service.get(t.id).state is State.IMPLEMENT_COMPLETE
+
+
 def test_merge_now_missing_ticket_404(client, monkeypatch):
     """POST /tickets/{id}/merge-now with a bogus id returns 404."""
     fake = _FakeForge()

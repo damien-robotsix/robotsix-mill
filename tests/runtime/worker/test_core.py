@@ -939,6 +939,106 @@ async def test_merge_poll_not_starved_by_full_slots(ctx, service, monkeypatch):
         await w.stop()
 
 
+async def _wait_until(pred, tries: int = 200) -> None:
+    for _ in range(tries):
+        if pred():
+            return
+        await asyncio.sleep(0.02)
+    raise AssertionError("condition not reached")
+
+
+async def test_merge_lane_hands_agent_stage_back_to_gate(ctx, service, monkeypatch):
+    """An ungated merge-lane run that moves the ticket to FIXING_CI stops
+    there: ci_fix must wait for a gate slot, not chain on the lane."""
+    import threading
+
+    release = threading.Event()
+    started = {"n": 0}
+    ci_fix_calls: list[str] = []
+    lock = threading.Lock()
+
+    class BlockingImplement(Stage):
+        name = "implement"
+        input_state = State.READY
+
+        def run(self, _t, _c):
+            with lock:
+                started["n"] += 1
+            release.wait(timeout=10)
+            return Outcome(State.BLOCKED, "implemented")
+
+    class RedMerge(Stage):
+        name = "merge"
+        input_state = State.IMPLEMENT_COMPLETE
+
+        def run(self, t, _c):
+            return Outcome(State.FIXING_CI, "ci red")
+
+    class RecordingCIFix(Stage):
+        name = "ci_fix"
+        input_state = State.FIXING_CI
+
+        def run(self, t, _c):
+            ci_fix_calls.append(t.id)
+            return Outcome(State.BLOCKED, "fixed")
+
+    monkeypatch.setitem(registry.STAGES, "implement", BlockingImplement())
+    monkeypatch.setitem(registry.STAGES, "merge", RedMerge())
+    monkeypatch.setitem(registry.STAGES, "ci_fix", RecordingCIFix())
+    ctx.settings.max_global_concurrency = 3
+    ctx.settings.classify_reserved_slots = 1
+
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+
+    fake_repos = ReposRegistry(
+        repos={
+            "test-repo": RepoConfig(
+                repo_id="test-repo",
+                board_id=ctx.repo_config.board_id if ctx.repo_config else "",
+                langfuse_project_name="p",
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+                max_concurrency=3,
+            ),
+        }
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker.core.get_repos_config",
+        lambda: fake_repos,
+    )
+
+    impls = []
+    for i in range(2):
+        t = service.create(f"impl {i}")
+        service.transition(t.id, State.READY, note="ready")
+        impls.append(t.id)
+    red = service.create("red PR")
+    service.transition(red.id, State.READY, note="ready")
+    service.transition(red.id, State.DELIVERABLE, note="delivered")
+    service.transition(red.id, State.IMPLEMENT_COMPLETE, note="gates")
+
+    w = Worker(ctx)
+    w.start()
+    try:
+        for tid in impls:
+            w.enqueue(tid)
+        await _wait_until(lambda: started["n"] == 2)
+
+        w.enqueue(red.id)
+        await _wait_until(lambda: service.get(red.id).state is State.FIXING_CI)
+        await asyncio.sleep(0.2)
+        assert service.get(red.id).state is State.FIXING_CI
+        assert ci_fix_calls == []  # held behind the saturated gate
+
+        release.set()
+        await _wait_until(lambda: bool(ci_fix_calls))
+        assert ci_fix_calls == [red.id]
+    finally:
+        release.set()
+        await asyncio.wait_for(w.queue_join(), timeout=10)
+        await w.stop()
+
+
 async def test_merge_poll_starvation_logged(ctx, service, caplog):
     """The per-tick metric counts queued implement_complete tickets while
     the global gate is saturated."""
@@ -2879,7 +2979,9 @@ async def test_cap_deferral_demotes_priority_ready_so_merge_pipeline_proceeds(
 
     invoked: list[str] = []
 
-    async def fake_process_ticket(ticket_id, p_ctx, active_map=None):
+    async def fake_process_ticket(
+        ticket_id, p_ctx, active_map=None, allowed_states=None
+    ):
         invoked.append(ticket_id)
 
     monkeypatch.setattr(
@@ -3115,7 +3217,9 @@ async def test_priority_ticket_wins_global_slot_over_earlier_other_board(
 
     invoked: list[str] = []
 
-    async def fake_process_ticket(ticket_id, p_ctx, active_map=None):
+    async def fake_process_ticket(
+        ticket_id, p_ctx, active_map=None, allowed_states=None
+    ):
         invoked.append(ticket_id)
 
     monkeypatch.setattr(
@@ -3174,7 +3278,9 @@ async def test_consumer_publishes_sandbox_rank_and_resets_it(ctx, service, monke
 
     seen: list[tuple[int, int]] = []
 
-    async def fake_process_ticket(ticket_id, p_ctx, active_map=None):
+    async def fake_process_ticket(
+        ticket_id, p_ctx, active_map=None, allowed_states=None
+    ):
         seen.append(current_rank())
 
     monkeypatch.setattr(
@@ -3435,7 +3541,9 @@ async def test_duplicate_across_requeue_path_runs_stage_once_per_state(
     started = asyncio.Event()
     release = asyncio.Event()
 
-    async def fake_process_ticket(ticket_id, p_ctx, active_map=None):
+    async def fake_process_ticket(
+        ticket_id, p_ctx, active_map=None, allowed_states=None
+    ):
         cur = service.get(ticket_id).state
         seen.append(cur)
         if cur is State.DRAFT:

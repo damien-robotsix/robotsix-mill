@@ -73,8 +73,10 @@ _DRAIN_HEAVY_STAGES: frozenset[str] = frozenset({"implement", "ci_fix", "refine"
 # non-classify slots with hour-scale implement/ci_fix runs, green PRs sat
 # at implement_complete for hours and operators merged them by hand.
 # REBASING / ADDRESSING_REVIEW also map to the merge stage but DO run an
-# agent, so they stay gated. Any sandbox an agent opens is still capped
-# by the sandbox slot gate.
+# agent, so they stay gated: an ungated run stops as soon as the ticket
+# leaves these states (process_ticket's allowed_states) and is re-enqueued
+# through the gate, so FIXING_CI / REBASING / DONE (retrospect) agents
+# never run on the lane.
 _MERGE_LANE_STATES: frozenset[State] = frozenset(
     {State.IMPLEMENT_COMPLETE, State.HUMAN_MR_APPROVAL, State.WAITING_AUTO_MERGE}
 )
@@ -550,6 +552,7 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
         while True:
             popped_prio, popped_stage, _seq, ticket_id = await queue.get()
             claimed: tuple[str, str] | None = None
+            requeue_after = False
             try:
                 before = board_service.get(ticket_id)
                 before_state = before.state if before else None
@@ -780,10 +783,24 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                                 ticket_id, per_ticket_ctx, active_map=self._active
                             )
                 else:
+                    # Ungated: stop the chain the moment the ticket leaves
+                    # the merge lane (CI red -> FIXING_CI, conflict ->
+                    # REBASING, merged -> DONE/retrospect) and re-enqueue
+                    # it, so those agent stages wait for a gate slot.
+                    lane = (
+                        _MERGE_LANE_STATES
+                        if self._global_semaphore is not None
+                        else None
+                    )
                     with _ticket_sandbox_rank(admission_rank):
                         await process_ticket(
-                            ticket_id, per_ticket_ctx, active_map=self._active
+                            ticket_id,
+                            per_ticket_ctx,
+                            active_map=self._active,
+                            allowed_states=lane,
                         )
+                    if lane is not None:
+                        requeue_after = True
                 after = board_service.get(ticket_id)
                 # _check_progress calls session_cost/session_traces, which
                 # hit Langfuse via a synchronous httpx.Client (20s timeout).
@@ -811,6 +828,10 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                     self._in_flight.discard(claimed[0])
                     self._active.pop(claimed, None)
                 queue.task_done()
+                if requeue_after:
+                    # A merge-lane run that left the lane hands the next
+                    # stage back to gated admission.
+                    self._requeue_if_left_lane(board_service, ticket_id)
 
     def _maybe_sweep_orphaned_epic(self, epic, svc) -> None:
         """Deterministically close an EPIC_OPEN epic whose children are ALL
@@ -1086,6 +1107,20 @@ class Worker(PeriodicPassesMixin, PollLoopsMixin):
                 self._log_merge_poll_starvation()
             except Exception:
                 log.exception("reconcile sweep failed")
+
+    def _requeue_if_left_lane(self, svc: TicketService, ticket_id: str) -> None:
+        """Re-enqueue a ticket whose ungated merge-lane run stopped because
+        it moved to a stage outside the lane (FIXING_CI, REBASING, DONE...),
+        so that stage runs under the global gate instead of waiting for
+        the next reconcile sweep.
+        """
+        t = svc.get(ticket_id)
+        if (
+            t is not None
+            and t.state not in _MERGE_LANE_STATES
+            and t.state in STAGE_FOR_STATE
+        ):
+            self.enqueue(ticket_id)
 
     def _log_merge_poll_starvation(self) -> int:
         """Log how many implement_complete tickets are queued but not
