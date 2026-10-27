@@ -46,7 +46,7 @@ jobs:
   publish-mill:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: lint
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@13e54ef2c331bfb3eb6daac295f49ff310b3d572  # main 2026-10-21
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@05d872b062890597dfcdd83d0eeac8918edc3618  # v1.3.0
     permissions:
       contents: read
       packages: write  # push the image to GHCR
@@ -55,11 +55,14 @@ jobs:
       security-events: write  # upload the Trivy scan SARIF to code scanning
     with:
       image-name: ghcr.io/damien-robotsix/robotsix-mill
+      # Smoke the published digest: sandbox-contract `gh`, bundled
+      # agent_definitions, and readable importlib.metadata version.
+      smoke_command: "gh --version && python -c 'from robotsix_mill._resources import agent_definitions_dir; assert agent_definitions_dir().is_dir()' && python -c \"from importlib.metadata import metadata; assert metadata('robotsix-mill')['Version']\""
 
   publish-sandbox:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: lint
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@13e54ef2c331bfb3eb6daac295f49ff310b3d572  # main 2026-10-21
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@05d872b062890597dfcdd83d0eeac8918edc3618  # v1.3.0
     permissions:
       contents: read
       packages: write  # push the image to GHCR
@@ -69,11 +72,12 @@ jobs:
     with:
       image-name: ghcr.io/damien-robotsix/robotsix-mill-sandbox
       dockerfile: sandbox/Dockerfile
+      smoke_command: "gh --version && uv --version"
 
   publish-proxy:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: lint
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@13e54ef2c331bfb3eb6daac295f49ff310b3d572  # main 2026-10-21
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-release.yml@05d872b062890597dfcdd83d0eeac8918edc3618  # v1.3.0
     permissions:
       contents: read
       packages: write  # push the image to GHCR
@@ -87,10 +91,13 @@ jobs:
       # uses repo-root-relative COPY paths so context: . (the reusable
       # default) works correctly.
 
-  smoke-mill:
-    name: Smoke test mill image
+  smoke-sandbox:
+    # The reusable's smoke_command covers `gh`/`uv` presence on the
+    # published digest, but cannot set `--user`, so the non-root uv
+    # assertion stays inline.
+    name: Smoke test sandbox image (non-root uv)
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    needs: publish-mill
+    needs: publish-sandbox
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -116,63 +123,10 @@ jobs:
         run: |
           if [ "$REF_TYPE" = "tag" ]; then
             TAG="$REF_NAME"
-            echo "image=ghcr.io/damien-robotsix/robotsix-mill:${TAG#v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "image=ghcr.io/damien-robotsix/robotsix-mill:main" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Assert sandbox-contract tools present (gh)
-        env:
-          IMAGE: ${{ steps.ref.outputs.image }}
-        run: docker run --rm --entrypoint gh "$IMAGE" --version
-
-      - name: Smoke — agent_definitions bundled in production image
-        env:
-          IMAGE: ${{ steps.ref.outputs.image }}
-        run: |
-          docker run --rm --entrypoint python "$IMAGE" -c \
-            "from robotsix_mill._resources import agent_definitions_dir; p = agent_definitions_dir(); assert p.is_dir(), f'Missing: {p}'"
-
-      - name: Smoke — importlib.metadata version readable in production image
-        env:
-          IMAGE: ${{ steps.ref.outputs.image }}
-        run: |
-          docker run --rm --entrypoint python "$IMAGE" -c \
-            "from importlib.metadata import metadata; m = metadata('robotsix-mill'); assert m['Version'], 'No version'"
-
-  smoke-sandbox:
-    name: Smoke test sandbox image
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    needs: publish-sandbox
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read  # pull the just-published image from GHCR for the smoke test
-    steps:
-      - name: Log in to GHCR
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6  # v4.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Resolve image ref
-        id: ref
-        env:
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          if [ "$REF_TYPE" = "tag" ]; then
-            TAG="$REF_NAME"
             echo "image=ghcr.io/damien-robotsix/robotsix-mill-sandbox:${TAG#v}" >> "$GITHUB_OUTPUT"
           else
             echo "image=ghcr.io/damien-robotsix/robotsix-mill-sandbox:main" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Assert sandbox-contract tools present (gh)
-        env:
-          IMAGE: ${{ steps.ref.outputs.image }}
-        run: docker run --rm --entrypoint gh "$IMAGE" --version
 
       - name: Assert uv reachable as non-root runtime user
         env:

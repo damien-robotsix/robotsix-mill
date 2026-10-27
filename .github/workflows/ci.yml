@@ -56,6 +56,42 @@ jobs:
       #     resolves 6.16.2, so no pypdf advisory is ignored here.
       audit-ignore: "PYSEC-2025-183, MAL-2026-4750, GHSA-9xwg-3r6f-jcx2, GHSA-jwv3-5hgf-82ww, GHSA-m2h6-j472-rp4c, GHSA-g6cj-pr64-35w5"
 
+  # ── PR-time image build + blocking Trivy gate (CRITICAL/HIGH, fixable) ──
+  # Mirrors the post-merge publish jobs in release.yml so a Dockerfile
+  # change that breaks the build or adds a CVE fails the PR, not `main`.
+  # Trivy reads the repo's `.trivyignore` from the checkout.
+  docker-pr-scan-mill:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      security-events: write  # upload the Trivy scan SARIF to code scanning
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@05d872b062890597dfcdd83d0eeac8918edc3618  # v1.3.0
+    with:
+      image-name: ghcr.io/damien-robotsix/robotsix-mill
+      dockerfile: Dockerfile
+      smoke_command: "gh --version && python -c 'from robotsix_mill._resources import agent_definitions_dir; assert agent_definitions_dir().is_dir()' && python -c \"from importlib.metadata import metadata; assert metadata('robotsix-mill')['Version']\""
+
+  docker-pr-scan-sandbox:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      security-events: write  # upload the Trivy scan SARIF to code scanning
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@05d872b062890597dfcdd83d0eeac8918edc3618  # v1.3.0
+    with:
+      image-name: ghcr.io/damien-robotsix/robotsix-mill-sandbox
+      dockerfile: sandbox/Dockerfile
+      smoke_command: "gh --version && uv --version"
+
+  docker-pr-scan-proxy:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      security-events: write  # upload the Trivy scan SARIF to code scanning
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@05d872b062890597dfcdd83d0eeac8918edc3618  # v1.3.0
+    with:
+      image-name: ghcr.io/damien-robotsix/robotsix-mill-sandbox-proxy
+      dockerfile: sandbox/proxy/Dockerfile
+
   mill-specific:
     name: Mill-specific checks
     runs-on: ubuntu-latest
