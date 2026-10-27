@@ -166,8 +166,15 @@ The note the operator writes on the `human_issue_approval → ready` (or
 conflict]` block at the top of the feedback, and to review as an
 `operator-approval-constraints` section. Approval notes often carry hard
 constraints (e.g. "pin to `<sha>`, do NOT resolve the v1.3.0 tag"), so
-where the spec text and the note disagree the note wins. Review treats a
-diff that contradicts the note as a blocking gap, not a nit. The note
+where the spec text and the note disagree the note wins. When the agent
+concludes a constraint cannot (or should not) be satisfied, it must not
+commit a self-justified deviation: it calls `ask_user` with the
+constraint, its reason and the proposed alternative, parking the ticket
+at `awaiting_user_reply` for the operator's decision. Review treats a
+diff that contradicts the note as a blocking gap (`REQUEST_CHANGES`),
+not a nit, even when the diff argues the deviation is necessary; a
+SHA pin older than a commit the note names is forced to
+`REQUEST_CHANGES` deterministically, whatever the LLM verdict. The note
 applies to the implement round that `ready` opened; empty notes and
 automatic resumes (`[auto-resume …]`) are ignored.
 

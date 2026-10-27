@@ -648,7 +648,11 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
         if approval:
             top = (
                 "[OPERATOR APPROVAL CONSTRAINTS — binding, override the spec "
-                f"where they conflict] {approval}"
+                f"where they conflict] {approval}\n"
+                "If you conclude a constraint above cannot or should not "
+                "be satisfied, do NOT commit a deviation (not even a "
+                "justified one): call `ask_user` with the constraint, "
+                "your reason and the alternative you propose, then stop."
             )
             feedback = f"{top}\n{feedback}" if feedback else top
 

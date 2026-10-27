@@ -342,6 +342,149 @@ def _verify_action_sha(
         return None  # Any failure → skip existence check
 
 
+_CONSTRAINT_SHA_RE = re.compile(r"(?<![0-9A-Za-z])[0-9a-f]{7,40}(?![0-9A-Za-z])")
+
+
+def _constraint_shas(note: str) -> list[str]:
+    """Return the commit SHAs (7–40 hex chars) an approval note names.
+
+    A token must mix digits and ``a-f`` letters so plain numbers and
+    hex-only words (``deadbeef`` aside) are not mistaken for SHAs.
+
+    >>> _constraint_shas("pin to CURRENT main, never older than 92c11fd2…")
+    ['92c11fd2']
+    >>> _constraint_shas("bump to 2026102 or v1.3.0, see decade")
+    []
+    """
+    seen: list[str] = []
+    for tok in _CONSTRAINT_SHA_RE.findall(note):
+        has_digit = any(ch.isdigit() for ch in tok)
+        has_alpha = any(ch.isalpha() for ch in tok)
+        if has_digit and has_alpha and tok not in seen:
+            seen.append(tok)
+    return seen
+
+
+def _sha_is_older_than(
+    owner_repo: str, sha: str, floor: str, token: str | None = None
+) -> bool | None:
+    """Best-effort: is commit *sha* a strict ancestor of *floor* in
+    *owner_repo*?
+
+    Fetches the remote ``HEAD`` and *sha* (commit graph only,
+    ``--filter=tree:0``) into a scratch repo, resolves the (possibly
+    abbreviated) *floor* there and asks ``git merge-base --is-ancestor``.
+    Returns ``True`` (older than the floor), ``False`` (equal, newer or
+    unrelated) or ``None`` when it could not be decided — malformed
+    input, network failure, or *floor* not a commit of this repo.
+    """
+    if not (
+        _OWNER_REPO_RE.match(owner_repo)
+        and _SHA_RE.match(sha)
+        and re.fullmatch(r"[0-9a-f]{7,40}", floor)
+    ):
+        return None
+    try:
+        owner, _, repo = owner_repo.partition("/")
+        url = f"https://github.com/{shlex.quote(owner)}/{shlex.quote(repo)}.git"
+        if token:
+            url = git_ops._authed_url(url, token)
+        with tempfile.TemporaryDirectory() as tmp:
+            return _scratch_is_ancestor(tmp, url, sha, floor)
+    except Exception:
+        return None
+
+
+def _scratch_is_ancestor(tmp: str, url: str, sha: str, floor: str) -> bool | None:
+    """Body of :func:`_sha_is_older_than`, run in scratch dir *tmp*."""
+
+    def _git(*args: str, timeout: int = 15) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", tmp, *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+    if _git("init", "-q").returncode != 0:
+        return None
+    if _git("fetch", "-q", "--filter=tree:0", url, "HEAD", sha, timeout=60).returncode:
+        return None
+    resolved = _git("rev-parse", "--verify", "--quiet", f"{floor}^{{commit}}")
+    if resolved.returncode != 0:
+        return None  # floor is not a commit of this repo
+    floor_full = resolved.stdout.strip()
+    if floor_full == sha:
+        return False
+    rc = _git("merge-base", "--is-ancestor", sha, floor_full).returncode
+    return {0: True, 1: False}.get(rc)
+
+
+def _enforce_approval_constraint_pins(
+    verdict: ReviewVerdict,
+    approval: str | None,
+    sha_refs: list[tuple[str, str, str, str]],
+    gh_token: str | None,
+) -> ReviewVerdict:
+    """Force REQUEST_CHANGES when the diff pins a SHA older than one the
+    operator's approval note names.
+
+    Ticket 9ad3: the note said "never older than 92c11fd2…"; implement
+    pinned an older commit with a self-justifying comment and review
+    approved it. A deviation from a binding operator constraint is the
+    operator's call — implement must ``ask_user`` instead — so this is
+    enforced here deterministically, whatever the LLM verdict.
+
+    *sha_refs* are ``(file, slug, sha, comment)`` tuples for 40-char
+    SHA pins added by the diff. Mutates and returns *verdict*.
+    """
+    if not approval:
+        return verdict
+    floors = _constraint_shas(approval)
+    if not floors:
+        return verdict
+    asks: list[ReviewAsk] = []
+    for file_path, slug, ref, _comment in sha_refs:
+        if not _SHA_RE.match(ref):
+            continue
+        parts = slug.split("/")
+        if len(parts) < 2:
+            continue
+        owner_repo = f"{parts[0]}/{parts[1]}"
+        for floor in floors:
+            if ref.startswith(floor) or floor.startswith(ref):
+                continue
+            if _sha_is_older_than(owner_repo, ref, floor, gh_token) is True:
+                asks.append(
+                    ReviewAsk(
+                        title=f"Pin {slug.split('/')[-1]} per approval constraint"[:80],
+                        description=(
+                            f"`{file_path}` pins `{slug}@{ref}`, which is older "
+                            f"than `{floor}` named in the operator's approval "
+                            f"note (binding):\n\n{approval}\n\n"
+                            "Satisfy the constraint. If you believe it cannot "
+                            "be satisfied, do NOT re-commit the deviation: call "
+                            "`ask_user` with the constraint, your reason and "
+                            "the alternative, and stop."
+                        ),
+                        files_touched=[file_path],
+                    )
+                )
+                break
+    if not asks:
+        return verdict
+    header = (
+        "Operator approval constraint violated: the diff pins a SHA older "
+        "than one the approval note names (see request_changes entries "
+        "below)."
+    )
+    verdict.verdict = "REQUEST_CHANGES"
+    verdict.auto_merge_eligible = False
+    verdict.request_changes = asks + list(verdict.request_changes)
+    verdict.comments = f"{header}\n\n{verdict.comments}" if verdict.comments else header
+    return verdict
+
+
 def _validate_action_refs(
     action_refs: list[tuple[str, str, str, str]],
 ) -> list[dict[str, str]]:

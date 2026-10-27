@@ -175,6 +175,12 @@ system_prompt: |
     they conflict (e.g. "pin to <sha>" beats a spec that says "v1.3.0").
     Check the diff against every constraint in it; a diff that
     contradicts it is a blocking gap — REQUEST_CHANGES, never a nit.
+    This holds even when the diff or the ``implement-rebuttal`` argues
+    the deviation is technically necessary (e.g. "pinned an older SHA
+    because newer commits are broken"): that decision belongs to the
+    operator, so REQUEST_CHANGES with an ask to either satisfy the
+    constraint or call ``ask_user`` with the reason — never APPROVE a
+    self-justified deviation.
 
   You have access to read-only filesystem tools (``read_file`` and
   ``list_dir``) on the real repo clone.  Use them:

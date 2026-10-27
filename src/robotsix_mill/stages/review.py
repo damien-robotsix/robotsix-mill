@@ -35,6 +35,7 @@ from ._review_helpers import (
     _collapse_comments,
     _detect_convergence,
     _diff_fingerprint,
+    _enforce_approval_constraint_pins,
     _file_in_scope,  # noqa: F401 — re-export for test imports
     _gaps_already_addressed,
     _load_file_map,
@@ -197,6 +198,20 @@ class ReviewStage(Stage):
         # 5. Action-ref SHA validation (mutates verdict on violations).
         verdict = self._validate_action_shas(
             dm.action_refs, dm.reusable_workflow_refs, dm.gh_token, verdict
+        )
+
+        # 5b. A pin older than a SHA the operator's approval note names is
+        # a blocking deviation, whatever the LLM verdict (ticket 9ad3).
+        from .implement.phase_coordinator import _operator_approval_note
+
+        verdict = _enforce_approval_constraint_pins(
+            verdict,
+            _operator_approval_note(
+                ctx.service.history(ticket.id), current_round_only=False
+            ),
+            [r for r in dm.action_refs if _SHA_RE.match(r[2])]
+            + dm.reusable_workflow_refs,
+            dm.gh_token,
         )
 
         # 6. Persist review artifact.

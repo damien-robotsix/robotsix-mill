@@ -2496,6 +2496,9 @@ def test_load_context_approval_note_leads_feedback(ctx_factory, monkeypatch):
     first = ic.feedback.splitlines()[0]
     assert first.startswith("[OPERATOR APPROVAL CONSTRAINTS")
     assert "pin to 92c11fd2" in first
+    # A constraint the agent cannot satisfy goes to the operator, not
+    # into a self-justified deviation (ticket 9ad3).
+    assert "call `ask_user` with the constraint" in ic.feedback
 
 
 def test_operator_approval_note_scoping():
