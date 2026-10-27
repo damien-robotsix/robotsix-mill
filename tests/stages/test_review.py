@@ -2400,3 +2400,132 @@ def test_answer_requests_change(answer, expected):
     from robotsix_mill.stages._review_helpers import _answer_requests_change
 
     assert _answer_requests_change(answer) is expected
+
+
+# --- operator approval constraints: pins older than a named SHA ---------
+
+_FLOOR = "92c11fd2"
+_OLD_PIN = "f167941e0123456789abcdef0123456789abcdef"
+
+
+def _approved_pin_ticket(ctx, note):
+    """A ticket approved with *note*, whose branch pins a reusable
+    workflow to ``_OLD_PIN``."""
+    import time as _time
+
+    t = ctx.service.create("Migrate codeql", "Use the reusable codeql.yml.")
+    ctx.service.transition(t.id, State.HUMAN_ISSUE_APPROVAL)
+    _time.sleep(0.01)
+    ctx.service.transition(t.id, State.READY, note=note)
+    ws = ctx.service.workspace(t)
+    repo_dir = ws.dir / "repo"
+    remote = _make_bare_repo(ws.dir)
+    _git(ws.dir, "clone", "-q", remote, str(repo_dir))
+    _git(repo_dir, "config", "user.email", "mill@robotsix.local")
+    _git(repo_dir, "config", "user.name", "robotsix-mill")
+    _git(repo_dir, "checkout", "-q", "-B", f"mill/{t.id}")
+    _write_workflow_yaml(
+        repo_dir,
+        "uses: damien-robotsix/robotsix-github-workflows/.github/workflows/"
+        f"codeql.yml@{_OLD_PIN} # newer commits mix versions",
+    )
+    _git(repo_dir, "add", "-A")
+    _git(repo_dir, "commit", "-q", "-m", "pin codeql")
+    ctx.service.set_branch(t.id, f"mill/{t.id}")
+    _time.sleep(0.01)
+    ctx.service.transition(t.id, State.CODE_REVIEW)
+    return ctx.service.get(t.id)
+
+
+def _patch_pin_checks(monkeypatch, older):
+    calls: list[tuple] = []
+
+    def _older(owner_repo, sha, floor, token=None):
+        calls.append((owner_repo, sha, floor))
+        return older
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages._review_helpers._sha_is_older_than", _older
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review._verify_action_sha", lambda *a, **k: True
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.review.run_review_agent",
+        lambda **_kw: ReviewVerdict(verdict="APPROVE", comments="lgtm"),
+    )
+    return calls
+
+
+def test_pin_older_than_approval_sha_is_sent_back(ctx_factory, monkeypatch):
+    """Ticket 9ad3: the note said "never older than 92c11fd2"; the diff
+    pinned an older commit with a self-justifying comment and the LLM
+    approved. Review must force REQUEST_CHANGES (→ implement), never let
+    it reach human_mr_approval."""
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
+    t = _approved_pin_ticket(
+        ctx, f"pin to the CURRENT main SHA, never older than {_FLOOR}…"
+    )
+    calls = _patch_pin_checks(monkeypatch, older=True)
+
+    out = ReviewStage().run(t, ctx)
+
+    assert out.next_state is State.READY
+    assert calls == [("damien-robotsix/robotsix-github-workflows", _OLD_PIN, _FLOOR)]
+    review_md = (ctx.service.workspace(t).artifacts_dir / "review.md").read_text()
+    assert "verdict: REQUEST_CHANGES" in review_md
+    assert "approval constraint violated" in review_md
+
+
+def test_pin_not_older_than_approval_sha_keeps_verdict(ctx_factory, monkeypatch):
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
+    t = _approved_pin_ticket(ctx, f"never older than {_FLOOR}")
+    _patch_pin_checks(monkeypatch, older=False)
+
+    out = ReviewStage().run(t, ctx)
+
+    assert out.next_state is State.DOCUMENTING
+
+
+def test_enforce_approval_pins_noop_without_named_sha(monkeypatch):
+    from robotsix_mill.stages._review_helpers import (
+        _enforce_approval_constraint_pins,
+    )
+
+    def _boom(*_a, **_k):
+        raise AssertionError("must not check ancestry")
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages._review_helpers._sha_is_older_than", _boom
+    )
+    refs = [("ci.yml", "o/r/.github/workflows/x.yml", _OLD_PIN, "")]
+    for note in (None, "", "pin to the v1.3.0 tag"):
+        v = ReviewVerdict(verdict="APPROVE", comments="ok")
+        assert _enforce_approval_constraint_pins(v, note, refs, None).verdict == (
+            "APPROVE"
+        )
+
+
+def test_constraint_shas_extracts_mixed_hex_tokens():
+    from robotsix_mill.stages._review_helpers import _constraint_shas
+
+    assert _constraint_shas(f"never older than {_FLOOR}…, not v1.3.0") == [_FLOOR]
+    assert _constraint_shas("bump to 2026102, see decade") == []
+
+
+def test_sha_is_older_than_uses_merge_base(monkeypatch):
+    from robotsix_mill.stages import _review_helpers
+
+    floor_full = "92c11fd2" + "0" * 32
+
+    def _run(cmd, **_kw):
+        if "rev-parse" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, floor_full + "\n", "")
+        if "merge-base" in cmd:
+            assert cmd[-2:] == [_OLD_PIN, floor_full]
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(_review_helpers.subprocess, "run", _run)
+    assert _review_helpers._sha_is_older_than("o/r", _OLD_PIN, _FLOOR) is True
+    assert _review_helpers._sha_is_older_than("o/r", _OLD_PIN, "nothex!") is None
