@@ -195,6 +195,97 @@ def _trace_gap_id_exists(
 
 
 # ---------------------------------------------------------------------------
+# Finding subject classification + root-cause fingerprint dedup
+# ---------------------------------------------------------------------------
+
+# Path prefixes that belong to the mill's own machinery (stages, prompts,
+# tools, sandbox image, harness).
+_MILL_PATH_PREFIXES = (
+    "src/robotsix_mill/",
+    "robotsix_mill/",
+    "agent_definitions/",
+    "expert_definitions/",
+    "skills/",
+    "sandbox/",
+)
+
+# Wording that ties a finding to mill machinery rather than to the
+# inspected repo's own code.
+_MILL_SUBJECT_RE = re.compile(
+    r"\b(?:sandbox|harness|prompt|re-?prompt\w*|stage|pipeline|"
+    r"robotsix[_-]mill|mill|agent[_ ]definitions?|structured output|"
+    r"tool (?:call|layer|wrapper)|not installed|dockerfile)\b"
+    r"|not found",
+    re.IGNORECASE,
+)
+
+_MISSING_CMD_RE = re.compile(
+    r"([A-Za-z][\w.+-]*):\s*(?:command\s+)?not found", re.IGNORECASE
+)
+
+_FINGERPRINT_RE = re.compile(r"<!--\s*trace-review-fingerprint:\s*(\S+)\s*-->")
+
+
+def _finding_is_repo_local(finding: TraceFinding) -> bool:
+    """Return ``True`` when *finding* is about the inspected repo's OWN
+    code (e.g. a flaky test there) rather than mill machinery.
+
+    Conservative: a finding is repo-local only when it cites concrete
+    files, none of them mill paths, and its text does not point at a
+    mill stage / prompt / tool / sandbox. Everything else is mill work.
+    """
+    files = [p.removeprefix("./") for p in (finding.target_files or []) if p]
+    if not files:
+        return False
+    if any(p.startswith(_MILL_PATH_PREFIXES) for p in files):
+        return False
+    text = f"{finding.symptom}\n{finding.root_cause}\n{finding.proposed_solution}"
+    return _MILL_SUBJECT_RE.search(text) is None
+
+
+def _finding_fingerprint(finding: TraceFinding) -> str:
+    """Stable root-cause fingerprint so the same gap seen in several
+    traces (different sessions / repos) dedups to one ticket.
+    """
+    text = f"{finding.symptom}\n{finding.root_cause}"
+    cmds = sorted({m.group(1).lower() for m in _MISSING_CMD_RE.finditer(text)})
+    if cmds:
+        return "missing-command:" + ",".join(cmds)
+    norm = re.sub(r"\b[0-9a-f]{6,}\b", " ", finding.symptom.lower())
+    words = re.sub(r"[^a-z]+", " ", norm).split()[:12]
+    return f"{finding.category}:" + "-".join(words)
+
+
+def _open_fingerprints(settings: Settings, board_id: str) -> set[str]:
+    """Fingerprints carried by still-open trace-review tickets on *board_id*."""
+    found: set[str] = set()
+    try:
+        tickets = TicketService(settings, board_id=board_id).list()
+    except Exception:
+        return found
+    from ...core.workspace import Workspace
+
+    for t in tickets:
+        if t.source != SourceKind.TRACE_REVIEW:
+            continue
+        if t.state in {State.CLOSED, State.ERRORED}:
+            continue
+        try:
+            desc = Workspace(
+                settings.workspaces_dir_for(t.board_id), t.id
+            ).read_description()
+        except Exception:
+            log.debug(
+                "trace-review: fingerprint read failed for ticket %s",
+                t.id,
+                exc_info=True,
+            )
+            continue
+        found.update(m.group(1) for m in _FINGERPRINT_RE.finditer(desc))
+    return found
+
+
+# ---------------------------------------------------------------------------
 # Path-existence guard (deterministic, code-grounded)
 # ---------------------------------------------------------------------------
 
@@ -319,6 +410,9 @@ def run_trace_review_pass(
     # in legacy deployments that haven't picked a target yet.
     target_board_id = source_board_id
     target_repo_id = repo_config.repo_id
+    # True once the configured mill target resolved: mill-machinery
+    # findings then always land there, whatever the session's repo.
+    mill_target_resolved = False
     if settings.trace_review_target_repo_id:
         try:
             from ...config import get_repos_config
@@ -328,6 +422,7 @@ def run_trace_review_pass(
             if target_rc is not None:
                 target_board_id = target_rc.board_id
                 target_repo_id = settings.trace_review_target_repo_id
+                mill_target_resolved = True
             else:
                 log.warning(
                     "trace-review: configured target repo %r not "
@@ -423,6 +518,9 @@ def run_trace_review_pass(
     # Track trace_ids already filed this run (gap-id dedup) to avoid
     # intra-run duplicates — one draft per trace, ever.
     filed_gap_ids: set[str] = set()
+    # Root-cause fingerprints per destination board (open tickets +
+    # filed this run) — one ticket per gap across sessions.
+    fingerprints_by_board: dict[str, set[str]] = {}
 
     # Pass A (streaming): fetch each trace's detail only long enough to
     # derive the one lightweight metric the batch baseline needs — the
@@ -619,82 +717,120 @@ def run_trace_review_pass(
             )
             break
 
-        # Determine the target board from the trace's session.
-        # A qualified session like "robotsix-chat · audit-..." tells us
-        # which repo's board should receive the finding; without it we
-        # fall back to the source board (or mill when unresolvable).
+        # Route each finding by its subject: mill machinery (stages,
+        # prompts, tools, sandbox image, harness) goes to the configured
+        # mill target board; only findings about the inspected repo's own
+        # code stay on the session's board. Without a configured target
+        # the session's board receives everything (legacy routing).
         trace_session_board = _resolve_board_for_session(
             flags.session_id, settings, source_board_id
         )
+        observed_repo = (
+            _extract_repo_from_session(flags.session_id) or repo_config.repo_id
+        )
+        observed_ticket = (flags.session_id or "(no session)").split(" · ", 1)[-1]
 
-        # Gap-id dedup: one ticket per trace across all runs.
-        # Prevents the same observation from being filed twice (fan-out
-        # problem), and stops re-filing on later runs.
+        # Gap-id dedup: one draft per trace within a run.
         if trace_id in filed_gap_ids:
             log.debug(
                 "trace-review: skipping trace %s — already filed this run",
                 trace_id[:8],
             )
             continue
-        if _trace_gap_id_exists(settings, trace_session_board, trace_id):
-            log.info(
-                "trace-review: skipping trace %s — gap-id already exists on board %s",
-                trace_id[:8],
-                trace_session_board,
-            )
-            continue
         filed_gap_ids.add(trace_id)
 
-        # Build one draft per trace with all findings enumerated.
-        session_short = flags.session_id or "(no session)"
-        title = (
-            f"trace-review: {len(kept_findings)} finding(s) "
-            f"for trace `{trace_id[:8]}` "
-            f"(session: {session_short})"
-        )
-        findings_body = ""
-        for i, f in enumerate(kept_findings, 1):
-            findings_body += (
-                f"## Finding {i}: {f.category} — {f.symptom}\n\n"
-                f"**Root cause (inspector hypothesis):** {f.root_cause}\n\n"
-                f"**Proposed solution:** {f.proposed_solution}\n\n"
-                f"_Inspector confidence: **{f.confidence}**._\n\n"
+        by_board: dict[str, list[TraceFinding]] = {}
+        for f in kept_findings:
+            dest = (
+                target_board_id
+                if mill_target_resolved and not _finding_is_repo_local(f)
+                else trace_session_board
             )
-        body = (
-            f"_Filed by the periodic trace-review pass.  "
-            f"Source trace: `{trace_id}` "
-            f"(session `{flags.session_id or '(no session)'}`, "
-            f"name `{flags.trace_name}`, total cost "
-            f"${flags.total_cost:.4f})._\n\n"
-            f"_Deterministic flags that surfaced this trace: "
-            f"{', '.join(flags.flags)}._\n\n"
-            f"{findings_body}"
-            f"<!-- trace-review-gap-id: {trace_id} -->\n"
-        )
-        try:
-            trace_service = (
-                TicketService(settings, board_id=trace_session_board)
-                if trace_session_board != target_board_id
-                else service
+            by_board.setdefault(dest, []).append(f)
+
+        for dest_board, board_findings in by_board.items():
+            # Gap-id dedup across runs: stops re-filing the same trace.
+            if _trace_gap_id_exists(settings, dest_board, trace_id):
+                log.info(
+                    "trace-review: skipping trace %s — gap-id already "
+                    "exists on board %s",
+                    trace_id[:8],
+                    dest_board,
+                )
+                continue
+            # Root-cause fingerprint dedup across sessions.
+            if dest_board not in fingerprints_by_board:
+                fingerprints_by_board[dest_board] = _open_fingerprints(
+                    settings, dest_board
+                )
+            known = fingerprints_by_board[dest_board]
+            fresh: list[tuple[TraceFinding, str]] = []
+            for f in board_findings:
+                fp = _finding_fingerprint(f)
+                if fp in known:
+                    log.info(
+                        "trace-review: skipping %s finding for trace %s — "
+                        "fingerprint %s already open on board %s",
+                        f.category,
+                        trace_id[:8],
+                        fp,
+                        dest_board,
+                    )
+                    continue
+                known.add(fp)
+                fresh.append((f, fp))
+            if not fresh:
+                continue
+
+            title = (
+                f"trace-review: {len(fresh)} finding(s) "
+                f"for trace `{trace_id[:8]}` "
+                f"(session: {flags.session_id or '(no session)'})"
             )
-            ticket = trace_service.create(
-                title=title,
-                description=body,
-                source=SourceKind.TRACE_REVIEW,
-                origin_session=session_id or None,
+            findings_body = ""
+            for i, (f, _fp) in enumerate(fresh, 1):
+                findings_body += (
+                    f"## Finding {i}: {f.category} — {f.symptom}\n\n"
+                    f"**Root cause (inspector hypothesis):** {f.root_cause}\n\n"
+                    f"**Proposed solution:** {f.proposed_solution}\n\n"
+                    f"_Inspector confidence: **{f.confidence}**._\n\n"
+                )
+            markers = "".join(
+                f"<!-- trace-review-fingerprint: {fp} -->\n" for _f, fp in fresh
             )
-            drafts.append(
-                {
-                    "id": ticket.id,
-                    "title": ticket.title,
-                    "board": trace_session_board,
-                }
+            body = (
+                f"_Filed by the periodic trace-review pass.  "
+                f"Source trace: `{trace_id}` "
+                f"(session `{flags.session_id or '(no session)'}`, "
+                f"name `{flags.trace_name}`, total cost "
+                f"${flags.total_cost:.4f})._\n\n"
+                f"Observed on: {observed_repo} {observed_ticket}\n\n"
+                f"_Deterministic flags that surfaced this trace: "
+                f"{', '.join(flags.flags)}._\n\n"
+                f"{findings_body}"
+                f"<!-- trace-review-gap-id: {trace_id} -->\n"
+                f"{markers}"
             )
-        except Exception:
-            log.exception(
-                "trace-review: failed to create draft for trace %s",
-                trace_id[:8],
-            )
+            try:
+                board_service = (
+                    service
+                    if dest_board == target_board_id
+                    else TicketService(settings, board_id=dest_board)
+                )
+                ticket = board_service.create(
+                    title=title,
+                    description=body,
+                    source=SourceKind.TRACE_REVIEW,
+                    origin_session=session_id or None,
+                )
+                drafts.append(
+                    {"id": ticket.id, "title": ticket.title, "board": dest_board}
+                )
+            except Exception:
+                log.exception(
+                    "trace-review: failed to create draft for trace %s",
+                    trace_id[:8],
+                )
 
     # Persist the watermark at ``now``. Each run reviews the most recent
     # traces and intentionally skips any older backlog (see the lookback

@@ -1389,6 +1389,137 @@ class TestTargetRepoRouting:
         _reset_repos_config()
 
 
+class TestFindingSubjectRouting:
+    """Mill-machinery findings go to the mill board whatever the
+    inspected session's repo; repo-local findings stay on the session's
+    board; the same root cause across sessions files one ticket."""
+
+    @pytest.fixture
+    def env(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OPENROUTER_API_KEY", "")
+        _reset_secrets()
+        import robotsix_mill.config as _cfg
+        from robotsix_mill.config import RepoConfig, ReposRegistry, _reset_repos_config
+        from robotsix_mill.core import db
+
+        db.reset_engine()
+        _reset_repos_config()
+
+        def _rc(repo_id):
+            return RepoConfig(
+                repo_id=repo_id,
+                board_id=f"{repo_id}-board",
+                langfuse_project_name=repo_id,
+                langfuse_public_key="pk",
+                langfuse_secret_key="sk",
+            )
+
+        _cfg._repos_config = ReposRegistry(
+            repos={r: _rc(r) for r in ("robotsix-chat", "robotsix-mill")}
+        )
+        s = Settings(
+            data_dir=str(tmp_path), trace_review_target_repo_id="robotsix-mill"
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.runners.trace_review_runner.Settings",
+            lambda: s,
+        )
+        yield s, _cfg._repos_config.repos["robotsix-chat"]
+        _reset_repos_config()
+
+    def _patch(self, monkeypatch, traces, findings):
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.list_all_traces_since",
+            lambda *a, **kw: traces,
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.langfuse.client.fetch_trace_detail",
+            lambda *a, **kw: {
+                "observations": [_obs("run_command", output="error: command failed")]
+            },
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.agents.trace_inspector.run_trace_inspector",
+            lambda **kw: TraceInspectResult(findings=findings),
+        )
+
+    @staticmethod
+    def _sandbox_finding():
+        return TraceFinding(
+            category="tool_error",
+            symptom="run_command failed: /bin/sh: 1: actionlint: not found",
+            root_cause="The sandbox image does not ship actionlint.",
+            proposed_solution="Install actionlint in sandbox/Dockerfile.",
+            confidence="high",
+        )
+
+    def test_tool_error_lands_on_mill_board_from_chat_session(self, env, monkeypatch):
+        s, chat_rc = env
+        self._patch(
+            monkeypatch,
+            [_trace(id="t1", sessionId="robotsix-chat · implement-20261027-e9ea")],
+            [self._sandbox_finding()],
+        )
+        result = run_trace_review_pass(session_id="sess", repo_config=chat_rc)
+
+        assert [d["board"] for d in result.drafts_created] == ["robotsix-mill-board"]
+        assert TicketService(s, board_id="robotsix-chat-board").list() == []
+        mill = TicketService(s, board_id="robotsix-mill-board").list()
+        assert len(mill) == 1
+        from robotsix_mill.core.workspace import Workspace
+
+        desc = Workspace(
+            s.workspaces_dir_for("robotsix-mill-board"), mill[0].id
+        ).read_description()
+        assert "Observed on: robotsix-chat implement-20261027-e9ea" in desc
+        assert "trace-review-fingerprint: missing-command:actionlint" in desc
+
+    def test_repo_local_finding_stays_on_session_board(self, env, monkeypatch):
+        s, chat_rc = env
+        flaky = TraceFinding(
+            category="tool_error",
+            symptom="test_login intermittently fails on a timing race",
+            root_cause="tests/test_login.py sleeps 0.1s instead of awaiting",
+            proposed_solution="Await the login future in tests/test_login.py.",
+            target_files=["tests/test_login.py"],
+            confidence="high",
+        )
+        self._patch(
+            monkeypatch,
+            [_trace(id="t1", sessionId="robotsix-chat · implement-x")],
+            [flaky, self._sandbox_finding()],
+        )
+        result = run_trace_review_pass(session_id="sess", repo_config=chat_rc)
+
+        boards = sorted(d["board"] for d in result.drafts_created)
+        assert boards == ["robotsix-chat-board", "robotsix-mill-board"]
+        assert len(TicketService(s, board_id="robotsix-chat-board").list()) == 1
+        assert len(TicketService(s, board_id="robotsix-mill-board").list()) == 1
+
+    def test_same_root_cause_across_sessions_files_once(self, env, monkeypatch):
+        s, chat_rc = env
+        self._patch(
+            monkeypatch,
+            [
+                _trace(id=f"t{i}", sessionId=f"robotsix-chat · implement-{i}")
+                for i in range(3)
+            ],
+            [self._sandbox_finding()],
+        )
+        result = run_trace_review_pass(session_id="sess", repo_config=chat_rc)
+        assert len(result.drafts_created) == 1
+
+        # A later run on a fresh trace still dedups against the open ticket.
+        self._patch(
+            monkeypatch,
+            [_trace(id="t9", sessionId="robotsix-chat · implement-9")],
+            [self._sandbox_finding()],
+        )
+        result = run_trace_review_pass(session_id="sess2", repo_config=chat_rc)
+        assert result.drafts_created == []
+        assert len(TicketService(s, board_id="robotsix-mill-board").list()) == 1
+
+
 class TestPreFilingDedup:
     """Pre-filing dedup helper ``_find_prior_matching_ticket`` and its
     integration into ``run_trace_review_pass``."""
