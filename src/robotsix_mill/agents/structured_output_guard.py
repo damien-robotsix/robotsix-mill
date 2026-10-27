@@ -20,6 +20,7 @@ safety net when the re-prompt also fails.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any, TypeVar
 
 log = logging.getLogger(__name__)
@@ -77,6 +78,27 @@ def _zero_tool_call_reprompt_needed(
     return True
 
 
+def _workspace_changed(probe: Callable[[], bool] | None, what: str) -> bool:
+    """Return True when *probe* reports edits already on disk.
+
+    A failing probe counts as "no changes" so the re-prompt still fires.
+    """
+    if probe is None:
+        return False
+    try:
+        changed = bool(probe())
+    except Exception as exc:
+        log.debug("%s: workspace-change probe failed (%s)", what, exc)
+        return False
+    if changed:
+        log.info(
+            "%s: no tool calls in message history but the workspace already "
+            "has changes — skipping zero-tool-call re-prompt",
+            what,
+        )
+    return changed
+
+
 # ── main guard ────────────────────────────────────────────────────────────
 
 
@@ -91,6 +113,7 @@ def reprompt_if_unstructured[T](
     run_kwargs: dict[str, Any] | None = None,
     require_no_tool_calls: bool = False,
     char_threshold: int = 10_000,
+    workspace_has_changes: Callable[[], bool] | None = None,
 ) -> Any:
     """Re-prompt *agent* once when ``result.output`` is unstructured,
     OR when *require_no_tool_calls* is True and the pass produced zero
@@ -128,6 +151,12 @@ def reprompt_if_unstructured[T](
     *run_kwargs* is forwarded to ``agent.run_sync`` on the re-prompt
     (e.g. ``{"usage_limits": limits}``); ``message_history`` is owned
     by the guard and must NOT appear in *run_kwargs*.
+
+    *workspace_has_changes* is an optional probe consulted only when the
+    zero-tool-call gate would fire. When it returns True the edits are
+    already on disk (e.g. tool calls ran inside a backend that does not
+    surface them in the message history), so the re-prompt is skipped
+    and the pass is treated as having used tools.
     """
     from .retry import run_agent
 
@@ -136,8 +165,10 @@ def reprompt_if_unstructured[T](
     # would return early for a structured ``ImplementResult`` that the
     # model produced without ever calling a tool — the exact zero-tool-call
     # pass this guard exists to catch.
-    if require_no_tool_calls and _zero_tool_call_reprompt_needed(
-        result, expected_type, what
+    if (
+        require_no_tool_calls
+        and _zero_tool_call_reprompt_needed(result, expected_type, what)
+        and not _workspace_changed(workspace_has_changes, what)
     ):
         extra_kwargs = dict(run_kwargs or {})
         try:

@@ -933,6 +933,12 @@ def run_coordinator(
             what="implement (re-prompt after prose-only)",
             run_kwargs={"usage_limits": limits},
             require_no_tool_calls=True,
+            # Edits already on disk mean the pass did real work even when
+            # the backend's message history shows no tool calls — skip the
+            # costly re-prompt and let the test gate judge the diff.
+            workspace_has_changes=lambda: bool(
+                _collect_implement_diff(repo_dir, target_branch).strip()
+            ),
         )
         output: ImplementResult = result.output
         if not isinstance(output, ImplementResult):
