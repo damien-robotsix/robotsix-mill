@@ -560,6 +560,106 @@ def test_check_status_parse_failed_workflow_fails_gate(tmp_path, monkeypatch):
     assert ".github/workflows/ci.yml" in names
 
 
+_BILLING_MSG = (
+    "The job was not started because recent account payments have failed "
+    "or your spending limit needs to be increased. Please check the "
+    "'Billing & plans' section in your settings"
+)
+
+
+def _billing_block_get_map(job_annotations):
+    """GET map for a run shaped like robotsix-invest run 40420277903:
+    every hosted job refused before starting (conclusion failure, no steps),
+    no check-run registered for the head SHA."""
+    detail_resp = {
+        "number": 402,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/402",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    runs_resp = {
+        "workflow_runs": [
+            {
+                "id": 40420277903,
+                "name": "CI",
+                "workflow_id": 55,
+                "head_sha": "abc123",
+                "conclusion": "failure",
+                "html_url": "http://run/40420277903",
+                "created_at": "2026-10-26T23:30:00Z",
+                "event": "pull_request",
+                "head_branch": "feature/x",
+            }
+        ]
+    }
+    jobs_resp = {
+        "jobs": [
+            {"id": 7001, "name": "test", "conclusion": "failure", "steps": []},
+            {"id": 7002, "name": "lint", "conclusion": "failure", "steps": []},
+        ]
+    }
+    return {
+        "repos/o/r/pulls/402": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, [{"number": 402}]),
+        "commits/abc123/check-runs": _make_response(200, {"check_runs": []}),
+        "commits/abc123/status": _make_response(200, {"statuses": []}),
+        "actions/runs/40420277903/jobs": _make_response(200, jobs_resp),
+        "check-runs/7001/annotations": _make_response(200, job_annotations),
+        "check-runs/7002/annotations": _make_response(200, job_annotations),
+        "actions/runs": _make_response(200, runs_resp),
+    }
+
+
+def test_check_status_billing_blocked_run_classified_account_blocked(
+    tmp_path, monkeypatch
+):
+    """Jobs refused by GitHub billing register no check-run; the synthesized
+    failure must carry the job annotations so ``classify_ci_run`` returns
+    INFRA_ACCOUNT_BLOCKED (regression: run 40420277903, ticket c4cd)."""
+    from robotsix_mill.stages.ci_infra_block import (
+        INFRA_ACCOUNT_BLOCKED,
+        classify_ci_run,
+    )
+
+    anns = [
+        {
+            "path": ".github",
+            "start_line": 1,
+            "annotation_level": "failure",
+            "message": _BILLING_MSG,
+        }
+    ]
+    _mock_httpx(monkeypatch, get_map=_billing_block_get_map(anns))
+
+    result = _forge(tmp_path).check_status(source_branch="feature/x")
+    assert result is not None
+    assert result["conclusion"] == "failure"
+    [entry] = result["failing"]
+    assert entry["annotations"][0]["message"] == _BILLING_MSG
+    assert "spending limit" in entry["summary"]
+    assert "parse failure" not in entry["summary"]
+    assert classify_ci_run(result) == INFRA_ACCOUNT_BLOCKED
+    # ci_fix classifies on the failing list alone.
+    assert classify_ci_run({"failing": result["failing"]}) == INFRA_ACCOUNT_BLOCKED
+
+
+def test_check_status_stepless_jobs_without_annotations_never_started(
+    tmp_path, monkeypatch
+):
+    """Jobs that all failed with no steps and no annotations are reported as
+    'jobs never started', not as a workflow parse failure."""
+    _mock_httpx(monkeypatch, get_map=_billing_block_get_map([]))
+
+    result = _forge(tmp_path).check_status(source_branch="feature/x")
+    assert result is not None
+    [entry] = result["failing"]
+    assert entry["annotations"] == []
+    assert "never started" in entry["summary"]
+    assert "parse failure" not in entry["summary"]
+
+
 def test_check_status_green_workflow_run_stays_green(tmp_path, monkeypatch):
     """A workflow RUN that concluded success must not flip a green gate."""
     list_resp = [{"number": 3}]
