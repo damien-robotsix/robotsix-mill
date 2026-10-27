@@ -2585,3 +2585,40 @@ def test_sha_is_older_than_uses_merge_base(monkeypatch):
     monkeypatch.setattr(_review_helpers.subprocess, "run", _run)
     assert _review_helpers._sha_is_older_than("o/r", _OLD_PIN, _FLOOR) is True
     assert _review_helpers._sha_is_older_than("o/r", _OLD_PIN, "nothex!") is None
+
+
+def test_sha_is_older_than_floor_not_in_repo_is_false(monkeypatch):
+    """A floor that is not a commit of the pinned repo (e.g. the note names
+    a floor for another action) is a definite "does not apply", not an
+    unverifiable check — otherwise unrelated pins would block forever."""
+    from robotsix_mill.stages import _review_helpers
+
+    def _run(cmd, **_kw):
+        if "rev-parse" in cmd:
+            return subprocess.CompletedProcess(cmd, 1, "", "")
+        if "merge-base" in cmd:
+            raise AssertionError("must not reach merge-base")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(_review_helpers.subprocess, "run", _run)
+    assert _review_helpers._sha_is_older_than("o/r", _OLD_PIN, _FLOOR) is False
+
+
+def test_enforce_approval_pins_floor_of_other_repo_keeps_verdict(monkeypatch):
+    """Note names a floor for one repo; the diff also SHA-pins an unrelated
+    action. The unrelated pin must not be forced to REQUEST_CHANGES."""
+    from robotsix_mill.stages import _review_helpers
+
+    def _run(cmd, **_kw):
+        if "rev-parse" in cmd:
+            return subprocess.CompletedProcess(cmd, 1, "", "")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(_review_helpers.subprocess, "run", _run)
+    refs = [("ci.yml", "actions/checkout", _OLD_PIN, "v4")]
+    v = ReviewVerdict(verdict="APPROVE", comments="ok")
+    out = _review_helpers._enforce_approval_constraint_pins(
+        v, f"never older than {_FLOOR}", refs, None
+    )
+    assert out.verdict == "APPROVE"
+    assert out.request_changes == []
