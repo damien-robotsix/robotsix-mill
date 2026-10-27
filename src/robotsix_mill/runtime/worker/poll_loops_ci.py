@@ -71,6 +71,11 @@ _REDISPATCH_MAX_ATTEMPTS = 3
 _CI_LOG_EMBED_MAX_CHARS = 20_000
 
 
+# Job-log section header emitted by ``GitHubForgeCIMixin._fetch_workflow_job_logs``.
+_FAILING_STEP_HEADER_RE = re.compile(
+    r"^### Job: (.+?) \(id=[^)]*\) — failing step: (.+)$", re.MULTILINE
+)
+
 _CI_TITLE_PREFIX_RE = re.compile(r"^\s*CI failure:\s*", re.IGNORECASE)
 
 
@@ -95,6 +100,15 @@ def _ci_log_body_parts(logs: str, ansi_re: re.Pattern[str]) -> list[str]:
     """Markdown body parts embedding a bounded, ANSI-stripped log tail."""
     stripped = ansi_re.sub("", logs)
     parts: list[str] = []
+    # Name the failing step(s) up front — the job-log section headers
+    # carry them, but the tail truncation below may cut a header off.
+    steps = _FAILING_STEP_HEADER_RE.findall(stripped)
+    if steps:
+        parts.append(
+            "**Failing step:** "
+            + "; ".join(f"`{step.strip()}` (job {job})" for job, step in steps)
+        )
+        parts.append("")
     if len(stripped) > _CI_LOG_EMBED_MAX_CHARS:
         stripped = stripped[-_CI_LOG_EMBED_MAX_CHARS:]
         parts.append(

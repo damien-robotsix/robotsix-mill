@@ -9,6 +9,8 @@ than imposing a one-size-fits-all regex.
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
+from typing import Any
 
 # Regex patterns for stripping CI runner preamble/setup boilerplate.
 # These lines carry no diagnostic value for the ci-fix agent and
@@ -66,6 +68,57 @@ def _strip_runner_noise(clean_log: str) -> str:
     # Collapse resulting blank-line runs.
     clean_log = re.sub(r"\n{3,}", "\n\n", clean_log)
     return clean_log.strip()
+
+
+# GitHub Actions prefixes every job-log line with an ISO-8601 UTC timestamp
+# (``2026-10-27T12:00:01.1234567Z <text>``); the first 19 chars are the
+# second-resolution key used to map lines onto a step's time range.
+_LOG_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})")
+
+
+def _failing_step(job: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the first step of *job* whose ``conclusion`` is ``failure``."""
+    for step in job.get("steps") or []:
+        if isinstance(step, dict) and step.get("conclusion") == "failure":
+            return step
+    return None
+
+
+def _utc_second(stamp: Any) -> str | None:
+    """Normalise an API timestamp to ``YYYY-MM-DDTHH:MM:SS`` in UTC."""
+    if not isinstance(stamp, str) or not stamp:
+        return None
+    try:
+        dt = datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(UTC)
+    return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _slice_log_to_step(clean_log: str, step: dict[str, Any]) -> str:
+    """Keep only the log lines emitted while *step* was running.
+
+    Lines are matched on their timestamp prefix against the step's
+    ``started_at``/``completed_at`` (inclusive, second resolution); a line
+    without a timestamp inherits the previous line's verdict. Returns ``""``
+    when the step carries no usable time range or no line falls inside it,
+    so callers can fall back to the whole job log.
+    """
+    start = _utc_second(step.get("started_at"))
+    end = _utc_second(step.get("completed_at"))
+    if start is None or end is None:
+        return ""
+    kept: list[str] = []
+    inside = False
+    for line in clean_log.splitlines():
+        m = _LOG_TS_RE.match(line)
+        if m is not None:
+            inside = start <= m.group(1) <= end
+        if inside:
+            kept.append(line)
+    return "\n".join(kept)
 
 
 def _capture_failure_window(

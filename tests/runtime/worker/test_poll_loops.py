@@ -937,6 +937,14 @@ class TestCiLogBodyParts:
         assert embedded.endswith("step output line 4999")
         assert len("\n".join(parts)) < 25_000
 
+    def test_failing_step_named_in_body(self):
+        logs = (
+            "### Job: Tests (id=7) — failing step: Audit dependencies\n"
+            "certifi 2024.2.2 GHSA-248v-346w-9cwc\n"
+        )
+        parts = _ci_log_body_parts(logs, self._ansi_re)
+        assert parts[0] == "**Failing step:** `Audit dependencies` (job Tests)"
+
 
 def test_poll_loops_reexports_moved_helpers():
     """Helpers split into poll_loops_ci / poll_loops_dependabot stay
