@@ -420,6 +420,53 @@ def _scratch_is_ancestor(tmp: str, url: str, sha: str, floor: str) -> bool | Non
     return {0: True, 1: False}.get(rc)
 
 
+def _pin_constraint_ask(
+    file_path: str,
+    slug: str,
+    ref: str,
+    floor: str,
+    approval: str,
+    older: bool | None,
+) -> ReviewAsk | None:
+    """Build the ask for a pin vs. an approval-note *floor*, or ``None``.
+
+    *older* is :func:`_sha_is_older_than`'s result. ``None`` (the check
+    could not run: fetch failure, bad token, floor not found) fails
+    closed — an unverified pin must not pass review silently.
+    """
+    name = slug.split("/")[-1]
+    if older is None:
+        return ReviewAsk(
+            title=f"Verify {name} pin vs approval constraint"[:80],
+            description=(
+                f"`{file_path}` pins `{slug}@{ref}`, but review could not "
+                f"verify it is not older than `{floor}` named in the "
+                "operator's approval note (binding) — the ancestry check "
+                "could not run (fetch failed, missing/expired token, or the "
+                f"floor is not a commit of the repo):\n\n{approval}\n\n"
+                f"Pin a commit at or after `{floor}`. If you believe the "
+                "constraint cannot be satisfied, call `ask_user` with the "
+                "constraint, your reason and the alternative, and stop."
+            ),
+            files_touched=[file_path],
+        )
+    if older:
+        return ReviewAsk(
+            title=f"Pin {name} per approval constraint"[:80],
+            description=(
+                f"`{file_path}` pins `{slug}@{ref}`, which is older "
+                f"than `{floor}` named in the operator's approval "
+                f"note (binding):\n\n{approval}\n\n"
+                "Satisfy the constraint. If you believe it cannot "
+                "be satisfied, do NOT re-commit the deviation: call "
+                "`ask_user` with the constraint, your reason and "
+                "the alternative, and stop."
+            ),
+            files_touched=[file_path],
+        )
+    return None
+
+
 def _enforce_approval_constraint_pins(
     verdict: ReviewVerdict,
     approval: str | None,
@@ -454,29 +501,23 @@ def _enforce_approval_constraint_pins(
         for floor in floors:
             if ref.startswith(floor) or floor.startswith(ref):
                 continue
-            if _sha_is_older_than(owner_repo, ref, floor, gh_token) is True:
-                asks.append(
-                    ReviewAsk(
-                        title=f"Pin {slug.split('/')[-1]} per approval constraint"[:80],
-                        description=(
-                            f"`{file_path}` pins `{slug}@{ref}`, which is older "
-                            f"than `{floor}` named in the operator's approval "
-                            f"note (binding):\n\n{approval}\n\n"
-                            "Satisfy the constraint. If you believe it cannot "
-                            "be satisfied, do NOT re-commit the deviation: call "
-                            "`ask_user` with the constraint, your reason and "
-                            "the alternative, and stop."
-                        ),
-                        files_touched=[file_path],
-                    )
-                )
+            ask = _pin_constraint_ask(
+                file_path,
+                slug,
+                ref,
+                floor,
+                approval,
+                _sha_is_older_than(owner_repo, ref, floor, gh_token),
+            )
+            if ask is not None:
+                asks.append(ask)
                 break
     if not asks:
         return verdict
     header = (
-        "Operator approval constraint violated: the diff pins a SHA older "
-        "than one the approval note names (see request_changes entries "
-        "below)."
+        "Operator approval constraint violated or unverifiable: the diff "
+        "pins a SHA that is older than, or could not be checked against, "
+        "one the approval note names (see request_changes entries below)."
     )
     verdict.verdict = "REQUEST_CHANGES"
     verdict.auto_merge_eligible = False
