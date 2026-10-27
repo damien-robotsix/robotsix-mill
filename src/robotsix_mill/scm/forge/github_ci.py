@@ -15,7 +15,12 @@ from typing import Any
 import httpx
 import yaml
 
-from ._log_utils import _capture_failure_window, _strip_runner_noise
+from ._log_utils import (
+    _capture_failure_window,
+    _failing_step,
+    _slice_log_to_step,
+    _strip_runner_noise,
+)
 
 
 def _trigger_event_names(on: Any) -> list[str] | None:
@@ -1018,6 +1023,15 @@ class GitHubForgeCIMixin:
             # image, git config, etc.) — pure token saving with zero
             # diagnostic loss.
             clean = _strip_runner_noise(clean)
+            # Narrow to the FAILING step (conclusion ``failure``) when its
+            # time range maps onto the log: the last N lines of a job are
+            # often post-step cleanup noise (setup-uv cache saves) that hide
+            # the step that actually failed. Falls back to the whole job log.
+            step = _failing_step(j)
+            if step is not None and not full_log:
+                sliced = _slice_log_to_step(clean, step)
+                if sliced.strip():
+                    clean = sliced
             # Capture the window around the FIRST failure marker (not a
             # blind tail-cap) so an ``if: always()`` cascade — where a
             # downstream always-step re-errors with misleading input —
@@ -1030,7 +1044,12 @@ class GitHubForgeCIMixin:
                     tail_context=_LOG_FAILURE_TAIL_CONTEXT,
                 )
 
-            parts.append(f"### Job: {job_name} (id={job_id})\n")
+            header = f"### Job: {job_name} (id={job_id})"
+            if step is not None:
+                header += f" — failing step: {step.get('name') or '?'}"
+            parts.append(header + "\n")
+            if j.get("html_url"):
+                parts.append(f"Job URL: {j['html_url']}\n")
             parts.append(clean)
             parts.append("\n")
 

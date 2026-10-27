@@ -39,7 +39,7 @@ from ..scm.forge.auth import (
 )
 from ..scm.forge.github import _parse_owner_repo
 from ..scm.vcs import git_ops
-from . import dependency_fix
+from . import ci_fix_audit, dependency_fix
 from ._ci_fix_checkpoint import (
     CiFixCheckpoint,
     build_ci_fix_checkpoint_resume_history,
@@ -504,6 +504,7 @@ class CIFixStage(Stage):
             changed_paths,
             head_sha,
             failing_run_urls=_failing_run_urls,
+            failing_run_ids=_failing_run_ids,
         )
 
     def _resolve_clone_and_status(
@@ -1029,6 +1030,7 @@ class CIFixStage(Stage):
         changed_paths: set[str],
         head_sha: str = "",
         failing_run_urls: list[str] | None = None,
+        failing_run_ids: list[int] | None = None,
     ) -> Outcome:
         """Reconcile, run the agent (one-shot), and route its verdict.
 
@@ -1075,6 +1077,17 @@ class CIFixStage(Stage):
         )
         if formatter_outcome is not None:
             return formatter_outcome
+
+        # Deterministic uv-audit / pip-audit pre-pass: a CVE flagged in a
+        # (transitive) dependency is fixed by `uv lock --upgrade-package`,
+        # no agent turn needed. Returns None to fall through to the agent
+        # when there is no audit signature, the bump failed, or another
+        # failing step remains after the bump.
+        audit_outcome = self._try_deterministic_audit_pass(
+            ticket, ctx, repo_dir, branch, failing_summary, failing, failing_run_ids
+        )
+        if audit_outcome is not None:
+            return audit_outcome
 
         # Hard per-ticket cap on total agent invocations for the same failing
         # check-set.  Checked here — after the deterministic formatter pass, so
@@ -1293,6 +1306,108 @@ class CIFixStage(Stage):
             "%s: deterministic `ruff format` pushed — returning to merge poll",
             ticket.id,
         )
+        return self._finalize_success(ticket, ctx, repo_dir, branch)
+
+    def _try_deterministic_audit_pass(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        repo_dir: str,
+        branch: str,
+        failing_summary: str,
+        failing: list[dict[str, Any]],
+        failing_run_ids: list[int] | None,
+    ) -> Outcome | None:
+        """Remediate a uv-audit / pip-audit CVE gate by a lock bump, no LLM.
+
+        Parses the failing runs' (failing-step) logs for the audit signature
+        (``<pkg> <version> … GHSA-…``), runs ``uv lock --upgrade-package``
+        for each flagged package plus ``uv lock --check`` and
+        ``uv sync --frozen --group dev``, then commits and pushes the lock
+        with the standard remediation note. The change is lockfile-only, so
+        no doc agent is involved.
+
+        Returns ``IMPLEMENT_COMPLETE`` (via ``_finalize_success``) only when
+        the audit gate was the SOLE failing step; when another step is still
+        failing the bump is pushed but ``None`` is returned so the agent
+        handles the remaining failure — the ticket is never closed as fixed
+        by a dependency bump alone. ``None`` too when there is no audit
+        signature or the bump could not be applied.
+        """
+        logs = ""
+        if failing_run_ids:
+            try:
+                forge = get_forge(ctx.settings, repo_config=ctx.repo_config)
+                logs = "\n".join(
+                    forge.fetch_workflow_job_logs(run_id=rid) or ""
+                    for rid in failing_run_ids
+                )
+            except Exception:
+                log.warning(
+                    "%s: audit pre-pass could not fetch job logs",
+                    ticket.id,
+                    exc_info=True,
+                )
+        plan = ci_fix_audit.parse_audit_failure(f"{failing_summary}\n{logs}")
+        if plan is None:
+            return None
+        repo = Path(repo_dir)
+        log.info(
+            "%s: dependency-audit CVE gate detected (%s in %s) — running "
+            "deterministic `uv lock --upgrade-package` before the ci-fix agent",
+            ticket.id,
+            ", ".join(plan.advisories),
+            ", ".join(plan.packages),
+        )
+        if not ci_fix_audit.apply_upgrade(repo_dir, plan) or not git_ops.has_changes(
+            repo
+        ):
+            log.info(
+                "%s: audit lock bump failed or changed nothing — falling "
+                "through to ci-fix agent",
+                ticket.id,
+            )
+            # Leave the agent a clean tree, not a half-applied bump.
+            subprocess.run(
+                ["git", "checkout", "--", "."],  # noqa: S607
+                cwd=repo_dir,
+                check=False,
+                capture_output=True,
+            )
+            return None
+
+        note = ci_fix_audit.audit_note(plan)
+        remote_url = _resolve_remote_url(ctx.settings, ctx.repo_config)
+        token = github_push_token(ctx.settings, repo_config=ctx.repo_config)
+        try:
+            git_ops.commit_all(
+                repo,
+                f"fix(deps): bump {', '.join(plan.packages)} for "
+                f"{', '.join(plan.advisories)} (automated ci-fix)\n\n{note}",
+            )
+            git_ops.push_with_lease(repo, branch, remote_url, token)
+        except subprocess.SubprocessError:
+            log.warning(
+                "%s: audit lock-bump commit/push failed — falling through to "
+                "ci-fix agent",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
+
+        only_audit = ci_fix_audit.audit_is_only_failure(logs, failing)
+        history = f"**CI Fix Cycle**\n\n{note}"
+        if not only_audit:
+            history += (
+                "\n\nAnother failing step remains besides the audit gate — "
+                "handing it to the ci-fix agent (not closed by the bump)."
+            )
+        try:
+            ctx.service.add_history_note(ticket.id, history)
+        except Exception:
+            log.exception("%s: failed to write audit-remediation note", ticket.id)
+        if not only_audit:
+            return None
         return self._finalize_success(ticket, ctx, repo_dir, branch)
 
     def _ci_recovered_before_block(

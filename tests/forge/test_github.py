@@ -313,6 +313,55 @@ def test_fetch_workflow_job_logs_single_failed_job(tmp_path, monkeypatch):
     assert _ANSI_CLEAN in result
 
 
+def test_fetch_workflow_job_logs_slices_to_failing_step(tmp_path, monkeypatch):
+    """The failing step's lines (not the job tail) are kept, named + linked."""
+    log_text = (
+        "2026-10-27T10:00:01.0000000Z Installing uv\n"
+        "2026-10-27T10:00:05.1000000Z certifi 2024.2.2 GHSA-248v-346w-9cwc\n"
+        "Found 1 known vulnerability\n"
+        "2026-10-27T10:00:06.0000000Z ##[error]Process completed with exit code 1.\n"
+        "2026-10-27T10:00:09.0000000Z Post job cleanup: saving uv cache\n"
+    )
+    jobs_data = {
+        "jobs": [
+            {
+                "id": 201,
+                "name": "Tests",
+                "conclusion": "failure",
+                "html_url": "https://github.com/o/r/actions/runs/1/job/201",
+                "steps": [
+                    {
+                        "name": "Set up uv",
+                        "conclusion": "success",
+                        "started_at": "2026-10-27T10:00:01Z",
+                        "completed_at": "2026-10-27T10:00:04Z",
+                    },
+                    {
+                        "name": "Audit dependencies",
+                        "conclusion": "failure",
+                        # Offset timestamps are normalised to UTC.
+                        "started_at": "2026-10-27T03:00:05.000-07:00",
+                        "completed_at": "2026-10-27T10:00:06Z",
+                    },
+                ],
+            },
+        ]
+    }
+    get_map = {
+        "actions/runs/1/jobs": _make_response(200, jobs_data),
+        "actions/jobs/201/logs": _make_response(200, {}, log_text),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    result = _forge(tmp_path).fetch_workflow_job_logs(run_id=1)
+    assert "### Job: Tests (id=201) — failing step: Audit dependencies" in result
+    assert "Job URL: https://github.com/o/r/actions/runs/1/job/201" in result
+    assert "GHSA-248v-346w-9cwc" in result
+    assert "Found 1 known vulnerability" in result  # untimestamped continuation
+    assert "Installing uv" not in result
+    assert "Post job cleanup" not in result
+
+
 def test_fetch_workflow_job_logs_multiple_failed_jobs(tmp_path, monkeypatch):
     """Two failed jobs → both logs concatenated."""
     jobs_data = {

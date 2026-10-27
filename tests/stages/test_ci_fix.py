@@ -2298,6 +2298,102 @@ def test_formatter_pass_no_changes_falls_through_to_agent(tmp_path, monkeypatch)
     assert agent_calls["n"] == 1
 
 
+_AUDIT_SUMMARY = (
+    "certifi 2024.2.2 GHSA-248v-346w-9cwc 2024.7.4\n"
+    "Found 1 known vulnerability in 1 package"
+)
+
+
+def _audit_check_status(monkeypatch, names):
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": n,
+                    "summary": _AUDIT_SUMMARY if "audit" in n else "1 test failed",
+                    "text": None,
+                    "annotations": [],
+                }
+                for n in names
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+
+
+def _audit_git_ops(monkeypatch, commits, upgrades):
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.ci_fix_audit.apply_upgrade",
+        lambda repo_dir, plan: upgrades.append(plan) or True,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.has_changes", lambda repo: True
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.commit_all",
+        lambda repo, msg: commits.append(msg),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda repo, branch, url, token: None,
+    )
+
+
+def test_audit_only_failure_remediated_without_agent(tmp_path, monkeypatch):
+    """A uv-audit CVE gate is fixed by a lock bump, no agent turn."""
+    ctx = _gh(tmp_path)
+    _audit_check_status(monkeypatch, ["ci / security-audit"])
+
+    def _no_agent(**k):
+        raise AssertionError("ci-fix agent must not run for an audit-only failure")
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.run_ci_fix_agent", _no_agent)
+    commits: list[str] = []
+    upgrades: list = []
+    _audit_git_ops(monkeypatch, commits, upgrades)
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert upgrades[0].packages == ("certifi",)
+    assert (
+        "CI Security Audit failed on GHSA-248v-346w-9cwc in transitive dep(s) "
+        "certifi; remediated via uv lock --upgrade-package; no source changes."
+    ) in commits[0]
+
+
+def test_audit_plus_other_failure_still_runs_agent(tmp_path, monkeypatch):
+    """The bump is pushed, but a remaining non-audit failure is not closed."""
+    ctx = _gh(tmp_path)
+    _audit_check_status(monkeypatch, ["ci / security-audit", "ci / tests"])
+    agent_calls = {"n": 0}
+
+    def _agent(**k):
+        agent_calls["n"] += 1
+        return CiFixResult(status="DONE", summary="ok")
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.run_ci_fix_agent", _agent)
+    commits: list[str] = []
+    upgrades: list = []
+    _audit_git_ops(monkeypatch, commits, upgrades)
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    CIFixStage().run(t, ctx)
+    assert upgrades and commits
+    assert agent_calls["n"] == 1
+
+
 def test_non_formatter_failure_does_not_run_formatter(tmp_path, monkeypatch):
     """A non-formatter failure must not trigger the deterministic pass."""
     ctx = _gh(tmp_path)
