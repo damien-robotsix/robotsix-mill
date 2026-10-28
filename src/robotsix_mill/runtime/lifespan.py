@@ -294,6 +294,17 @@ def create_lifespan(
                     "deploy startup sandbox wiring failed"
                 )
 
+        # Log the configured sandbox image's tool inventory (and a
+        # config-pin-drift line when it is not the sandbox/Dockerfile image)
+        # so a Dockerfile change that cannot reach live sandboxes is visible
+        # on the first pass. Log-only, best-effort.
+        try:
+            from ..sandbox._inventory import log_sandbox_tool_inventory
+
+            await asyncio.to_thread(log_sandbox_tool_inventory, settings)
+        except Exception:
+            logging.getLogger(__name__).exception("startup sandbox tool check failed")
+
         worker.start()
         worker.requeue_unfinished()  # resume anything left mid-pipeline
 

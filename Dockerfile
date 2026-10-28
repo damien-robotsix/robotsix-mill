@@ -41,6 +41,40 @@ RUN apk add --no-cache git && \
     npm run build
 
 # =============================================================================
+# Workflow-lint gate tooling (actionlint + zizmor) for the sandbox.
+# Production pins `sandbox_image` to THIS image (ghcr.io/.../robotsix-mill),
+# not the one sandbox/Dockerfile builds, so the lint tools #3499 added there
+# never reached a live sandbox. Docker cannot share a stage across two
+# Dockerfiles, so this stage mirrors sandbox/Dockerfile's `actionlint-build`
+# verbatim — same base digest, tag and commit check; keep the two in sync
+# (tests/sandbox/test_sandbox.py asserts the pins match).
+#
+# actionlint built from source with a patched Go toolchain: the upstream
+# v1.17.0 release binaries are built with go1.27.1, whose stdlib carries
+# HIGH CVEs (crypto/x509, crypto/tls, net/http) that fail the Trivy gate.
+# GOTOOLCHAIN=local stops go.mod's `toolchain go1.27.1` line from
+# downloading the vulnerable toolchain. Static binary (CGO_ENABLED=0).
+# =============================================================================
+FROM golang:1.27.3-bookworm@sha256:fea12ba16096adec0f699ce1c4da2154d320450e56c1f63671f95d2a3551c77b AS actionlint-build
+ARG ACTIONLINT_VERSION=1.17.0
+ARG ACTIONLINT_COMMIT=08bb2c4f0d039744455b87aef1c647fb8b66d37b
+ENV GOTOOLCHAIN=local CGO_ENABLED=0
+WORKDIR /build
+RUN git clone --depth 1 --branch "v${ACTIONLINT_VERSION}" https://github.com/kjanat/actionlint.git . \
+    && test "$(git rev-parse HEAD)" = "${ACTIONLINT_COMMIT}" \
+    && go build -trimpath -ldflags "-s -w" -o /out/actionlint ./cmd/actionlint \
+    && /out/actionlint -version
+
+# zizmor at the lint-workflows gate version (same pin as sandbox/Dockerfile).
+# Installed into an isolated --target so only its self-contained Rust binary
+# is copied into the runtime image — nothing lands in site-packages.
+FROM python:3.14-slim@sha256:c845af9399020c7e562969a13689e929074a10fd057acd1b1fad06a2fb068e97 AS zizmor-build
+ARG ZIZMOR_VERSION=1.31.1
+# hadolint ignore=DL3013
+RUN pip install --no-cache-dir --target /opt/zizmor "zizmor==${ZIZMOR_VERSION}" \
+    && /opt/zizmor/bin/zizmor --version
+
+# =============================================================================
 # Stage 1: builder — temporary stage for build-time tooling and artifact
 # production.  Nothing from this stage (except copied artifacts) lands in
 # the final image.
@@ -206,6 +240,15 @@ COPY --from=builder /usr/local/bin/robotsix-mill /usr/local/bin/robotsix-mill
 # no-op (uv is already in the inherited site-packages but its /usr/local/bin
 # launcher was not copied → "uv: not found"), so copy the launcher explicitly.
 COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
+# uvx ships next to uv in the same wheel; it was never copied, so
+# `command -v uvx` failed in the live sandbox (the mill image).
+COPY --from=builder /usr/local/bin/uvx /usr/local/bin/uvx
+# Workflow-lint gate binaries (see the actionlint-build / zizmor-build stages):
+# lets an implement run `actionlint && zizmor --persona=pedantic
+# .github/workflows/` inside the sandbox, which runs this image.
+COPY --from=actionlint-build /out/actionlint /usr/local/bin/actionlint
+COPY --from=zizmor-build /opt/zizmor/bin/zizmor /usr/local/bin/zizmor
+RUN uvx --version && actionlint -version && zizmor --version
 
 # Non-root user.  UID 1000 matches the typical first-host-user UID so the
 # named volume lines up without extra chown when bind-mounted.

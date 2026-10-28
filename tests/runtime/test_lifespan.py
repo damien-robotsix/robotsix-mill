@@ -179,7 +179,15 @@ def lifespan_mocks(monkeypatch):
         mock_heartbeat,
     )
 
+    # Keep startup hermetic: no `docker run` tool probe.
+    mock_tool_inventory = MagicMock()
+    monkeypatch.setattr(
+        "robotsix_mill.sandbox._inventory.log_sandbox_tool_inventory",
+        mock_tool_inventory,
+    )
+
     return {
+        "tool_inventory": mock_tool_inventory,
         "init_db": mock_init_db,
         "worker": mock_worker,
         "worker_class": mock_worker_class,
@@ -295,6 +303,19 @@ async def test_deploy_mode_wires_network_and_volume(
 
     resolve.assert_called_once_with(settings)
     ensure.assert_called_once_with(settings)
+
+
+@pytest.mark.asyncio
+async def test_startup_logs_sandbox_tool_inventory(
+    settings, repos_registry, lifespan_mocks
+):
+    """Startup runs the log-only sandbox tool-inventory check."""
+    lifespan = create_lifespan(settings, repos_registry)
+    app = FastAPI()
+    async with lifespan(app):
+        pass
+
+    lifespan_mocks["tool_inventory"].assert_called_once_with(settings)
 
 
 @pytest.mark.asyncio

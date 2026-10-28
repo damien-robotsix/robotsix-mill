@@ -55,9 +55,10 @@ jobs:
       security-events: write  # upload the Trivy scan SARIF to code scanning
     with:
       image-name: ghcr.io/damien-robotsix/robotsix-mill
-      # Smoke the published digest: sandbox-contract `gh`, bundled
+      # Smoke the published digest: sandbox-contract `gh` and workflow-lint
+      # tools (this image is the production sandbox_image), bundled
       # agent_definitions, and readable importlib.metadata version.
-      smoke_command: "gh --version && python -c 'from robotsix_mill._resources import agent_definitions_dir; assert agent_definitions_dir().is_dir()' && python -c \"from importlib.metadata import metadata; assert metadata('robotsix-mill')['Version']\""
+      smoke_command: "gh --version && actionlint -version && zizmor --version && uvx --version && python -c 'from robotsix_mill._resources import agent_definitions_dir; assert agent_definitions_dir().is_dir()' && python -c \"from importlib.metadata import metadata; assert metadata('robotsix-mill')['Version']\""
 
   publish-sandbox:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
