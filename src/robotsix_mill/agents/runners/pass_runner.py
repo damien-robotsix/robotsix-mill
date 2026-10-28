@@ -1123,12 +1123,24 @@ def _create_one_draft(
     # Resolve parent epic for scanner sources — group findings
     # under one rollup epic per (source, board) so the board shows
     # one card per category instead of dozens of micro-tickets.
+    # The epic is created only here, right before its first child; if
+    # that child then fails to file, a freshly-created epic is deleted
+    # so no empty rollup card is left on the board.
     parent_id: str | None = None
+    created_epic = False
     if source_label in _SCANNER_SOURCES:
         try:
-            parent_id = _find_or_create_scanner_epic(
-                target_service, target_board_id, source_label, settings
+            parent_id = _find_scanner_epic(
+                target_service, target_board_id, source_label
             )
+        except Exception:
+            parent_id = None
+        try:
+            if parent_id is None:
+                parent_id = _find_or_create_scanner_epic(
+                    target_service, target_board_id, source_label, settings
+                )
+                created_epic = True
         except Exception:
             log.exception(
                 "%s: failed to find/create scanner rollup epic for board %s",
@@ -1174,6 +1186,16 @@ def _create_one_draft(
         return {"id": ticket.id, "title": ticket.title}, gap_id
     except Exception:
         log.exception("failed to create draft ticket: %s", title)
+        if created_epic and parent_id is not None:
+            try:
+                if not any(t.parent_id == parent_id for t in target_service.list()):
+                    target_service.delete(parent_id)
+            except Exception:
+                log.exception(
+                    "%s: failed to delete empty rollup epic %s",
+                    source_label,
+                    parent_id,
+                )
         return None, ""
 
 

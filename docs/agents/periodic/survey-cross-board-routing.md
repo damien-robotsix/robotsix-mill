@@ -31,6 +31,22 @@ The agent sets `draft_target_repo_ids[0]` and optionally
    target board for each draft, runs cross-board dedup, and creates the
    ticket on the correct board via `target_service.create(board_id=...)`.
 
+## Evidence-board routing for companion drafts
+
+`survey_runner.route_survey_drafts` (wired as the survey
+`route_result_fn` in `periodic_runner.py`) rewrites the result before
+filing. A repo-local draft (empty target, or the surveyed repo) is filed on
+the board of the registered repo its evidence names — the title is checked
+first, then the body, matching a repo id or its `snake_case` package form
+(e.g. `src/robotsix_mill/…`) — so a pass for `robotsix-auto-mail` that finds
+a gap in `robotsix-mill`'s CI files it on the mill board. Naming the
+surveyed repo keeps the draft local. Every draft carries
+`Observed on: <surveyed repo>`, and drafts sharing a `gap_id` and target
+repo are collapsed so one pass yields one ticket per repo. The rollup epic
+is created on the child's board right before the child; if the child then
+fails to file, the freshly-created epic is deleted, so no empty rollup is
+left behind.
+
 ## Bespoke agents: `draft_repo_ids`
 
 Bespoke per-repo agents (`src/robotsix_mill/agents/bespoke.py`) file every
