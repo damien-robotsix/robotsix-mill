@@ -20,7 +20,8 @@ RUN apt-get update \
         nodejs=20.19.2+dfsg-1+deb13u3 \
         npm=9.2.0~ds1-3 \
     && curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh \
-    && chmod a+rx /usr/local/bin/uv \
+    && chmod a+rx /usr/local/bin/uv /usr/local/bin/uvx \
+    && /usr/local/bin/uvx --version \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI (`gh`) for driving contribution workflows (push -> PR -> merge)
@@ -74,6 +75,36 @@ RUN pip install --no-cache-dir "playwright==${PLAYWRIGHT_VERSION}" \
 # extra_sandbox_packages in each repo's .robotsix-mill/config.yaml.
 # hadolint ignore=DL3013
 RUN pip install --no-cache-dir pytest pytest-asyncio pytest-cov
+
+# Workflow-lint gate tooling: the same actionlint + `zizmor
+# --persona=pedantic .github/workflows/` pair the shared lint-workflows.yml
+# runs in CI, so an implement that edits .github/workflows/** can lint it
+# before review instead of paying a ci_fix round. Both are pinned to exactly
+# what CI runs: zizmor to the version lint-workflows.yml installs, actionlint
+# to the release reviewdog/action-actionlint v1.79.1 bundles (the kjanat
+# fork, v1.17.0). The actionlint tarball is verified against its published
+# sha256 before extraction. Binaries land in /usr/local/bin (on PATH,
+# world-readable) for the non-root runtime user, as with uv above.
+ARG ZIZMOR_VERSION=1.31.1
+ARG ACTIONLINT_VERSION=1.17.0
+ARG ACTIONLINT_SHA256_AMD64=620abd485a12b6ab1125b844a876414e1d5bd2af8a3125b27f82b01d0d9d6e5a
+ARG ACTIONLINT_SHA256_ARM64=9be067d6b6e2f455fd0144850520b4b1114a0a792ca6e003302c939792589345
+# hadolint ignore=DL3013
+RUN pip install --no-cache-dir "zizmor==${ZIZMOR_VERSION}" \
+    && ARCH="$(dpkg --print-architecture)" \
+    && case "$ARCH" in \
+         amd64) ALSHA="$ACTIONLINT_SHA256_AMD64" ;; \
+         arm64) ALSHA="$ACTIONLINT_SHA256_ARM64" ;; \
+         *) echo "unsupported architecture for actionlint: $ARCH" >&2; exit 1 ;; \
+       esac \
+    && curl -fsSL "https://github.com/kjanat/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${ARCH}.tar.gz" \
+        -o /tmp/actionlint.tar.gz \
+    && echo "${ALSHA}  /tmp/actionlint.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin actionlint \
+    && chmod a+rx /usr/local/bin/actionlint \
+    && rm /tmp/actionlint.tar.gz \
+    && actionlint -version \
+    && zizmor --version
 
 # Dart SDK so the implement agent can run `dart format` (and other Dart
 # tooling) and commit reformatted files itself — no operator handoff.

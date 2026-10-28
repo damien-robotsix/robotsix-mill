@@ -566,6 +566,92 @@ def test_dockerfile_bakes_in_dart_sdk():
     assert "dart --version" in dockerfile
 
 
+def test_dockerfile_bakes_in_workflow_linters_and_uvx():
+    """Image smoke (text-level, no daemon): actionlint and zizmor are baked
+    in at exact pins matching CI's lint-workflows gate, the actionlint
+    tarball is checksum-verified, uvx is runtime-readable, and the build
+    runs each tool's --version so a broken install fails the image build."""
+    dockerfile = (
+        Path(__file__).resolve().parents[2] / "sandbox" / "Dockerfile"
+    ).read_text(encoding="utf-8")
+    assert "ARG ZIZMOR_VERSION=1.31.1" in dockerfile
+    assert '"zizmor==${ZIZMOR_VERSION}"' in dockerfile
+    assert "ARG ACTIONLINT_VERSION=1.17.0" in dockerfile
+    assert "sha256sum -c -" in dockerfile
+    assert "actionlint -version" in dockerfile
+    assert "zizmor --version" in dockerfile
+    assert "chmod a+rx /usr/local/bin/uv /usr/local/bin/uvx" in dockerfile
+    assert "uvx --version" in dockerfile
+
+
+# ── uv required-version pin ───────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("files", "expected"),
+    [
+        ({"pyproject.toml": '[tool.uv]\nrequired-version = "==0.12.19"\n'}, "0.12.19"),
+        ({"pyproject.toml": '[tool.uv]\nrequired-version = "0.12.19"\n'}, "0.12.19"),
+        ({".uv-version": "0.11.2\n", "pyproject.toml": ""}, "0.11.2"),
+        ({"pyproject.toml": '[tool.uv]\nrequired-version = ">=0.12"\n'}, None),
+        ({"pyproject.toml": '[tool.uv]\nrequired-version = "0.1; rm -rf /"\n'}, None),
+        ({"pyproject.toml": "[project]\nname = 'x'\n"}, None),
+        ({"pyproject.toml": "not [valid toml"}, None),
+        ({}, None),
+    ],
+)
+def test_uv_required_version(tmp_path, files, expected):
+    for name, text in files.items():
+        (tmp_path / name).write_text(text)
+    assert sandbox._uv_required_version(tmp_path) == expected
+
+
+def test_uv_pin_prefix_installs_pinned_uv_with_egress(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.uv]\nrequired-version = "==0.12.19"\n'
+    )
+    s = _settings(tmp_path, sandbox_proxy_url="http://sandbox-proxy:8888")
+    prefix = sandbox._uv_pin_prefix(tmp_path, s, "/sbxcache")
+    assert '_mu_t="/sbxcache/uv-pinned/0.12.19"' in prefix
+    assert '"uv==0.12.19"' in prefix
+    assert 'export PATH="$_mu_t/bin:$PATH"' in prefix
+    # Matching the pin, never bypassing the check.
+    assert "UV_NO_VERSION_CHECK" not in prefix
+
+
+def test_uv_pin_prefix_no_download_without_egress(tmp_path):
+    (tmp_path / ".uv-version").write_text("0.12.19\n")
+    s = _settings(tmp_path, sandbox_proxy_url="")
+    prefix = sandbox._uv_pin_prefix(tmp_path, s, None)
+    assert '_mu_t="/tmp/.mill-uv/0.12.19"' in prefix
+    assert "pip install" not in prefix
+    assert 'export PATH="$_mu_t/bin:$PATH"' in prefix
+
+
+def test_uv_pin_prefix_empty_without_pin(tmp_path):
+    s = _settings(tmp_path, sandbox_proxy_url="http://sandbox-proxy:8888")
+    assert sandbox._uv_pin_prefix(tmp_path, s, "/sbxcache") == ""
+
+
+def test_run_puts_pinned_uv_on_path(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".uv-version").write_text("0.12.19\n")
+    s = _settings(tmp_path, sandbox_proxy_url="", sandbox_package_cache=False)
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout=b"ok", stderr=b"")
+
+    monkeypatch.setattr(sandbox, "_repo_mount", lambda repo_dir, settings: [])
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    sandbox.run("uv --version", repo_dir=repo, settings=s)
+    cmd = seen["argv"][-1]
+    assert cmd.startswith(PATH_EXPORT + '_mu_t="/tmp/.mill-uv/0.12.19"; ')
+    assert cmd.endswith("uv --version")
+
+
 # ── extra sandbox packages ────────────────────────────────────────────
 
 
