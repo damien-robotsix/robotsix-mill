@@ -577,7 +577,7 @@ def test_dockerfile_bakes_in_workflow_linters_and_uvx():
     assert "ARG ZIZMOR_VERSION=1.31.1" in dockerfile
     assert '"zizmor==${ZIZMOR_VERSION}"' in dockerfile
     assert "ARG ACTIONLINT_VERSION=1.17.0" in dockerfile
-    assert "sha256sum -c -" in dockerfile
+    assert "sha256sum -c /tmp/actionlint.sha256" in dockerfile
     assert "actionlint -version" in dockerfile
     assert "zizmor --version" in dockerfile
     assert "chmod a+rx /usr/local/bin/uv /usr/local/bin/uvx" in dockerfile

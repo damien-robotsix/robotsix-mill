@@ -99,10 +99,11 @@ RUN pip install --no-cache-dir "zizmor==${ZIZMOR_VERSION}" \
        esac \
     && curl -fsSL "https://github.com/kjanat/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${ARCH}.tar.gz" \
         -o /tmp/actionlint.tar.gz \
-    && echo "${ALSHA}  /tmp/actionlint.tar.gz" | sha256sum -c - \
+    && echo "${ALSHA}  /tmp/actionlint.tar.gz" > /tmp/actionlint.sha256 \
+    && sha256sum -c /tmp/actionlint.sha256 \
     && tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin actionlint \
     && chmod a+rx /usr/local/bin/actionlint \
-    && rm /tmp/actionlint.tar.gz \
+    && rm /tmp/actionlint.tar.gz /tmp/actionlint.sha256 \
     && actionlint -version \
     && zizmor --version
 
