@@ -305,6 +305,15 @@ class Forge(ABC):
         where a retry yields a new pipeline id) report ``None``.
         """
 
+    def list_tag_workflow_runs(self, *, tag_glob: str) -> list[dict[str, Any]]:
+        """List completed ``push`` workflow runs on tags matching *tag_glob*.
+
+        Same dict shape as :meth:`list_workflow_runs`, newest first; for a
+        tag push ``head_branch`` is the tag name.  The default returns
+        ``[]`` (forge without tag-run support); GitHub overrides it.
+        """
+        return []
+
     def get_workflow_run(self, *, run_id: int) -> dict[str, Any] | None:
         """Fetch a single workflow run by *run_id*, or ``None`` when unavailable.
 

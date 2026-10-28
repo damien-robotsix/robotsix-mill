@@ -142,6 +142,8 @@
         "diagnostic_target_repo_id": "robotsix-mill",
         "ci_auto_close_interval_seconds": 0,
         "ci_stale_failure_days": 14,
+        "ci_monitor_scan_tags": true,
+        "ci_monitor_tag_glob": "v*",
         "disk_check_extra_paths": [
             "/"
         ],
