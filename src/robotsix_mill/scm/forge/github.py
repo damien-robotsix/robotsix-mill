@@ -17,9 +17,11 @@ all the mixins), shared helpers, and repo-metadata operations
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from typing import Any
+from urllib.parse import quote
 
 from ._http import _ApiClient
 from .base import Forge
@@ -175,7 +177,59 @@ class GitHubForge(
         """
         return self._get_repo_description(owner=owner, repo=repo)
 
+    def read_repo_file(self, *, path: str, ref: str = "") -> str | None:
+        """Raw text of *path* at *ref* (``""`` → default branch), or ``None``
+        on any error.  Read-only.  Must NEVER raise.
+        """
+        try:
+            owner, repo = self._owner_repo
+            return self._read_repo_file(owner=owner, repo=repo, path=path, ref=ref)
+        except Exception:
+            return None
+
+    def list_repo_files(self, *, ref: str = "") -> list[str] | None:
+        """Blob paths of the tree at *ref* (``""`` → default branch), or
+        ``None`` on any error.  Read-only.  Must NEVER raise.
+        """
+        try:
+            owner, repo = self._owner_repo
+            return self._list_repo_files(owner=owner, repo=repo, ref=ref)
+        except Exception:
+            return None
+
     # --- HTTP seam (monkeypatched in tests) ---
+    def _read_repo_file(self, *, owner: str, repo: str, path: str, ref: str) -> str:
+        """GET /repos/{owner}/{repo}/contents/{path}[?ref=]; decoded text."""
+        params = {"ref": ref} if ref else None
+        r = self._http.get(
+            f"/repos/{owner}/{repo}/contents/{quote(path, safe='/')}",
+            params=params,
+        )
+        r.raise_for_status()
+        payload = r.json()
+        if not isinstance(payload, dict):  # a directory listing
+            raise TypeError(f"{path!r} is a directory, not a file")
+        raw = payload.get("content") or ""
+        if payload.get("encoding") == "base64":
+            return base64.b64decode(raw).decode("utf-8", "replace")
+        return raw
+
+    def _list_repo_files(self, *, owner: str, repo: str, ref: str) -> list[str]:
+        """GET /repos/{owner}/{repo}/git/trees/{ref}?recursive=1 → blob paths.
+
+        ``HEAD`` resolves to the default branch when *ref* is empty.
+        """
+        r = self._http.get(
+            f"/repos/{owner}/{repo}/git/trees/{quote(ref or 'HEAD', safe='')}",
+            params={"recursive": "1"},
+        )
+        r.raise_for_status()
+        return [
+            e["path"]
+            for e in r.json().get("tree", [])
+            if e.get("type") == "blob" and e.get("path")
+        ]
+
     def _repo_metadata_headers(self) -> dict[str, Any]:
         """Auth headers for repo-metadata calls: the forge (App) token only.
 

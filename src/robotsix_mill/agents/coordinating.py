@@ -515,6 +515,7 @@ def run_coordinator(
     from .base import _safe_close, build_agent_from_definition
     from .ci_log_fetch_tool import build_ci_log_fetch_tool
     from .explore import make_explore_tool, make_parallel_explore_tool
+    from .fleet_file_tools import build_fleet_file_tools
     from .fs_tools import build_fs_tools
     from .retry import run_agent
     from .verify_diff_tool import make_verify_diff_tool
@@ -648,6 +649,11 @@ def run_coordinator(
         # Always wired so the prompt's call directive resolves; when
         # ci_log_fetch_fn is None every call reports CI_LOG_FETCH_UNAVAILABLE.
         build_ci_log_fetch_tool(branch=target_branch, fetch_fn=ci_log_fetch_fn),
+        # read_fleet_file / grep_fleet_repo: read-only host-side forge reads
+        # of other registered fleet repos (verify, don't ask a human).
+        *build_fleet_file_tools(
+            settings, ticket_id=current_ticket_id, stage=stage_name
+        ),
         *fs_tools,
     ]
     # Wrap when either signal is needed: the watchdog event (gated on

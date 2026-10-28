@@ -107,6 +107,7 @@ def test_approve_transitions_to_deliverable(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -138,6 +139,7 @@ def test_request_changes_transitions_to_ready(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -176,6 +178,7 @@ def test_needs_discussion_pauses_for_user_reply(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -215,6 +218,7 @@ def test_blind_review_only_diff_and_spec(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         captured["diff"] = diff
@@ -254,6 +258,7 @@ def test_agent_error_blocks_resumable(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -291,6 +296,7 @@ def test_empty_diff_approves_without_agent(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         agent_called.append(1)
@@ -339,6 +345,7 @@ def test_writes_review_artifact_on_approve(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -376,6 +383,7 @@ def test_writes_review_artifact_on_request_changes(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -413,6 +421,7 @@ def test_comment_multiline_collapse(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -448,6 +457,7 @@ def test_comment_truncation(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -488,6 +498,7 @@ def test_comment_empty_returns_no_details(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -542,6 +553,7 @@ def test_request_changes_under_cap(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -591,6 +603,7 @@ def test_request_changes_at_cap_pauses_on_directives_gate(ctx_factory, monkeypat
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -684,6 +697,7 @@ def test_request_changes_at_cap_includes_ask_user_directives(ctx_factory, monkey
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -726,6 +740,7 @@ def test_request_changes_at_cap_without_concrete_directives_escalates(
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -767,6 +782,7 @@ def test_approve_resets_counter(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -801,6 +817,7 @@ def test_needs_discussion_preserves_counter(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         del settings, diff, spec, model_name, prior_context, repo_dir, reference_files
@@ -2192,6 +2209,7 @@ def test_review_cache_hit_skips_agent(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         agent_calls.append(1)
@@ -2238,6 +2256,7 @@ def test_review_cache_different_diff_miss(ctx_factory, monkeypatch):
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         agent_calls.append(1)
@@ -2291,6 +2310,7 @@ def test_request_changes_cache_does_not_replay_across_rounds(ctx_factory, monkey
         changed_line_ranges=None,
         screenshot_path=None,
         extra_roots=None,
+        ticket_id="",
         level=None,
     ):
         agent_calls.append(1)

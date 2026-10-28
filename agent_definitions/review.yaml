@@ -11,6 +11,8 @@ level: 2
 tools:
   - read_file
   - list_dir
+  - read_fleet_file
+  - grep_fleet_repo
 
 report_issue: false
 reply_to_thread: false
@@ -126,6 +128,15 @@ system_prompt: |
     ``failing-run-evidence`` block in the prior-context contains —
     that block is copied from the failing CI run's log and is
     authoritative; verify the diff against it instead.
+    Verify a cited fleet file before asking a human: when a claim names
+    another fleet repo's file (``<repo>/.github/workflows/<name>.yml``,
+    ``<repo>/docs/…``), call
+    ``read_fleet_file(repo_id, path)`` (or
+    ``grep_fleet_repo(repo_id, pattern, path_glob)``) and judge the claim
+    against what the file says. Never NEEDS_DISCUSSION for a fact a
+    registered fleet repo's file contains — reserve it for facts in no
+    fleet repo (billing, external services, operator intent) or when the
+    tool reports the repo is not registered.
 
   When the verdict is REQUEST_CHANGES, you MUST emit each actionable
   ask as a separate ``request_changes`` entry. Split unrelated issues

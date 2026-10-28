@@ -52,6 +52,8 @@ _VALID_TOOL_NAMES = frozenset(
         "inspect_cost",
         "query_app_logs",
         "fetch_ci_logs",
+        "read_fleet_file",
+        "grep_fleet_repo",
         "post_findings",
         "git_fetch",
         "git_remote_sha",
