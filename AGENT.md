@@ -112,6 +112,12 @@ extracted package): no such in-repo copy exists.
   CI check must gate or be removed" rule.
 - Don't reintroduce a regression a test or this file already guards.
 
+## CI workflows
+
+- This repo applies the robotsix-standards
+  [Job timeout-minutes](https://github.com/damien-robotsix/robotsix-standards)
+  convention (adopted in #3503).
+
 ## CLI
 
 - **Regenerate shell completions with every new subcommand.** When
