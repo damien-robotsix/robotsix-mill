@@ -931,8 +931,11 @@ def test_green_unpromotable_blocks_at_the_ceiling_naming_the_missing_context(
     ctx = _green_unpromotable_ctx(tmp_path, monkeypatch)
     monkeypatch.setattr(
         github.GitHubForge,
-        "required_status_contexts",
-        lambda self, *, target_branch: ["lint", "typecheck"],
+        "required_status_checks",
+        lambda self, *, target_branch: [
+            {"context": "lint", "app_id": None},
+            {"context": "typecheck", "app_id": None},
+        ],
     )
     t = _implement_complete(ctx)
     stage = MergeStage()
@@ -950,6 +953,56 @@ def test_green_unpromotable_blocks_at_the_ceiling_naming_the_missing_context(
     assert "https://forge/pr/1" in final.note
 
 
+def test_green_unpromotable_names_context_renamed_to_shared_workflow(
+    tmp_path, monkeypatch
+):
+    """Required ``CodeQL`` (github-actions, app 15368) is only satisfied by
+    a same-named check-run from github-advanced-security (57789): the note
+    names the exact context and suggests the shared workflow's
+    ``CodeQL / Analyze`` instead of the generic "check protection" hint."""
+    from robotsix_mill.stages.ci_infra_block import REPO_SETTING_BLOCK_MARKER
+
+    ctx = _green_unpromotable_ctx(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "https://forge/pr/732",
+            "mergeable": True,
+            "mergeable_state": "blocked",
+            "sha": "abc123",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "required_status_checks",
+        lambda self, *, target_branch: [{"context": "CodeQL", "app_id": 15368}],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "head_check_runs",
+        lambda self, *, sha: [
+            {"name": "CodeQL", "app_id": 57789},
+            {"name": "CodeQL / Analyze", "app_id": 15368},
+        ],
+    )
+    t = _implement_complete(ctx)
+    stage = MergeStage()
+    outs = [stage.run(t, ctx) for _ in range(ctx.settings.green_unpromotable_max_polls)]
+
+    final = outs[-1]
+    assert final.next_state is State.BLOCKED
+    assert (
+        "required context 'CodeQL' (app 15368) is not reported by any "
+        "check-run on abc123" in final.note
+    )
+    assert "update branch protection to 'CodeQL / Analyze'" in final.note
+    assert REPO_SETTING_BLOCK_MARKER in final.note
+    assert "protection rules" not in final.note
+
+
 def test_green_unpromotable_falls_back_when_protection_is_unreadable(
     tmp_path, monkeypatch
 ):
@@ -957,7 +1010,7 @@ def test_green_unpromotable_falls_back_when_protection_is_unreadable(
     ctx = _green_unpromotable_ctx(tmp_path, monkeypatch)
     monkeypatch.setattr(
         github.GitHubForge,
-        "required_status_contexts",
+        "required_status_checks",
         lambda self, *, target_branch: [],
     )
     t = _implement_complete(ctx)
@@ -1141,7 +1194,7 @@ def _empty_rollup_ctx(tmp_path, monkeypatch, **extra):
     )
     monkeypatch.setattr(
         github.GitHubForge,
-        "required_status_contexts",
+        "required_status_checks",
         lambda self, *, target_branch: [],
     )
     return ctx

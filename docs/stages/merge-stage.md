@@ -26,6 +26,26 @@ This means humans are only notified when the PR is actually ready for
 review and merge — no premature noise for PRs with failing CI or
 conflicts.
 
+### Green but blocked by a renamed required context
+
+A PR can be fully green yet `mergeable_state='blocked'` when branch
+protection on the target branch requires a check context the PR no longer
+reports — typically an inline job that was renamed or moved into a shared
+reusable workflow (e.g. `CodeQL` → `CodeQL / Analyze`). The stage diffs the
+target branch's required checks (classic protection `required_status_checks`
+and rulesets) against the head's check-runs, matching by **name and app**.
+A same-named check-run from a different app does not satisfy a context
+pinned to another app (e.g. a `CodeQL` run from github-advanced-security
+does not satisfy a `CodeQL` context pinned to github-actions).
+
+When a required context is unsatisfied, the ticket parks `BLOCKED` with a
+note starting `repo setting required:` that names each missing context, its
+pinned app, and the closest run name to switch protection to, e.g.
+`required context 'CodeQL' (app 15368) is not reported by any check-run on
+<sha>; the PR renames/removes it — update branch protection to 'CodeQL / Analyze'`.
+The operator updates branch protection; agents cannot edit it. If the head's
+check-runs cannot be listed, the diff falls back to job names (app unknown).
+
 ## Operator-initiated re-implement from `HUMAN_MR_APPROVAL`
 
 While reviewing a PR in `HUMAN_MR_APPROVAL`, an operator who wants code

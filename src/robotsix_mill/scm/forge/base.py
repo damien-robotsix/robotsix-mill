@@ -598,6 +598,29 @@ class Forge(ABC):
         """
         return []
 
+    def required_status_checks(self, *, target_branch: str) -> list[dict[str, Any]]:
+        """Required checks on *target_branch*, with the app each must come from.
+
+        Returns ``[{"context": str, "app_id": int | None}, ...]``;
+        ``app_id`` ``None`` means "any source". The default derives the list
+        from :meth:`required_status_contexts` with no app pinning. Same
+        "``[]`` is unknown" contract; must NEVER raise.
+        """
+        return [
+            {"context": ctx, "app_id": None}
+            for ctx in self.required_status_contexts(target_branch=target_branch)
+        ]
+
+    def head_check_runs(self, *, sha: str) -> list[dict[str, Any]]:
+        """Every check-run / status reported on commit *sha*, with its app.
+
+        Returns ``[{"name": str, "app_id": int | None}, ...]`` without
+        collapsing same-name runs from different apps (unlike
+        ``check_status``'s ``jobs``). Diagnosis only: ``[]`` means
+        "unknown". Must NEVER raise.
+        """
+        return []
+
     def list_branches(self) -> list[BranchInfo]:
         """List all remote branches with last-commit timestamp and
         protection flag. Returns [] on any failure. Must NEVER raise.

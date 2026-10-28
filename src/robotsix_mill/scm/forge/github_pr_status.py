@@ -41,6 +41,11 @@ def _parse_pr_detail(pr: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _app_or_any(app_id: Any) -> int | None:
+    """Normalize a protection ``app_id`` / ``integration_id``: ``-1``/null = any app."""
+    return app_id if isinstance(app_id, int) and app_id > 0 else None
+
+
 class GitHubForgePRStatusMixin:
     """PR status / query operations for GitHub — mixed into ``GitHubForge``.
 
@@ -178,6 +183,112 @@ class GitHubForgePRStatusMixin:
                 ]
             return [ctx for ctx in body.get("contexts", []) if isinstance(ctx, str)]
         return []
+
+    def _required_status_checks(
+        self, *, owner: str, repo: str, branch: str
+    ) -> list[dict[str, Any]]:
+        """Classic-protection checks plus ruleset checks, with their app ids."""
+        out: list[dict[str, Any]] = []
+        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
+            resp = c.get(
+                f"{api}/repos/{owner}/{repo}/branches/{branch}/protection"
+                "/required_status_checks",
+                headers=headers,
+            )
+            if resp.status_code == 401:
+                continue
+            if resp.status_code not in (403, 404):
+                resp.raise_for_status()
+                body = resp.json()
+                checks = body.get("checks")
+                if isinstance(checks, list):
+                    out += [
+                        {
+                            "context": chk["context"],
+                            "app_id": _app_or_any(chk.get("app_id")),
+                        }
+                        for chk in checks
+                        if isinstance(chk.get("context"), str)
+                    ]
+                else:
+                    out += [
+                        {"context": ctx, "app_id": None}
+                        for ctx in body.get("contexts", [])
+                        if isinstance(ctx, str)
+                    ]
+            rules = c.get(
+                f"{api}/repos/{owner}/{repo}/rules/branches/{branch}",
+                headers=headers,
+            )
+            if rules.status_code == 200 and isinstance(rules.json(), list):
+                for rule in rules.json():
+                    if rule.get("type") != "required_status_checks":
+                        continue
+                    params = rule.get("parameters") or {}
+                    out += [
+                        {
+                            "context": chk["context"],
+                            "app_id": _app_or_any(chk.get("integration_id")),
+                        }
+                        for chk in params.get("required_status_checks") or []
+                        if isinstance(chk.get("context"), str)
+                    ]
+            return out
+        return out
+
+    def required_status_checks(self, *, target_branch: str) -> list[dict[str, Any]]:
+        """Required checks on *target_branch* (classic protection + rulesets).
+
+        Each entry is ``{"context": str, "app_id": int | None}``. Returns
+        ``[]`` on any failure — callers read ``[]`` as "unknown".
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        try:
+            return self._required_status_checks(
+                owner=owner, repo=repo, branch=target_branch
+            )
+        except Exception:
+            return []
+
+    def _head_check_runs(
+        self, *, owner: str, repo: str, sha: str
+    ) -> list[dict[str, Any]]:
+        for _retry, c, api, headers in self._http.retrying_client():  # type: ignore[attr-defined]
+            resp = c.get(
+                f"{api}/repos/{owner}/{repo}/commits/{sha}/check-runs",
+                headers=headers,
+                params={"per_page": 100},
+            )
+            if resp.status_code == 401:
+                continue
+            resp.raise_for_status()
+            out = [
+                {"name": cr["name"], "app_id": (cr.get("app") or {}).get("id")}
+                for cr in resp.json().get("check_runs", [])
+                if isinstance(cr.get("name"), str)
+            ]
+            st = c.get(
+                f"{api}/repos/{owner}/{repo}/commits/{sha}/status", headers=headers
+            )
+            if st.status_code == 200:
+                out += [
+                    {"name": s["context"], "app_id": None}
+                    for s in st.json().get("statuses", [])
+                    if isinstance(s.get("context"), str)
+                ]
+            return out
+        return []
+
+    def head_check_runs(self, *, sha: str) -> list[dict[str, Any]]:
+        """Check-runs and commit statuses on *sha*, each with its app id.
+
+        Returns ``[]`` on any failure (diagnosis only).
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        try:
+            return self._head_check_runs(owner=owner, repo=repo, sha=sha)
+        except Exception:
+            return []
 
     def required_status_contexts(self, *, target_branch: str) -> list[str]:
         """Return the status contexts branch protection requires on *target_branch*.

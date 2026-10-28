@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import contextlib
 import datetime
+import difflib
 from pathlib import Path
 from typing import Any, cast
 
@@ -28,6 +29,7 @@ from ...core.block_reason import TARGET_BRANCH_RED, encode
 from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ...scm.forge import Forge, get_forge, rate_limit
+from ...stages.ci_infra_block import REPO_SETTING_BLOCK_MARKER
 from ...stages.ci_transient import is_transient_ci_failure
 from ..base import Outcome, StageContext
 from ._base import _MergeStageBase
@@ -77,6 +79,61 @@ def _build_failing_summary(ci_status: dict[str, Any]) -> str:
             if msg:
                 parts.append(msg)
     return "\n".join(parts)
+
+
+def _closest_check_name(context: str, names: list[str]) -> str | None:
+    """Best guess at what *context* was renamed to among *names*."""
+    containing = [n for n in names if context.lower() in n.lower()]
+    if containing:
+        return min(containing, key=len)
+    close = difflib.get_close_matches(context, names, n=1, cutoff=0.4)
+    return close[0] if close else None
+
+
+def _missing_required_checks(
+    required: list[dict[str, Any]], runs: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Required checks no run on the head satisfies (matched by name + app).
+
+    A required ``app_id`` of ``None`` accepts any app; a run whose app is
+    unknown (``None``) satisfies any app. Each missing entry carries a
+    ``suggestion``: the closest-named run from the required app (excluding
+    the exact name, which by definition comes from the wrong app).
+    """
+    missing: list[dict[str, Any]] = []
+    for req in required:
+        ctx, app = req.get("context"), req.get("app_id")
+        if not isinstance(ctx, str):
+            continue
+
+        def app_ok(run: dict[str, Any], app: Any = app) -> bool:
+            return app is None or run.get("app_id") in (None, app)
+
+        if any(r.get("name") == ctx and app_ok(r) for r in runs):
+            continue
+        candidates = sorted(
+            {r["name"] for r in runs if r.get("name") != ctx and app_ok(r)}
+        )
+        missing.append(
+            {
+                "context": ctx,
+                "app_id": app,
+                "suggestion": _closest_check_name(ctx, candidates),
+            }
+        )
+    return missing
+
+
+def _describe_missing_context(m: dict[str, Any], head: str, target: str) -> str:
+    """One block-note clause naming a missing required context."""
+    app = f" (app {m['app_id']})" if m.get("app_id") is not None else ""
+    clause = (
+        f"required context {m['context']!r}{app} is not reported by any "
+        f"check-run on {head}; the PR renames/removes it — "
+    )
+    if m.get("suggestion"):
+        return clause + f"update branch protection to {m['suggestion']!r}"
+    return clause + (f"restore the check or remove it from {target}'s required checks")
 
 
 def _ci_run_in_flight(ci_status: dict[str, Any]) -> bool:
@@ -743,15 +800,17 @@ class CIPollMixin(_MergeStageBase):
         _write_counter(counter_path, 0)
 
         target = target_branch_for(s, ctx.repo_config)
-        missing = self._unsatisfiable_required_contexts(ctx, branch, target)
+        head_sha = (pr or {}).get("sha") or ""
+        missing = self._unsatisfiable_required_contexts(ctx, branch, target, head_sha)
         if missing:
             detail = (
-                f"branch protection on {target} requires the status "
-                f"context(s) {sorted(missing)}, which are not among the "
-                f"checks this PR reports — the job producing each was most "
-                f"likely renamed or is no longer triggered. Align the check "
-                f"name with the required context (or update the protection "
-                f"rule), then resume."
+                f"{REPO_SETTING_BLOCK_MARKER} branch protection on {target} "
+                f"(an operator must update it): "
+                + "; ".join(
+                    _describe_missing_context(m, head_sha or branch, target)
+                    for m in missing
+                )
+                + "."
             )
         else:
             detail = (
@@ -839,32 +898,37 @@ class CIPollMixin(_MergeStageBase):
         return None, []
 
     def _unsatisfiable_required_contexts(
-        self, ctx: StageContext, branch: str, target: str
-    ) -> set[str]:
-        """Required contexts on *target* that this PR's checks cannot satisfy.
+        self, ctx: StageContext, branch: str, target: str, head_sha: str = ""
+    ) -> list[dict[str, Any]]:
+        """Required checks on *target* that this PR's checks cannot satisfy.
 
         Best-effort, and used only to word the block note — never to decide
         it. An empty result means either "nothing missing" or "protection
-        could not be read". The reported set comes from ``check_status``'s
-        ``jobs``, which carries check-run names and falls back to commit
-        statuses only when there are no check runs at all, so on a repo using
-        both a status-satisfied context can show up here spuriously.
+        could not be read". Required checks carry the app they must come
+        from (classic protection ``app_id`` / ruleset ``integration_id``),
+        and are diffed against the head's check-runs by name AND app: a
+        same-named check-run from another app (e.g. github-advanced-security's
+        ``CodeQL``) does not satisfy a context pinned to github-actions.
+        When the head's check-runs cannot be listed, falls back to
+        ``check_status``'s ``jobs`` (names only, app unknown).
         """
         try:
             forge = get_forge(ctx.settings, repo_config=ctx.repo_config)
-            required = set(forge.required_status_contexts(target_branch=target))
+            required = forge.required_status_checks(target_branch=target)
             if not required:
-                return set()
-            status = forge.check_status(source_branch=branch) or {}
-            reported = {
-                name
-                for name in (job.get("name") for job in status.get("jobs", []) or [])
-                if isinstance(name, str)
-            }
-            return required - reported
+                return []
+            runs = forge.head_check_runs(sha=head_sha) if head_sha else []
+            if not runs:
+                status = forge.check_status(source_branch=branch) or {}
+                runs = [
+                    {"name": job.get("name"), "app_id": None}
+                    for job in status.get("jobs", []) or []
+                    if isinstance(job.get("name"), str)
+                ]
+            return _missing_required_checks(required, runs)
         except Exception as e:  # diagnosis only — never mask the real block
             log.warning("could not diff required contexts for %s: %s", branch, e)
-            return set()
+            return []
 
     def _check_ping_pong(
         self,
