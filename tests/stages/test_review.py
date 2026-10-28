@@ -1375,6 +1375,29 @@ def test_prior_context_caps_oversized(ctx_factory):
     assert len(block) < 2000
 
 
+def test_prior_context_carries_failing_run_evidence(ctx_factory):
+    """A ci_fix-spawned ticket's ``## Failing run evidence`` block reaches
+    review's prior-context — from the pre-refine draft when refine dropped
+    it from the spec — so review never asks which version CI installs."""
+    from robotsix_mill.stages.review import _build_prior_context
+
+    ctx = ctx_factory(forge_remote_url="file:///dummy", review_enabled="true")
+    t = ctx.service.create("Dep fix", "refined spec without the evidence")
+    ws = ctx.service.workspace(t)
+    ws.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    (ws.artifacts_dir / "draft-original.md").write_text(
+        "## Out-of-scope CI failure\n\n"
+        "## Failing run evidence\n\n**Installed packages:**\n```\n"
+        "+ pytest==9.1.1\n```\n",
+        encoding="utf-8",
+    )
+
+    block = _build_prior_context(t, ctx, ws)
+    assert block is not None
+    assert "failing-run-evidence" in block
+    assert "+ pytest==9.1.1" in block
+
+
 def test_prior_context_under_cap_verbatim(ctx_factory):
     """Content shorter than the cap is returned verbatim — no note."""
     from robotsix_mill.stages.review import _build_prior_context

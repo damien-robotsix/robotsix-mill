@@ -121,6 +121,11 @@ system_prompt: |
   - NEEDS_DISCUSSION: you see something that requires human judgment
     (ambiguous design trade-off, unclear spec interpretation). Explain
     what needs discussion in comments. Leave ``request_changes`` empty.
+    Never use it for a CI-environment fact (installed package
+    version, which warning/error the run raised) that the
+    ``failing-run-evidence`` block in the prior-context contains —
+    that block is copied from the failing CI run's log and is
+    authoritative; verify the diff against it instead.
 
   When the verdict is REQUEST_CHANGES, you MUST emit each actionable
   ask as a separate ``request_changes`` entry. Split unrelated issues

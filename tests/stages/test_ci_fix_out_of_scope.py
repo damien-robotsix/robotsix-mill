@@ -424,6 +424,99 @@ def test_out_of_scope_description_names_untouched_alert(tmp_path, monkeypatch):
     assert "src/untouched.py" in desc
 
 
+_FIXTURE_JOB_LOG = "\n".join(
+    [
+        "### Job: Tests (id=1) — failing step: Run tests",
+        "2026-10-28T03:20:00.0000000Z Resolved 120 packages in 1.2s",
+        "2026-10-28T03:20:01.0000000Z  + anyio==4.14.2",
+        "2026-10-28T03:20:01.0000000Z  + pytest==9.1.1",
+        *[f"2026-10-28T03:20:02.0000000Z filler line {i}" for i in range(100)],
+        (
+            "2026-10-28T03:20:03.0000000Z platform linux -- Python 3.14.0, "
+            "pytest-9.1.1, pluggy-1.6.0"
+        ),
+        (
+            "2026-10-28T03:20:03.0000000Z pytest.PytestRemovedIn10Warning: "
+            "CallSpec2 is deprecated"
+        ),
+        "##[error]Process completed with exit code 1.",
+    ]
+)
+
+
+def test_out_of_scope_description_carries_failing_run_evidence(tmp_path, monkeypatch):
+    """The spawned dependency ticket carries the failing run URL, the
+    installed-package lines and the failing-step error excerpt, so its
+    implement/review stages never guess (or ask_user) about the CI env."""
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch, alert_paths=("src/untouched.py",))
+    run_url = "https://github.com/o/r/actions/runs/40624810165"
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, **k: [
+            {
+                "id": 40624810165,
+                "name": "CI",
+                "conclusion": "failure",
+                "html_url": run_url,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "fetch_workflow_job_logs",
+        lambda self, **k: _FIXTURE_JOB_LOG,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    fix = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)[0]
+    desc = ctx.service.workspace(fix).read_description()
+    assert "## Failing run evidence" in desc
+    evidence = desc.split("## Failing run evidence", 1)[1]
+    assert run_url in evidence
+    assert "+ pytest==9.1.1" in evidence
+    assert "+ anyio==4.14.2" in evidence
+    assert "pytest-9.1.1" in evidence
+    assert "PytestRemovedIn10Warning" in evidence
+    assert "CallSpec2" in evidence
+    # Excerpt is bounded to the log tail.
+    assert "filler line 0\n" not in evidence
+    assert "filler line 99" in evidence
+
+
+def test_build_and_extract_failing_run_evidence_roundtrip():
+    from robotsix_mill.stages.ci_fix_helpers import (
+        build_failing_run_evidence,
+        extract_failing_run_evidence,
+    )
+
+    summary = _build_failing_summary(
+        failing=[{"name": "Tests"}],
+        log_text="\n--- CI (run 1, url: https://github.com/o/r/actions/runs/1) ---\n"
+        + _FIXTURE_JOB_LOG,
+    )
+    evidence = build_failing_run_evidence(summary)
+    assert "https://github.com/o/r/actions/runs/1" in evidence
+    body = f"## Spec\n\nx\n\n{evidence}\n## Later section\n\ny\n"
+    extracted = extract_failing_run_evidence(body)
+    assert extracted == evidence.strip()
+    assert "Later section" not in extracted
+    assert build_failing_run_evidence("## lint\n") == ""
+
+
 def test_out_of_scope_spawns_fix_ticket_and_parks(tmp_path, monkeypatch):
     """An OUT_OF_SCOPE verdict creates exactly one fix ticket, wires
     depends_on/unblocks both ways, parks the original to BLOCKED, and never

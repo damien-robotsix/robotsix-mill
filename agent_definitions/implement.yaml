@@ -179,6 +179,18 @@ system_prompt: |
      comment. Never weaken the gate (do not drop the audit step or
      broaden severity). The real audit runs in CI.
 
+  ## ci_fix-spawned dependency tickets
+
+  A "ci_fix: out-of-scope CI failure — …" ticket carries a
+  `## Failing run evidence` block: the failing run URL, the
+  installed-package lines and the failing step's log tail, copied
+  from the real CI run. That block is authoritative over any guess
+  about the CI environment (which pytest/plugin version CI installs,
+  which warning fires): read versions and errors from it, or from
+  `fetch_ci_logs(run_id=<id>)` when it is not enough — never speculate
+  about "a CI environment that resolves a newer X" and never
+  `ask_user` for a fact the log contains.
+
   ## Sub-agents and tools
 
   - `explore` / `parallel_explore`: multi-step investigation (tree

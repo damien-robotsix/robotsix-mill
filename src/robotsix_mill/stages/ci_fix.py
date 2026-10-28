@@ -81,6 +81,7 @@ from .ci_fix_helpers import (
     _workspace_repo_dir,
     _write_counter,
     _write_text,
+    build_failing_run_evidence,
 )
 from .ci_infra_block import (
     INFRA_ACCOUNT_BLOCKED,
@@ -2155,6 +2156,12 @@ class CIFixStage(Stage):
                 "`.pre-commit-config.yaml` lychee hook args) rather than making "
                 f"a CI-pipeline change:{url_list}\n"
             )
+        # Implement/review on the spawned ticket cannot read the CI log —
+        # carry the run URL, installed packages and failing-step tail so
+        # they never guess (or ask_user) about the CI environment.
+        evidence = build_failing_run_evidence(failing_summary)
+        if evidence:
+            description += f"\n{evidence}"
         block_reason = "CI failure is out of scope for this ticket"
 
         # Dedup fingerprint from the failing CHECK NAMES only — an

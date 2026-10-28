@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import logging
+import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
@@ -404,6 +405,110 @@ def _build_failing_summary(
         parts.append("```")
         parts.append("")
     return "\n".join(parts)
+
+
+FAILING_RUN_EVIDENCE_HEADING = "## Failing run evidence"
+_EVIDENCE_TAIL_LINES = 80
+_EVIDENCE_MAX_PACKAGE_LINES = 200
+_RUN_URL_RE = re.compile(r"https?://[^\s)\]>,]+/actions/runs/\d+[^\s)\]>,]*")
+# GitHub Actions log lines carry an ISO-8601 timestamp prefix.
+_LOG_TS_PREFIX_RE = re.compile(r"^\d{4}-\d\d-\d\dT[\d:.]+Z\s?")
+_INSTALLED_PACKAGE_RES = (
+    # uv: ` + pytest==9.1.1`
+    re.compile(r"^\s*\+\s+[A-Za-z0-9][\w.\-]*(?:\[[^\]]*\])?==\S+\s*$"),
+    # pip: `Successfully installed pytest-9.1.1 anyio-4.14.2`
+    re.compile(r"^\s*Successfully installed\s+\S"),
+    # pytest session header: `platform … -- Python 3.14.0, pytest-9.1.1, …`
+    re.compile(r"^\s*platform \S+ -- Python \S+, pytest-\S+"),
+    re.compile(r"^\s*plugins: \S"),
+)
+
+
+def _job_log_text(failing_summary: str) -> str:
+    """Return the fenced ``**Job logs:**`` body of *failing_summary* ("" if none)."""
+    marker = "**Job logs:**"
+    idx = failing_summary.find(marker)
+    if idx < 0:
+        return ""
+    rest = failing_summary[idx + len(marker) :].lstrip("\n")
+    if rest.startswith("```"):
+        rest = rest[3:].lstrip("\n")
+    end = rest.rfind("```")
+    if end >= 0:
+        rest = rest[:end]
+    return rest.rstrip()
+
+
+def build_failing_run_evidence(failing_summary: str) -> str:
+    """Build the ``## Failing run evidence`` block for a spawned ticket.
+
+    The ci_fix-spawned dependency ticket is implemented and reviewed by
+    stages that cannot read the CI log; without this block they guessed at
+    the CI environment (which pytest CI installs, which warning fires) and
+    parked at awaiting_user_reply for facts the log contained. Carries the
+    failing run URL(s), the installed-package lines, and the last
+    ``_EVIDENCE_TAIL_LINES`` lines of the (already failing-step-narrowed)
+    job log. Returns "" when *failing_summary* carries none of these.
+    """
+    urls = list(dict.fromkeys(_RUN_URL_RE.findall(failing_summary)))
+    log_text = _job_log_text(failing_summary)
+    lines = [_LOG_TS_PREFIX_RE.sub("", ln) for ln in log_text.splitlines()]
+    packages = [
+        ln.strip() for ln in lines if any(p.search(ln) for p in _INSTALLED_PACKAGE_RES)
+    ]
+    packages = list(dict.fromkeys(packages))[:_EVIDENCE_MAX_PACKAGE_LINES]
+    tail = [ln for ln in lines if ln.strip()][-_EVIDENCE_TAIL_LINES:]
+    if not (urls or packages or tail):
+        return ""
+    parts = [
+        FAILING_RUN_EVIDENCE_HEADING,
+        "",
+        (
+            "_Copied from the failing CI run's log — authoritative over any "
+            "guess about the CI environment. Use `fetch_ci_logs(run_id=…)` for "
+            "more._"
+        ),
+        "",
+    ]
+    if urls:
+        parts.append("**Run:** " + ", ".join(urls))
+        parts.append("")
+    if packages:
+        parts.append("**Installed packages:**")
+        parts.append("```")
+        parts.extend(packages)
+        parts.append("```")
+        parts.append("")
+    if tail:
+        parts.append(f"**Failing step log (last {len(tail)} lines):**")
+        parts.append("```")
+        # Neutralise inner fences so the excerpt cannot close the block.
+        parts.extend(ln.replace("```", "'''") for ln in tail)
+        parts.append("```")
+        parts.append("")
+    return "\n".join(parts)
+
+
+def extract_failing_run_evidence(text: str) -> str:
+    """Return the ``## Failing run evidence`` section of *text* ("" if absent).
+
+    The section ends at the next ``## `` heading outside a code fence.
+    """
+    out: list[str] = []
+    in_section = False
+    in_fence = False
+    for line in text.splitlines():
+        if not in_section:
+            if line.strip() == FAILING_RUN_EVIDENCE_HEADING:
+                in_section = True
+                out.append(line)
+            continue
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and line.startswith("## "):
+            break
+        out.append(line)
+    return "\n".join(out).strip()
 
 
 def _build_compact_failing_summary(
