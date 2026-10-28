@@ -861,7 +861,9 @@ def _failing_run_evidence(ws) -> str:
     return ""
 
 
-def _build_prior_context(ticket, ctx, ws) -> str | None:
+def _build_prior_context(
+    ticket: Ticket, ctx: StageContext, ws: Workspace
+) -> str | None:
     """Assemble prior review comments and the implement agent's rebuttal
     from the last round into a ``prior-context`` fenced block.
 

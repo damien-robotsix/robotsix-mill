@@ -653,8 +653,6 @@ def _normalize_ci_failure_reason(
     3. Strips annotation lines (``path:line: message``) and timestamps.
     4. Returns the first 16 hex digits of the SHA-256 hash of the result.
     """
-    import re
-
     names = sorted(chk.get("name", "unknown") for chk in failing)
     names_key = "|".join(names)
 
