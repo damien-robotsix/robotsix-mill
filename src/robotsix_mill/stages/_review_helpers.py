@@ -845,7 +845,25 @@ def _unaddressed_change_answer(
     return answer if _answer_requests_change(answer) else None
 
 
-def _build_prior_context(ticket, ctx, ws) -> str | None:
+def _failing_run_evidence(ws) -> str:
+    """The ``## Failing run evidence`` block from the spec or pre-refine draft."""
+    from .ci_fix_helpers import extract_failing_run_evidence
+
+    try:
+        evidence = extract_failing_run_evidence(ws.read_description())
+    except Exception:
+        evidence = ""
+    if evidence:
+        return evidence
+    draft = ws.artifacts_dir / "draft-original.md"
+    if draft.exists():
+        return extract_failing_run_evidence(draft.read_text(encoding="utf-8"))
+    return ""
+
+
+def _build_prior_context(
+    ticket: Ticket, ctx: StageContext, ws: Workspace
+) -> str | None:
     """Assemble prior review comments and the implement agent's rebuttal
     from the last round into a ``prior-context`` fenced block.
 
@@ -885,6 +903,23 @@ def _build_prior_context(ticket, ctx, ws) -> str | None:
                 "Verify the diff against it: any deviation is a blocking "
                 "gap (REQUEST_CHANGES), never a nit.\n"
                 + _cap(approval, "operator-approval-constraints"),
+            )
+        )
+
+    # A ci_fix-spawned dependency ticket carries the failing run's log
+    # evidence (installed packages, failing-step tail). Review has no
+    # fetch_ci_logs, and refine may rewrite the spec without it — so feed
+    # it here (falling back to the pre-refine draft) or review parks at
+    # awaiting_user_reply asking which version CI installs (ticket b5c7).
+    evidence = _failing_run_evidence(ws)
+    if evidence:
+        parts.append(
+            section(
+                "failing-run-evidence",
+                "Copied from the failing CI run's log. Authoritative for "
+                "CI-environment facts (installed versions, raised "
+                "warnings/errors) — never NEEDS_DISCUSSION for a fact "
+                "it contains.\n" + _cap(evidence, "failing-run-evidence"),
             )
         )
 
