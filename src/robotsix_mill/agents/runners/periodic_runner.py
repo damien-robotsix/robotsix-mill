@@ -23,6 +23,7 @@ from ...core.models import SourceKind
 from ...core.service import TicketService
 from ...scm.forge.auth import github_token, gitlab_token
 from .pass_runner import run_agent_pass
+from .survey_runner import route_survey_drafts
 from .triage_boilerplate_runner import route_triage_boilerplate_drafts
 
 log = logging.getLogger("robotsix_mill.periodic_runner")
@@ -433,6 +434,9 @@ PERIODIC_PASS_CONFIGS: dict[str, PeriodicPassConfig] = {
         workspace_subdir="survey_workspace",
         result_dataclass=PeriodicPassResult,
         clone_token_fn=_clone_token,
+        # Companion drafts land on the board of the repo their evidence
+        # names, not the surveyed repo's board.
+        route_result_fn=route_survey_drafts,
     ),
     "completeness_check": PeriodicPassConfig(
         label="completeness_check",
