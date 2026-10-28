@@ -179,15 +179,21 @@ def lifespan_mocks(monkeypatch):
         mock_heartbeat,
     )
 
-    # Keep startup hermetic: no `docker run` tool probe.
+    # Keep startup hermetic: no `docker run` tool probe, no image pull.
     mock_tool_inventory = MagicMock()
     monkeypatch.setattr(
         "robotsix_mill.sandbox._inventory.log_sandbox_tool_inventory",
         mock_tool_inventory,
     )
+    mock_init_image = MagicMock()
+    monkeypatch.setattr(
+        "robotsix_mill.sandbox._image.init_sandbox_image",
+        mock_init_image,
+    )
 
     return {
         "tool_inventory": mock_tool_inventory,
+        "init_image": mock_init_image,
         "init_db": mock_init_db,
         "worker": mock_worker,
         "worker_class": mock_worker_class,
@@ -315,6 +321,7 @@ async def test_startup_logs_sandbox_tool_inventory(
     async with lifespan(app):
         pass
 
+    lifespan_mocks["init_image"].assert_called_once_with(settings)
     lifespan_mocks["tool_inventory"].assert_called_once_with(settings)
 
 

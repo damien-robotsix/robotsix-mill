@@ -556,3 +556,8 @@ observed_epoch
 # only from tests/forge/test_http.py and tests/forge/test_rate_limit.py, and
 # vulture only scans src/.
 _reset_for_tests
+
+# -- sandbox -----------------------------------------------------------------
+# _reset — sandbox/_image.py test hook; only called from tests/conftest.py
+# (vulture only scans src/, 60% confidence).
+_reset
