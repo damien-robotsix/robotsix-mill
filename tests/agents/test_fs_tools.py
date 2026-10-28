@@ -19,6 +19,7 @@ from robotsix_mill.agents.fs_tools import (
     _safe,
     build_fs_tools,
     build_preseed_history,
+    missing_lint_tool_result,
 )
 
 # ---------------------------------------------------------------------------
@@ -3673,3 +3674,50 @@ class TestAbandonedStageGuard:
         (root / "b.txt").write_text("bravo\n")
         assert "bravo" in tools["read_file"](path="b.txt")
         assert (root / "a.txt").read_text() == "alpha\n"
+
+
+# ---------------------------------------------------------------------------
+# Missing lint tool → structured skipped result
+# ---------------------------------------------------------------------------
+
+
+class TestMissingLintTool:
+    @pytest.mark.parametrize(
+        "out",
+        [
+            "sh: 1: actionlint: not found\n",
+            "bash: actionlint: command not found\n",
+            "bash: line 1: actionlint: command not found\n",
+        ],
+    )
+    def test_shape(self, out):
+        result = missing_lint_tool_result(127, out)
+        assert result is not None
+        assert result.splitlines()[0] == "skipped: missing tool actionlint"
+        assert "exit=127" in result
+        assert out.strip() in result
+
+    def test_lists_every_missing_linter(self):
+        out = "sh: 1: uvx: not found\nsh: 1: zizmor: not found\n"
+        result = missing_lint_tool_result(127, out)
+        assert result is not None
+        assert result.splitlines()[:2] == [
+            "skipped: missing tool uvx",
+            "skipped: missing tool zizmor",
+        ]
+
+    def test_none_for_other_cases(self):
+        # Not a lint tool, wrong exit code, or nothing missing.
+        assert missing_lint_tool_result(127, "sh: 1: foo: not found\n") is None
+        assert missing_lint_tool_result(1, "sh: 1: actionlint: not found\n") is None
+        assert missing_lint_tool_result(0, "ok") is None
+
+    def test_run_command_returns_skipped(self, tmp_path, settings, monkeypatch):
+        root = tmp_path / "repo"
+        root.mkdir()
+        tools = _build(root, settings)
+        monkeypatch.setattr(
+            sandbox, "run", lambda *a, **kw: (127, "sh: 1: actionlint: not found\n")
+        )
+        result = tools["run_command"]("actionlint")
+        assert result.startswith("skipped: missing tool actionlint\n")

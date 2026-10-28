@@ -1,3 +1,19 @@
+# actionlint built from source with a patched Go toolchain: the upstream
+# v1.17.0 release binaries are built with go1.27.1, whose stdlib carries
+# HIGH CVEs (crypto/x509, crypto/tls, net/http) that fail the Trivy gate.
+# Same pinned tag/commit CI runs; only the toolchain differs.
+# GOTOOLCHAIN=local stops go.mod's `toolchain go1.27.1` line from
+# downloading the vulnerable toolchain.
+FROM golang:1.27.3-bookworm@sha256:fea12ba16096adec0f699ce1c4da2154d320450e56c1f63671f95d2a3551c77b AS actionlint-build
+ARG ACTIONLINT_VERSION=1.17.0
+ARG ACTIONLINT_COMMIT=08bb2c4f0d039744455b87aef1c647fb8b66d37b
+ENV GOTOOLCHAIN=local CGO_ENABLED=0
+WORKDIR /build
+RUN git clone --depth 1 --branch "v${ACTIONLINT_VERSION}" https://github.com/kjanat/actionlint.git . \
+    && test "$(git rev-parse HEAD)" = "${ACTIONLINT_COMMIT}" \
+    && go build -trimpath -ldflags "-s -w" -o /out/actionlint ./cmd/actionlint \
+    && /out/actionlint -version
+
 FROM python:3.14-slim@sha256:c845af9399020c7e562969a13689e929074a10fd057acd1b1fad06a2fb068e97
 
 # Install the uv Rust binary (pinned to match CI's version).
@@ -20,7 +36,8 @@ RUN apt-get update \
         nodejs=20.19.2+dfsg-1+deb13u3 \
         npm=9.2.0~ds1-3 \
     && curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh \
-    && chmod a+rx /usr/local/bin/uv \
+    && chmod a+rx /usr/local/bin/uv /usr/local/bin/uvx \
+    && /usr/local/bin/uvx --version \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI (`gh`) for driving contribution workflows (push -> PR -> merge)
@@ -74,6 +91,22 @@ RUN pip install --no-cache-dir "playwright==${PLAYWRIGHT_VERSION}" \
 # extra_sandbox_packages in each repo's .robotsix-mill/config.yaml.
 # hadolint ignore=DL3013
 RUN pip install --no-cache-dir pytest pytest-asyncio pytest-cov
+
+# Workflow-lint gate tooling: the same actionlint + `zizmor
+# --persona=pedantic .github/workflows/` pair the shared lint-workflows.yml
+# runs in CI, so an implement that edits .github/workflows/** can lint it
+# before review instead of paying a ci_fix round. Both are pinned to exactly
+# what CI runs: zizmor to the version lint-workflows.yml installs, actionlint
+# to the release reviewdog/action-actionlint v1.79.1 bundles (the kjanat
+# fork, v1.17.0), built from source in the actionlint-build stage above
+# (pinned tag + commit check). Binaries land in /usr/local/bin (on PATH,
+# world-readable) for the non-root runtime user, as with uv above.
+ARG ZIZMOR_VERSION=1.31.1
+# hadolint ignore=DL3013
+RUN pip install --no-cache-dir "zizmor==${ZIZMOR_VERSION}" \
+    && zizmor --version
+COPY --from=actionlint-build /out/actionlint /usr/local/bin/actionlint
+RUN actionlint -version
 
 # Dart SDK so the implement agent can run `dart format` (and other Dart
 # tooling) and commit reformatted files itself — no operator handoff.

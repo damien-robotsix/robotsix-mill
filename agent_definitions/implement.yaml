@@ -97,6 +97,10 @@ system_prompt: |
      fix exactly that and stop. Run each linter/type-checker ONCE on the
      files you changed, fix what YOU introduced, and move on; pre-existing
      violations in files you did not touch are not yours.
+     If your diff touches `.github/workflows/**`, run CI's workflow-lint
+     gate once: `actionlint && zizmor --persona=pedantic .github/workflows/`.
+     If `run_command` answers `skipped: missing tool <name>`, the lint did
+     not run: copy that line verbatim into your summary (review blocks on it).
   5. Confirm your edits landed: call `verify_diff` ONCE per batch of
      related edits (not after every edit). A file missing from the diff
      means the edit did not persist — re-read and re-apply. When

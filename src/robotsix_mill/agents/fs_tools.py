@@ -582,6 +582,54 @@ def _coerce_command_list(command: list[str] | str) -> list[str] | str:
     return [text] if text else []
 
 
+# Lint binaries whose absence must surface as a structured "skipped" result
+# rather than a bare rc=127 the agent can paraphrase away. ``uvx`` is listed
+# because linters are commonly run through it (``uvx zizmor``).
+_LINT_TOOLS = frozenset(
+    {
+        "actionlint",
+        "hadolint",
+        "mypy",
+        "ruff",
+        "shellcheck",
+        "uvx",
+        "yamllint",
+        "zizmor",
+    }
+)
+# ``sh: 1: actionlint: not found`` (dash), ``bash: actionlint: command not
+# found``, ``bash: line 1: zizmor: command not found``.
+_NOT_FOUND_RE = re.compile(
+    r"^(?:\S*sh: (?:line )?\d+: |\S*sh: )?([\w.+-]+): (?:command )?not found\s*$",
+    re.MULTILINE,
+)
+
+
+def missing_lint_tool_result(rc: int, out: str) -> str | None:
+    """Return the structured skipped result when a linter binary is missing.
+
+    The shell exits 127 when a command is not found. If any missing command
+    is a known lint tool, the lint did NOT run. The returned text starts
+    with ``skipped: missing tool <name>``, a fixed marker the review prompt
+    treats as a blocking gap for ``.github/workflows/**`` changes. Returns
+    ``None`` when no known lint tool is missing.
+    """
+    if rc != 127:
+        return None
+    missing = sorted({m.group(1) for m in _NOT_FOUND_RE.finditer(out)} & _LINT_TOOLS)
+    if not missing:
+        return None
+    head = "\n".join(f"skipped: missing tool {name}" for name in missing)
+    return (
+        f"{head}\n"
+        "This lint did NOT run: the sandbox has no such binary. Copy the "
+        "`skipped: missing tool …` line(s) verbatim into your final summary "
+        "— review treats a skipped lint on `.github/workflows/**` changes "
+        "as a blocking gap. Do not claim the lint passed.\n"
+        f"exit={rc}\n{out}"
+    )
+
+
 def _parse_file_read_cmd(command: str) -> tuple[str, int, int | None] | None:
     """Parse shell commands that re-read file content.
 
@@ -1795,6 +1843,9 @@ def _build_shell_tools(state: _FsToolState) -> list[Any]:
                 )
         except sandbox.SandboxError as e:
             return f"sandbox error: {e}"
+        skipped = missing_lint_tool_result(rc, out)
+        if skipped is not None:
+            return skipped
         if not out.strip():
             if rc == 0:
                 return "Your command ran successfully and did not produce any output."
@@ -1862,7 +1913,10 @@ def _build_shell_tools(state: _FsToolState) -> list[Any]:
         parts: list[str] = []
         for idx, cmd, rc, out in sorted(results, key=lambda r: r[0]):
             header = f"### [{idx + 1}/{len(commands)}] {cmd}"
-            if not out.strip():
+            skipped = missing_lint_tool_result(rc, out)
+            if skipped is not None:
+                parts.append(f"{header}\n{skipped}")
+            elif not out.strip():
                 if rc == 0:
                     parts.append(f"{header}\nexit={rc}\n(no output)")
                 else:

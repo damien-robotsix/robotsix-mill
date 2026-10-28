@@ -81,6 +81,7 @@ def _run_impl(
         _repo_mount,
         _sandbox_slot,
         _truncate,
+        _uv_pin_prefix,
         ensure_sandbox_network,
         load_extra_sandbox_packages,
         log,
@@ -240,8 +241,13 @@ def _run_impl(
     # no shell expansion) and be the FIRST statement so it is in effect
     # for the extra-package install, the project install, and the user
     # command alike.
+    # The repo's pinned uv (required-version / .uv-version) goes first on
+    # PATH right after, so the project install and the command both run it
+    # instead of tripping uv's version check (see _uv_pin_prefix).
     effective_command = (
-        'export PATH="$HOME/.local/bin:/tmp/.local/bin:$PATH"; ' + effective_command
+        'export PATH="$HOME/.local/bin:/tmp/.local/bin:$PATH"; '
+        + _uv_pin_prefix(repo_dir, settings, _CACHE_TARGET if cache_argv else None)
+        + effective_command
     )
 
     # Override the image ENTRYPOINT: images like robotsix/mill have one

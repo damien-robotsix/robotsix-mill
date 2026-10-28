@@ -485,6 +485,80 @@ def _has_uv_sources(repo_dir: Path) -> bool:
     return isinstance(sources, dict) and len(sources) > 0
 
 
+# Exact uv pins only (``==0.12.19`` or a bare ``0.12.19``). Ranges are left
+# to uv itself. The strict pattern is also what keeps this repo-controlled
+# string safe to splice into the sandbox's shell snippet.
+_UV_EXACT_PIN = re.compile(r"^\s*(?:==\s*)?(\d+(?:\.\d+){1,3})\s*$")
+
+
+def _uv_required_version(repo_dir: Path) -> str | None:
+    """Return the repo's exact uv pin, or ``None``.
+
+    Read from ``.uv-version`` first, then ``[tool.uv].required-version`` in
+    ``pyproject.toml``. Missing/malformed files and non-exact specifiers
+    yield ``None``.
+    """
+    try:
+        raw: object = (repo_dir / ".uv-version").read_text(encoding="utf-8").strip()
+    except OSError:
+        raw = ""
+    if not raw:
+        import tomllib
+
+        try:
+            parsed = tomllib.loads(
+                (repo_dir / "pyproject.toml").read_text(encoding="utf-8")
+            )
+        except OSError, tomllib.TOMLDecodeError:
+            return None
+        tool_uv = parsed.get("tool", {}).get("uv", {})
+        raw = tool_uv.get("required-version") if isinstance(tool_uv, dict) else None
+    if not isinstance(raw, str):
+        return None
+    m = _UV_EXACT_PIN.match(raw)
+    return m.group(1) if m else None
+
+
+def _uv_pin_prefix(repo_dir: Path, settings: Settings, cache_target: str | None) -> str:
+    """Shell snippet putting the repo's pinned uv first on ``PATH``.
+
+    A repo with ``required-version = "==X"`` makes every ``uv`` call in a
+    sandbox whose baked uv differs die with ``Required uv version … does
+    not match the running version`` — including the project install,
+    which then printed ``sandbox project install failed`` on every
+    ``run_command``. Rather than bypassing the check, install exactly the
+    pinned uv (the ``uv`` PyPI wheel ships ``uv`` + ``uvx``) with
+    ``pip install --target`` into the shared disk cache (or ``/tmp`` when
+    the cache is off), guarded by the binary's presence and installed via
+    a ``.tmp.$$`` dir + ``mv`` so racing sandboxes can't corrupt it — the
+    same scheme as :func:`_pip_extras_cached_install`. The download is
+    only attempted with egress; without it an already-cached copy is still
+    used. Returns ``""`` when the repo has no exact pin.
+    """
+    pin = _uv_required_version(repo_dir)
+    if pin is None:
+        return ""
+    root = f"{cache_target}/uv-pinned" if cache_target else "/tmp/.mill-uv"  # nosec B108 — sandbox-internal tmpfs
+    fetch = ""
+    if settings.sandbox_proxy_url:
+        fetch = (
+            'if [ ! -x "$_mu_t/bin/uv" ]; then '
+            '_mu_tmp="$_mu_t.tmp.$$"; rm -rf "$_mu_tmp"; '
+            "if pip install --quiet --disable-pip-version-check "
+            f'--target "$_mu_tmp" "uv=={pin}" >/dev/null 2>&1; then '
+            'mv -T "$_mu_tmp" "$_mu_t" 2>/dev/null || rm -rf "$_mu_tmp"; '
+            'else rm -rf "$_mu_tmp"; fi; fi; '
+        )
+    return (
+        f'_mu_t="{root}/{pin}"; '
+        f'if [ "$(uv --version 2>/dev/null | cut -d" " -f2)" != "{pin}" ]; then '
+        f"{fetch}"
+        'if [ -x "$_mu_t/bin/uv" ]; then export PATH="$_mu_t/bin:$PATH"; '
+        f'else echo "WARNING: could not install uv {pin} (repo required-version); '
+        'uv commands will fail its version check" >&2; fi; fi; '
+    )
+
+
 def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> str:
     """Prepend a read-only-safe project install to *command*, if warranted.
 
