@@ -49,6 +49,16 @@ def pytest_runtest_call(item):
 
 
 @pytest.fixture(autouse=True)
+def _reset_sandbox_image_resolver():
+    """Keep the process-wide sandbox image resolver uninitialised (inert)."""
+    from robotsix_mill.sandbox import _image
+
+    _image._reset()
+    yield
+    _image._reset()
+
+
+@pytest.fixture(autouse=True)
 def _reset_failover_tracker():
     """Isolate every test from llmio's process-wide failover singleton."""
     from robotsix_llmio.core.failover import reset_failover_tracker

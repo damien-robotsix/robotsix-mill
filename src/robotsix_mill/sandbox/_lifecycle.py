@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from ..config import Settings
+from ._image import resolve_sandbox_image
 
 
 def run(
@@ -254,7 +255,9 @@ def _run_impl(
     # (it starts the server) which would otherwise swallow our command.
     # Per-repo override (sandbox_image) wins; None falls back to the
     # fleet-wide settings.sandbox_image so existing callers are unchanged.
-    image = sandbox_image or settings.sandbox_image
+    # Pinned to the running mill's digest (or the tag freshly pulled) once
+    # the worker has initialised the resolver — see sandbox/_image.py.
+    image = resolve_sandbox_image(sandbox_image or settings.sandbox_image)
     argv += ["--entrypoint", "sh", image, "-lc", effective_command]
 
     # Per-op timeout: use the dedicated sandbox_op_timeout when set,
