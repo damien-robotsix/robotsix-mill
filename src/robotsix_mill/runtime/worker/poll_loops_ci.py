@@ -500,10 +500,19 @@ class PollLoopsCiMixin(_WorkerBase):
     # ------------------------------------------------------------------
 
     def _apply_stale_ci_gate(
-        self, service: TicketService, forge: Forge, ticket: Ticket, body: str
+        self,
+        service: TicketService,
+        forge: Forge,
+        ticket: Ticket,
+        body: str,
+        rc: RepoConfig | None = None,
     ) -> None:
         """Run the stale-CI gate on a freshly filed draft (best-effort)."""
-        from ...stages.ci_stale_gate import evaluate_stale_ci
+        from ...stages.ci_stale_gate import (
+            escalate_verdict,
+            evaluate_stale_ci,
+            sibling_forges,
+        )
 
         try:
             verdict = evaluate_stale_ci(
@@ -511,9 +520,13 @@ class PollLoopsCiMixin(_WorkerBase):
                 ticket,
                 body,
                 stale_days=self.ctx.settings.ci_stale_failure_days,
+                siblings=(
+                    sibling_forges(self.ctx.settings, rc) if rc is not None else None
+                ),
             )
             if verdict is None:
                 return
+            escalate_verdict(self.ctx.settings, verdict, ticket.id)
             log.info(
                 "CI monitor: stale-CI gate %s %s — %s",
                 verdict.action,
@@ -805,7 +818,7 @@ class PollLoopsCiMixin(_WorkerBase):
             # 7b. Stale-CI gate: close an already-fixed failure / block an
             # upstream-only one before it can reach ``ready``.
             await asyncio.to_thread(
-                self._apply_stale_ci_gate, service, forge, ticket, body
+                self._apply_stale_ci_gate, service, forge, ticket, body, rc
             )
 
             # Mark as seen and clear any deferral bookkeeping.

@@ -41,8 +41,10 @@ def _load_marker(settings: Settings) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _default_escalate(repo: str, setting: str, ticket_id: str) -> None:
-    message = (
+def _default_escalate(
+    repo: str, setting: str, ticket_id: str, message: str | None = None
+) -> None:
+    message = message or (
         f"OPERATOR ESCALATION — repository setting required on {repo}: enable "
         f"'{setting}' at {repo_settings_url(repo)} (Settings > Code security). "
         f"CI cannot pass until it is on; ticket {ticket_id} is BLOCKED and "
@@ -69,14 +71,23 @@ def escalate_repo_setting_block(
     ticket_id: str,
     *,
     escalate: EscalateFn | None = None,
+    message: str | None = None,
 ) -> bool:
-    """Escalate *setting* on *repo* once; return True when an escalation fired."""
+    """Escalate *setting* on *repo* once; return True when an escalation fired.
+
+    *message* overrides the default (Settings > Code security) wording.
+    """
     key = f"{repo}|{setting}"
     marker = _load_marker(settings)
     if key in marker:
         return False
     try:
-        (escalate or _default_escalate)(repo, setting, ticket_id)
+        if escalate is not None:
+            escalate(repo, setting, ticket_id)
+        elif message is not None:
+            _default_escalate(repo, setting, ticket_id, message)
+        else:
+            _default_escalate(repo, setting, ticket_id)
     except Exception:
         log.exception("repo_setting_block: escalation failed for %s", key)
         return False
