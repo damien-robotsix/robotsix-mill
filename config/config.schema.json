@@ -924,6 +924,18 @@
           "title": "Ci Log Max Bytes",
           "type": "integer"
         },
+        "ci_monitor_scan_tags": {
+          "default": true,
+          "description": "Also scan tag-push workflow runs (tags matching ci_monitor_tag_glob) and file CI-failure tickets for them.",
+          "title": "Ci Monitor Scan Tags",
+          "type": "boolean"
+        },
+        "ci_monitor_tag_glob": {
+          "default": "v*",
+          "description": "fnmatch glob selecting the tags the CI monitor scans.",
+          "title": "Ci Monitor Tag Glob",
+          "type": "string"
+        },
         "ci_patterns_path": {
           "anyOf": [
             {

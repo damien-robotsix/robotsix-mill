@@ -952,3 +952,92 @@ def test_newer_run_than_failure_not_dispatched(tmp_path, monkeypatch):
     _run(settings)
 
     assert dispatched == []
+
+
+# --- tag-scoped tickets ----------------------------------------------------
+
+
+class _TagFakeForge(_FakeForge):
+    """Branch-aware fake: ``list_workflow_runs`` filters on ``head_branch``
+    (as GitHub's ``?branch=`` does — a tag push's head_branch is the tag)."""
+
+    def __init__(self, runs):
+        super().__init__(runs)
+
+    def list_workflow_runs(self, *, branch=None, head_sha=None):
+        return [r for r in self._runs if r.get("head_branch") == branch]
+
+    def list_tag_workflow_runs(self, *, tag_glob):
+        import fnmatch
+
+        return [
+            r
+            for r in self._runs
+            if r.get("event") == "push"
+            and fnmatch.fnmatchcase(r.get("head_branch") or "", tag_glob)
+        ]
+
+
+def _tag_run(id_, sha, conclusion, created, tag="v1.2.3", event="push"):
+    return {
+        "name": "Release image",
+        "head_sha": sha,
+        "conclusion": conclusion,
+        "id": id_,
+        "html_url": f"https://x/run/{id_}",
+        "created_at": created,
+        "event": event,
+        "head_branch": tag,
+        "path": ".github/workflows/release.yml",
+    }
+
+
+def _prepare_tag(tmp_path, monkeypatch, runs):
+    settings, service = _prepare(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        car, "get_forge", lambda settings, repo_config=None: _TagFakeForge(runs)
+    )
+    t = _ci_ticket(
+        service, settings, wf="Release image", branch="v1.2.3", f_sha="a1b2c3d4"
+    )
+    return settings, service, t
+
+
+_TAG_FAIL = _tag_run(100, "a1b2c3d4", "failure", "2026-09-01T00:00:00Z")
+
+
+def test_green_main_does_not_close_tag_ticket(tmp_path, monkeypatch):
+    main_green = _tag_run(200, "c0ffee02", "success", "2026-09-02T00:00:00Z", "main")
+    main_green2 = _tag_run(201, "c0ffee03", "success", "2026-09-03T00:00:00Z", "main")
+    settings, service, t = _prepare_tag(
+        tmp_path, monkeypatch, [main_green2, main_green, _TAG_FAIL]
+    )
+
+    result = _run(settings)
+
+    assert result["closed"] == 0
+    assert service.get(t.id).state is State.DRAFT
+
+
+def test_green_dispatch_on_tag_closes_tag_ticket(tmp_path, monkeypatch):
+    dispatch_green = _tag_run(
+        300, "a1b2c3d4", "success", "2026-09-02T00:00:00Z", event="workflow_dispatch"
+    )
+    settings, service, t = _prepare_tag(
+        tmp_path, monkeypatch, [dispatch_green, _TAG_FAIL]
+    )
+
+    result = _run(settings)
+
+    assert result["closed"] == 1
+    assert service.get(t.id).state is State.DONE
+
+
+def test_green_next_tag_run_closes_tag_ticket(tmp_path, monkeypatch):
+    next_tag = _tag_run(400, "b2c3d4e5", "success", "2026-09-05T00:00:00Z", "v1.2.4")
+    settings, service, t = _prepare_tag(tmp_path, monkeypatch, [next_tag, _TAG_FAIL])
+
+    result = _run(settings)
+
+    assert result["closed"] == 1
+    assert service.get(t.id).state is State.DONE

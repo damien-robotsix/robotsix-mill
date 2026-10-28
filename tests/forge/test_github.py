@@ -200,6 +200,37 @@ def test_list_workflow_runs_by_branch(tmp_path, monkeypatch):
     assert result[0]["head_branch"] == "main"
 
 
+def test_list_tag_workflow_runs_filters_on_tag_glob(tmp_path, monkeypatch):
+    """Push runs whose ``head_branch`` (the tag name) matches the glob only."""
+
+    def _run(id_, head_branch, event="push"):
+        return {
+            "id": id_,
+            "name": "Release image",
+            "workflow_id": 500,
+            "head_sha": f"sha{id_}",
+            "conclusion": "failure",
+            "html_url": "http://x",
+            "created_at": "2026-10-28T00:00:00Z",
+            "event": event,
+            "head_branch": head_branch,
+        }
+
+    runs_data = {
+        "workflow_runs": [
+            _run(1, "v1.2.3"),
+            _run(2, "main"),
+            _run(3, "release-1"),
+            _run(4, "v1.2.2", event="workflow_dispatch"),
+        ]
+    }
+    _mock_httpx(monkeypatch, get_map={"actions/runs": _make_response(200, runs_data)})
+
+    result = _forge(tmp_path).list_tag_workflow_runs(tag_glob="v*")
+    assert [r["id"] for r in result] == [1]
+    assert result[0]["head_branch"] == "v1.2.3"
+
+
 def test_list_workflow_runs_by_head_sha(tmp_path, monkeypatch):
     """Mock with ?head_sha=abc123 param."""
     runs_data = {"workflow_runs": []}

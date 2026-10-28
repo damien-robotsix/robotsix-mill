@@ -632,6 +632,20 @@ class _PeriodicSettings(BaseModel):
             "changed on main since is treated as stale."
         ),
     )
+    # Tag-triggered workflow scan (runtime/worker/poll_loops_ci.py): release
+    # publish workflows run on ``push: tags: ['v*']``, never on main, so a red
+    # release job was invisible to the default-branch scan.
+    ci_monitor_scan_tags: bool = Field(
+        default=True,
+        description=(
+            "Also scan tag-push workflow runs (tags matching "
+            "ci_monitor_tag_glob) and file CI-failure tickets for them."
+        ),
+    )
+    ci_monitor_tag_glob: str = Field(
+        default="v*",
+        description="fnmatch glob selecting the tags the CI monitor scans.",
+    )
 
     # --- diagnostic event store ---
     # Explicit file path for the JSONL diagnostic event store.  When

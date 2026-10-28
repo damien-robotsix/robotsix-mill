@@ -37,11 +37,12 @@ memory ledger.
 
 from __future__ import annotations
 
+import fnmatch
 import logging
 import re
 from typing import TYPE_CHECKING, Any
 
-from ...config import get_repos_config
+from ...config import get_repos_config, target_branch_for
 from ...core.models import SourceKind, TicketEvent
 from ...core.service import TicketService
 from ...core.states import DONE_OR_CLOSED
@@ -290,12 +291,19 @@ def _maybe_close(
         )
         return False
 
+    tag_scoped = _is_tag_target(settings, repo_config, target)
+    runs = _with_tag_runs(forge, settings, ticket, runs) if tag_scoped else runs
+
     green_runs, skip_reason = _green_since_failure(
-        runs, wf, f_sha, failing_created_at=failing_created_at
+        runs,
+        wf,
+        f_sha,
+        failing_created_at=failing_created_at,
+        dispatch_is_fix=tag_scoped,
     )
     if not green_runs:
         try:
-            dispatched = _maybe_dispatch_cron_workflow(
+            dispatched = not tag_scoped and _maybe_dispatch_cron_workflow(
                 service, forge, ticket, wf, target, f_sha, runs
             )
         except Exception:
@@ -317,6 +325,43 @@ def _maybe_close(
     log.info("ci_auto_close: close %s — workflow green (source=%s)", ticket.id, source)
     _close(service, ticket.id, wf, target, green_runs)
     return True
+
+
+def _is_tag_target(settings: Settings, repo_config: Any, target: str) -> bool:
+    """True when *target* is a tag the CI monitor's tag scan files for
+    (matches ``ci_monitor_tag_glob`` and is not the merge target branch).
+    """
+    if not settings.ci_monitor_scan_tags:
+        return False
+    if not fnmatch.fnmatchcase(target, settings.ci_monitor_tag_glob):
+        return False
+    try:
+        return target != target_branch_for(settings, repo_config)
+    except Exception:
+        return True
+
+
+def _with_tag_runs(
+    forge: Any, settings: Settings, ticket: Any, runs: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Add the tag-push runs to a tag ticket's ``branch=<tag>`` runs.
+
+    A tag ticket closes on a green run on that tag (``branch=<tag>`` also
+    covers a ``workflow_dispatch`` on the tag) or on the next tag's green
+    push run — never on a green main.  Best-effort: a listing failure keeps
+    *runs* unchanged.
+    """
+    try:
+        tag_runs = forge.list_tag_workflow_runs(tag_glob=settings.ci_monitor_tag_glob)
+    except Exception:
+        log.warning(
+            "ci_auto_close: list_tag_workflow_runs failed for ticket %s",
+            ticket.id,
+            exc_info=True,
+        )
+        return runs
+    known = {r.get("id") for r in runs}
+    return list(runs) + [r for r in tag_runs if r.get("id") not in known]
 
 
 def _has_open_mr(forge: Any, ticket: Any) -> bool:
@@ -347,6 +392,7 @@ def _green_since_failure(
     f_sha: str,
     *,
     failing_created_at: str | None = None,
+    dispatch_is_fix: bool = False,
 ) -> tuple[list[dict[str, Any]] | None, str | None]:
     """Return ``(green_runs, None)`` when the workflow *wf* is fixed at-or-after
     *f_sha*, else ``(None, reason)`` naming why the ticket is skipped.
@@ -367,7 +413,9 @@ def _green_since_failure(
     green head) OR a *re-run* of the failing commit itself (``run_attempt >
     1``: a transient failure fixed by re-running the same run, which never
     produces a new head). Otherwise two consecutive greens at-or-after the
-    failing commit are required.
+    failing commit are required.  With *dispatch_is_fix* (tag-scoped
+    tickets, whose tag never gets a new head) a green ``workflow_dispatch``
+    run on the failing commit is a deliberate re-run and also suffices.
 
     ``reason`` is one of ``cannot anchor`` (no completed runs for the
     workflow), ``failing head outside run window`` (the failing commit is no
@@ -409,7 +457,10 @@ def _green_since_failure(
         return None, "still red"
     green_runs = [r for r in since if r.get("conclusion") == "success"]
     fix_identifiable = any(
-        (r.get("head_sha") or "") != f_sha or _attempt(r) > 1 for r in green_runs
+        (r.get("head_sha") or "") != f_sha
+        or _attempt(r) > 1
+        or (dispatch_is_fix and r.get("event") == "workflow_dispatch")
+        for r in green_runs
     )
     if streak < 2 and not fix_identifiable:
         return None, "lone green on failing head, attempt 1"

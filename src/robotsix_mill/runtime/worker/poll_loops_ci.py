@@ -271,6 +271,42 @@ class PollLoopsCiMixin(_WorkerBase):
                 latest_by_wf[wf] = run
         return latest_by_wf
 
+    @staticmethod
+    async def _latest_tag_runs(
+        forge: Forge, tag_glob: str, repo_label: str
+    ) -> list[tuple[Any, dict[str, Any], str, str]]:
+        """Latest tag-push run per ``workflow_id`` as scan items.
+
+        Tag-triggered workflows (release publish on ``push: tags: ['v*']``)
+        never run on the default branch, so the branch scan cannot see them
+        (robotsix-auto-mail ``Release image`` failed on v0.10.0, v0.11.0 and
+        v0.11.1 with no ticket filed).  Returns ``(wf, run, tag, key)``
+        tuples keyed ``<workflow_id>:<head_sha>:<tag>`` so one tag files
+        once.  Best-effort: a listing failure yields no items and the branch
+        scan proceeds unaffected.
+        """
+        try:
+            runs = await asyncio.to_thread(
+                forge.list_tag_workflow_runs, tag_glob=tag_glob
+            )
+        except Exception as exc:
+            log.warning(
+                "CI monitor (%s): tag-run listing failed — skipping tag scan: %s",
+                repo_label,
+                exc,
+            )
+            return []
+        items: list[tuple[Any, dict[str, Any], str, str]] = []
+        seen_wf: set[Any] = set()
+        for run in runs:
+            wf = run.get("workflow_id")
+            tag = run.get("head_branch") or ""
+            if wf is None or not tag or wf in seen_wf:
+                continue
+            seen_wf.add(wf)
+            items.append((wf, run, tag, f"{wf}:{run.get('head_sha')}:{tag}"))
+        return items
+
     async def _fetch_run_logs_with_deferral(
         self,
         forge: Forge,
@@ -590,16 +626,29 @@ class PollLoopsCiMixin(_WorkerBase):
 
         existing = service.list()
 
-        for wf, run in latest_by_wf.items():
+        # Scan items: ``(workflow_id, run, ref, seen-key)``. Branch runs keep
+        # the historical ``<wf>:<sha>`` key; tag runs are keyed per tag.
+        scan: list[tuple[Any, dict[str, Any], str, str]] = [
+            (wf, run, target, f"{wf}:{run.get('head_sha')}")
+            for wf, run in latest_by_wf.items()
+        ]
+        if settings.ci_monitor_scan_tags:
+            scan.extend(
+                await self._latest_tag_runs(
+                    forge, settings.ci_monitor_tag_glob, repo_label
+                )
+            )
+
+        for wf, run, run_target, key in scan:
             conclusion = run.get("conclusion")
             # Queue-timeout re-dispatch: a ``cancelled`` latest run that never
             # started a job means the image/artifact for the current head is
             # missing. Re-dispatch it (once a runner is online) rather than
             # filing a ticket — a ticket is filed only if a re-dispatched run
             # then fails (handled by the failing-conclusions path below).
+            # Target-branch runs only: a tag run is not re-dispatched.
             if conclusion == "cancelled":
-                key = f"{wf}:{run.get('head_sha')}"
-                if key in seen:
+                if run_target != target or key in seen:
                     continue
                 if self._maybe_redispatch_cancelled(
                     forge, run, wf, key, redispatch, now, repo_label, target
@@ -618,11 +667,10 @@ class PollLoopsCiMixin(_WorkerBase):
             wf_name = run.get("name", "unknown")
             wf_path = run.get("path", "")
             run_id_val = run.get("id")
-            title = f"CI failure: {wf_name} on {target}"
+            title = f"CI failure: {wf_name} on {run_target}"
 
             # Cheap first guard: avoid re-filing or re-commenting
             # for the exact same failing commit.
-            key = f"{wf}:{run.get('head_sha')}"
             if key in seen:
                 continue
 
@@ -640,7 +688,7 @@ class PollLoopsCiMixin(_WorkerBase):
 
             # 3. Canonical-ticket consolidation.
             canonical, _ = self._find_canonical_ci_ticket(
-                existing, service, wf_name, target
+                existing, service, wf_name, run_target
             )
 
             if canonical is not None:
@@ -650,7 +698,7 @@ class PollLoopsCiMixin(_WorkerBase):
                     repo_label,
                     wf_name,
                     run_id_val,
-                    target,
+                    run_target,
                     canonical.id,
                 )
                 comment_body = (
@@ -658,7 +706,7 @@ class PollLoopsCiMixin(_WorkerBase):
                     f"also failed at commit "
                     f"`{run.get('head_sha', '')}` on "
                     f"{run.get('created_at', '')} "
-                    f"({wf_name} on {target})."
+                    f"({wf_name} on {run_target})."
                 )
                 try:
                     service.add_comment(canonical.id, body=comment_body)
@@ -679,7 +727,7 @@ class PollLoopsCiMixin(_WorkerBase):
                 repo_label,
                 wf_name,
                 run_id_val,
-                target,
+                run_target,
             )
 
             # 4. Fetch job logs with retry/backoff + deferral.
@@ -711,7 +759,8 @@ class PollLoopsCiMixin(_WorkerBase):
             body_parts = [
                 f"**Workflow:** {wf_name}",
                 f"**Path:** {wf_path}",
-                f"**Branch:** {target}",
+                f"**Branch:** {run_target}",
+                *([f"**Tag:** {run_target}"] if run_target != target else []),
                 f"**Run:** [{run_id_val}]({run.get('html_url', '')})",
                 f"**Commit:** `{run.get('head_sha', '')}`",
                 f"**Created:** {run.get('created_at', '')}",
@@ -768,7 +817,7 @@ class PollLoopsCiMixin(_WorkerBase):
                     repo_label,
                     wf_name,
                     run_id_val,
-                    target,
+                    run_target,
                     prior.id,
                     fingerprint,
                 )
@@ -777,7 +826,7 @@ class PollLoopsCiMixin(_WorkerBase):
                     f"also failed at commit "
                     f"`{run.get('head_sha', '')}` on "
                     f"{run.get('created_at', '')} "
-                    f"({wf_name} on {target}).\n\n"
+                    f"({wf_name} on {run_target}).\n\n"
                     f"_Fingerprint: `{fingerprint}`_"
                 )
                 try:

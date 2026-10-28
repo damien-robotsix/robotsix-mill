@@ -1737,3 +1737,110 @@ def test_account_block_run_is_suppressed_not_filed(tmp_path, monkeypatch):
     # Commit marked seen so the monitor does not re-check it every cycle.
     state = json.loads(state_path.read_text("utf-8"))
     assert "300:def" in state["seen"]
+
+
+def _tag_fake_forge(monkeypatch, branch_runs, tag_runs):
+    """Fake forge serving distinct target-branch and tag-push run lists."""
+
+    class TagFakeForge:
+        def __init__(self):
+            self.tag_globs = []
+
+        def list_workflow_runs(self, *, branch=None, head_sha=None):
+            return branch_runs
+
+        def list_tag_workflow_runs(self, *, tag_glob):
+            self.tag_globs.append(tag_glob)
+            return tag_runs
+
+        def fetch_workflow_job_logs(self, *, run_id):
+            return "gh release create: exit 4\n"
+
+        def commit_ci_conclusion(self, *, sha):
+            return None
+
+    forge = TagFakeForge()
+    monkeypatch.setattr(
+        "robotsix_mill.scm.forge.get_forge", lambda settings, repo_config=None: forge
+    )
+    return forge
+
+
+_GREEN_MAIN_RUN = {
+    "id": 10,
+    "name": "CI",
+    "workflow_id": 100,
+    "head_sha": "main01",
+    "conclusion": "success",
+    "html_url": "http://run/10",
+    "created_at": "2026-10-28T10:00:00Z",
+    "event": "push",
+    "head_branch": "main",
+}
+_RED_TAG_RUN = {
+    "id": 40662145482,
+    "name": "Release image",
+    "path": ".github/workflows/release.yml",
+    "workflow_id": 500,
+    "head_sha": "tag0123",
+    "conclusion": "failure",
+    "html_url": "http://run/40662145482",
+    "created_at": "2026-10-28T09:00:00Z",
+    "event": "push",
+    "head_branch": "v1.2.3",
+}
+
+
+def test_red_tag_run_files_once_with_green_main(tmp_path, monkeypatch):
+    """A red latest run on tag v1.2.3 + green main → exactly one
+    ``CI failure: Release image on v1.2.3`` ticket; a second pass files
+    nothing (seen key ``<workflow_id>:<head_sha>:<tag>``).
+    """
+    ctx = _ctx(tmp_path)
+    forge = _tag_fake_forge(monkeypatch, [_GREEN_MAIN_RUN], [_RED_TAG_RUN])
+    worker = Worker(ctx)
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    _run_one_cycle(worker, monkeypatch)
+    _run_one_cycle(worker, monkeypatch)
+
+    ci = [t for t in ctx.service.list() if t.source == SourceKind.CI]
+    assert [t.title for t in ci] == ["CI failure: Release image on v1.2.3"]
+    body = ctx.service.workspace(ci[0]).read_description() or ""
+    assert "**Branch:** v1.2.3" in body
+    assert "**Tag:** v1.2.3" in body
+    assert forge.tag_globs[0] == "v*"
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    seen = json.loads(state_path.read_text("utf-8"))["seen"]
+    assert "500:tag0123:v1.2.3" in seen
+
+
+def test_tag_scan_disabled_files_nothing(tmp_path, monkeypatch):
+    ctx = _ctx(tmp_path, ci_monitor_scan_tags=False)
+    forge = _tag_fake_forge(monkeypatch, [_GREEN_MAIN_RUN], [_RED_TAG_RUN])
+    worker = Worker(ctx)
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    _run_one_cycle(worker, monkeypatch)
+
+    assert [t for t in ctx.service.list() if t.source == SourceKind.CI] == []
+    assert forge.tag_globs == []
+
+
+def test_only_latest_tag_run_per_workflow_is_considered(tmp_path, monkeypatch):
+    """Newest-first listing: a green v1.2.4 run hides the older red v1.2.3."""
+    ctx = _ctx(tmp_path)
+    green_newer = {
+        **_RED_TAG_RUN,
+        "id": 2,
+        "head_sha": "tag0124",
+        "conclusion": "success",
+        "head_branch": "v1.2.4",
+    }
+    _tag_fake_forge(monkeypatch, [_GREEN_MAIN_RUN], [green_newer, _RED_TAG_RUN])
+    worker = Worker(ctx)
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+
+    _run_one_cycle(worker, monkeypatch)
+
+    assert [t for t in ctx.service.list() if t.source == SourceKind.CI] == []

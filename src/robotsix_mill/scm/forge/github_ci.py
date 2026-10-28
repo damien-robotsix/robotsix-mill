@@ -7,6 +7,7 @@ Split from ``github.py``.  Defines ``GitHubForgeCIMixin`` that
 from __future__ import annotations
 
 import base64
+import fnmatch
 import functools
 import re
 from collections.abc import Callable
@@ -569,6 +570,21 @@ class GitHubForgeCIMixin:
             head_sha=head_sha,
         )
 
+    def list_tag_workflow_runs(self, *, tag_glob: str) -> list[dict[str, Any]]:
+        """Return completed ``push`` runs whose ``head_branch`` (the tag
+        name, for a tag push) matches the fnmatch *tag_glob*.
+        """
+        owner, repo = self._owner_repo  # type: ignore[attr-defined]
+        runs = self._list_workflow_runs(
+            owner=owner, repo=repo, branch=None, head_sha=None, event="push"
+        )
+        return [
+            r
+            for r in runs
+            if r.get("event") == "push"
+            and fnmatch.fnmatchcase(r.get("head_branch") or "", tag_glob)
+        ]
+
     def get_workflow_run(self, *, run_id: int) -> dict[str, Any] | None:
         """Return a single GitHub Actions workflow run by *run_id*.
 
@@ -890,10 +906,13 @@ class GitHubForgeCIMixin:
         branch: str | None,
         head_sha: str | None,
         status: str | None = "completed",
+        event: str | None = None,
     ) -> list[dict[str, Any]]:
         params: dict[str, Any] = {"per_page": 30}
         if status is not None:
             params["status"] = status
+        if event is not None:
+            params["event"] = event
         if branch is not None:
             params["branch"] = branch
         if head_sha is not None:
