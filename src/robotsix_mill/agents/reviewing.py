@@ -464,6 +464,7 @@ def run_review_agent(
     changed_line_ranges: dict[str, list[tuple[int, int]]] | None = None,
     screenshot_path: Path | None = None,
     extra_roots: list[Path] | None = None,
+    ticket_id: str = "",
 ) -> ReviewVerdict:
     """Run a blind review of *diff* against *spec*.
 
@@ -533,6 +534,15 @@ def run_review_agent(
         from ..core.tool_wrappers import wrap_read_tools_with_consecutive_error_guard
 
         tools = wrap_read_tools_with_consecutive_error_guard(tools)
+
+    # Read-only cross-repo reads (host-side forge GETs) so a claim about
+    # another fleet repo's file is verified, not escalated to a human.
+    from .fleet_file_tools import build_fleet_file_tools
+
+    tools = [
+        *tools,
+        *build_fleet_file_tools(settings, ticket_id=ticket_id, stage="review"),
+    ]
 
     overrides: dict[str, Any] = {}
     if level is not None:

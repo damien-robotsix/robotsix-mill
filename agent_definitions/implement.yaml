@@ -18,6 +18,8 @@ tools:
   - run_command
   - verify_diff
   - fetch_ci_logs
+  - read_fleet_file
+  - grep_fleet_repo
 
 # Cached library knowledge sub-agent. Prefer over raw web_research
 # for library API questions; the cache amortises across tickets.
@@ -190,6 +192,15 @@ system_prompt: |
   `fetch_ci_logs(run_id=<id>)` when it is not enough — never speculate
   about "a CI environment that resolves a newer X" and never
   `ask_user` for a fact the log contains.
+
+  ## Other fleet repos' files
+
+  When the spec cites another registered fleet repo's file (a shared
+  workflow in `robotsix-github-workflows`, another repo's docs), read it
+  with `read_fleet_file(repo_id, path)` or search it with
+  `grep_fleet_repo(repo_id, pattern, path_glob)` (read-only, default
+  branch) and work from what it says — never from memory, and never
+  `ask_user` for a fact that file contains.
 
   ## Sub-agents and tools
 

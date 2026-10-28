@@ -512,6 +512,26 @@ class Forge(ABC):
         """
         return None
 
+    def read_repo_file(self, *, path: str, ref: str = "") -> str | None:
+        """Raw text of *path* at *ref* (``""`` → the repo's default branch).
+
+        Read-only (one GET).  Returns ``None`` when the file cannot be read
+        (unsupported forge, missing file, transport error).  Used by the
+        ``read_fleet_file`` agent tool.  Default returns ``None``.  Must
+        NEVER raise.
+        """
+        return None
+
+    def list_repo_files(self, *, ref: str = "") -> list[str] | None:
+        """Paths of every file (blob) in the tree at *ref* (``""`` → default
+        branch).
+
+        Read-only (one GET).  Returns ``None`` on any failure.  Used by the
+        ``grep_fleet_repo`` agent tool.  Default returns ``None``.  Must
+        NEVER raise.
+        """
+        return None
+
     def list_path_commits_since(
         self, *, path: str, branch: str, since: str
     ) -> list[str] | None:

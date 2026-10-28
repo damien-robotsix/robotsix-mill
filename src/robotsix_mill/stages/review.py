@@ -170,6 +170,7 @@ class ReviewStage(Stage):
                 changed_line_ranges=dm.changed_line_ranges,
                 screenshot_path=screenshot_path,
                 extra_roots=extra_roots,
+                ticket_id=ticket.id,
             )
         except Exception as e:
             log.exception("%s: review agent error", ticket.id)
