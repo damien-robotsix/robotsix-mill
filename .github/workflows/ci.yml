@@ -95,6 +95,7 @@ jobs:
   mill-specific:
     name: Mill-specific checks
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       UV_MALWARE_CHECK: "1"
     steps:
