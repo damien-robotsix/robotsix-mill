@@ -251,6 +251,27 @@ def _extract_annotations(
             summary = output.get("summary")
             text = output.get("text")
             raw_anns = output.get("annotations") or []
+            # GitHub's check-run detail never embeds the annotations: it
+            # carries ``annotations_count`` + ``annotations_url`` and the
+            # list lives behind that URL. Reading only the inline key meant
+            # every failing check reported "no annotations" — including the
+            # account-billing block ("The job was not started because recent
+            # account payments have failed …"), whose ONLY evidence is such an
+            # annotation, so the ci_fix / CI-monitor account-block gates never
+            # fired (robotsix-invest b291 / c4cd, 2026-10-28; the unseen
+            # 2026-09-18..22 outage).
+            if not raw_anns and (output.get("annotations_count") or 0) > 0:
+                ann_url = output.get("annotations_url") or (
+                    f"{api}/repos/{owner}/{repo}/check-runs/{cr_id}/annotations"
+                )
+                try:
+                    ar = client.get(ann_url, headers=headers)
+                    ar.raise_for_status()
+                    fetched = ar.json()
+                    if isinstance(fetched, list):
+                        raw_anns = fetched
+                except Exception:
+                    pass  # annotations fetch is best-effort too
             annotations = [
                 {
                     "path": a.get("path", ""),
