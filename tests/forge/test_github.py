@@ -2438,3 +2438,73 @@ def test_dispatch_workflow_failure_returns_dict(tmp_path, monkeypatch):
 
     assert result["dispatched"] is False
     assert "reason" in result
+
+
+# ---------------------------------------------------------------------------
+# required_status_checks / head_check_runs (app-aware protection diff)
+# ---------------------------------------------------------------------------
+
+
+def test_required_status_checks_merges_classic_and_ruleset_with_app_ids(
+    tmp_path, monkeypatch
+):
+    classic = {
+        "checks": [
+            {"context": "CodeQL", "app_id": 15368},
+            {"context": "Lint", "app_id": -1},
+        ]
+    }
+    rules = [
+        {"type": "deletion"},
+        {
+            "type": "required_status_checks",
+            "parameters": {
+                "required_status_checks": [
+                    {"context": "Tests", "integration_id": 15368},
+                    {"context": "Docs"},
+                ]
+            },
+        },
+    ]
+    _mock_httpx(
+        monkeypatch,
+        get_map={
+            "protection/required_status_checks": _make_response(200, classic),
+            "rules/branches/main": _make_response(200, rules),
+        },
+    )
+    assert _forge(tmp_path).required_status_checks(target_branch="main") == [
+        {"context": "CodeQL", "app_id": 15368},
+        {"context": "Lint", "app_id": None},
+        {"context": "Tests", "app_id": 15368},
+        {"context": "Docs", "app_id": None},
+    ]
+
+
+def test_required_status_checks_unprotected_returns_empty(tmp_path, monkeypatch):
+    _mock_httpx(monkeypatch, get_map={})
+    assert _forge(tmp_path).required_status_checks(target_branch="main") == []
+
+
+def test_head_check_runs_keeps_same_name_runs_from_different_apps(
+    tmp_path, monkeypatch
+):
+    runs = {
+        "check_runs": [
+            {"name": "CodeQL", "app": {"id": 57789}},
+            {"name": "CodeQL / Analyze", "app": {"id": 15368}},
+        ]
+    }
+    statuses = {"statuses": [{"context": "ci/legacy"}]}
+    _mock_httpx(
+        monkeypatch,
+        get_map={
+            "commits/abc/check-runs": _make_response(200, runs),
+            "commits/abc/status": _make_response(200, statuses),
+        },
+    )
+    assert _forge(tmp_path).head_check_runs(sha="abc") == [
+        {"name": "CodeQL", "app_id": 57789},
+        {"name": "CodeQL / Analyze", "app_id": 15368},
+        {"name": "ci/legacy", "app_id": None},
+    ]
