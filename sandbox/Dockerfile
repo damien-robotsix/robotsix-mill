@@ -1,3 +1,19 @@
+# actionlint built from source with a patched Go toolchain: the upstream
+# v1.17.0 release binaries are built with go1.27.1, whose stdlib carries
+# HIGH CVEs (crypto/x509, crypto/tls, net/http) that fail the Trivy gate.
+# Same pinned tag/commit CI runs; only the toolchain differs.
+# GOTOOLCHAIN=local stops go.mod's `toolchain go1.27.1` line from
+# downloading the vulnerable toolchain.
+FROM golang:1.27.3-bookworm@sha256:fea12ba16096adec0f699ce1c4da2154d320450e56c1f63671f95d2a3551c77b AS actionlint-build
+ARG ACTIONLINT_VERSION=1.17.0
+ARG ACTIONLINT_COMMIT=08bb2c4f0d039744455b87aef1c647fb8b66d37b
+ENV GOTOOLCHAIN=local CGO_ENABLED=0
+WORKDIR /build
+RUN git clone --depth 1 --branch "v${ACTIONLINT_VERSION}" https://github.com/kjanat/actionlint.git . \
+    && test "$(git rev-parse HEAD)" = "${ACTIONLINT_COMMIT}" \
+    && go build -trimpath -ldflags "-s -w" -o /out/actionlint ./cmd/actionlint \
+    && /out/actionlint -version
+
 FROM python:3.14-slim@sha256:c845af9399020c7e562969a13689e929074a10fd057acd1b1fad06a2fb068e97
 
 # Install the uv Rust binary (pinned to match CI's version).
@@ -82,30 +98,15 @@ RUN pip install --no-cache-dir pytest pytest-asyncio pytest-cov
 # before review instead of paying a ci_fix round. Both are pinned to exactly
 # what CI runs: zizmor to the version lint-workflows.yml installs, actionlint
 # to the release reviewdog/action-actionlint v1.79.1 bundles (the kjanat
-# fork, v1.17.0). The actionlint tarball is verified against its published
-# sha256 before extraction. Binaries land in /usr/local/bin (on PATH,
+# fork, v1.17.0), built from source in the actionlint-build stage above
+# (pinned tag + commit check). Binaries land in /usr/local/bin (on PATH,
 # world-readable) for the non-root runtime user, as with uv above.
 ARG ZIZMOR_VERSION=1.31.1
-ARG ACTIONLINT_VERSION=1.17.0
-ARG ACTIONLINT_SHA256_AMD64=620abd485a12b6ab1125b844a876414e1d5bd2af8a3125b27f82b01d0d9d6e5a
-ARG ACTIONLINT_SHA256_ARM64=9be067d6b6e2f455fd0144850520b4b1114a0a792ca6e003302c939792589345
 # hadolint ignore=DL3013
 RUN pip install --no-cache-dir "zizmor==${ZIZMOR_VERSION}" \
-    && ARCH="$(dpkg --print-architecture)" \
-    && case "$ARCH" in \
-         amd64) ALSHA="$ACTIONLINT_SHA256_AMD64" ;; \
-         arm64) ALSHA="$ACTIONLINT_SHA256_ARM64" ;; \
-         *) echo "unsupported architecture for actionlint: $ARCH" >&2; exit 1 ;; \
-       esac \
-    && curl -fsSL "https://github.com/kjanat/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${ARCH}.tar.gz" \
-        -o /tmp/actionlint.tar.gz \
-    && echo "${ALSHA}  /tmp/actionlint.tar.gz" > /tmp/actionlint.sha256 \
-    && sha256sum -c /tmp/actionlint.sha256 \
-    && tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin actionlint \
-    && chmod a+rx /usr/local/bin/actionlint \
-    && rm /tmp/actionlint.tar.gz /tmp/actionlint.sha256 \
-    && actionlint -version \
     && zizmor --version
+COPY --from=actionlint-build /out/actionlint /usr/local/bin/actionlint
+RUN actionlint -version
 
 # Dart SDK so the implement agent can run `dart format` (and other Dart
 # tooling) and commit reformatted files itself — no operator handoff.
