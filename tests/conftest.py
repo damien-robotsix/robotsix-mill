@@ -234,6 +234,10 @@ def _no_dotenv(monkeypatch, tmp_path):
         "MILL_SANDBOX_DATA_MOUNT",
         "ANTHROPIC_API_KEY",
         "CLAUDE_CODE_OAUTH_TOKEN",
+        # The gate container sets DOCKER_HOST=tcp://mill-socket-proxy:2375,
+        # which makes sandbox code shell out to a real (unresolvable)
+        # docker daemon. Tests that need it set it explicitly.
+        "DOCKER_HOST",
         # Old env vars -- strip to prevent confusion
     ):
         monkeypatch.delenv(var, raising=False)
