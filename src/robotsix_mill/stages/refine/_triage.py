@@ -736,8 +736,11 @@ def deterministic_triage_pre_checks(
     # implementation in fenced code blocks), skip the triage LLM call and
     # route directly to implement.  The expensive refine agent adds no
     # value on a spec that is already code-complete.
+    # CI-monitor drafts are exempt: their only fence is the failing run's
+    # log tail, not a proposed change, so they need a real refine
+    # diagnosis (repo fix vs transient vs human).
     threshold = s.refine_prescriptive_spec_code_lines_threshold
-    if threshold > 0:
+    if threshold > 0 and ticket.source != SourceKind.CI:
         code_lines = _count_code_block_lines(draft)
         if code_lines >= threshold:
             log.info(

@@ -191,6 +191,39 @@ def test_pre_checks_prescriptive_spec_threshold_met(ctx_factory):
     assert "prescriptive spec" in (outcome.note or "")
 
 
+def test_pre_checks_prescriptive_skipped_for_ci_log_tail(ctx_factory):
+    """A CI-monitor draft whose only fence is the failing run's log tail
+    must NOT take the prescriptive shortcut — it needs a refine diagnosis."""
+    import re
+
+    from robotsix_mill.runtime.worker.poll_loops_ci import _ci_log_body_parts
+
+    ctx = ctx_factory(refine_prescriptive_spec_code_lines_threshold=3)
+    logs = "### Job: build (id=1) — failing step: Deploy\n" + "\n".join(
+        f"2026-10-23T16:37:{i:02d}.1234567Z ##[error] HTTP 500 from Pages"
+        for i in range(30)
+    )
+    draft = "\n".join(
+        [
+            "**Workflow:** docs",
+            "**Path:** .github/workflows/docs.yml",
+            "**Branch:** main",
+            "**Run:** [123](https://github.com/o/r/actions/runs/123)",
+            "**Commit:** `abc123`",
+            "**Created:** 2026-10-23T16:37:00Z",
+            "",
+            *_ci_log_body_parts(logs, re.compile(r"\x1b\[[0-9;]*m")),
+        ]
+    )
+    assert _triage._count_code_block_lines(draft) >= 3
+    t = _ticket(ctx, "CI failure: docs on main", draft, source=SourceKind.CI)
+    ws = ctx.service.workspace(t)
+
+    outcome = _triage.deterministic_triage_pre_checks(ctx, t, draft, ws, ctx.settings)
+
+    assert outcome is None or "prescriptive spec" not in (outcome.note or "")
+
+
 def test_pre_checks_prescriptive_threshold_zero_disabled(ctx_factory):
     """With the threshold set to 0 the prescriptive shortcut is disabled —
     a code-heavy draft falls through to refine (None)."""
