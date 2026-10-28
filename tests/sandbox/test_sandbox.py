@@ -568,8 +568,8 @@ def test_dockerfile_bakes_in_dart_sdk():
 
 def test_dockerfile_bakes_in_workflow_linters_and_uvx():
     """Image smoke (text-level, no daemon): actionlint and zizmor are baked
-    in at exact pins matching CI's lint-workflows gate, the actionlint
-    tarball is checksum-verified, uvx is runtime-readable, and the build
+    in at exact pins matching CI's lint-workflows gate, actionlint is
+    built from a commit-verified source checkout, uvx is runtime-readable, and the build
     runs each tool's --version so a broken install fails the image build."""
     dockerfile = (
         Path(__file__).resolve().parents[2] / "sandbox" / "Dockerfile"
@@ -577,7 +577,9 @@ def test_dockerfile_bakes_in_workflow_linters_and_uvx():
     assert "ARG ZIZMOR_VERSION=1.31.1" in dockerfile
     assert '"zizmor==${ZIZMOR_VERSION}"' in dockerfile
     assert "ARG ACTIONLINT_VERSION=1.17.0" in dockerfile
-    assert "sha256sum -c /tmp/actionlint.sha256" in dockerfile
+    assert "ARG ACTIONLINT_COMMIT=" in dockerfile
+    assert 'test "$(git rev-parse HEAD)" = "${ACTIONLINT_COMMIT}"' in dockerfile
+    assert "COPY --from=actionlint-build /out/actionlint" in dockerfile
     assert "actionlint -version" in dockerfile
     assert "zizmor --version" in dockerfile
     assert "chmod a+rx /usr/local/bin/uv /usr/local/bin/uvx" in dockerfile
