@@ -118,6 +118,24 @@ and surface as an opaque "no changes produced" failure at implement.
 first (`resume-blocked`), then use `robotsix-mill ticket mark-done <id> --note
 "abandoned: target paths are vcs-imported"` to close the ticket and start fresh.
 
+### Infra account block on a private repo (App lacks `checks: read`)
+
+GitHub refusing to start hosted jobs (failed payment / spending limit)
+parks the ticket `BLOCKED` with a note starting `Infra account blocked`,
+and the ci_fix agent is not run. Normally the billing annotation on the
+check-run is the evidence. On a private repo, the robotsix-mill GitHub
+App needs `Checks: read` and `Commit statuses: read` to read check-runs,
+statuses and annotations. Without them those endpoints return 403. The
+forge then logs one WARNING per repo naming the missing permission, and
+the ticket still parks as an account block when every failing workflow
+run has jobs that never started (no steps).
+
+**What to do:** the mill raises a single operator escalation asking you
+to add `Checks: read` and `Commit statuses: read` to the App and to accept
+the new permissions on the installation. Until you do, a real code failure
+on that private repo can be misread as an account block, so check the
+WARNING and the run's jobs before resuming.
+
 ## Retrying tickets
 
 Transient infrastructure errors (git outages, provider 503s, connection
