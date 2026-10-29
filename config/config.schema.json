@@ -66,8 +66,10 @@
         },
         "secret_key": {
           "description": "Secret key for this Langfuse project, from the Langfuse project settings.",
+          "format": "password",
           "title": "Secret Key",
-          "type": "string"
+          "type": "string",
+          "writeOnly": true
         }
       },
       "required": [
@@ -196,8 +198,10 @@
         },
         "langfuse_secret_key": {
           "description": "Langfuse secret key for trace observability (populated from global secrets).",
+          "format": "password",
           "title": "Langfuse Secret Key",
-          "type": "string"
+          "type": "string",
+          "writeOnly": true
         },
         "max_concurrency": {
           "default": 1,
@@ -220,7 +224,9 @@
         "openrouter_api_key": {
           "anyOf": [
             {
-              "type": "string"
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
             },
             {
               "type": "null"

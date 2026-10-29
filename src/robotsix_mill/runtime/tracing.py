@@ -62,7 +62,13 @@ def _resolve_mill_langfuse() -> tuple[str, str, str, str, str] | None:
     if not lf.projects:
         return None
     name, proj = next(iter(lf.projects.items()))
-    return (lf.host, proj.public_key, proj.secret_key, proj.project_id, name)
+    return (
+        lf.host,
+        proj.public_key,
+        proj.secret_key.get_secret_value(),
+        proj.project_id,
+        name,
+    )
 
 
 # Readiness flag, derived from llmio's ``setup_langfuse_tracing`` return.
@@ -257,7 +263,10 @@ def _tracing_enabled(repo_config: RepoConfig | None = None) -> bool:
     per-repo credentials.
     """
     if repo_config is not None:
-        return bool(repo_config.langfuse_public_key and repo_config.langfuse_secret_key)
+        return bool(
+            repo_config.langfuse_public_key
+            and repo_config.langfuse_secret_key.get_secret_value()
+        )
     creds = _resolve_mill_langfuse()
     if creds is None:
         return False
@@ -290,7 +299,7 @@ def _ensure_tracing(repo_config: RepoConfig | None = None) -> None:
             repo_config.langfuse_base_url or "https://cloud.langfuse.com"
         ).rstrip("/")
         public_key = repo_config.langfuse_public_key
-        secret_key = repo_config.langfuse_secret_key
+        secret_key = repo_config.langfuse_secret_key.get_secret_value()
         project_name = repo_config.langfuse_project_name
     else:
         creds = _resolve_mill_langfuse()

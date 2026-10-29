@@ -71,6 +71,10 @@ repos:
     hooks:
       - id: shellcheck
         args: [--severity=warning]
+  - repo: https://github.com/damien-robotsix/robotsix-standards
+    rev: v0.10.0
+    hooks:
+      - id: check-secret-str
   - repo: local
     hooks:
       - id: validate-module-taxonomy

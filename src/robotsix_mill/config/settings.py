@@ -51,7 +51,7 @@ class LangfuseProjectCredentials(BaseModel):
     public_key: str = Field(
         description="Public key for this Langfuse project, from the Langfuse project settings.",
     )
-    secret_key: str = Field(
+    secret_key: SecretStr = Field(
         description="Secret key for this Langfuse project, from the Langfuse project settings.",
     )
     project_id: str = Field(
