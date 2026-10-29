@@ -41,6 +41,7 @@ def run_scope_triage_agent(
     out_of_scope_files: list[str],
     diff_summaries: dict[str, str],
     operator_resolution: str = "",
+    full_diffs: bool = False,
 ) -> ScopeTriageVerdict:
     """Triage whether out-of-scope file changes are legitimate.
 
@@ -58,6 +59,9 @@ def run_scope_triage_agent(
         diff_summaries: Mapping of file path to a summary of its diff.
         operator_resolution: The operator's resume note(s) answering a
             previous ESCALATE on this ticket; empty when there is none.
+        full_diffs: ``diff_summaries`` hold each file's FULL diff (the
+            re-ask after an ESCALATE that blamed a truncated summary);
+            rendered as a ``full-diffs`` section instead.
 
     Returns:
         A :class:`ScopeTriageVerdict` with the action, justification,
@@ -77,7 +81,7 @@ def run_scope_triage_agent(
         + "\n\n"
         + section("out-of-scope-files", out_of_scope_body)
         + "\n\n"
-        + section("diff-summaries", diff_body)
+        + section("full-diffs" if full_diffs else "diff-summaries", diff_body)
     )
     if operator_resolution:
         user_prompt += "\n\n" + section(

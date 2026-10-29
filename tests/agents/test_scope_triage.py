@@ -103,6 +103,42 @@ def test_expand_for_new_test_file(monkeypatch):
     assert result.expand_files == ["tests/test_feature.py"]
 
 
+def test_full_diffs_rendered_as_full_diffs_section(monkeypatch):
+    """full_diffs=True renders the diffs under a ``full-diffs`` section."""
+    from robotsix_mill.config import Settings
+
+    base_mod = _install_mocks(monkeypatch)
+    seen: list[str] = []
+
+    def fake_build_agent(settings, definition, tools, level, repo_dir=None, **kw):
+        class FakeAgent:
+            def run_sync(self, msg):
+                seen.append(msg)
+                return type(
+                    "R",
+                    (),
+                    {
+                        "output": ScopeTriageVerdict(
+                            action="ESCALATE", justification="x"
+                        )
+                    },
+                )()
+
+        return FakeAgent()
+
+    monkeypatch.setattr(base_mod, "build_agent_from_definition", fake_build_agent)
+    run_scope_triage_agent(
+        settings=Settings(data_dir="/tmp"),
+        ticket_spec="spec",
+        file_map=["src/a.py"],
+        out_of_scope_files=["tests/test_api.py"],
+        diff_summaries={"tests/test_api.py": "+import httpx"},
+        full_diffs=True,
+    )
+    assert "````full-diffs" in seen[0]
+    assert "````diff-summaries" not in seen[0]
+
+
 def test_reject_for_unrelated_module(monkeypatch):
     """A diff touching an unrelated module → REJECT."""
     from robotsix_mill.config import Settings

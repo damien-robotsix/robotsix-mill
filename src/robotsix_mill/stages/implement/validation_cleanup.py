@@ -14,6 +14,7 @@ that reference them off the stage class continue to resolve.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -51,6 +52,93 @@ def _spec_names_path(spec: str, path: str) -> bool:
     false negative silently deletes the ticket's deliverable.
     """
     return bool(spec) and path in spec
+
+
+# Mechanical commands whose output file a spec implies by naming the
+# command alone ("Then run `uv lock`" → ``uv.lock``).  Matched on the
+# file's basename so a sub-project lockfile (``web/package-lock.json``)
+# counts too.
+_COMMAND_OUTPUTS: tuple[tuple[re.Pattern[str], frozenset[str]], ...] = (
+    (re.compile(r"\buv\s+(?:lock|sync|add|remove)\b"), frozenset({"uv.lock"})),
+    (
+        re.compile(r"\bnpm\s+(?:install|i|ci|update)\b"),
+        frozenset({"package-lock.json"}),
+    ),
+    (re.compile(r"\bpoetry\s+(?:lock|add|remove)\b"), frozenset({"poetry.lock"})),
+    (
+        re.compile(r"\bcargo\s+(?:update|generate-lockfile)\b"),
+        frozenset({"Cargo.lock"}),
+    ),
+    (re.compile(r"\byarn(?:\s+install)?\b"), frozenset({"yarn.lock"})),
+    (re.compile(r"\bpnpm\s+(?:install|i)\b"), frozenset({"pnpm-lock.yaml"})),
+    (re.compile(r"\bgo\s+mod\s+tidy\b"), frozenset({"go.sum"})),
+)
+
+
+def _spec_command_implies_path(spec: str, path: str) -> bool:
+    """True when *spec* names a mechanical command that writes *path*.
+
+    Same strength as :func:`_spec_names_path`: biasing a lockfile the
+    spec told the agent to regenerate toward "in scope" costs nothing.
+    """
+    if not spec:
+        return False
+    name = path.rsplit("/", 1)[-1]
+    return any(name in outputs and rx.search(spec) for rx, outputs in _COMMAND_OUTPUTS)
+
+
+# An ESCALATE whose reason is "I could not see enough of the diff" is a
+# context gap, not a scope ambiguity: re-ask once with the full diff
+# before blocking (robotsix-browser 91f7 sat BLOCKED 13 h on "I can't
+# tell from the truncated summary").
+_MISSING_CONTEXT_RE = re.compile(
+    r"truncat|can(?:'|no)?t\s+tell|cannot\s+(?:tell|see|determine|verify)"
+    r"|(?:insufficient|not\s+enough|missing)\s+(?:context|diff)"
+    r"|(?:summary|diff)\s+(?:is\s+)?(?:too\s+short|cut\s+off|incomplete)",
+    re.IGNORECASE,
+)
+
+FULL_DIFF_MAX_LINES = 400
+
+
+def _is_missing_context_reason(justification: str) -> bool:
+    """True when an ESCALATE justification blames missing diff context."""
+    return bool(_MISSING_CONTEXT_RE.search(justification or ""))
+
+
+def _full_file_diff(repo_dir: Path, target: str, path: str) -> str:
+    """Return *path*'s full diff vs the branch base, capped at
+    :data:`FULL_DIFF_MAX_LINES` lines.
+
+    Diffs the merge base of ``origin/<target>`` and ``HEAD`` against the
+    working tree, so committed and uncommitted branch changes both show.
+    An untracked file (empty diff) is shown as its content instead.
+    """
+
+    def _git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(repo_dir), *args],
+            capture_output=True,
+            text=True,
+        ).stdout
+
+    base = _git("merge-base", f"origin/{target}", "HEAD").strip() or (
+        f"origin/{target}"
+    )
+    raw = _git("diff", base, "--", path)
+    if not raw.strip():
+        file_path = repo_dir / path
+        try:
+            raw = "NEW FILE (untracked — no diff vs base):\n" + file_path.read_text(
+                encoding="utf-8", errors="replace"
+            )
+        except OSError:
+            raw = "NEW FILE (untracked — unreadable)"
+    lines = raw.split("\n")
+    if len(lines) > FULL_DIFF_MAX_LINES:
+        omitted = len(lines) - FULL_DIFF_MAX_LINES
+        lines = [*lines[:FULL_DIFF_MAX_LINES], f"… ({omitted} more line(s) omitted)"]
+    return "\n".join(lines)
 
 
 class ValidationCleanupMixin:

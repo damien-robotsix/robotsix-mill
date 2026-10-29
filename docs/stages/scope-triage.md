@@ -54,6 +54,16 @@ The gate judges the spec and the diff only, so an ESCALATE used to repeat word f
 3. **Accepted files are expanded deterministically** and recorded as `scope-triage: \`<file>\` accepted by operator note <ts>`. They do not count against the EXPAND cap and do not reach the LLM.
 4. **Anything else** is passed to the classifier as operator context. If the gate ESCALATEs again, the block note includes the operator's resume note (`re-escalated despite operator resume note …`), so the loop is visible. To proceed, put the decision in the spec.
 
+## Missing-context ESCALATE: full-diff re-ask
+
+An ESCALATE that blames missing context (for example, "truncated summary" or "cannot tell from the diff") is treated as a context gap, not a scope ambiguity. Before blocking, the gate re-asks the classifier **once** with each out-of-scope file's full diff against the branch base, capped at 400 lines per file. The re-ask is rendered as a `full-diffs` section in place of `diff-summaries`.
+
+If the re-ask still ESCALATEs, the block note never repeats the "truncated" wording. It reads `scope still ambiguous after reviewing the full per-file diff`, so the operator sees the real reason.
+
+## Spec-implied lockfiles
+
+A file the spec names through a mechanical command is auto-EXPANDed, the same way a file the spec names verbatim is. For example, "run `uv lock`" implies `uv.lock`, and "npm install" implies `package-lock.json`. Other recognised commands are `poetry lock`/`add`/`remove` (`poetry.lock`), `cargo update` (`Cargo.lock`), `yarn` (`yarn.lock`), `pnpm install` (`pnpm-lock.yaml`) and `go mod tidy` (`go.sum`). Matching is on the file's basename, so `web/package-lock.json` counts too. These files never reach the classifier.
+
 ## Configuration
 
 | Knob | Env var | Default | Purpose |

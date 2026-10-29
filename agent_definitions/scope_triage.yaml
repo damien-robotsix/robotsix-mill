@@ -121,6 +121,17 @@ system_prompt: |
   - The diff is too complex to judge from the summary.
   - A reasonable person could argue either EXPAND or REJECT.
 
+  If a summary is cut off and you cannot tell what a change is for, say
+  so in `justification` (e.g. "truncated summary") — the pipeline then
+  re-asks ONCE with each file's FULL diff in a `full-diffs` section.
+  When you receive `full-diffs`, judge from it and NEVER cite a
+  truncated summary or missing context as your reason. An import added
+  to a file is EXPAND when the full diff shows it used later in that
+  same file by an in-scope change (e.g. a probe test).
+  A lockfile/generated file the spec tells the agent to regenerate via
+  a command (`uv lock` → `uv.lock`, `npm install` → `package-lock.json`)
+  is EXPAND, like a file the spec names verbatim.
+
   TIE-BREAKER: when unsure, choose ESCALATE — EXCEPT for a refactor /
   split / extraction ticket whose new out-of-scope file just relocates
   code from an in-scope file in the same package: that is EXPAND, not a
