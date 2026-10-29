@@ -299,7 +299,12 @@ def _maybe_close(
         wf,
         f_sha,
         failing_created_at=failing_created_at,
-        dispatch_is_fix=tag_scoped,
+        # A green ``workflow_dispatch`` on the failing commit is a
+        # deliberate re-run whatever the target: a red main fixed by a repo
+        # SETTING (missing secret/variable) never gets a new head, so
+        # requiring a second green parked it until an unrelated push
+        # (robotsix-linkedin 93c8, 2026-10-29).
+        dispatch_is_fix=True,
     )
     if not green_runs:
         try:
@@ -413,9 +418,10 @@ def _green_since_failure(
     green head) OR a *re-run* of the failing commit itself (``run_attempt >
     1``: a transient failure fixed by re-running the same run, which never
     produces a new head). Otherwise two consecutive greens at-or-after the
-    failing commit are required.  With *dispatch_is_fix* (tag-scoped
-    tickets, whose tag never gets a new head) a green ``workflow_dispatch``
-    run on the failing commit is a deliberate re-run and also suffices.
+    failing commit are required.  With *dispatch_is_fix* (passed for every
+    target: a tag never gets a new head, and neither does a main fixed by a
+    repo setting) a green ``workflow_dispatch`` run on the failing commit is
+    a deliberate re-run and also suffices.
 
     ``reason`` is one of ``cannot anchor`` (no completed runs for the
     workflow), ``failing head outside run window`` (the failing commit is no

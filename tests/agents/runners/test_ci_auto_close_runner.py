@@ -1019,6 +1019,45 @@ def test_green_main_does_not_close_tag_ticket(tmp_path, monkeypatch):
     assert service.get(t.id).state is State.DRAFT
 
 
+def test_green_dispatch_on_failing_main_head_closes(tmp_path, monkeypatch):
+    # A red main fixed by a repo SETTING (missing secret) never gets a new
+    # head: the operator re-runs it with workflow_dispatch on the same
+    # commit. That deliberate re-run must close the ticket on its own
+    # (robotsix-linkedin 93c8, 2026-10-29: skipped as "lone green").
+    settings, service = _prepare(
+        tmp_path,
+        monkeypatch,
+        runs=[
+            {
+                "name": "ci / tests",
+                "head_sha": "abc123",
+                "conclusion": "success",
+                "event": "workflow_dispatch",
+                "run_attempt": 1,
+                "id": 201,
+                "html_url": "https://x/run/201",
+                "created_at": "2026-09-02T02:00:00Z",
+            },
+            {
+                "name": "ci / tests",
+                "head_sha": "abc123",
+                "conclusion": "failure",
+                "event": "push",
+                "run_attempt": 1,
+                "id": 200,
+                "html_url": "https://x/run/200",
+                "created_at": "2026-09-01T00:00:00Z",
+            },
+        ],
+    )
+    t = _ci_ticket(service, settings, f_sha="abc123")
+
+    result = _run(settings)
+
+    assert result["closed"] == 1
+    assert service.get(t.id).state is State.DONE
+
+
 def test_green_dispatch_on_tag_closes_tag_ticket(tmp_path, monkeypatch):
     dispatch_green = _tag_run(
         300, "a1b2c3d4", "success", "2026-09-02T00:00:00Z", event="workflow_dispatch"
