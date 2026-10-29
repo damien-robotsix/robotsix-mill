@@ -321,6 +321,62 @@ def _eventful_states(history: Any) -> list[str]:
     return seen
 
 
+_AGENT_MD_EXISTING_HEADING_NOTE = (
+    "**Placement:** if a heading with the same text already exists in "
+    "AGENT.md on the base branch, append the rule bullet(s) to that "
+    "section; never add a second heading with the same text."
+)
+
+
+def _group_proposals_by_section(
+    proposals: list[dict[str, Any]],
+) -> list[tuple[str, list[dict[str, Any]]]]:
+    """Group AGENT.md proposals targeting the same section heading.
+
+    Headings are compared on their text (``#`` markers, surrounding
+    whitespace and case ignored), so ``## CI runners`` and
+    ``## ci runners`` land in one group. Groups keep first-seen order and
+    the first proposal's heading spelling.
+    """
+    groups: dict[str, tuple[str, list[dict[str, Any]]]] = {}
+    for prop in proposals:
+        section = prop.get("section", "")
+        key = " ".join(section.lstrip("#").split()).casefold()
+        if key not in groups:
+            groups[key] = (section, [])
+        groups[key][1].append(prop)
+    return list(groups.values())
+
+
+def _agented_proposal_ticket(
+    section: str, group: list[dict[str, Any]], origin_id: str
+) -> tuple[str, str]:
+    """Build the (title, body) of one AGENT.md follow-up ticket covering
+    every rule in *group* (all targeting *section*).
+    """
+    section_label = section.lstrip("#").strip() or "AGENT.md"
+    rule_snippet = " ".join(group[0].get("rule", "").split())
+    if len(rule_snippet) > 80:
+        rule_snippet = rule_snippet[:79].rstrip() + "…"
+    if not rule_snippet:
+        rule_snippet = "proposed rule"
+    if len(group) > 1:
+        rule_snippet += f" (+{len(group) - 1} more)"
+    title = f"AGENT.md: {section_label} — {rule_snippet}"
+
+    parts = [f"### Proposed addition to {section}\n\n"]
+    for prop in group:
+        parts.append(
+            f"> **Rule:** {prop.get('rule', '')}\n\n"
+            f"**Rationale:** {prop.get('rationale', '')}\n\n"
+        )
+    parts.append(
+        f"{_AGENT_MD_EXISTING_HEADING_NOTE}\n\n"
+        f"**Provenance:** proposed by retrospect from {origin_id}\n"
+    )
+    return title, "".join(parts)
+
+
 class RetrospectStage(Stage):
     """Run a deep-analysis retrospective on completed tickets and optionally spawn follow-up draft tickets."""
 
@@ -702,8 +758,9 @@ class RetrospectStage(Stage):
         ctx: StageContext,
         drafts_remaining: list[int],
     ) -> list[str]:
-        """File a draft ticket per AGENT.md proposal on the originating
-        repo's board.
+        """File a draft ticket per AGENT.md section heading on the
+        originating repo's board — proposals targeting the same heading
+        in one pass are grouped into a single ticket.
 
         Gated by the ``retrospect_spawn_agented_proposals`` flag.
         AGENT.md proposals are always
@@ -724,26 +781,8 @@ class RetrospectStage(Stage):
         # File on the originating repo's board only.
         target_service = ctx.service
         spawned: list[str] = []
-        for prop in proposals:
-            section = prop.get("section", "")
-            rule = prop.get("rule", "")
-            rationale = prop.get("rationale", "")
-
-            section_label = section.lstrip("#").strip() or "AGENT.md"
-            rule_snippet = " ".join(rule.split())  # collapse whitespace
-            if len(rule_snippet) > 80:
-                rule_snippet = rule_snippet[:79].rstrip() + "…"
-            if rule_snippet:
-                title = f"AGENT.md: {section_label} — {rule_snippet}"
-            else:
-                title = f"AGENT.md: {section_label} — proposed rule"
-
-            body = (
-                f"### Proposed addition to {section}\n\n"
-                f"> **Rule:** {rule}\n\n"
-                f"**Rationale:** {rationale}\n\n"
-                f"**Provenance:** proposed by retrospect from {ticket.id}\n"
-            )
+        for section, group in _group_proposals_by_section(proposals):
+            title, body = _agented_proposal_ticket(section, group, ticket.id)
 
             # Dedup: skip if an open (non-done/non-closed) ticket with the
             # same case-insensitive title already exists on the target
