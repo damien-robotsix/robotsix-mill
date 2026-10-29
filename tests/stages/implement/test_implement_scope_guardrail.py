@@ -2376,3 +2376,145 @@ def test_operator_resolution_rejecting_note_does_not_accept():
     assert res.accepted_files() == {"b.txt": "ts2"}
     res.notes.append(("ts3", "all confirmed in scope"))
     assert res.accepted_files() == {"b.txt": "ts2", _ZIZMOR: "ts3"}
+
+
+# --- missing-context ESCALATE re-ask + command-implied lockfile (91f7) ---
+
+_SPEC_91F7 = (
+    "## Problem\n\nrobotsix-browser hand-rolls its HTTP client in "
+    "`src/robotsix_browser/api.py`.\n\n## Scope\n\nMigrate it to httpx and "
+    "add a probe test. Then run `uv lock`.\n"
+)
+_TRUNCATED = (
+    "I can't tell from the truncated summary whether that import serves a "
+    "probe test, I'm escalating rather than expanding or rejecting"
+)
+
+
+def _setup_91f7(ctx_factory, tmp_path):
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "src/robotsix_browser/api.py")
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    (repo / "src" / "robotsix_browser").mkdir(parents=True)
+    (repo / "src" / "robotsix_browser" / "api.py").write_text("import httpx\n")
+    (repo / "uv.lock").write_text('version = 1\n[[package]]\nname = "httpx"\n')
+    (repo / "tests").mkdir()
+    # The import sits at the top; its only use is at line ~121, far past
+    # the 40-line summary window.
+    body = ["import httpx", ""] + [f"# filler {i}" for i in range(117)]
+    body += ["def test_probe():", "    assert httpx.get('http://x').status_code"]
+    (repo / "tests" / "test_api.py").write_text("\n".join(body) + "\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "wip")
+    return ctx, t, repo
+
+
+def _call_guardrail(ctx, t, repo):
+    return ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"src/robotsix_browser/api.py"},
+        settings=ctx.settings,
+        spec=_SPEC_91F7,
+        current_feedback=None,
+    )
+
+
+def test_scope_guardrail_91f7_replay_expands_both_files(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """uv.lock is auto-EXPANDed (spec says `uv lock`); the truncated-summary
+    ESCALATE on tests/test_api.py is re-asked with the full diff → EXPAND."""
+    ctx, t, repo = _setup_91f7(ctx_factory, tmp_path)
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    calls: list[dict] = []
+
+    def _fake_triage(
+        *,
+        settings,
+        ticket_spec,
+        file_map,
+        out_of_scope_files,
+        diff_summaries,
+        full_diffs=False,
+    ):
+        calls.append({"oos": out_of_scope_files, "diffs": diff_summaries})
+        diff = diff_summaries["tests/test_api.py"]
+        if full_diffs and "httpx.get(" in diff:
+            return ScopeTriageVerdict(
+                action="EXPAND",
+                justification="import is used by the probe test",
+                expand_files=["tests/test_api.py"],
+            )
+        assert "httpx.get(" not in diff  # summary is truncated
+        return ScopeTriageVerdict(action="ESCALATE", justification=_TRUNCATED)
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    result = _call_guardrail(ctx, t, repo)
+
+    assert len(calls) == 2
+    assert calls[0]["oos"] == ["tests/test_api.py"]  # uv.lock never reaches LLM
+    assert result.action == "skip_iteration"
+    assert result.outcome is None
+    assert {"uv.lock", "tests/test_api.py"} <= result.file_map
+
+
+def test_scope_guardrail_escalate_note_never_cites_truncated_summary(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """When the full-diff re-ask still blames missing context, the BLOCKED
+    note does not repeat the misleading "truncated summary" reason."""
+    ctx, t, repo = _setup_91f7(ctx_factory, tmp_path)
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
+
+    calls: list[bool] = []
+
+    def _fake_triage(
+        *,
+        settings,
+        ticket_spec,
+        file_map,
+        out_of_scope_files,
+        diff_summaries,
+        full_diffs=False,
+    ):
+        calls.append(full_diffs)
+        return ScopeTriageVerdict(action="ESCALATE", justification=_TRUNCATED)
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    result = _call_guardrail(ctx, t, repo)
+
+    assert calls == [False, True]
+    assert result.outcome is not None
+    assert result.outcome.next_state is State.BLOCKED
+    assert "scope-triage ESCALATE" in result.outcome.note
+    assert "truncated" not in result.outcome.note.lower()
+
+
+@pytest.mark.parametrize(
+    ("spec", "path", "expected"),
+    [
+        ("Then run `uv lock`.", "uv.lock", True),
+        ("run npm install", "web/package-lock.json", True),
+        ("Then run `uv lock`.", "package-lock.json", False),
+        ("no commands here", "uv.lock", False),
+    ],
+)
+def test_spec_command_implies_path(spec, path, expected):
+    from robotsix_mill.stages.implement.validation_cleanup import (
+        _spec_command_implies_path,
+    )
+
+    assert _spec_command_implies_path(spec, path) is expected

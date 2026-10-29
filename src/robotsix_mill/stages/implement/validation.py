@@ -34,7 +34,13 @@ from ._shared import (
     _should_skip_test_gate,
     log,
 )
-from .validation_cleanup import ValidationCleanupMixin, _spec_names_path
+from .validation_cleanup import (
+    ValidationCleanupMixin,
+    _full_file_diff,
+    _is_missing_context_reason,
+    _spec_command_implies_path,
+    _spec_names_path,
+)
 
 # The managed repo's per-repo settings file.  Unlike the standard config
 # files auto-reverted by ``_revert_standard_configs`` (in
@@ -344,8 +350,13 @@ class ValidationMixin(ValidationCleanupMixin, _ImplementStageBase):
         # biasing toward "in scope" for a spec-cited file is exactly the
         # intent (a false positive costs nothing; a false negative splits an
         # in-scope ticket).
+        # A file the spec implies via a mechanical command ("run `uv lock`"
+        # → uv.lock, "npm install" → package-lock.json) is cited the same way.
         spec_cited = {
-            f for f in changed if f not in file_map and _spec_names_path(spec, f)
+            f
+            for f in changed
+            if f not in file_map
+            and (_spec_names_path(spec, f) or _spec_command_implies_path(spec, f))
         }
         if spec_cited:
             file_map |= spec_cited
@@ -796,6 +807,27 @@ class ValidationMixin(ValidationCleanupMixin, _ImplementStageBase):
                 diff_summaries=diff_summaries,
                 **extra,
             )
+            # An ESCALATE blaming the 40-line summary is a context gap, not
+            # a scope ambiguity: re-ask ONCE with each file's full diff.
+            if verdict.action == "ESCALATE" and _is_missing_context_reason(
+                verdict.justification
+            ):
+                log.info(
+                    "%s: scope-triage ESCALATE cited missing context — "
+                    "re-asking with full per-file diffs",
+                    ticket.id,
+                )
+                verdict = st.run_scope_triage_agent(
+                    settings=settings,
+                    ticket_spec=spec,
+                    file_map=sorted(file_map),
+                    out_of_scope_files=out_of_scope,
+                    diff_summaries={
+                        p: _full_file_diff(repo_dir, target, p) for p in out_of_scope
+                    },
+                    full_diffs=True,
+                    **extra,
+                )
         except Exception as exc:
             from ...runtime.transient_errors import (
                 is_model_unavailable_error,
@@ -1045,8 +1077,16 @@ class ValidationMixin(ValidationCleanupMixin, _ImplementStageBase):
             )
 
         # ESCALATE (or agent error fall-through).
+        justification = verdict.justification if verdict is not None else ""
+        if _is_missing_context_reason(justification):
+            # The classifier already saw the full diff on the re-ask; a
+            # "truncated summary" reason would mislead the operator.
+            justification = (
+                "scope still ambiguous after reviewing the full per-file diff "
+                "— the classifier could not decide EXPAND vs REJECT"
+            )
         reason = (
-            f"scope-triage ESCALATE: {verdict.justification}"
+            f"scope-triage ESCALATE: {justification}"
             if verdict is not None
             else (
                 f"scope-triage agent error ({(triage_error or 'unknown')[:160]}) "
