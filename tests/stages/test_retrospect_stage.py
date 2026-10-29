@@ -1770,6 +1770,69 @@ def test_agented_proposals_file_tickets_on_enable(ctx_factory, monkeypatch):
         assert t.id in body
 
 
+def test_agented_proposals_same_section_grouped_into_one_ticket(
+    ctx_factory, monkeypatch
+):
+    """Replay of the 2026-10-29 robotsix-invest pass: two rules for the
+    same ``## CI runners`` heading yield ONE follow-up ticket carrying
+    both rules under a single heading, plus the instruction to reuse an
+    existing heading on the base branch."""
+    ctx = ctx_factory()
+    _agented_seams(monkeypatch)
+
+    rule_a = "Every job in GitHub workflows must set runs-on to the self-hosted runner."
+    rule_b = "Do not call a shared CI workflow that pins its own runner."
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            agented_md_proposals=[
+                {"section": "## CI runners", "rule": rule_a, "rationale": "PR 415."},
+                {"section": "## ci runners ", "rule": rule_b, "rationale": "PR 416."},
+            ]
+        ),
+    )
+
+    t = _ticket(ctx)
+    RetrospectStage().run(t, ctx)
+
+    spawned = [tk for tk in ctx.service.list() if tk.id != t.id]
+    assert len(spawned) == 1
+    assert spawned[0].title.startswith("AGENT.md: CI runners — ")
+    assert "(+1 more)" in spawned[0].title
+    body = ctx.service.workspace(spawned[0]).read_description()
+    assert rule_a in body and rule_b in body
+    assert "PR 415." in body and "PR 416." in body
+    assert body.count("### Proposed addition to") == 1
+    assert body.lower().count("ci runners") == 1
+    assert "already exists in AGENT.md on the base branch" in body
+    assert "never add a second heading with the same text" in body
+
+
+def test_agented_proposal_single_rule_reuses_existing_heading(ctx_factory, monkeypatch):
+    """A single-rule proposal also tells the writer to append to an
+    existing heading rather than add a duplicate one."""
+    ctx = ctx_factory()
+    _agented_seams(monkeypatch)
+    monkeypatch.setattr(
+        retrospecting,
+        "run_retrospect_agent",
+        lambda **kwargs: _result(
+            agented_md_proposals=[
+                {"section": "## Git / CI", "rule": "Rebase first.", "rationale": "x"}
+            ]
+        ),
+    )
+
+    t = _ticket(ctx)
+    RetrospectStage().run(t, ctx)
+
+    (spawned,) = [tk for tk in ctx.service.list() if tk.id != t.id]
+    assert spawned.title == "AGENT.md: Git / CI — Rebase first."
+    body = ctx.service.workspace(spawned).read_description()
+    assert "append the rule bullet(s) to that section" in body
+
+
 def test_agented_proposal_tickets_gated_by_setting(ctx_factory, monkeypatch):
     """When retrospect_spawn_agented_proposals is disabled, no proposal
     tickets are filed (and no candidates file is written)."""
