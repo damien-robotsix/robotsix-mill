@@ -794,7 +794,7 @@ class ValidationMixin(ValidationCleanupMixin, _ImplementStageBase):
 
         triage_error: str | None = None
         try:
-            extra: dict[str, str] = (
+            extra: dict[str, Any] = (
                 {"operator_resolution": resolution.render()}
                 if resolution is not None
                 else {}
