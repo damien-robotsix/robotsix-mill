@@ -128,3 +128,50 @@ def test_repo_setting_block_classifier():
     note = repo_setting_block_note("o/r", "Dependency graph")
     assert note.startswith(REPO_SETTING_BLOCK_MARKER)
     assert "https://github.com/o/r/settings/security_analysis" in note
+
+
+def _stepless_entry(name):
+    return {
+        "name": name,
+        "annotations": [],
+        "checks_unreadable": True,
+        "jobs": [
+            {
+                "name": "job",
+                "conclusion": "failure",
+                "steps": [],
+                "runner_name": None,
+            }
+        ],
+    }
+
+
+def test_unreadable_checks_with_all_jobs_stepless_is_account_blocked():
+    """Private repo, App lacks ``checks: read``: no annotation visible, but
+    no job of any failing workflow started → the billing refusal."""
+    run = {"failing": [_stepless_entry("CI"), _stepless_entry("Lint")]}
+    assert classify_ci_run(run) == INFRA_ACCOUNT_BLOCKED
+    top = {"checks_unreadable": True, "failing": [dict(_stepless_entry("CI"))]}
+    del top["failing"][0]["checks_unreadable"]
+    assert classify_ci_run(top) == INFRA_ACCOUNT_BLOCKED
+
+
+def test_unreadable_checks_with_a_started_job_is_not_blocked():
+    started = _stepless_entry("Lint")
+    started["jobs"].append(
+        {"name": "x", "conclusion": "failure", "steps": [{"name": "Run"}]}
+    )
+    assert classify_ci_run({"failing": [_stepless_entry("CI"), started]}) is None
+
+
+def test_unreadable_checks_without_job_data_is_not_blocked():
+    entry = _stepless_entry("CI")
+    entry["jobs"] = []
+    assert classify_ci_run({"failing": [entry]}) is None
+    assert classify_ci_run({"checks_unreadable": True, "failing": []}) is None
+
+
+def test_stepless_jobs_with_readable_checks_and_no_annotation_is_not_blocked():
+    entry = _stepless_entry("CI")
+    del entry["checks_unreadable"]
+    assert classify_ci_run({"failing": [entry]}) is None

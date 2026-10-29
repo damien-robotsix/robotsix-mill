@@ -99,3 +99,29 @@ def escalate_repo_setting_block(
     except Exception:
         log.exception("repo_setting_block: could not persist escalation marker")
     return True
+
+
+# The App permissions are installation-wide, so one escalation covers every
+# private repo whose check-runs/statuses/annotations read 403.
+_APP_PERMISSION_SUBJECT = "robotsix-mill GitHub App"
+_APP_PERMISSION_SETTING = "Checks: read + Commit statuses: read"
+
+
+def escalate_app_checks_permission(settings: Settings, ticket_id: str) -> bool:
+    """Escalate the App's missing ``checks``/``statuses`` read once."""
+    message = (
+        "OPERATOR ESCALATION — the robotsix-mill GitHub App cannot read "
+        "check-runs / commit statuses / check-run annotations on private "
+        "repos (HTTP 403), so CI failure detail (including the GitHub "
+        "billing-block annotation) is invisible. Add 'Checks: read' and "
+        "'Commit statuses: read' to the robotsix-mill App's repository "
+        "permissions and accept the new permissions on the installation. "
+        f"First seen on ticket {ticket_id}."
+    )
+    return escalate_repo_setting_block(
+        settings,
+        _APP_PERMISSION_SUBJECT,
+        _APP_PERMISSION_SETTING,
+        ticket_id,
+        message=message,
+    )
