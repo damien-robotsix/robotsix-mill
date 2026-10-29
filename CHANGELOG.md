@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.21.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.20.0...v0.21.0) (2026-10-29)
+
+
+### Features
+
+* ci_monitor: watch tag-triggered release workflows, not only main — auto-mail's Release image job was red on v0.10.0/v0.11.0/v0.11.1 unseen (20261028T153808Z-ci-monitor-watch-tag-triggered-release-w-380c) ([#3515](https://github.com/damien-robotsix/robotsix-mill/issues/3515)) ([509c56d](https://github.com/damien-robotsix/robotsix-mill/commit/509c56da27c6c17a03b24b9cd13bbca88f813117))
+
+
+### Bug Fixes
+
+* **ci-auto-close:** a green workflow_dispatch on the failing head closes main tickets too ([#3518](https://github.com/damien-robotsix/robotsix-mill/issues/3518)) ([1938194](https://github.com/damien-robotsix/robotsix-mill/commit/1938194882fc092dee31a9fce5a33e0b31c03d81))
+* forge: surface a missing App `checks`/`statuses` read permission instead of silently treating private-repo check-runs as absent (20261029T073241Z-forge-surface-a-missing-app-checks-statu-3e16) ([#3517](https://github.com/damien-robotsix/robotsix-mill/issues/3517)) ([c6e724f](https://github.com/damien-robotsix/robotsix-mill/commit/c6e724f5654ecb4a3066e684661b95259f1ea44b))
+* **forge:** fetch check-run annotations from the annotations endpoint ([#3514](https://github.com/damien-robotsix/robotsix-mill/issues/3514)) ([77fde3d](https://github.com/damien-robotsix/robotsix-mill/commit/77fde3d28ea73933871b43d7d2d915b223b3185b))
+* merge stage: when mergeable_state=blocked with green checks, diff required status contexts (incl. app id) against head check-runs and name the renamed/removed context (20261028T113626Z-merge-stage-when-mergeable-state-blocked-3948) ([#3510](https://github.com/damien-robotsix/robotsix-mill/issues/3510)) ([ec03fb0](https://github.com/damien-robotsix/robotsix-mill/commit/ec03fb098c543a933d4ce7fc976268fdea0e6e89))
+* scope-triage: read the full per-file diff before ESCALATE instead of deciding from a truncated summary (20261029T065026Z-scope-triage-read-the-full-per-file-diff-81c5) ([#3516](https://github.com/damien-robotsix/robotsix-mill/issues/3516)) ([9314aa2](https://github.com/damien-robotsix/robotsix-mill/commit/9314aa2f2c0dd2ed261470f759e6039e5a265b2d))
+
 ## [0.20.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.19.1...v0.20.0) (2026-10-28)
 
 
