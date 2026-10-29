@@ -68,7 +68,7 @@ def test_global_langfuse_configure_every_repo(tmp_path):
     for rid in ("bare", "has_stale_block"):
         r = reg.repos[rid]
         assert r.langfuse_public_key == "pk-global"
-        assert r.langfuse_secret_key == "sk-global"
+        assert r.langfuse_secret_key.get_secret_value() == "sk-global"
         assert r.langfuse_project_name == "robotsix-mill"
         assert r.langfuse_base_url == "https://lf.example.com"
 

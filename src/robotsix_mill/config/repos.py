@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
 
 class CrossRepoTarget(BaseModel):
@@ -68,7 +68,7 @@ class RepoConfig(BaseModel):
     langfuse_public_key: str = Field(
         description="Langfuse public key for trace observability (populated from global secrets)."
     )
-    langfuse_secret_key: str = Field(
+    langfuse_secret_key: SecretStr = Field(
         description="Langfuse secret key for trace observability (populated from global secrets)."
     )
     langfuse_base_url: str = Field(
@@ -80,7 +80,7 @@ class RepoConfig(BaseModel):
     # They are identical across every repo — there is no per-repo Langfuse
     # configuration.
     # Per-repo OpenRouter inference key.
-    openrouter_api_key: str | None = Field(
+    openrouter_api_key: SecretStr | None = Field(
         None,
         description="Per-repo OpenRouter API key override. Unset falls back to the global key.",
     )
@@ -462,7 +462,7 @@ def _apply_global_langfuse(repos: dict[str, RepoConfig]) -> RepoConfig | None:
         return None
     name, proj = next(iter(lf.projects.items()))
     pk, sk = proj.public_key, proj.secret_key
-    if not (pk and sk):
+    if not (pk and sk.get_secret_value()):
         return None
     project_name = name
     project_id = proj.project_id

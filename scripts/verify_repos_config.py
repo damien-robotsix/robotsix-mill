@@ -78,7 +78,7 @@ def main() -> int:
             f"langfuse_public_key is too short ({len(pk)} chars, expected ≥ 20)"
         )
 
-    sk = repo.langfuse_secret_key
+    sk = repo.langfuse_secret_key.get_secret_value()
     if not sk:
         errors.append("langfuse_secret_key is empty")
     elif not sk.startswith("sk-lf-"):

@@ -50,7 +50,7 @@ def run_langfuse_cleanup_pass(
             "/"
         )
         public_key = repo_config.langfuse_public_key
-        secret_key = repo_config.langfuse_secret_key
+        secret_key = repo_config.langfuse_secret_key.get_secret_value()
         label = repo_config.repo_id
     else:
         lf = settings.langfuse
@@ -60,7 +60,7 @@ def run_langfuse_cleanup_pass(
         _, proj = next(iter(lf.projects.items()))
         host = (lf.host or "https://cloud.langfuse.com").rstrip("/")
         public_key = proj.public_key
-        secret_key = proj.secret_key
+        secret_key = proj.secret_key.get_secret_value()
         label = "default"
 
     if not (public_key and secret_key):

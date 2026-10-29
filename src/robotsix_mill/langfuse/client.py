@@ -68,11 +68,11 @@ def _build_read_client(
             return None
         _, proj = next(iter(lf.projects.items()))
         public_key = proj.public_key
-        secret_key = proj.secret_key
+        secret_key = proj.secret_key.get_secret_value()
         base_url = lf.host
     else:
         public_key = repo_config.langfuse_public_key
-        secret_key = repo_config.langfuse_secret_key
+        secret_key = repo_config.langfuse_secret_key.get_secret_value()
         base_url = repo_config.langfuse_base_url
         if not (public_key and secret_key):
             return None
