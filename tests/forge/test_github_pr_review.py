@@ -1853,6 +1853,136 @@ def test_extract_annotations_success():
     assert result["annotations"][0]["start_line"] == 42
 
 
+def test_extract_annotations_fetches_annotations_endpoint():
+    """Real GitHub shape: the detail carries ``annotations_count`` and
+    ``annotations_url`` but NO inline ``annotations`` list — the list is
+    fetched from that URL (the account-billing block lives there)."""
+    detail_data = {
+        "output": {
+            "title": None,
+            "summary": None,
+            "text": None,
+            "annotations_count": 2,
+            "annotations_url": "https://api.github.com/repos/o/r/check-runs/123/annotations",
+        },
+    }
+    annotations_data = [
+        {
+            "path": ".github",
+            "blob_href": "https://github.com/o/r/blob/abc/.github",
+            "start_line": 1,
+            "end_line": 1,
+            "annotation_level": "failure",
+            "title": "",
+            "message": (
+                "The job was not started because recent account payments "
+                "have failed or your spending limit needs to be increased."
+            ),
+            "raw_details": "",
+        },
+        {
+            "path": ".github",
+            "start_line": 1,
+            "end_line": 1,
+            "annotation_level": "warning",
+            "message": "The ubuntu-latest label will migrate to Ubuntu 26",
+        },
+    ]
+    calls: list[str] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def __init__(self, data):
+            self._data = data
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self._data
+
+    class FakeClient:
+        def get(self, url, headers=None):
+            calls.append(url)
+            if url.endswith("/annotations"):
+                return FakeResponse(annotations_data)
+            return FakeResponse(detail_data)
+
+    cr = {"id": 123, "name": "CI / Tests", "conclusion": "failure"}
+    result = _extract_annotations(
+        FakeClient(), "https://api.github.com", "o", "r", {}, cr
+    )
+    assert calls == [
+        "https://api.github.com/repos/o/r/check-runs/123",
+        "https://api.github.com/repos/o/r/check-runs/123/annotations",
+    ]
+    assert [a["message"][:30] for a in result["annotations"]] == [
+        "The job was not started becaus",
+        "The ubuntu-latest label will m",
+    ]
+    assert result["annotations"][0]["level"] == "failure"
+
+
+def test_extract_annotations_zero_count_skips_endpoint():
+    """``annotations_count: 0`` → no second request."""
+    calls: list[str] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"output": {"summary": "x", "annotations_count": 0}}
+
+    class FakeClient:
+        def get(self, url, headers=None):
+            calls.append(url)
+            return FakeResponse()
+
+    cr = {"id": 9, "name": "lint"}
+    result = _extract_annotations(
+        FakeClient(), "https://api.github.com", "o", "r", {}, cr
+    )
+    assert len(calls) == 1
+    assert result["annotations"] == []
+
+
+def test_extract_annotations_endpoint_error_is_best_effort():
+    """A failing annotations fetch keeps the detail's summary and yields []."""
+
+    class FakeDetail:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"output": {"summary": "boom", "annotations_count": 1}}
+
+    class FakeErr:
+        status_code = 403
+
+        def raise_for_status(self):
+            raise RuntimeError("403")
+
+        def json(self):
+            return {}
+
+    class FakeClient:
+        def get(self, url, headers=None):
+            return FakeErr() if url.endswith("/annotations") else FakeDetail()
+
+    cr = {"id": 9, "name": "lint"}
+    result = _extract_annotations(
+        FakeClient(), "https://api.github.com", "o", "r", {}, cr
+    )
+    assert result["summary"] == "boom"
+    assert result["annotations"] == []
+
+
 def test_extract_annotations_http_error():
     """HTTP error from detail fetch → empty result (best-effort, no exception)."""
 
