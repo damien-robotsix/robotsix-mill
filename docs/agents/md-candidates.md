@@ -41,6 +41,16 @@ a draft ticket on the audited repo proposing the `AGENT.md` edit. Rejecting
 moves it to `REJECTED` and runs nothing. Once acted on, a candidate stays
 in the file as an audit trail (visibility is controlled by the UI filter).
 
+### Grouping proposals by section
+
+Proposals that target the same `AGENT.md` heading in one retrospect pass
+are grouped into a single draft ticket, with each rule as its own block
+under that heading. Headings are matched on their text (leading `#`
+markers, surrounding whitespace and case ignored), so `## CI runners` and
+`## ci runners` count as one section. The drafted ticket tells the writer
+to append each rule bullet to an existing heading of the same text on the
+base branch, and never to add a second heading with that text.
+
 ## The AGENT.md panel (board UI)
 
 A `📋 AGENT.md` button sits in the board toolbar header. Clicking it
