@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import fnmatch
 import functools
+import logging
 import re
 from collections.abc import Callable
 from typing import Any
@@ -22,6 +23,42 @@ from ._log_utils import (
     _slice_log_to_step,
     _strip_runner_noise,
 )
+
+log = logging.getLogger(__name__)
+
+# App permission each endpoint needs. On a PRIVATE repo an installation
+# without ``checks``/``statuses`` gets a 403 from these endpoints (public
+# repos are readable regardless), which hides the billing-block annotation.
+_ENDPOINT_PERMISSION = {
+    "check-runs": "checks: read",
+    "annotations": "checks: read",
+    "status": "statuses: read",
+}
+
+# (owner/repo, permission) pairs already warned about in this process.
+_warned_unreadable: set[tuple[str, str]] = set()
+
+
+def _note_unreadable(
+    owner: str, repo: str, endpoint: str, seen: set[str] | None = None
+) -> None:
+    """Record a 403 on *endpoint*; WARN once per (repo, missing permission)."""
+    if seen is not None:
+        seen.add(endpoint)
+    permission = _ENDPOINT_PERMISSION[endpoint]
+    key = (f"{owner}/{repo}", permission)
+    if key in _warned_unreadable:
+        return
+    _warned_unreadable.add(key)
+    log.warning(
+        "GitHub App installation lacks '%s' on %s/%s: GET %s returned 403, so "
+        "CI check detail is unreadable (add the permission to the App and "
+        "accept it on the installation)",
+        permission,
+        owner,
+        repo,
+        endpoint,
+    )
 
 
 def _trigger_event_names(on: Any) -> list[str] | None:
@@ -389,6 +426,7 @@ def _fetch_run_job_failures(
     repo: str,
     headers: dict[str, Any],
     run_id: Any,
+    unreadable: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Best-effort ``(failed_jobs, annotations)`` for a workflow run.
 
@@ -398,6 +436,8 @@ def _fetch_run_job_failures(
     started (GitHub billing / spending-limit block) has an empty ``steps``
     array and carries the refusal reason ONLY as such an annotation. Any
     error resolves to empty lists so a flaky API never breaks the gate.
+    A 403 on the annotations endpoint (App lacks ``checks: read``) is
+    recorded in *unreadable*.
     """
     if run_id is None:
         return [], []
@@ -426,6 +466,8 @@ def _fetch_run_job_failures(
                 f"{api}/repos/{owner}/{repo}/check-runs/{job_id}/annotations",
                 headers=headers,
             )
+            if ar.status_code == 403:
+                _note_unreadable(owner, repo, "annotations", unreadable)
             ar.raise_for_status()
             raw_anns = ar.json() or []
         except Exception:
@@ -524,6 +566,17 @@ def _merge_workflow_run_failures(
                 "text": None,
                 "annotations": annotations,
                 "conclusion": run.get("conclusion"),
+                # Actions jobs API (``actions: read``) — readable even when
+                # check-runs are not; ``classify_ci_run`` keys on ``steps``.
+                "jobs": [
+                    {
+                        "name": j.get("name"),
+                        "conclusion": j.get("conclusion"),
+                        "steps": j.get("steps"),
+                        "runner_name": j.get("runner_name"),
+                    }
+                    for j in failed_jobs
+                ],
             }
         )
     result["conclusion"] = "failure"
@@ -791,7 +844,9 @@ class GitHubForgeCIMixin:
             # A 403 here means the App installation lacks ``checks: read``
             # for this repo. That's a config gap, not a transient error
             # — treat it as "no check_runs visible" and fall through to
-            # statuses + no-CI handling.
+            # statuses + no-CI handling, but WARN once and flag the result
+            # ``checks_unreadable`` so the billing-block gate can still fire.
+            unreadable: set[str] = set()
             check_runs: list[dict[str, Any]] = []
             cr_resp = c.get(
                 f"{api}/repos/{owner}/{repo}/commits/{sha}/check-runs",
@@ -800,7 +855,9 @@ class GitHubForgeCIMixin:
             )
             if cr_resp.status_code == 401:
                 continue
-            if cr_resp.status_code != 403:
+            if cr_resp.status_code == 403:
+                _note_unreadable(owner, repo, "check-runs", unreadable)
+            else:
                 cr_resp.raise_for_status()
                 check_runs = cr_resp.json().get("check_runs", [])
 
@@ -816,7 +873,9 @@ class GitHubForgeCIMixin:
             )
             if st_resp.status_code == 401:
                 continue
-            if st_resp.status_code != 403:
+            if st_resp.status_code == 403:
+                _note_unreadable(owner, repo, "status", unreadable)
+            else:
                 st_resp.raise_for_status()
                 statuses_data = st_resp.json()
                 status_runs = _statuses_to_check_runs(statuses_data)
@@ -893,9 +952,21 @@ class GitHubForgeCIMixin:
                 if wf_runs is not None
                 else self._safe_list_workflow_runs(owner, repo, sha),
                 functools.partial(
-                    _fetch_run_job_failures, c, api, owner, repo, headers
+                    _fetch_run_job_failures,
+                    c,
+                    api,
+                    owner,
+                    repo,
+                    headers,
+                    unreadable=unreadable,
                 ),
             )
+            if unreadable:
+                result["checks_unreadable"] = True
+                # ci_fix classifies on the ``failing`` list alone.
+                failing_entries: Any = result.get("failing") or []
+                for entry in failing_entries:
+                    entry["checks_unreadable"] = True
             result["_sha"] = sha
             return result
         return None

@@ -2585,6 +2585,80 @@ def test_infra_account_block_parks_without_running_agent(tmp_path, monkeypatch):
     assert INFRA_ACCOUNT_BLOCK_MARKER in (out.note or "")
 
 
+def test_unreadable_checks_stepless_runs_park_and_escalate_permission_once(
+    tmp_path, monkeypatch
+):
+    """b291 replay: check-runs 403 (App lacks ``checks: read``), two workflow
+    runs whose jobs never started → BLOCKED with the account-block marker,
+    ci_fix agent never runs, App-permission gap escalated once."""
+    from robotsix_mill.agents.runners import repo_setting_block_runner as rsb
+    from robotsix_mill.stages.ci_fix_helpers import _FailingContext
+    from robotsix_mill.stages.ci_infra_block import INFRA_ACCOUNT_BLOCK_MARKER
+
+    ctx = _gh(tmp_path)
+    t = _fixing_ci(ctx)
+    stage = CIFixStage()
+
+    def _entry(name, url):
+        return {
+            "name": name,
+            "summary": (
+                "Workflow run concluded 'failure': its jobs never started "
+                f"(no steps, no annotations). {url}"
+            ),
+            "text": None,
+            "annotations": [],
+            "conclusion": "failure",
+            "jobs": [
+                {
+                    "name": "build",
+                    "conclusion": "failure",
+                    "steps": [],
+                    "runner_name": None,
+                }
+            ],
+            "checks_unreadable": True,
+        }
+
+    fctx = _FailingContext(
+        repo_dir=str(tmp_path),
+        branch=t.branch,
+        failing_summary="CI\nLint Dockerfile\n",
+        failing=[
+            _entry("CI", "http://run/501"),
+            _entry("Lint Dockerfile", "http://run/502"),
+        ],
+    )
+    monkeypatch.setattr(stage, "_resolve_clone_and_status", lambda ticket, c: fctx)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix._emit_ci_failure_event",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix._check_upstream_ci_breakage",
+        lambda *a, **k: None,
+    )
+
+    def _boom(*a, **k):
+        raise AssertionError("ci_fix agent must NOT run for an account block")
+
+    monkeypatch.setattr(stage, "_run_agent_and_finalize", _boom)
+    calls: list[tuple] = []
+    monkeypatch.setattr(rsb, "_default_escalate", lambda *a: calls.append(a))
+
+    out = stage.run(t, ctx)
+    out2 = stage.run(t, ctx)
+
+    for o in (out, out2):
+        assert o.next_state is State.BLOCKED
+        assert INFRA_ACCOUNT_BLOCK_MARKER in (o.note or "")
+    assert len(calls) == 1
+    message = calls[0][3]
+    assert "Checks: read" in message
+    assert "Commit statuses: read" in message
+    assert "installation" in message
+
+
 # --- Rebase push retries once on a stale installation token ---------------
 
 _PUSH_403 = "remote: Permission to o/r.git denied to mill[bot].\nfatal: 403"

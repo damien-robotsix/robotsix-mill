@@ -24,7 +24,10 @@ from typing import Any
 from ..agents.ci_fixing import CiFixResult, run_ci_fix_agent
 from ..agents.runners.diagnostic_events import emit_diagnostic_event
 from ..agents.runners.pass_runner import load_memory, persist_memory
-from ..agents.runners.repo_setting_block_runner import escalate_repo_setting_block
+from ..agents.runners.repo_setting_block_runner import (
+    escalate_app_checks_permission,
+    escalate_repo_setting_block,
+)
 from ..config import target_branch_for
 from ..core.models import SourceKind, Ticket
 from ..core.states import State
@@ -85,6 +88,7 @@ from .ci_fix_helpers import (
 )
 from .ci_infra_block import (
     INFRA_ACCOUNT_BLOCKED,
+    checks_unreadable,
     classify_ci_run,
     classify_repo_setting_block,
     infra_account_block_note,
@@ -414,6 +418,11 @@ class CIFixStage(Stage):
         # signature from the failing checks' annotations and park the ticket
         # immediately; the account-block recovery pass raises a single
         # fleet-wide escalation and auto-resumes once hosted CI works again.
+        # On a private repo whose App lacks ``checks: read`` the annotation is
+        # a 403; escalate that permission gap once (the classifier then keys
+        # on every job being stepless).
+        if checks_unreadable({"failing": failing}):
+            escalate_app_checks_permission(ctx.settings, ticket.id)
         if classify_ci_run({"failing": failing}) == INFRA_ACCOUNT_BLOCKED:
             log.warning(
                 "%s: CI refused by GitHub (account/billing block) — parking "

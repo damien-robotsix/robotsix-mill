@@ -711,3 +711,180 @@ def test_check_status_green_workflow_run_stays_green(tmp_path, monkeypatch):
     assert result is not None
     assert result["conclusion"] == "success"
     assert result["failing"] == []
+
+
+_FORBIDDEN = {
+    "message": "Resource not accessible by integration",
+    "documentation_url": "https://docs.github.com/rest/checks/runs",
+    "status": "403",
+}
+
+
+def _actions_job(job_id, name):
+    """Real-shaped Actions jobs-API entry for a job GitHub refused to start."""
+    return {
+        "id": job_id,
+        "name": name,
+        "status": "completed",
+        "conclusion": "failure",
+        "started_at": "2026-10-28T02:31:02Z",
+        "completed_at": "2026-10-28T02:31:02Z",
+        "steps": [],
+        "labels": ["ubuntu-latest"],
+        "runner_id": None,
+        "runner_name": None,
+        "runner_group_id": None,
+        "runner_group_name": None,
+    }
+
+
+def _private_repo_unreadable_get_map():
+    """b291 replay: private repo, App without ``checks``/``statuses`` read —
+    check-runs, status and annotations all 403; two workflow runs whose
+    jobs were all refused before starting (billing block)."""
+    detail_resp = {
+        "number": 402,
+        "merged": False,
+        "state": "open",
+        "html_url": "http://pr/402",
+        "mergeable": True,
+        "head": {"sha": "abc123"},
+    }
+    runs_resp = {
+        "workflow_runs": [
+            {
+                "id": 501,
+                "name": "CI",
+                "workflow_id": 55,
+                "head_sha": "abc123",
+                "status": "completed",
+                "conclusion": "failure",
+                "html_url": "http://run/501",
+                "created_at": "2026-10-28T02:31:00Z",
+                "event": "pull_request",
+                "head_branch": "feature/x",
+            },
+            {
+                "id": 502,
+                "name": "Lint Dockerfile",
+                "workflow_id": 56,
+                "head_sha": "abc123",
+                "status": "completed",
+                "conclusion": "failure",
+                "html_url": "http://run/502",
+                "created_at": "2026-10-28T02:31:00Z",
+                "event": "pull_request",
+                "head_branch": "feature/x",
+            },
+        ]
+    }
+    return {
+        "repos/o/r/pulls/402": _make_response(200, detail_resp),
+        "repos/o/r/pulls": _make_response(200, [{"number": 402}]),
+        "commits/abc123/check-runs": _make_response(403, _FORBIDDEN),
+        "commits/abc123/status": _make_response(403, _FORBIDDEN),
+        "actions/runs/501/jobs": _make_response(
+            200, {"jobs": [_actions_job(8001, "test"), _actions_job(8002, "lint")]}
+        ),
+        "actions/runs/502/jobs": _make_response(
+            200, {"jobs": [_actions_job(8003, "hadolint")]}
+        ),
+        "annotations": _make_response(403, _FORBIDDEN),
+        "actions/runs": _make_response(200, runs_resp),
+    }
+
+
+@pytest.fixture
+def _forge_ci_log(monkeypatch):
+    """Capture github_ci WARNINGs (handler on the logger itself, so it works
+    whether or not the package logger propagates) with a clean dedup set."""
+    import logging
+
+    from robotsix_mill.scm.forge import github_ci
+
+    monkeypatch.setattr(github_ci, "_warned_unreadable", set())
+    records: list[logging.LogRecord] = []
+
+    class _H(logging.Handler):
+        def emit(self, record):
+            records.append(record)
+
+    h = _H(level=logging.WARNING)
+    github_ci.log.addHandler(h)
+    monkeypatch.setattr(github_ci.log, "level", logging.NOTSET)
+    yield records
+    github_ci.log.removeHandler(h)
+
+
+def test_check_status_checks_unreadable_stepless_runs_account_blocked(
+    tmp_path, monkeypatch, _forge_ci_log
+):
+    """403 on check-runs/status/annotations → ``checks_unreadable`` flag and
+    stepless jobs threaded into each failing entry → INFRA_ACCOUNT_BLOCKED."""
+    from robotsix_mill.stages.ci_infra_block import (
+        INFRA_ACCOUNT_BLOCKED,
+        classify_ci_run,
+    )
+
+    _mock_httpx(monkeypatch, get_map=_private_repo_unreadable_get_map())
+
+    result = _forge(tmp_path).check_status(source_branch="feature/x")
+    assert result is not None
+    assert result["conclusion"] == "failure"
+    assert result["checks_unreadable"] is True
+    assert {f["name"] for f in result["failing"]} == {"CI", "Lint Dockerfile"}
+    for entry in result["failing"]:
+        assert entry["annotations"] == []
+        assert entry["checks_unreadable"] is True
+        assert entry["jobs"]
+        assert all(j["steps"] == [] for j in entry["jobs"])
+        assert all(j["runner_name"] is None for j in entry["jobs"])
+    assert classify_ci_run(result) == INFRA_ACCOUNT_BLOCKED
+    # ci_fix classifies on the failing list alone.
+    assert classify_ci_run({"failing": result["failing"]}) == INFRA_ACCOUNT_BLOCKED
+
+
+def test_check_runs_403_warns_once_per_repo_naming_permission(
+    tmp_path, monkeypatch, _forge_ci_log
+):
+    """A 403 on check-runs logs exactly one WARNING per repo naming
+    ``checks: read``, however many times CI is polled."""
+    get_map = _private_repo_unreadable_get_map()
+    get_map["commits/abc123/status"] = _make_response(200, {"statuses": []})
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    forge.check_status(source_branch="feature/x")
+    forge.check_status(source_branch="feature/x")
+
+    msgs = [r.getMessage() for r in _forge_ci_log if r.levelname == "WARNING"]
+    checks = [m for m in msgs if "checks: read" in m]
+    assert len(checks) == 1
+    assert "o/r" in checks[0]
+    assert not any("statuses: read" in m for m in msgs)
+
+
+def test_status_403_warns_naming_statuses_permission(
+    tmp_path, monkeypatch, _forge_ci_log
+):
+    _mock_httpx(monkeypatch, get_map=_private_repo_unreadable_get_map())
+
+    forge = _forge(tmp_path)
+    forge.check_status(source_branch="feature/x")
+    forge.check_status(source_branch="feature/x")
+
+    msgs = [r.getMessage() for r in _forge_ci_log if r.levelname == "WARNING"]
+    assert len([m for m in msgs if "statuses: read" in m]) == 1
+    assert len([m for m in msgs if "checks: read" in m]) == 1
+
+
+def test_readable_checks_do_not_set_unreadable_flag(
+    tmp_path, monkeypatch, _forge_ci_log
+):
+    """Public-repo shape (200s): no flag, no warning."""
+    _mock_httpx(monkeypatch, get_map=_billing_block_get_map([]))
+
+    result = _forge(tmp_path).check_status(source_branch="feature/x")
+    assert result is not None
+    assert "checks_unreadable" not in result
+    assert not _forge_ci_log

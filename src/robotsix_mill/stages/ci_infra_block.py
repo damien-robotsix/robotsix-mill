@@ -118,6 +118,38 @@ def _has_stepless_job(run: dict[str, Any]) -> bool:
     return any(j.get("steps") == [] for j in _jobs(run))
 
 
+def _failing_checks(run: dict[str, Any]) -> list[dict[str, Any]]:
+    return [c for c in (run.get("failing") or []) if isinstance(c, dict)]
+
+
+def checks_unreadable(run: dict[str, Any]) -> bool:
+    """True when the forge flagged check-runs/statuses/annotations as 403.
+
+    Set on the status dict and on each failing entry, so ci_fix's
+    ``{"failing": failing}`` shape carries it too.
+    """
+    return bool(run.get("checks_unreadable")) or any(
+        c.get("checks_unreadable") for c in _failing_checks(run)
+    )
+
+
+def _no_job_ever_started(run: dict[str, Any]) -> bool:
+    """True when every failing workflow run's jobs all have empty ``steps``.
+
+    Each failing entry must carry Actions-API ``jobs`` (at least one) and
+    every one of them must have ``steps == []`` — no job of any workflow
+    started. An entry without job data (e.g. a commit status) fails this.
+    """
+    failing = _failing_checks(run)
+    if not failing:
+        return False
+    for check in failing:
+        jobs = _jobs(check)
+        if not jobs or any(j.get("steps") != [] for j in jobs):
+            return False
+    return True
+
+
 def classify_ci_run(run: dict[str, Any]) -> str | None:
     """Classify *run* as :data:`INFRA_ACCOUNT_BLOCKED` or ``None``.
 
@@ -130,9 +162,17 @@ def classify_ci_run(run: dict[str, Any]) -> str | None:
 
     *run* is a dict with any of: ``jobs`` (each optionally ``steps``),
     ``annotations`` (flat list), ``failing`` (check dicts with nested
-    ``annotations``/``summary``/``text``).
+    ``annotations``/``summary``/``text``/``jobs``), ``checks_unreadable``.
+
+    When the App cannot read check-runs (``checks_unreadable`` — a 403 on a
+    private repo) the billing annotation is invisible too. A run in which
+    no job of any failing workflow ever started (all ``steps`` empty) is
+    then the billing refusal on its own (the 2026-09-18 and 2026-10-27/28
+    outages both had exactly that shape).
     """
     if not annotations_indicate_account_block(run):
+        if checks_unreadable(run) and _no_job_ever_started(run):
+            return INFRA_ACCOUNT_BLOCKED
         return None
     if _has_step_data(run) and not _has_stepless_job(run):
         return None
