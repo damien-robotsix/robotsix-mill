@@ -1057,6 +1057,9 @@ class TestRunCommand:
             # An in-word `#` is not a comment in the shell.
             "echo ok#x && pytest",
             "foo#bar; pytest tests",
+            # A shlex error elsewhere must not disable the guard.
+            "pytest; echo x\\",
+            "pytest tests && echo 'unbalanced",
         ],
     )
     def test_refuses_full_suite_pytest(self, tmp_path, settings, fake_sandbox, command):

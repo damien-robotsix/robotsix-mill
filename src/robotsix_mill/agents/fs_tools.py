@@ -443,16 +443,25 @@ def full_suite_pytest_segment(command: str) -> str | None:
     # The shell treats an in-word ``#`` (``foo#bar``) as a literal; shlex's
     # default commenters would swallow the rest of the line from there.
     lexer.commenters = ""
+    segments: list[list[str]] = [[]]
     try:
         all_tokens = list(lexer)
     except ValueError:
-        return None
-    segments: list[list[str]] = [[]]
-    for tok in all_tokens:
-        if tok and set(tok) <= set("&|;"):
-            segments.append([])
-        else:
-            segments[-1].append(tok)
+        # Unbalanced quote / trailing backslash somewhere: fall back to a
+        # naive operator split and check every segment that still parses,
+        # so ``pytest; echo x\`` is not waved through.
+        segments = []
+        for raw in re.split(r"&&|\|\||;|\|", command):
+            try:
+                segments.append(shlex.split(raw, comments=False))
+            except ValueError:
+                continue
+    else:
+        for tok in all_tokens:
+            if tok and set(tok) <= set("&|;"):
+                segments.append([])
+            else:
+                segments[-1].append(tok)
     for tokens in segments:
         segment = shlex.join(tokens)
         # strip leading env assignments and launchers
