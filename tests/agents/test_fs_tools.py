@@ -1052,6 +1052,14 @@ class TestRunCommand:
             "uv run ruff check . && uv run pytest",
             ".venv/bin/pytest -x",
             "UV_MALWARE_CHECK=0 uv run pytest tests",
+            "uv run ruff check .&&uv run pytest -q",
+            "cd repo; pytest tests/",
+            # An in-word `#` is not a comment in the shell.
+            "echo ok#x && pytest",
+            "foo#bar; pytest tests",
+            # A shlex error elsewhere must not disable the guard.
+            "pytest; echo x\\",
+            "pytest tests && echo 'unbalanced",
         ],
     )
     def test_refuses_full_suite_pytest(self, tmp_path, settings, fake_sandbox, command):
@@ -1075,6 +1083,9 @@ class TestRunCommand:
             "uv run ruff check src && uv run pytest tests/agents -q",
             "uv run mypy src/ --strict",
             "git diff --stat",
+            # Quoted `|` is a regex alternation, not a pipe (trace fdb0241e).
+            'grep -rn -E "ruff|mypy|pytest|playwright|python-ci" .github/',
+            "git grep -n -E 'ruff|pytest'",
         ],
     )
     def test_allows_targeted_pytest_and_other_commands(
