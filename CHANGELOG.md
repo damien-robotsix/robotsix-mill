@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.21.0...v0.21.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* Retrospect AGENT.md follow-ups: append to an existing section instead of adding a duplicate heading (20261029T091523Z-retrospect-agent-md-follow-ups-append-to-43ce) ([#3519](https://github.com/damien-robotsix/robotsix-mill/issues/3519)) ([9e97c36](https://github.com/damien-robotsix/robotsix-mill/commit/9e97c36a3571ddab2d7682ff08d8f9dca4a4fc71))
+
 ## [0.21.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.20.0...v0.21.0) (2026-10-29)
 
 
