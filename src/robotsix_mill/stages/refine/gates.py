@@ -128,6 +128,17 @@ _SCOPE_TRIAGE_NARRATIVE_RE = re.compile(
 )
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 
+# Pasted CI log tails / event payloads and bot identities are evidence,
+# not the requested change: a GitHub event payload's ``sender`` block
+# names ``robotsix-mill[bot]`` / ``github.com/apps/robotsix-mill`` on
+# every repo the mill touches.  Strip them before scanning for terms.
+_SCOPE_TRIAGE_FENCED_BLOCK_RE = re.compile(
+    r"(`{3,}|~{3,})[^\n]*\n.*?(?:^\1[ \t]*$|\Z)", re.DOTALL | re.MULTILINE
+)
+_SCOPE_TRIAGE_BOT_IDENTITY_RE = re.compile(
+    r"(?:https?://)?github\.com/apps/[\w.-]+|[\w.-]+\[bot\]", re.IGNORECASE
+)
+
 # Board suggested in a parked wrong-board verdict: mill-internal
 # concepts belong on the mill's own board.
 _SCOPE_TRIAGE_SUSPECTED_BOARD = "robotsix-mill"
@@ -163,7 +174,13 @@ def _named_path_in_repo(text: str, repo_dir: Path) -> str | None:
 
 
 def _requested_change_text(text: str) -> str:
-    """Drop provenance/narrative sentences, keeping the requested change."""
+    """Drop provenance/narrative sentences, keeping the requested change.
+
+    Fenced blocks (CI log tails) and bot logins / GitHub App URLs are
+    removed first — they are evidence, not the change.
+    """
+    text = _SCOPE_TRIAGE_FENCED_BLOCK_RE.sub("\n", text)
+    text = _SCOPE_TRIAGE_BOT_IDENTITY_RE.sub(" ", text)
     return "\n".join(
         sentence
         for sentence in _SENTENCE_SPLIT_RE.split(text)
@@ -423,6 +440,11 @@ class RefineGatesMixin:
         # they cite legitimately live in one of the OTHER cloned repos,
         # so a single-repo grep cannot prove a mis-route.  Skip.
         if ticket.board_id == "meta":
+            return None
+
+        # CI-failure tickets are filed on the board of the repo whose
+        # workflow failed, so they cannot be on the wrong board.
+        if ticket.source == SourceKind.CI:
             return None
 
         text = f"{title}\n{draft}"
