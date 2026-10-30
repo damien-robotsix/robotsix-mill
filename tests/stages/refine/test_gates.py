@@ -1645,6 +1645,52 @@ def test_scope_triage_repo_awareness_parks_agent_filed_ticket(ctx_factory, tmp_p
     assert "suspected board: robotsix-mill" in out.note
 
 
+_CI_LOG_TAIL_BODY = (
+    "The Publish Docker image workflow failed on main.\n\n"
+    "Log tail:\n"
+    "```\n"
+    '"sender": {\n'
+    '  "login": "robotsix-mill[bot]",\n'
+    '  "html_url": "https://github.com/apps/robotsix-mill",\n'
+    '  "type": "Bot"\n'
+    "}\n"
+    "```\n"
+)
+
+
+@pytest.mark.parametrize("source", [SourceKind.CI, SourceKind.USER])
+def test_scope_triage_repo_awareness_ignores_ci_log_bot_login(
+    ctx_factory, tmp_path, source
+):
+    """Regression: a CI log tail naming robotsix-mill[bot] is not a mis-route."""
+    ctx = ctx_factory()
+    title = "CI failure: Publish Docker image on main"
+    t = _ticket(ctx, title=title, body=_CI_LOG_TAIL_BODY, source=source)
+    t.board_id = "robotsix-memory"
+    repo = _make_repo(tmp_path, {"src/game.py": "def play():\n    return 1\n"})
+
+    out = RefineStage._run_scope_triage_repo_awareness_gate(
+        ctx, t, _CI_LOG_TAIL_BODY, title, repo
+    )
+    assert out is None
+
+
+def test_scope_triage_repo_awareness_still_rejects_non_ci_mill_concept(
+    ctx_factory, tmp_path
+):
+    """A non-CI ticket really asking for a mill change is still rejected."""
+    ctx = ctx_factory()
+    title = "Tune robotsix-mill refine"
+    body = "Change robotsix-mill so the ci_fix stage retries twice."
+    t = _ticket(ctx, title=title, body=body)
+    repo = _make_repo(tmp_path, {"src/game.py": "def play():\n    return 1\n"})
+
+    out = RefineStage._run_scope_triage_repo_awareness_gate(ctx, t, body, title, repo)
+    assert out is not None
+    assert out.next_state is State.DONE
+    assert "wrong board" in out.note
+
+
 def test_doc_only_gate_mixed_code_and_docs_returns_none(ctx_factory):
     ctx = ctx_factory()
     body = "Update `docs/api.md` and fix `src/api.py` handler"
