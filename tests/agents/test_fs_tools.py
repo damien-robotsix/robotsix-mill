@@ -1054,6 +1054,9 @@ class TestRunCommand:
             "UV_MALWARE_CHECK=0 uv run pytest tests",
             "uv run ruff check .&&uv run pytest -q",
             "cd repo; pytest tests/",
+            # An in-word `#` is not a comment in the shell.
+            "echo ok#x && pytest",
+            "foo#bar; pytest tests",
         ],
     )
     def test_refuses_full_suite_pytest(self, tmp_path, settings, fake_sandbox, command):

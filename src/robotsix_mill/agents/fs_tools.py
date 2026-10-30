@@ -440,6 +440,9 @@ def full_suite_pytest_segment(command: str) -> str | None:
     # alternation in ``grep -E "ruff|pytest"``) are not mistaken for pipes.
     lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
+    # The shell treats an in-word ``#`` (``foo#bar``) as a literal; shlex's
+    # default commenters would swallow the rest of the line from there.
+    lexer.commenters = ""
     try:
         all_tokens = list(lexer)
     except ValueError:
