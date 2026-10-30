@@ -561,3 +561,10 @@ _reset_for_tests
 # _reset — sandbox/_image.py test hook; only called from tests/conftest.py
 # (vulture only scans src/, 60% confidence).
 _reset
+
+# -- agents/fs_tools ---------------------------------------------------------
+# whitespace_split / commenters — shlex.shlex configuration attributes set in
+# full_suite_pytest_segment(); read internally by the stdlib lexer, so vulture
+# (60%) flags the assignments as unused attributes.
+whitespace_split
+commenters
