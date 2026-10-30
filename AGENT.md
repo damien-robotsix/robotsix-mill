@@ -331,7 +331,10 @@ Classifying the file in-commit prevents the registry from omitting it
 and saves the `module_curator` from filing a "Classify" drift ticket
 after the fact. The CI path-lint only checks that existing entries'
 paths resolve to real files; it does not require new files to be added,
-so this stays a convention enforced at authoring time.
+so this stays a convention enforced at authoring time. For `.py` files
+under `src/` and `tests/` it is also enforced by
+`tests/dev_tooling/test_modules_yaml_coverage.py`, which runs in the CI
+test job and fails listing every unregistered file.
 
 ### Placing a module's tests
 
