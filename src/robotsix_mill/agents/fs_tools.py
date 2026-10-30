@@ -436,11 +436,22 @@ def full_suite_pytest_segment(command: str) -> str | None:
     """
     import shlex
 
-    for segment in re.split(r"&&|\|\||;|\|", command):
-        try:
-            tokens = shlex.split(segment, comments=False)
-        except ValueError:
-            continue
+    # Tokenise the WHOLE command first so operators inside quotes (e.g. the
+    # alternation in ``grep -E "ruff|pytest"``) are not mistaken for pipes.
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        all_tokens = list(lexer)
+    except ValueError:
+        return None
+    segments: list[list[str]] = [[]]
+    for tok in all_tokens:
+        if tok and set(tok) <= set("&|;"):
+            segments.append([])
+        else:
+            segments[-1].append(tok)
+    for tokens in segments:
+        segment = shlex.join(tokens)
         # strip leading env assignments and launchers
         i = 0
         while i < len(tokens) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tokens[i]):
