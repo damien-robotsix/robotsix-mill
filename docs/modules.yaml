@@ -6,6 +6,9 @@
 # Schema: bundled with the robotsix-modules package (see
 # https://github.com/damien-robotsix/robotsix-modules).
 # Validation: pre-commit hook `validate-module-taxonomy` + CI step
+# Coverage: tests/dev_tooling/test_modules_yaml_coverage.py (run by the
+# CI test job) fails when any .py file under src/ or tests/ is not
+# claimed by a module's `paths`.
 
 modules:
   # -------------------------------------------------------------------
@@ -631,6 +634,7 @@ modules:
       - tests/dev_tooling/test_check_cve_ignore_sync.py
       - tests/dev_tooling/test_docs_nav.py
       - tests/dev_tooling/test_emit_config_schema.py
+      - tests/dev_tooling/test_modules_yaml_coverage.py
       - tests/dev_tooling/test_modules_yaml_paths.py
       - tests/dev_tooling/test_mypy_gate_parity.py
       - tests/dev_tooling/test_render_harden_dockerfile.py
