@@ -5,7 +5,7 @@ keyed by run id.  When it needs the full log for a specific run — or when a
 truncated window doesn't show enough context — it calls ``fetch_ci_logs``
 with the run id (or a run URL) and receives the log contents.
 
-The tool runs HOST-SIDE (like ``wait_for_ci`` and the bridged git tools): the
+The tool runs HOST-SIDE (like the bridged git tools): the
 agent stays inside its ``--network none`` sandbox and never reaches the forge
 directly.  All forge access is funnelled through the ``fetch_fn`` closure
 supplied by the stage.
@@ -150,9 +150,9 @@ def build_ci_log_fetch_tool(
                 return (
                     "error: fetch_ci_logs requires either a run_id (int) or a "
                     "run_url (str) containing a /runs/<id> path segment. "
-                    "No run id or run URL was provided — re-run wait_for_ci "
-                    "first to obtain the run id/URL from its CI_FAILING summary, "
-                    "then pass it here. Never pass a placeholder numeric id "
+                    "No run id or run URL was provided — take the run id/URL "
+                    "from the failing-check summary in your prompt and pass "
+                    "it here. Never pass a placeholder numeric id "
                     "(e.g. 0) — it will be rejected."
                 )
 

@@ -518,7 +518,7 @@ def _build_compact_failing_summary(
     changed_paths: set[str] | None = None,
     max_chars: int = 2000,
 ) -> str:
-    """Build a bounded, compact failure digest for late wait_for_ci iterations.
+    """Build a bounded, compact failure digest for late compact-summary iterations.
 
     Unlike :func:`_build_failing_summary` — which inlines the full (capped)
     log window plus every annotation and alert — this keeps only:

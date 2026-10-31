@@ -821,7 +821,7 @@
         },
         "ci_fix_iteration_summary_max_chars": {
           "default": 2000,
-          "description": "Maximum characters of the compact wait_for_ci failure summary for iterations >= 2. 0 disables compacting.",
+          "description": "Maximum characters of the compact ci-fix failure summary for iterations >= 2. 0 disables compacting.",
           "minimum": 0,
           "title": "Ci Fix Iteration Summary Max Chars",
           "type": "integer"
