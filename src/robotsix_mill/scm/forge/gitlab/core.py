@@ -516,7 +516,7 @@ class GitLabForge(
         """
         cached = getattr(self, "_cached_bot_login", None)
         if cached is not None:
-            return cached
+            return str(cached)
         try:
             login = self._get_authenticated_user_login()
         except Exception:
@@ -577,14 +577,14 @@ class GitLabForge(
         r = self._http.get(f"/projects/{quote(f'{owner}/{repo}', safe='')}")
         if r.status_code != 200:
             return ""
-        return r.json().get("description") or ""
+        return str(r.json().get("description") or "")
 
     def _get_authenticated_user_login(self) -> str:
         """GET /user → ``username``."""
         r = self._http.get("/user")
         if r.status_code != 200:
             return ""
-        return r.json().get("username") or ""
+        return str(r.json().get("username") or "")
 
     def _read_repo_file(self, *, project_path: str, path: str, ref: str) -> str:
         """GET /projects/:id/repository/files/:file_path/raw?ref= → raw text."""
