@@ -295,6 +295,34 @@ class GitLabForgeCIMixin:
         except Exception:
             return None
 
+    def get_workflow_file(self, *, path: str) -> str | None:
+        """Return the raw text of the CI file at *path* on the configured
+        target branch, or ``None`` on any error.  Must NEVER raise.
+        """
+        try:
+            from .core import _parse_gitlab_project_path
+
+            project_path = _parse_gitlab_project_path(self._remote_url)  # type: ignore[attr-defined]
+            return self._get_raw_file(project_path=project_path, path=path)
+        except Exception:
+            return None
+
+    def list_path_commits_since(
+        self, *, path: str, branch: str, since: str
+    ) -> list[str] | None:
+        """Return SHAs of commits on *branch* touching *path* after *since*,
+        or ``None`` on any error.  Must NEVER raise.
+        """
+        try:
+            from .core import _parse_gitlab_project_path
+
+            project_path = _parse_gitlab_project_path(self._remote_url)  # type: ignore[attr-defined]
+            return self._list_path_commits_since(
+                project_path=project_path, path=path, branch=branch, since=since
+            )
+        except Exception:
+            return None
+
     def dispatch_workflow(
         self,
         *,
@@ -638,3 +666,35 @@ class GitLabForgeCIMixin:
             ci_text = f.text
 
         return _gitlab_ci_triggers(ci_text, has_active_schedule=has_active_schedule)
+
+    def _get_raw_file(self, *, project_path: str, path: str) -> str:
+        """GET /projects/:id/repository/files/:path/raw?ref=<target branch>."""
+        from urllib.parse import quote
+
+        from ....config import target_branch_for
+
+        pid = self._resolve_project_id(project_path)  # type: ignore[attr-defined]
+        ref = target_branch_for(self.settings, self._repo_config)  # type: ignore[attr-defined]
+        r = self._http.get(  # type: ignore[attr-defined]
+            f"/projects/{pid}/repository/files/{quote(path, safe='')}/raw",
+            params={"ref": ref},
+        )
+        r.raise_for_status()
+        return str(r.text)
+
+    def _list_path_commits_since(
+        self, *, project_path: str, path: str, branch: str, since: str
+    ) -> list[str]:
+        """GET /projects/:id/repository/commits?ref_name=&path=&since= → SHAs."""
+        pid = self._resolve_project_id(project_path)  # type: ignore[attr-defined]
+        r = self._http.get(  # type: ignore[attr-defined]
+            f"/projects/{pid}/repository/commits",
+            params={
+                "ref_name": branch,
+                "path": path,
+                "since": since,
+                "per_page": 20,
+            },
+        )
+        r.raise_for_status()
+        return [c.get("id", "") for c in r.json() if c.get("id")]

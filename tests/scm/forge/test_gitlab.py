@@ -2543,6 +2543,60 @@ def test_get_workflow_triggers_error_returns_none(tmp_path, monkeypatch):
     assert forge.get_workflow_triggers(path="ignored") is None
 
 
+# ---------------------------------------------------------------------------
+# get_workflow_file / list_path_commits_since — stale-CI gate parity
+# ---------------------------------------------------------------------------
+
+
+def test_get_workflow_file_returns_raw_text(tmp_path, monkeypatch):
+    get_map = {
+        "repository/files/.gitlab-ci.yml/raw": _make_response(
+            200, {}, "stages:\n  - build\n"
+        ),
+        "projects/ns%2Fproject": _make_response(200, {"id": 42}),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.get_workflow_file(path=".gitlab-ci.yml") == "stages:\n  - build\n"
+
+
+def test_get_workflow_file_error_returns_none(tmp_path, monkeypatch):
+    """Missing file (404) → None, never raises."""
+    get_map = {"projects/ns%2Fproject": _make_response(200, {"id": 42})}
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    assert forge.get_workflow_file(path="ci/missing.yml") is None
+
+
+def test_list_path_commits_since_returns_ids(tmp_path, monkeypatch):
+    commits = [{"id": "abc123"}, {"id": "def456"}, {"title": "no id"}]
+    get_map = {
+        "repository/commits": _make_response(200, commits),
+        "projects/ns%2Fproject": _make_response(200, {"id": 42}),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_path_commits_since(
+        path=".gitlab-ci.yml", branch="main", since="2026-01-01T00:00:00+00:00"
+    )
+    assert result == ["abc123", "def456"]
+
+
+def test_list_path_commits_since_error_returns_none(tmp_path, monkeypatch):
+    _mock_httpx(monkeypatch, get_map={})
+
+    forge = _forge(tmp_path)
+    assert (
+        forge.list_path_commits_since(
+            path=".gitlab-ci.yml", branch="main", since="2026-01-01T00:00:00+00:00"
+        )
+        is None
+    )
+
+
 def test_gitlab_ci_triggers_helper_schedule_from_active_flag():
     """The helper adds 'schedule' when an active schedule exists even with
     no workflow:rules block."""
