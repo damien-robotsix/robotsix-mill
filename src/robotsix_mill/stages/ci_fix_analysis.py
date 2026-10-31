@@ -108,7 +108,7 @@ def _build_failure_detail(
 
     When *compact* is True the returned *failing_summary* is a bounded
     digest (see ``_build_compact_failing_summary``) instead of the full
-    inline detail — used for the 2nd and later ``wait_for_ci`` iterations
+    inline detail — used for the 2nd and later compact-summary iterations
     so the pydantic-ai transcript stops growing with loop depth.
     """
     s = ctx.settings

@@ -158,9 +158,10 @@ class _MergeSettings(BaseModel):
         ge=0,
     )
 
-    # Multi-repo merge path only: maximum characters of a COMPACT failure
-    # summary returned by ``wait_for_ci`` on the 2nd and later iterations
-    # of one ci-fix run.  The single-repo CIFixStage no longer uses this.
+    # Maximum characters of the COMPACT failure summary that the 2nd and
+    # later compact-summary iterations of one ci-fix run receive.  Read by
+    # ``_build_failure_detail(compact=True)`` in ``stages/ci_fix_analysis.py``;
+    # CIFixStage currently requests the full (non-compact) detail.
     # The first iteration (and the initial dispatch prompt) always receive
     # the full, already-capped failure detail; later iterations receive a
     # bounded digest (failing check names + first-error signatures + a
@@ -170,7 +171,7 @@ class _MergeSettings(BaseModel):
     # still expand on demand via ``fetch_ci_logs``.  0 disables compacting
     # (every iteration sends the full summary — the pre-existing behaviour).
     ci_fix_iteration_summary_max_chars: int = Field(
-        description="Maximum characters of the compact wait_for_ci failure summary for iterations >= 2. 0 disables compacting.",
+        description="Maximum characters of the compact ci-fix failure summary for iterations >= 2. 0 disables compacting.",
         default=2000,
         ge=0,
     )

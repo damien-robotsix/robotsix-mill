@@ -169,7 +169,6 @@ match the `__name__` of a tool function registered in the
 | `git_remote_sha` | vcs | Resolve a remote ref to a commit SHA |
 | `git_push_with_lease` | vcs | Push with lease safety check |
 | `git_branch_ancestry` | vcs | Check branch ancestry relationship |
-| `wait_for_ci` | ci | Wait for CI checks to complete |
 | `fetch_ci_logs` | ci | Fetch CI run logs |
 | `read_fleet_file` | git | Read-only: read a file from another fleet repo registered in `repos_config` (host-side forge GET, default branch unless `ref` is given; capped at 256 KB) |
 | `grep_fleet_repo` | git | Read-only: regex-search files of another registered fleet repo (default branch; up to 50 `path:line` matches) |
