@@ -57,7 +57,7 @@ callers in the deliver/merge stages depend on these exact keys.
 | 11 | `fetch_workflow_job_logs` | `(*, run_id: int)` | `str` | Concatenated, ANSI-stripped, size-capped logs of all failed jobs in a workflow run.  Returns `""` when no failed jobs found. |
 | 12 | `update_repo` | `(*, owner: str, repo: str, description: str)` | `bool` | Update the repository description.  Returns `False` on any API failure — must never raise.  The read-back counterpart `get_repo_description()` is concrete (defaults to `""`). |
 
-#### 1.2.2 Concrete (non-abstract) methods (8 total)
+#### 1.2.2 Concrete (non-abstract) methods (11 total)
 
 These have default implementations in the base class.  Adapters **may**
 override them when the forge supports the capability.
