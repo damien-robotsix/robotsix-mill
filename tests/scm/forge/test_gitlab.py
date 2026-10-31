@@ -1954,6 +1954,36 @@ def test_list_tag_workflow_runs_filters_on_tag_glob(tmp_path):
     assert runs[0]["head_sha"] == "t1"
 
 
+def test_list_tag_workflow_runs_no_tagged_runs(tmp_path):
+    """No tag pipelines, or none matching the glob → []."""
+
+    class _FakeHttp:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def get(self, path, **kw):
+            return _make_response(200, self.payload)
+
+    forge = _forge(tmp_path)
+    forge._resolve_project_id = lambda _path: 42
+    forge._http = _FakeHttp([])
+    assert forge.list_tag_workflow_runs(tag_glob="v*") == []
+
+    forge._http = _FakeHttp(
+        [
+            {
+                "id": 1,
+                "ref": "nightly-1",
+                "sha": "t0",
+                "status": "success",
+                "web_url": "http://gl/pipelines/1",
+                "created_at": "2026-03-07T00:00:00Z",
+            }
+        ]
+    )
+    assert forge.list_tag_workflow_runs(tag_glob="v*") == []
+
+
 # ---------------------------------------------------------------------------
 # fetch_workflow_job_logs
 # ---------------------------------------------------------------------------
@@ -2637,6 +2667,21 @@ def test_list_path_commits_since_returns_ids(tmp_path, monkeypatch):
     assert result == ["abc123", "def456"]
 
 
+def test_list_path_commits_since_no_commits_returns_empty(tmp_path, monkeypatch):
+    """No commits touched the path since *since* → [] (not None)."""
+    get_map = {
+        "repository/commits": _make_response(200, []),
+        "projects/ns%2Fproject": _make_response(200, {"id": 42}),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    forge = _forge(tmp_path)
+    result = forge.list_path_commits_since(
+        path=".gitlab-ci.yml", branch="main", since="2026-01-01T00:00:00+00:00"
+    )
+    assert result == []
+
+
 def test_list_path_commits_since_error_returns_none(tmp_path, monkeypatch):
     _mock_httpx(monkeypatch, get_map={})
 
@@ -2745,6 +2790,21 @@ def test_gitlab_list_repo_files_omits_empty_ref(tmp_path):
     forge._http = http
     assert forge.list_repo_files() == ["a"]
     assert "ref" not in http.calls[0][1]["params"]
+
+
+def test_gitlab_read_repo_file_missing_file_returns_none(tmp_path):
+    """A 404 on the raw-file endpoint (missing file) → None."""
+
+    class _MissingHttp(_RecordingHttp):
+        def _resp(self, url):
+            if url.endswith("/raw"):
+                return _make_response(404, {"message": "404 File Not Found"})
+            return super()._resp(url)
+
+    forge = _forge(tmp_path)
+    forge._http = _MissingHttp()
+    assert forge.read_repo_file(path="nope.yml") is None
+    assert forge.read_repo_file(path="nope.yml", ref="main") is None
 
 
 def test_gitlab_repo_file_reads_never_raise(tmp_path):
