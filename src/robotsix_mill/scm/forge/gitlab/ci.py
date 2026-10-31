@@ -192,6 +192,44 @@ class GitLabForgeCIMixin:
         except Exception:
             return None
 
+    def commit_ci_conclusion(self, *, sha: str) -> dict[str, Any] | None:
+        """Aggregate CI conclusion for an arbitrary commit *sha* (no MR).
+
+        Reads the latest pipeline for the sha and maps it to the same
+        shape as :meth:`check_status`.  Returns ``None`` when the status
+        cannot be determined (auth/permission/transport error).  Never
+        raises.
+        """
+        try:
+            from .core import _parse_gitlab_project_path
+
+            project_path = _parse_gitlab_project_path(self._remote_url)  # type: ignore[attr-defined]
+            pid = self._resolve_project_id(project_path)  # type: ignore[attr-defined]
+            r = self._http.get(  # type: ignore[attr-defined]
+                f"/projects/{pid}/pipelines",
+                params={"sha": sha, "per_page": 1},
+            )
+            r.raise_for_status()
+            items = r.json()
+            if not items:
+                return {"conclusion": None, "failing": [], "pending": [], "jobs": []}
+            pipeline = items[0]
+
+            conclusion = _map_pipeline_status(pipeline.get("status", ""))
+            failing: list[dict[str, Any]] = []
+            if conclusion == "failure":
+                failing = self._get_failed_jobs(project_path, pipeline["id"])
+            jobs = self._get_pipeline_job_summaries(pid, pipeline["id"])
+
+            return {
+                "conclusion": conclusion,
+                "failing": failing,
+                "pending": [],
+                "jobs": jobs,
+            }
+        except Exception:
+            return None
+
     def list_workflow_runs(
         self, *, branch: str | None = None, head_sha: str | None = None
     ) -> list[dict[str, Any]]:
