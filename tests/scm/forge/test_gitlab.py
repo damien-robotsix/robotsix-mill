@@ -689,6 +689,88 @@ def test_check_status_pipeline_canceled_is_pending(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# commit_ci_conclusion
+# ---------------------------------------------------------------------------
+
+
+def test_commit_ci_conclusion_success(tmp_path, monkeypatch):
+    """Latest pipeline for the sha with status=success → conclusion=success."""
+    get_map = {
+        "pipelines/100/jobs": _make_response(
+            200, [{"name": "test", "status": "success"}]
+        ),
+        "projects/42/pipelines": _make_response(
+            200, [{"id": 100, "status": "success"}]
+        ),
+        "projects/ns%2Fproject": _make_response(200, {"id": 42}),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    result = _forge(tmp_path).commit_ci_conclusion(sha="abc")
+    assert result == {
+        "conclusion": "success",
+        "failing": [],
+        "pending": [],
+        "jobs": [{"name": "test", "conclusion": "success"}],
+    }
+
+
+def test_commit_ci_conclusion_failure_lists_failed_jobs(tmp_path, monkeypatch):
+    """status=failed → conclusion=failure with failed job details."""
+    get_map = {
+        "pipelines/100/jobs": _make_response(
+            200, [{"id": 200, "name": "build", "stage": "test", "status": "failed"}]
+        ),
+        "jobs/200/trace": _make_response(200, None, "build failed: boom"),
+        "projects/42/pipelines": _make_response(200, [{"id": 100, "status": "failed"}]),
+        "projects/ns%2Fproject": _make_response(200, {"id": 42}),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    result = _forge(tmp_path).commit_ci_conclusion(sha="abc")
+    assert result["conclusion"] == "failure"
+    assert [f["name"] for f in result["failing"]] == ["build"]
+    assert result["failing"][0]["summary"] == "build failed: boom"
+
+
+def test_commit_ci_conclusion_running_is_pending(tmp_path, monkeypatch):
+    get_map = {
+        "pipelines/100/jobs": _make_response(200, []),
+        "projects/42/pipelines": _make_response(
+            200, [{"id": 100, "status": "running"}]
+        ),
+        "projects/ns%2Fproject": _make_response(200, {"id": 42}),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    result = _forge(tmp_path).commit_ci_conclusion(sha="abc")
+    assert result["conclusion"] == "pending"
+
+
+def test_commit_ci_conclusion_no_pipeline(tmp_path, monkeypatch):
+    """No pipeline for the sha → conclusion=None (not unavailable)."""
+    get_map = {
+        "projects/42/pipelines": _make_response(200, []),
+        "projects/ns%2Fproject": _make_response(200, {"id": 42}),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    result = _forge(tmp_path).commit_ci_conclusion(sha="abc")
+    assert result == {"conclusion": None, "failing": [], "pending": [], "jobs": []}
+
+
+def test_commit_ci_conclusion_api_error_returns_none(tmp_path, monkeypatch):
+    """Any API error → None, never raises."""
+    get_map = {
+        "projects/42/pipelines": _make_response(403, {}, "forbidden"),
+        "projects/ns%2Fproject": _make_response(200, {"id": 42}),
+    }
+    _mock_httpx(monkeypatch, get_map=get_map)
+
+    assert _forge(tmp_path).commit_ci_conclusion(sha="abc") is None
+
+
+# ---------------------------------------------------------------------------
 # merge_pr
 # ---------------------------------------------------------------------------
 
