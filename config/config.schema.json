@@ -854,13 +854,6 @@
           "title": "Ci Fix Max Attempts",
           "type": "integer"
         },
-        "ci_fix_max_consecutive_pending": {
-          "default": 2,
-          "description": "Multi-repo merge path only: early bail-out threshold \u2014 return CI_STUCK after this many consecutive CI_STILL_PENDING results. 0 disables.",
-          "minimum": 0,
-          "title": "Ci Fix Max Consecutive Pending",
-          "type": "integer"
-        },
         "ci_fix_max_cycles": {
           "default": 3,
           "description": "Multi-repo merge path only: max ci-fix cycles per ticket.",
@@ -873,13 +866,6 @@
           "description": "Consecutive identical CI failure cycles before escalating. 0 disables.",
           "minimum": 0,
           "title": "Ci Fix Max Identical Failures",
-          "type": "integer"
-        },
-        "ci_fix_max_iterations": {
-          "default": 3,
-          "description": "Multi-repo merge path only: maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
-          "minimum": 0,
-          "title": "Ci Fix Max Iterations",
           "type": "integer"
         },
         "ci_fix_max_total_attempts": {
@@ -909,20 +895,6 @@
           "minimum": 0,
           "title": "Ci Fix Request Limit",
           "type": "integer"
-        },
-        "ci_fix_wait_poll_interval_s": {
-          "default": 30.0,
-          "description": "Multi-repo merge path only: seconds between CI conclusion polls during wait_for_ci.",
-          "exclusiveMinimum": 0,
-          "title": "Ci Fix Wait Poll Interval S",
-          "type": "number"
-        },
-        "ci_fix_wait_timeout_s": {
-          "default": 900.0,
-          "description": "Multi-repo merge path only: maximum seconds a single wait_for_ci call blocks before returning still-pending.",
-          "exclusiveMinimum": 0,
-          "title": "Ci Fix Wait Timeout S",
-          "type": "number"
         },
         "ci_log_max_bytes": {
           "default": 65536,

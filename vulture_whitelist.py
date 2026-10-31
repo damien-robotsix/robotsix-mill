@@ -33,12 +33,6 @@ reset_for_tests
 _reset_fleet_notifier  # test helper — reset fleet notifier singleton between tests
 run_completeness_check_agent
 run_config_sync_agent
-# build_ci_wait_tool — the wait_for_ci agent tool. Its only src caller
-# (ci_fixing.py) was removed when the single-repo ci_fix agent became
-# one-shot; kept for the multi-repo merge path + covered by
-# tests/agents/test_ci_wait_tool.py (vulture only scans src/).
-build_ci_wait_tool
-
 # FastAPI route function — registered via @router.post decorator; vulture
 # (60% confidence) cannot trace decorator-based registration.
 close_thread_for_ticket
@@ -207,16 +201,6 @@ get_field_value
 # Pydantic Settings field — wired in a future PR (retrospect throttle);
 # vulture (60% confidence) cannot trace attribute reads on BaseModel fields.
 retrospect_max_drafts_per_run
-# ci_fix wait-loop settings — the single-repo CIFixStage is now one-shot and
-# no longer reads these, but they are retained for config-schema/pin
-# compatibility (production pins them) and are still referenced by the
-# multi-repo merge path's config surface. Vulture flags them as unused since
-# no src reader remains.
-ci_fix_max_iterations
-ci_fix_wait_poll_interval_s
-ci_fix_wait_timeout_s
-ci_fix_max_consecutive_pending
-
 # -- core --------------------------------------------------------------------
 # set_coordinator_max_tool_calls_override — public TicketService setter for the
 # per-ticket coordinator tool-call budget override; exercised by
@@ -540,12 +524,6 @@ _build_edit_claim_diagnostic
 implement_memory_path
 refine_memory_path
 retrospect_memory_path
-
-# _make_ci_status_fn — built the wait_for_ci status closure; its src caller
-# (_invoke_agent) was removed when the single-repo ci_fix agent became
-# one-shot. Retained and covered by tests/stages/test_ci_fix.py
-# (test_make_ci_status_fn_*); vulture only scans src/.
-_make_ci_status_fn
 
 # -- forge -------------------------------------------------------------------
 # observed_epoch — RateLimitSnapshot field recording when the quota headers

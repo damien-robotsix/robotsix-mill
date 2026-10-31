@@ -49,32 +49,6 @@ class _MergeSettings(BaseModel):
     # It does NOT wait for CI verification — the external FIXING_CI ⇄
     # IMPLEMENT_COMPLETE polling loop handles iteration.
 
-    # Multi-repo merge path only (MultiRepoCiFixMixin): maximum number of
-    # wait_for_ci iterations per ticket before escalating to BLOCKED.  The
-    # single-repo CIFixStage no longer uses this — its agent is one-shot.
-    # Sized against observed runs, not guesswork: sampled successful ci_fix
-    # stages completed in 300-900 s, all of them on a SINGLE verify iteration.
-    # 3 leaves two retries for the "fix reveals the next failure" case while
-    # keeping the derived stage ceiling (see Settings.stage_timeout_for) inside
-    # what a 3-slot worker pool can afford to hold.
-    #
-    # A 3 -> 5 bump has been proposed twice and is deliberately NOT applied:
-    # once as AC #3 of PR #2988 (lost in a rebase, so never shipped) and again
-    # as PR #3018, reverted by #3019. Two reasons it was declined. First it is
-    # inert where it matters: the deployed mill pins this key -- along with ~297
-    # others -- in its stored config, so the shipped default is shadowed and
-    # only the pin decides. Second the ceiling above is real: at 900 s per wait
-    # plus the coordinator budget, 5 iterations take the ci_fix stage ceiling
-    # from 3600 to 5400 s on shipped defaults (4800 -> 6600 s with the live
-    # mill's pinned coordinator budget), i.e. a third of a 3-slot pool held for
-    # 90 minutes. Raise the PIN, per-repo, if a specific board needs the extra
-    # cascade room -- do not raise the fleet default.
-    ci_fix_max_iterations: int = Field(
-        description="Multi-repo merge path only: maximum wait_for_ci iterations per ticket before escalating to BLOCKED.",
-        default=3,
-        ge=0,
-    )
-
     # Wall-clock timeout (seconds) for a single ci-fix agent pass.  This
     # wraps the LLM agent call inside the stage and fires BEFORE the
     # worker's stage timeout, so the stage produces a diagnostic block
@@ -84,11 +58,9 @@ class _MergeSettings(BaseModel):
     #
     # This is a FLOOR, not the applied value.  Settings.
     # ci_fix_agent_timeout_effective raises it to at least
-    # ci_fix_agent_budget_seconds (= ci_fix_max_iterations x
-    # ci_fix_wait_timeout_s + the coordinator budget), and
+    # ci_fix_agent_budget_seconds (the coordinator budget), and
     # Settings.stage_timeout_for keeps the stage wrapper above that
-    # again — so raising the iteration budget can no longer leave the
-    # agent unable to spend it.  Read those two before tuning this.
+    # again.  Read those two before tuning this.
     ci_fix_agent_timeout_seconds: int = Field(
         description=(
             "Floor for the ci-fix agent pass wall-clock (seconds); raised to "
@@ -100,8 +72,8 @@ class _MergeSettings(BaseModel):
 
     # Multi-repo merge path only (MultiRepoCiFixMixin): that path still runs
     # the legacy one-shot-per-cycle agent with an external retry loop, so it
-    # keeps its own attempt + cycle ceilings.  The single-repo CIFixStage no
-    # longer uses these — its budget is ci_fix_max_iterations.
+    # keeps its own attempt + cycle ceilings.  The single-repo CIFixStage
+    # does not use these.
     ci_fix_max_attempts: int = Field(
         description="Multi-repo merge path only: max ci-fix attempts per cycle.",
         default=2,
@@ -149,32 +121,6 @@ class _MergeSettings(BaseModel):
     # loop.  Set to 0 to disable the check entirely.
     deliver_max_identical_blocks: int = Field(
         description="Consecutive identical merge-guard blocks before stronger escalation. 0 disables.",
-        default=2,
-        ge=0,
-    )
-
-    # Multi-repo merge path only: how often (seconds) wait_for_ci polls
-    # the forge for the branch's CI conclusion while a run is in progress.
-    ci_fix_wait_poll_interval_s: float = Field(
-        description="Multi-repo merge path only: seconds between CI conclusion polls during wait_for_ci.",
-        default=30.0,
-        gt=0,
-    )
-
-    # Multi-repo merge path only: maximum seconds a single wait_for_ci call
-    # blocks before returning a still-pending signal.
-    ci_fix_wait_timeout_s: float = Field(
-        description="Multi-repo merge path only: maximum seconds a single wait_for_ci call blocks before returning still-pending.",
-        default=900.0,
-        gt=0,
-    )
-
-    # Multi-repo merge path only: early bail-out when CI is stuck.
-    ci_fix_max_consecutive_pending: int = Field(
-        description=(
-            "Multi-repo merge path only: early bail-out threshold — return CI_STUCK after this many "
-            "consecutive CI_STILL_PENDING results. 0 disables."
-        ),
         default=2,
         ge=0,
     )

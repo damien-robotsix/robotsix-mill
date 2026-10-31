@@ -540,225 +540,26 @@ def test_agent_crash_blocks(tmp_path, monkeypatch):
     assert out.next_state is State.BLOCKED
 
 
-def test_ci_status_fn_not_passed_to_agent(tmp_path, monkeypatch):
-    """The stage does NOT wire ci_status_fn into the agent — the agent is
-    one-shot (fix + push, no CI waiting)."""
-    ctx = _gh(tmp_path)
-    _failing_check_status(monkeypatch)
-    captured = {}
+def test_run_ci_fix_agent_has_no_ci_status_fn():
+    """The ci-fix agent is one-shot (fix + push, no CI waiting): the dead
+    wait_for_ci probe parameter must not come back."""
+    import inspect
 
-    def fake_agent(**k):
-        captured["ci_status_fn"] = k.get("ci_status_fn")
-        return CiFixResult(status="DONE", summary="ok")
+    from robotsix_mill.agents.ci_fixing import run_ci_fix_agent
 
-    monkeypatch.setattr("robotsix_mill.stages.ci_fix.run_ci_fix_agent", fake_agent)
-    monkeypatch.setattr(
-        "robotsix_mill.stages.ci_fix.git_ops.post_push_check",
-        lambda repo, branch, target, remote_url, token: git_ops.PostPushResult.PASS,
-    )
-
-    t = _fixing_ci(ctx)
-    _setup_repo(ctx, t)
-    out = CIFixStage().run(t, ctx)
-    assert out.next_state is State.IMPLEMENT_COMPLETE
-    # ci_status_fn is no longer passed — the agent is one-shot.
-    assert captured["ci_status_fn"] is None
-
-
-def test_make_ci_status_fn_maps_conclusions(tmp_path, monkeypatch):
-    """_make_ci_status_fn returns (conclusion, summary) tuples matching the
-    forge's check_status verdicts."""
-    import time as _time_mod
-
-    ctx = _gh(tmp_path)
-    t = _fixing_ci(ctx)
-    _setup_repo(ctx, t)
-    branch = f"mill/{t.id}"
-    stage = CIFixStage()
-
-    # Ensure the 120 s grace period is always expired so verdicts are
-    # mapped straight through (the grace-period behaviour is tested
-    # separately below).
-    _tick = [0]
-
-    def _fake_monotonic():
-        _tick[0] += 1000.0
-        return _tick[0]
-
-    monkeypatch.setattr(_time_mod, "monotonic", _fake_monotonic)
-
-    # Helper that accepts the new ``require_checks`` kwarg.
-    def _cs(conclusion, failing=(), sha=""):
-        def _fn(self, *, source_branch, require_checks=False):
-            result: dict = {"conclusion": conclusion, "failing": list(failing)}
-            if sha:
-                result["_sha"] = sha
-            return result
-
-        return _fn
-
-    # success
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "check_status",
-        _cs("success", sha="abc1234"),
-    )
-    conclusion, summary = stage._make_ci_status_fn(t, ctx, branch)()
-    assert conclusion == "success"
-    assert "abc1234" in summary
-
-    # pending
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "check_status",
-        _cs("pending"),
-    )
-    assert stage._make_ci_status_fn(t, ctx, branch)() == ("pending", "")
-
-    # gone (PR vanished)
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "check_status",
-        lambda self, *, source_branch, require_checks=False: None,
-    )
-    assert stage._make_ci_status_fn(t, ctx, branch)() == ("gone", "")
-
-    # failure carries a summary
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "check_status",
-        _cs(
-            "failure",
-            failing=[
-                {"name": "lint", "summary": "boom", "text": None, "annotations": []}
-            ],
-            sha="abc123",
-        ),
-    )
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "pr_status",
-        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
-    )
-    conclusion, summary = stage._make_ci_status_fn(t, ctx, branch)()
-    assert conclusion == "failure"
-    assert "lint" in summary
-    assert "abc123" in summary
-
-
-def test_transient_check_status_error_maps_to_pending(tmp_path, monkeypatch):
-    """A forge exception during the wait probe maps to 'pending' so the agent
-    keeps waiting rather than giving up on a blip."""
-    ctx = _gh(tmp_path)
-    t = _fixing_ci(ctx)
-    _setup_repo(ctx, t)
-
-    def boom(self, *, source_branch, require_checks=False):
-        raise RuntimeError("forge 500")
-
-    monkeypatch.setattr(github.GitHubForge, "check_status", boom)
-    assert CIFixStage()._make_ci_status_fn(t, ctx, f"mill/{t.id}")() == ("pending", "")
-
-
-def test_make_ci_status_fn_includes_run_id_in_failure_prefix(tmp_path, monkeypatch):
-    """When failing workflow runs exist for the SHA, the run_id is included
-    in the CI_FAILING prefix so the agent can pass it to fetch_ci_logs."""
-    import time as _time_mod
-
-    ctx = _gh(tmp_path)
-    t = _fixing_ci(ctx)
-    _setup_repo(ctx, t)
-    branch = f"mill/{t.id}"
-    stage = CIFixStage()
-
-    _tick = [0]
-
-    def _fake_monotonic():
-        _tick[0] += 1000.0
-        return _tick[0]
-
-    monkeypatch.setattr(_time_mod, "monotonic", _fake_monotonic)
-
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "check_status",
-        lambda self, *, source_branch, require_checks=False: {
-            "conclusion": "failure",
-            "failing": [
-                {"name": "lint", "summary": "boom", "text": None, "annotations": []}
-            ],
-            "_sha": "abc123",
-        },
-    )
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "pr_status",
-        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
-    )
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "list_code_scanning_alerts",
-        lambda self, *, source_branch: [],
-    )
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "pr_files",
-        lambda self, *, source_branch: [],
-    )
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "list_workflow_runs",
-        lambda self, *, head_sha, branch=None: [
-            {
-                "id": 30399400001,
-                "name": "CI",
-                "conclusion": "failure",
-            }
-        ],
-    )
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "fetch_workflow_job_logs",
-        lambda self, *, run_id, full_log=False: "some log output",
-    )
-
-    conclusion, summary = stage._make_ci_status_fn(t, ctx, branch)()
-    assert conclusion == "failure"
-    assert "[sha: abc123, run: 30399400001]" in summary
-    assert "lint" in summary
+    assert "ci_status_fn" not in inspect.signature(run_ci_fix_agent).parameters
 
 
 def test_failure_detail_caps_job_log_context(tmp_path, monkeypatch):
     """_build_failure_detail caps the inline job-log context (head+tail
-    window) so late wait_for_ci iterations don't re-send unbounded log
+    window) so repeated fix attempts don't re-send unbounded log
     history, while preserving the first-error window (head) and the tail."""
-    import time as _time_mod
-
     ctx = _gh(tmp_path, ci_fix_log_context_max_chars=500)
     t = _fixing_ci(ctx)
     _setup_repo(ctx, t)
     branch = f"mill/{t.id}"
     stage = CIFixStage()
 
-    _tick = [0]
-
-    def _fake_monotonic():
-        _tick[0] += 1000.0
-        return _tick[0]
-
-    monkeypatch.setattr(_time_mod, "monotonic", _fake_monotonic)
-
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "check_status",
-        lambda self, *, source_branch, require_checks=False: {
-            "conclusion": "failure",
-            "failing": [
-                {"name": "lint", "summary": "boom", "text": None, "annotations": []}
-            ],
-            "_sha": "abc123",
-        },
-    )
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
@@ -788,18 +589,16 @@ def test_failure_detail_caps_job_log_context(tmp_path, monkeypatch):
         lambda self, *, run_id, full_log=False: big_log,
     )
 
-    conclusion, summary = stage._make_ci_status_fn(t, ctx, branch)()
-    assert conclusion == "failure"
+    failing = [{"name": "lint", "summary": "boom", "text": None, "annotations": []}]
+    summary = stage._build_failure_detail(t, ctx, branch, failing)[0]
     assert "[... job logs truncated:" in summary
     assert "HEAD_MARKER_XYZ" in summary  # first-error window is preserved
     assert "TAIL_MARKER_XYZ" in summary  # recent tail is preserved
 
 
-def test_make_ci_status_fn_compacts_late_iterations(tmp_path, monkeypatch):
-    """On attempt >= 2 the status_fn returns a compact digest instead of the
-    full failure detail, bounding per-iteration transcript growth."""
-    import time as _time_mod
-
+def test_failure_detail_compact_bounds_summary(tmp_path, monkeypatch):
+    """With compact=True _build_failure_detail returns a bounded digest
+    instead of the full inline failure detail."""
     ctx = _gh(
         tmp_path,
         ci_fix_log_context_max_chars=16000,
@@ -810,37 +609,6 @@ def test_make_ci_status_fn_compacts_late_iterations(tmp_path, monkeypatch):
     branch = f"mill/{t.id}"
     stage = CIFixStage()
 
-    _tick = [0]
-
-    def _fake_monotonic():
-        _tick[0] += 1000.0
-        return _tick[0]
-
-    monkeypatch.setattr(_time_mod, "monotonic", _fake_monotonic)
-
-    monkeypatch.setattr(
-        github.GitHubForge,
-        "check_status",
-        lambda self, *, source_branch, require_checks=False: {
-            "conclusion": "failure",
-            "failing": [
-                {
-                    "name": "lint",
-                    "summary": "boom",
-                    "text": None,
-                    "annotations": [
-                        {
-                            "path": "src/foo.py",
-                            "start_line": 10,
-                            "level": "failure",
-                            "message": "unused import os",
-                        }
-                    ],
-                }
-            ],
-            "_sha": "abc123",
-        },
-    )
     monkeypatch.setattr(
         github.GitHubForge,
         "pr_status",
@@ -869,12 +637,26 @@ def test_make_ci_status_fn_compacts_late_iterations(tmp_path, monkeypatch):
         lambda self, *, run_id, full_log=False: "some log output\n",
     )
 
-    status_fn = stage._make_ci_status_fn(t, ctx, branch)
+    failing = [
+        {
+            "name": "lint",
+            "summary": "boom",
+            "text": None,
+            "annotations": [
+                {
+                    "path": "src/foo.py",
+                    "start_line": 10,
+                    "level": "failure",
+                    "message": "unused import os",
+                }
+            ],
+        }
+    ]
 
-    _, full = status_fn(1)
-    assert "**Job logs:**" in full  # attempt 1 keeps the full inline detail
+    full = stage._build_failure_detail(t, ctx, branch, failing)[0]
+    assert "**Job logs:**" in full  # non-compact keeps the full inline detail
 
-    _, compact = status_fn(2)
+    compact = stage._build_failure_detail(t, ctx, branch, failing, compact=True)[0]
     assert "compact summary" in compact
     assert "**Job logs:**" not in compact
     assert len(compact) <= 1200

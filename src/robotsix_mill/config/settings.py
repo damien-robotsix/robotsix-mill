@@ -327,6 +327,12 @@ class Settings(
             "enable_repo_creation",
             "repo_visibility_default",
             "forge_repo_create_token",
+            # The ci-fix wait_for_ci verify loop was removed (#3087); its
+            # settings were left unread until 2026-10-30.
+            "ci_fix_max_iterations",
+            "ci_fix_wait_poll_interval_s",
+            "ci_fix_wait_timeout_s",
+            "ci_fix_max_consecutive_pending",
         }
         present = sorted(set(data) & removed)
         if not present:

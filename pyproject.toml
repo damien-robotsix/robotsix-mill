@@ -410,7 +410,6 @@ convention = "google"
 "src/robotsix_mill/config/_settings_core.py" = ["S104"]
 "src/robotsix_mill/stages/hooks.py" = ["S603", "S607"]
 "src/robotsix_mill/agents/ci_log_fetch_tool.py" = ["E402", "B021"]
-"src/robotsix_mill/agents/ci_wait_tool.py" = ["E402"]
 "src/robotsix_mill/agents/testing.py" = ["S108"]
 # --- expanded lint rules: new C901 regressions from auto-fixes ------------
 # Collapsible-if, nested-with flattening, and other simplifications can
