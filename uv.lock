@@ -1774,7 +1774,7 @@ claude-sdk = [
 
 [[package]]
 name = "robotsix-mill"
-version = "0.21.1"
+version = "0.21.2"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
