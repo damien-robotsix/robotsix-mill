@@ -57,7 +57,7 @@ callers in the deliver/merge stages depend on these exact keys.
 | 11 | `fetch_workflow_job_logs` | `(*, run_id: int)` | `str` | Concatenated, ANSI-stripped, size-capped logs of all failed jobs in a workflow run.  Returns `""` when no failed jobs found. |
 | 12 | `update_repo` | `(*, owner: str, repo: str, description: str)` | `bool` | Update the repository description.  Returns `False` on any API failure — must never raise.  The read-back counterpart `get_repo_description()` is concrete (defaults to `""`). |
 
-#### 1.2.2 Concrete (non-abstract) methods (7 total)
+#### 1.2.2 Concrete (non-abstract) methods (8 total)
 
 These have default implementations in the base class.  Adapters **may**
 override them when the forge supports the capability.
@@ -73,6 +73,7 @@ override them when the forge supports the capability.
 | `list_repo_files(*, ref="")` | Returns `None`. Backs the `read_fleet_file` / `grep_fleet_repo` agent tools. | `GET /repos/{owner}/{repo}/git/trees/{ref}?recursive=1`. | Paginates `GET /projects/:id/repository/tree?recursive=true[&ref=]`, keeping `type == "blob"` entries. Returns `None` on any error. |
 | `get_workflow_file(*, path)` | Returns `None`. Used by the stale-CI gate to tell whether a failing job lives in a shared/included workflow. | Overridden in `github_ci.py`. | `GET /projects/:id/repository/files/:path/raw?ref=<target branch>` — returns the raw CI file text, `None` on any error. |
 | `list_path_commits_since(*, path, branch, since)` | Returns `None`. Used by the stale-CI gate to tell whether the CI config was edited after an old failing run. | Overridden in `github_ci.py`. | `GET /projects/:id/repository/commits?ref_name=<branch>&path=<path>&since=<iso>` — returns commit ids, `None` on any error. |
+| `list_tag_workflow_runs(*, tag_glob)` | Returns `[]` (forge without tag-run support). | Lists completed `push` workflow runs and keeps those whose `head_branch` (the tag name) matches `tag_glob` via `fnmatch`. | `GET /projects/:id/pipelines?scope=tags`, keeps pipelines whose `ref` (the tag name) matches `tag_glob` via `fnmatch.fnmatchcase`; same run-dict shape as `list_workflow_runs`, newest first. |
 
 ### 1.3 Factory: `get_forge()`
 
