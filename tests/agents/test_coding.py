@@ -4,7 +4,7 @@ stage-resumable :class:`AgentBudgetError` / :class:`AgentRunError`.
 
 Does NOT test the coordinator logic itself (that belongs in
 ``tests/agents/test_coordinating.py``) or stage-level handling of
-these exceptions (covered by ``tests/stages/test_implement.py``).
+these exceptions (covered by ``tests/stages/implement/test_implement.py``).
 """
 
 from __future__ import annotations

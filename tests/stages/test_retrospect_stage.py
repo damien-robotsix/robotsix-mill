@@ -70,7 +70,7 @@ def _ticket(
 @pytest.fixture
 def ctx_factory(tmp_path, fake_sandbox):
     """Return a factory that creates fresh StageContexts with isolated
-    settings + DB, matching test_implement.py:40-55."""
+    settings + DB, matching tests/stages/implement/test_implement.py."""
     from robotsix_mill.config import Settings
 
     created = []

@@ -214,7 +214,7 @@ Tests live in `tests/` and mirror the source tree
   `MILL_REQUIRE_APPROVAL=false`.
 - `service` — a `TicketService` bound to the test settings.
 
-**Fake-agent closures** ([`tests/test_implement.py`](tests/test_implement.py)):
+**Fake-agent closures** ([`tests/stages/implement/conftest.py`](tests/stages/implement/conftest.py)):
 - `_fake_agent(write)` returns a callable matching
   `run_implement_agent`'s keyword-only signature.
 - `write=None` → agent returns `("did the thing", [])` without writing
