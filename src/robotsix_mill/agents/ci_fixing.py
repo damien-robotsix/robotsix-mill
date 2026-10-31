@@ -92,7 +92,6 @@ def run_ci_fix_agent(
     token: str | None = None,
     token_provider: Callable[[], str | None] | None = None,
     token_cache_clear: Callable[[], None] | None = None,
-    ci_status_fn: Callable[[int], tuple[str, str]] | None = None,
     ci_log_fetch_fn: Callable[[int, bool], str] | None = None,
     sandbox_image: str | None = None,
     checkpoint: Any | None = None,

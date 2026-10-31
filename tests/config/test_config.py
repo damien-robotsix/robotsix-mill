@@ -372,8 +372,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     # --- CI-fix tuning ---
     ("ci_fix_max_cycles", "MILL_CI_FIX_MAX_CYCLES", "5", 5),
     ("ci_fix_max_identical_failures", "MILL_CI_FIX_MAX_IDENTICAL_FAILURES", "3", 3),
-    ("ci_fix_wait_poll_interval_s", "MILL_CI_FIX_WAIT_POLL_INTERVAL_S", "15.0", 15.0),
-    ("ci_fix_wait_timeout_s", "MILL_CI_FIX_WAIT_TIMEOUT_S", "1200.0", 1200.0),
     ("max_stuck_cycles", "MILL_MAX_STUCK_CYCLES", "5", 5),
     # --- web research / fetch ---
     ("web_search", "MILL_WEB_SEARCH", "1", True),
@@ -491,8 +489,6 @@ ALIAS_CASES: list[tuple[str, str, str, object]] = [
     ("lint_on_edit", "MILL_LINT_ON_EDIT", "0", False),
     # --- delete_branch_on_merge ---
     ("delete_branch_on_merge", "MILL_DELETE_BRANCH_ON_MERGE", "0", False),
-    # --- ci_fix_max_iterations ---
-    ("ci_fix_max_iterations", "MILL_CI_FIX_MAX_ITERATIONS", "3", 3),
     # --- ci_fix_request_limit via YAML alias ---
     ("ci_fix_request_limit", "MILL_CI_FIX_REQUEST_LIMIT", "80", 80),
     # --- network probe ---
@@ -1126,6 +1122,24 @@ def test_removed_claude_max_concurrency_pin_is_dropped_not_fatal(caplog):
         s = Settings(claude_max_concurrency=6)
     assert not hasattr(s, "claude_max_concurrency")
     assert "claude_max_concurrency" in caplog.text
+
+
+def test_removed_ci_fix_wait_keys_are_dropped_not_fatal(caplog):
+    """The wait_for_ci verify loop is gone and production pins its four
+    settings — ``extra="forbid"`` must not crash-loop the boot."""
+    from robotsix_mill.config import Settings
+
+    removed = {
+        "ci_fix_max_iterations": 3,
+        "ci_fix_wait_poll_interval_s": 30.0,
+        "ci_fix_wait_timeout_s": 900.0,
+        "ci_fix_max_consecutive_pending": 2,
+    }
+    with caplog.at_level("WARNING"):
+        s = Settings(**removed)
+    for key in removed:
+        assert not hasattr(s, key)
+        assert key in caplog.text
 
 
 def test_removed_repo_creation_keys_are_dropped_not_fatal(
