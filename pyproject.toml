@@ -39,7 +39,7 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "httpx>=0.27",
     "cryptography",
-    "pypdf>=6.21.1",
+    "pypdf>=6.21.4",
     # Shared kanban-board frontend library: column-per-status board chrome
     # parameterized by a BoardAdapter Protocol and a render-mode switch.
     # Consumed via git dependency — see robotsix-board README for API docs.
@@ -94,7 +94,7 @@ exclude-newer = "7d"
 # falls inside the rolling 7-day window, so uv would otherwise cap certifi
 # at 2026.10.18 (still vulnerable). The per-package cutoff post-dates the
 # upload so uv resolves 2026.10.19.
-exclude-newer-package = { pypdf = "2026-10-22T00:00:00Z", certifi = "2026-10-21T00:00:00Z" }
+exclude-newer-package = { pypdf = "2026-10-29T00:00:00Z", certifi = "2026-10-21T00:00:00Z" }
 # robotsix-github-auth pins robotsix-http to an older rev (4cf79993) while
 # robotsix-llmio pins ba90d55ea.  The two transitive exact-rev pins are
 # otherwise irreconcilable; both are ancestors of the rev below, so
