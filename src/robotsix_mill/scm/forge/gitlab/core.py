@@ -485,6 +485,45 @@ class GitLabForge(
         """
         return []
 
+    def head_check_runs(self, *, sha: str) -> list[dict[str, Any]]:
+        """Commit statuses reported on *sha*.
+
+        Returns ``[{"name": str, "app_id": None}, ...]`` — GitLab
+        statuses carry no app identity.  Returns ``[]`` on any failure
+        (diagnosis only).  Never raises.
+        """
+        try:
+            project_path = _parse_gitlab_project_path(self._remote_url)
+            return self._head_check_runs(project_path=project_path, sha=sha)
+        except Exception:
+            return []
+
+    def get_repo_description(self, *, owner: str, repo: str) -> str:
+        """Return the description of *owner*/*repo*, or ``""`` on failure.
+
+        Read-back counterpart of :meth:`update_repo`.  Never raises.
+        """
+        try:
+            return self._get_project_description(owner=owner, repo=repo)
+        except Exception:
+            return ""
+
+    def get_authenticated_user_login(self) -> str:
+        """Return the username of the user associated with the current token.
+
+        Calls ``GET /user``.  Caches the result on the instance after the
+        first call.  Returns ``""`` on any failure.  Never raises.
+        """
+        cached = getattr(self, "_cached_bot_login", None)
+        if cached is not None:
+            return str(cached)
+        try:
+            login = self._get_authenticated_user_login()
+        except Exception:
+            login = ""
+        self._cached_bot_login = login
+        return login
+
     def read_repo_file(self, *, path: str, ref: str = "") -> str | None:
         """Raw text of *path* at *ref* (``""`` → default branch), or ``None``
         on any error.  Read-only.  Must NEVER raise.
@@ -516,6 +555,36 @@ class GitLabForge(
         r = self._http.get(f"/projects/{quote(project_path, safe='')}")
         r.raise_for_status()
         return str(r.json()["default_branch"])
+
+    def _head_check_runs(self, *, project_path: str, sha: str) -> list[dict[str, Any]]:
+        """GET /projects/:id/repository/commits/:sha/statuses (paginated)."""
+        from urllib.parse import quote
+
+        return list(
+            _paginated_get(
+                self._http,
+                f"/projects/{quote(project_path, safe='')}"
+                f"/repository/commits/{quote(sha, safe='')}/statuses",
+                params={},
+                item_fn=lambda s: {"name": s.get("name", ""), "app_id": None},
+            )
+        )
+
+    def _get_project_description(self, *, owner: str, repo: str) -> str:
+        """GET /projects/:encoded_path → ``description``."""
+        from urllib.parse import quote
+
+        r = self._http.get(f"/projects/{quote(f'{owner}/{repo}', safe='')}")
+        if r.status_code != 200:
+            return ""
+        return str(r.json().get("description") or "")
+
+    def _get_authenticated_user_login(self) -> str:
+        """GET /user → ``username``."""
+        r = self._http.get("/user")
+        if r.status_code != 200:
+            return ""
+        return str(r.json().get("username") or "")
 
     def _read_repo_file(self, *, project_path: str, path: str, ref: str) -> str:
         """GET /projects/:id/repository/files/:file_path/raw?ref= → raw text."""

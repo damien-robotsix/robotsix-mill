@@ -354,8 +354,8 @@ class Forge(ABC):
 
         Concrete (not abstract) with an ``""`` default — implements the
         forge API call to read back the description set via
-        :meth:`update_repo`. Non-GitHub forges inherit the no-op until
-        they implement the read path.
+        :meth:`update_repo`. GitHub and GitLab override it; other
+        forges inherit the no-op until they implement the read path.
 
         Must NEVER raise — catch all API-level failures and return ``""``.
         """
@@ -662,7 +662,7 @@ class Forge(ABC):
     def get_authenticated_user_login(self) -> str:
         """Return the login of the authenticated user/app.
 
-        Default returns ``""`` — only GitHub implements this.
+        Default returns ``""`` — GitHub and GitLab override it.
         Callers should treat ``""`` as "could not resolve" and choose
         an appropriate fallback (e.g. author-guard bypass).
         """
