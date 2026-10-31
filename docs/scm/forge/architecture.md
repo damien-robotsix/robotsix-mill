@@ -57,7 +57,7 @@ callers in the deliver/merge stages depend on these exact keys.
 | 11 | `fetch_workflow_job_logs` | `(*, run_id: int)` | `str` | Concatenated, ANSI-stripped, size-capped logs of all failed jobs in a workflow run.  Returns `""` when no failed jobs found. |
 | 12 | `update_repo` | `(*, owner: str, repo: str, description: str)` | `bool` | Update the repository description.  Returns `False` on any API failure — must never raise.  The read-back counterpart `get_repo_description()` is concrete (defaults to `""`). |
 
-#### 1.2.2 Concrete (non-abstract) methods (4 total)
+#### 1.2.2 Concrete (non-abstract) methods (7 total)
 
 These have default implementations in the base class.  Adapters **may**
 override them when the forge supports the capability.
@@ -69,6 +69,8 @@ override them when the forge supports the capability.
 | `delete_branch(*, branch)` | Returns `False`. | `DELETE /repos/.../git/refs/heads/{branch}` — returns `True` on 204/404/422 (branch gone = success). | `DELETE /projects/:id/repository/branches/:branch` — returns `True` on 204/404. |
 | `list_branches()` | Returns `[]`. | Paginates `GET /repos/.../branches`, returns `list[BranchInfo]`. | Paginates `GET /projects/:id/repository/branches`. |
 | `list_open_pr_branches()` | Returns `set()` (empty). | Paginates `GET /repos/.../pulls?state=open`, collects head refs. | Paginates `GET /projects/:id/merge_requests?state=opened`, collects `source_branch`. |
+| `read_repo_file(*, path, ref="")` | Returns `None`. Backs the `read_fleet_file` / `grep_fleet_repo` agent tools. | `GET /repos/{owner}/{repo}/contents/{path}` (base64-decoded). | `GET /projects/:id/repository/files/:file_path/raw?ref=` with the path URL-encoded; empty `ref` resolves to the project's `default_branch`. Returns `None` on any error. |
+| `list_repo_files(*, ref="")` | Returns `None`. Backs the `read_fleet_file` / `grep_fleet_repo` agent tools. | `GET /repos/{owner}/{repo}/git/trees/{ref}?recursive=1`. | Paginates `GET /projects/:id/repository/tree?recursive=true[&ref=]`, keeping `type == "blob"` entries. Returns `None` on any error. |
 
 ### 1.3 Factory: `get_forge()`
 
