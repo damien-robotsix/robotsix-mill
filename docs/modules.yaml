@@ -138,10 +138,10 @@ modules:
       - src/robotsix_mill/scm/vcs/git_diff.py
       - src/robotsix_mill/scm/vcs/git_ops.py
       - src/robotsix_mill/scm/vcs/__init__.py
-      - tests/vcs/__init__.py
-      - tests/vcs/test_clone_all_repos.py
-      - tests/vcs/test_git_ops.py
-      - tests/vcs/test_rebase_exempt_paths_in_step.py
+      - tests/scm/vcs/__init__.py
+      - tests/scm/vcs/test_clone_all_repos.py
+      - tests/scm/vcs/test_git_ops.py
+      - tests/scm/vcs/test_rebase_exempt_paths_in_step.py
       - docs/scm/vcs/**/*
     dependencies: []
 
@@ -154,6 +154,7 @@ modules:
     paths:
       - src/robotsix_mill/scm/forge/__init__.py
       - src/robotsix_mill/scm/__init__.py
+      - tests/scm/__init__.py
       - src/robotsix_mill/scm/forge/base.py
       - src/robotsix_mill/scm/forge/auth.py
       - src/robotsix_mill/scm/forge/github.py
@@ -175,19 +176,19 @@ modules:
       - src/robotsix_mill/scm/forge/_http.py
       - src/robotsix_mill/scm/forge/_log_utils.py
       - src/robotsix_mill/scm/forge/rate_limit.py
-      - tests/forge/test_forge_auth.py
-      - tests/forge/test_forge_base.py
-      - tests/forge/test_github.py
-      - tests/forge/test_github_dependabot.py
-      - tests/forge/test_github_merge_classification.py
-      - tests/forge/test_github_pagination.py
-      - tests/forge/test_github_pr_lifecycle.py
-      - tests/forge/test_github_pr_review.py
-      - tests/forge/test_github_security.py
-      - tests/forge/test_gitlab.py
-      - tests/forge/test_gitlab_pagination.py
-      - tests/forge/test_http.py
-      - tests/forge/test_rate_limit.py
+      - tests/scm/forge/test_forge_auth.py
+      - tests/scm/forge/test_forge_base.py
+      - tests/scm/forge/test_github.py
+      - tests/scm/forge/test_github_dependabot.py
+      - tests/scm/forge/test_github_merge_classification.py
+      - tests/scm/forge/test_github_pagination.py
+      - tests/scm/forge/test_github_pr_lifecycle.py
+      - tests/scm/forge/test_github_pr_review.py
+      - tests/scm/forge/test_github_security.py
+      - tests/scm/forge/test_gitlab.py
+      - tests/scm/forge/test_gitlab_pagination.py
+      - tests/scm/forge/test_http.py
+      - tests/scm/forge/test_rate_limit.py
       - docs/scm/forge/**/*
     dependencies: [config, vcs]
 
