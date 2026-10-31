@@ -2895,3 +2895,68 @@ def test_gitlab_repo_file_reads_never_raise(tmp_path):
     assert forge.read_repo_file(path="a.yml") is None
     assert forge.read_repo_file(path="a.yml", ref="main") is None
     assert forge.list_repo_files() is None
+
+
+# ---------------------------------------------------------------------------
+# head_check_runs / get_repo_description / get_authenticated_user_login
+# ---------------------------------------------------------------------------
+
+
+def test_head_check_runs_maps_statuses(tmp_path, monkeypatch):
+    _mock_httpx(
+        monkeypatch,
+        get_map={
+            "/repository/commits/abc123/statuses": _make_response(
+                200, [{"name": "lint", "status": "success"}, {"name": "tests"}]
+            )
+        },
+    )
+    forge = _forge(tmp_path)
+    assert forge.head_check_runs(sha="abc123") == [
+        {"name": "lint", "app_id": None},
+        {"name": "tests", "app_id": None},
+    ]
+
+
+def test_head_check_runs_failure_returns_empty(tmp_path, monkeypatch):
+    _mock_httpx(monkeypatch, get_map={"/statuses": _make_response(500, [], "boom")})
+    forge = _forge(tmp_path)
+    assert forge.head_check_runs(sha="abc123") == []
+
+
+def test_get_repo_description_reads_project(tmp_path, monkeypatch):
+    _mock_httpx(
+        monkeypatch,
+        get_map={
+            "/projects/ns%2Fproject": _make_response(200, {"description": "hello"})
+        },
+    )
+    forge = _forge(tmp_path)
+    assert forge.get_repo_description(owner="ns", repo="project") == "hello"
+
+
+def test_get_repo_description_null_or_failure_returns_empty(tmp_path, monkeypatch):
+    _mock_httpx(
+        monkeypatch,
+        get_map={"/projects/ns%2Fnull": _make_response(200, {"description": None})},
+    )
+    forge = _forge(tmp_path)
+    assert forge.get_repo_description(owner="ns", repo="null") == ""
+    # Unmapped URL → 404 from the mock.
+    assert forge.get_repo_description(owner="ns", repo="missing") == ""
+
+
+def test_get_authenticated_user_login_reads_username_and_caches(tmp_path, monkeypatch):
+    _mock_httpx(
+        monkeypatch, get_map={"/user": _make_response(200, {"username": "mill-bot"})}
+    )
+    forge = _forge(tmp_path)
+    assert forge.get_authenticated_user_login() == "mill-bot"
+    _mock_httpx(monkeypatch, get_map={})
+    assert forge.get_authenticated_user_login() == "mill-bot"
+
+
+def test_get_authenticated_user_login_failure_returns_empty(tmp_path, monkeypatch):
+    _mock_httpx(monkeypatch, get_map={"/user": _make_response(401, {}, "nope")})
+    forge = _forge(tmp_path)
+    assert forge.get_authenticated_user_login() == ""

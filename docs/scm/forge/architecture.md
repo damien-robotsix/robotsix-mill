@@ -57,7 +57,7 @@ callers in the deliver/merge stages depend on these exact keys.
 | 11 | `fetch_workflow_job_logs` | `(*, run_id: int)` | `str` | Concatenated, ANSI-stripped, size-capped logs of all failed jobs in a workflow run.  Returns `""` when no failed jobs found. |
 | 12 | `update_repo` | `(*, owner: str, repo: str, description: str)` | `bool` | Update the repository description.  Returns `False` on any API failure — must never raise.  The read-back counterpart `get_repo_description()` is concrete (defaults to `""`). |
 
-#### 1.2.2 Concrete (non-abstract) methods (11 total)
+#### 1.2.2 Concrete (non-abstract) methods (14 total)
 
 These have default implementations in the base class.  Adapters **may**
 override them when the forge supports the capability.
@@ -75,6 +75,9 @@ override them when the forge supports the capability.
 | `list_path_commits_since(*, path, branch, since)` | Returns `None`. Used by the stale-CI gate to tell whether the CI config was edited after an old failing run. | Overridden in `github_ci.py`. | `GET /projects/:id/repository/commits?ref_name=<branch>&path=<path>&since=<iso>` — returns commit ids, `None` on any error. |
 | `commit_ci_conclusion(*, sha)` | Returns `None` (CI status unavailable). Same `{conclusion, failing, pending}` shape as `check_status`. | Runs `_check_status` against the bare sha; `None` on any error. | `GET /projects/:id/pipelines?sha=<sha>&per_page=1`, maps the latest pipeline's status and jobs like `check_status` (`conclusion: None` when no pipeline exists). Returns `None` on any error — never raises. |
 | `list_tag_workflow_runs(*, tag_glob)` | Returns `[]` (forge without tag-run support). | Lists completed `push` workflow runs and keeps those whose `head_branch` (the tag name) matches `tag_glob` via `fnmatch`. | `GET /projects/:id/pipelines?scope=tags`, keeps pipelines whose `ref` (the tag name) matches `tag_glob` via `fnmatch.fnmatchcase`; same run-dict shape as `list_workflow_runs`, newest first. |
+| `head_check_runs(*, sha)` | Returns `[]` ("unknown"). Used by `ci_poll` to diagnose missing required contexts. | Check-runs and commit statuses on `sha`, each with its app id. | Paginates `GET /projects/:id/repository/commits/:sha/statuses`; each status maps to `{"name": <name>, "app_id": None}`. Returns `[]` on any error. |
+| `get_repo_description(*, owner, repo)` | Returns `""`. Read-back counterpart of `update_repo`. | Reads the repository `description`. | `GET /projects/:id` → `description` (`null` → `""`). Returns `""` on any error. |
+| `get_authenticated_user_login()` | Returns `""`; callers treat it as "could not resolve" (e.g. author-guard bypass). | `GET /user` → `login` (cached per instance). | `GET /user` → `username` (cached per instance). Returns `""` on any error. |
 
 ### 1.3 Factory: `get_forge()`
 
