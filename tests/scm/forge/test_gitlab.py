@@ -2552,3 +2552,98 @@ def test_gitlab_ci_triggers_helper_schedule_from_active_flag():
     assert triggers is not None
     assert "schedule" in triggers
     assert "workflow_dispatch" in triggers
+
+
+# ---------------------------------------------------------------------------
+# read_repo_file / list_repo_files (fleet-file tools parity with GitHub)
+# ---------------------------------------------------------------------------
+
+
+class _RecordingHttp:
+    """Fake ``_ApiClient`` for the repo-file seams: records GET calls and
+    serves the project lookup, raw file, and paginated tree endpoints."""
+
+    def __init__(self, *, tree_pages=None, fail=False):
+        self.calls: list = []
+        self.tree_pages = list(tree_pages or [])
+        self.fail = fail
+
+    def _resp(self, url):
+        if self.fail:
+            return _make_response(500, {}, "boom")
+        if url.endswith("/raw"):
+            return _make_response(200, None, text="hi")
+        if "/repository/tree" in url:
+            return _make_response(200, self.tree_pages.pop(0))
+        return _make_response(200, {"id": 7, "default_branch": "trunk"})
+
+    def get(self, path, **kw):
+        self.calls.append((path, kw))
+        return self._resp(path)
+
+    def client(self):
+        from contextlib import contextmanager
+
+        outer = self
+
+        class _C:
+            def get(self, url, headers=None, params=None):
+                outer.calls.append((url, {"params": params}))
+                return outer._resp(url)
+
+        @contextmanager
+        def _cm():
+            yield _C(), "https://gl/api/v4", {}
+
+        return _cm()
+
+
+def test_gitlab_read_repo_file_get_only_and_default_branch(tmp_path):
+    forge = _forge(tmp_path)
+    http = _RecordingHttp()
+    forge._http = http
+    assert forge.read_repo_file(path="x y/a.yml") == "hi"
+    assert forge.read_repo_file(path="a.yml", ref="v1") == "hi"
+    assert http.calls[0] == ("/projects/ns%2Fproject", {})
+    assert http.calls[1] == (
+        "/projects/ns%2Fproject/repository/files/x%20y%2Fa.yml/raw",
+        {"params": {"ref": "trunk"}},
+    )
+    assert http.calls[2] == (
+        "/projects/ns%2Fproject/repository/files/a.yml/raw",
+        {"params": {"ref": "v1"}},
+    )
+    assert len(http.calls) == 3
+
+
+def test_gitlab_list_repo_files_paginates_and_keeps_blobs(tmp_path):
+    forge = _forge(tmp_path)
+    page1 = [{"type": "blob", "path": f"f{i}"} for i in range(99)] + [
+        {"type": "tree", "path": "dir"}
+    ]
+    page2 = [{"type": "blob", "path": "dir/last.yml"}]
+    http = _RecordingHttp(tree_pages=[page1, page2])
+    forge._http = http
+    files = forge.list_repo_files(ref="v1")
+    assert files == [f"f{i}" for i in range(99)] + ["dir/last.yml"]
+    assert len(http.calls) == 2
+    url, kw = http.calls[0]
+    assert url == "https://gl/api/v4/projects/ns%2Fproject/repository/tree"
+    assert kw["params"]["recursive"] == "true"
+    assert kw["params"]["ref"] == "v1"
+
+
+def test_gitlab_list_repo_files_omits_empty_ref(tmp_path):
+    forge = _forge(tmp_path)
+    http = _RecordingHttp(tree_pages=[[{"type": "blob", "path": "a"}]])
+    forge._http = http
+    assert forge.list_repo_files() == ["a"]
+    assert "ref" not in http.calls[0][1]["params"]
+
+
+def test_gitlab_repo_file_reads_never_raise(tmp_path):
+    forge = _forge(tmp_path)
+    forge._http = _RecordingHttp(fail=True)
+    assert forge.read_repo_file(path="a.yml") is None
+    assert forge.read_repo_file(path="a.yml", ref="main") is None
+    assert forge.list_repo_files() is None
