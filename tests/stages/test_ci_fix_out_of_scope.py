@@ -674,6 +674,73 @@ def test_out_of_scope_fix_done_auto_resumes_original(tmp_path, monkeypatch):
     assert states.count(State.HUMAN_ISSUE_APPROVAL) <= 1
 
 
+def _merged_fix_then_rerun(tmp_path, monkeypatch, run_created_at):
+    """Spawn a fix, merge it (DONE), then re-enter OOS on the resumed parent
+    with a failing run on the parent's head created at *run_created_at*."""
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    ctx.service.transition(t.id, State.BLOCKED, note=out.note)
+    fix = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)[0]
+    ctx.service.transition(fix.id, State.DONE)  # PR merged
+    assert ctx.service.get(t.id).state is State.FIXING_CI
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, branch=None, head_sha=None: [
+            {
+                "id": 77,
+                "head_sha": head_sha,
+                "conclusion": "failure",
+                "created_at": run_created_at,
+            }
+        ],
+    )
+    reruns: list[int] = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "rerun_workflow",
+        lambda self, *, run_id: reruns.append(run_id) or {"rerun": True},
+    )
+    out2 = CIFixStage().run(ctx.service.get(t.id), ctx)
+    return ctx, t, fix, out2, reruns
+
+
+def test_out_of_scope_fix_merged_after_run_reruns_ci_no_respawn(tmp_path, monkeypatch):
+    """The failing run predates the merge of the ci_fp-matching fix: the red
+    result is stale, so CI is re-run and no new dependency ticket spawned."""
+    ctx, t, fix, out, reruns = _merged_fix_then_rerun(
+        tmp_path, monkeypatch, "2000-01-01T00:00:00Z"
+    )
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert reruns == [77]
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert [f.id for f in fixes] == [fix.id]
+    notes = [e.note or "" for e in ctx.service.history(t.id)]
+    assert any(f"out-of-scope fix {fix.id} already merged" in n for n in notes)
+
+
+def test_out_of_scope_fix_merged_before_run_still_spawns(tmp_path, monkeypatch):
+    """The failing run started after the fix merged: the failure genuinely
+    recurred, so a new dependency ticket is spawned."""
+    ctx, _t, fix, out, reruns = _merged_fix_then_rerun(
+        tmp_path, monkeypatch, "2999-01-01T00:00:00Z"
+    )
+    assert out.next_state is State.BLOCKED
+    assert reruns == []
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert len(fixes) == 2
+    assert fix.id in {f.id for f in fixes}
+
+
 def test_in_scope_done_still_pushes_no_fix_ticket(tmp_path, monkeypatch):
     """Regression: an in-scope DONE verdict still push-checks and returns
     IMPLEMENT_COMPLETE without spawning any out-of-scope fix ticket."""

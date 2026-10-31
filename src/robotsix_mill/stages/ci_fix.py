@@ -94,6 +94,7 @@ from .ci_infra_block import (
     infra_account_block_note,
     repo_setting_block_note,
 )
+from .ci_stale_gate import _parse_ts
 
 log = logging.getLogger("robotsix_mill.stages.ci_fix")
 
@@ -113,6 +114,10 @@ _CI_FIX_HISTORY_MAX_ENTRIES = 20
 # agent's fix is still only local, so it is replayed on the freshest remote
 # state. Only after the budget is exhausted does the stage block for a human.
 _CI_PUSH_RETRY_BUDGET = 3
+
+# Records the merged dependency-fix ticket id a stale out-of-scope failure
+# was already re-checked against, so the re-check fires once per fix.
+_CI_MERGED_RECHECK = "ci_fix_merged_recheck.txt"
 
 
 def _is_budget_cap_error(exc: BaseException) -> bool:
@@ -2158,9 +2163,99 @@ class CIFixStage(Stage):
         if transient_outcome is not None:
             return transient_outcome
 
+        merged_outcome = self._recheck_after_merged_fix(
+            ticket, ctx, branch, failing_summary, head_sha
+        )
+        if merged_outcome is not None:
+            return merged_outcome
+
         return self._spawn_or_reuse_fix(
             ticket, ctx, branch, result, failing_summary, head_sha, out_of_scope_alerts
         )
+
+    def _recheck_after_merged_fix(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        branch: str,
+        failing_summary: str,
+        head_sha: str,
+    ) -> Outcome | None:
+        """Re-run CI instead of re-spawning when the fix already merged.
+
+        When the most recent dependency ticket with this failure's
+        ``ci_fp:`` fingerprint merged AFTER the failing run on *head_sha*
+        started, the red result is stale: refresh the branch if it is
+        behind, else re-run the failed workflows, and re-poll. One-shot per
+        merged fix ticket (recorded in an artifact), so a failure that
+        genuinely persists after the re-check still spawns a new ticket.
+
+        Returns ``Outcome(State.IMPLEMENT_COMPLETE)`` when a re-check was
+        triggered, else ``None`` (caller proceeds to spawn).
+        """
+        if not head_sha:
+            return None
+        board_id = ctx.repo_config.board_id if ctx.repo_config else ""
+        fingerprint = _ci_failure_fingerprint(
+            _extract_check_names(failing_summary), board_id
+        )
+        try:
+            merged = dependency_fix.find_merged_fix(
+                ctx, [f"ci_fp:{fingerprint}"], board_id or ticket.board_id
+            )
+        except Exception as exc:
+            log.warning("%s: merged-fix lookup failed: %s", ticket.id, exc)
+            return None
+        if merged is None:
+            return None
+        fix_id, merged_at = merged
+
+        marker = ctx.service.workspace(ticket).artifacts_dir / _CI_MERGED_RECHECK
+        try:
+            if marker.read_text().strip() == fix_id:
+                return None
+        except OSError:
+            # No marker yet (first recheck for this fix) — proceed.
+            pass
+
+        forge = get_forge(ctx.settings, repo_config=ctx.repo_config)
+        try:
+            runs = [
+                r
+                for r in forge.list_workflow_runs(head_sha=head_sha)
+                if r.get("conclusion") == "failure"
+            ]
+        except Exception as exc:
+            log.warning("%s: list_workflow_runs failed: %s", ticket.id, exc)
+            return None
+        started = [_parse_ts(r.get("created_at")) for r in runs]
+        if not started or any(s is None or s >= merged_at for s in started):
+            return None
+
+        action = "re-running CI"
+        try:
+            pr = forge.pr_status(source_branch=branch)
+            if (pr or {}).get("mergeable_state") == "behind":
+                forge.update_branch(source_branch=branch)
+                action = "refreshed branch"
+            else:
+                for run in runs:
+                    forge.rerun_workflow(run_id=run["id"])
+        except Exception as exc:
+            log.warning("%s: merged-fix re-check failed: %s", ticket.id, exc)
+            return None
+
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(fix_id)
+        try:
+            ctx.service.add_history_note(
+                ticket.id,
+                f"out-of-scope fix {fix_id} already merged; {action} "
+                "instead of re-spawning",
+            )
+        except Exception:
+            log.warning("%s: failed to record merged-fix note", ticket.id)
+        return Outcome(State.IMPLEMENT_COMPLETE)
 
     def _finalize_success(
         self,
