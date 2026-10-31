@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.21.2](https://github.com/damien-robotsix/robotsix-mill/compare/v0.21.1...v0.21.2) (2026-10-31)
+
+
+### Bug Fixes
+
+* ci_fix: out-of-scope CI failure — docker-pr-scan-mill / Scan, ci / Tests, Security audit (20261031T091439Z-ci-fix-out-of-scope-ci-failure-docker-pr-bd92) ([#3532](https://github.com/damien-robotsix/robotsix-mill/issues/3532)) ([7fd253c](https://github.com/damien-robotsix/robotsix-mill/commit/7fd253cfbf20250270fd0ea4228d97c254851646))
+* scope-triage: stop the repo awareness gate from rejecting CI-failure tickets because the log tail contains `robotsix-mill[bot]` (20261030T132320Z-scope-triage-stop-the-repo-awareness-gat-6099) ([#3527](https://github.com/damien-robotsix/robotsix-mill/issues/3527)) ([6500c97](https://github.com/damien-robotsix/robotsix-mill/commit/6500c97d6e40ad7550470968c8b45881ba58859e))
+* trace-review: 1 finding(s) for trace `fdb0241e` (session: meta · meta-20261030T104836Z-a2bb4829) (20261030T123148Z-trace-review-1-finding-s-for-trace-fdb02-de26) ([#3526](https://github.com/damien-robotsix/robotsix-mill/issues/3526)) ([39d9049](https://github.com/damien-robotsix/robotsix-mill/commit/39d904938705a44a043502f4173c963559854d11))
+
 ## [0.21.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.21.0...v0.21.1) (2026-10-30)
 
 
