@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import UTC, datetime
 
 from ..core.models import SourceKind, Ticket, TicketKind
 from ..core.states import State
@@ -54,6 +55,36 @@ def _label_dedup(
         cand_labels = _parse_labels(cand.labels)
         if any(label in cand_labels for label in dedup_labels):
             return cand.id
+    return None
+
+
+def find_merged_fix(
+    ctx: StageContext,
+    dedup_labels: list[str],
+    board_id: str,
+) -> tuple[str, datetime] | None:
+    """Return ``(id, merged_at)`` of a just-merged fix for *dedup_labels*.
+
+    Looks at the MOST RECENT ticket on *board_id* carrying any of
+    *dedup_labels* (any state). Returns it only when it is DONE/CLOSED
+    and its history shows it reached DONE (PR merged); ``merged_at`` is
+    the time of that first DONE event. Returns ``None`` otherwise — an
+    open match is handled by :func:`_label_dedup`, and a ticket closed
+    without a merge (e.g. "no change needed") fixed nothing.
+    """
+    candidates: list[Ticket] = ctx.service.recent_tickets(limit=200, board_id=board_id)
+    for cand in candidates:
+        if not any(label in _parse_labels(cand.labels) for label in dedup_labels):
+            continue
+        if cand.state not in (State.CLOSED, State.DONE):
+            return None
+        for ev in ctx.service.history(cand.id):
+            if ev.state == State.DONE:
+                at = ev.at
+                if at.tzinfo is None:
+                    at = at.replace(tzinfo=UTC)
+                return cand.id, at
+        return None
     return None
 
 
