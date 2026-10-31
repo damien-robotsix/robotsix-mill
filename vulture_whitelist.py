@@ -531,7 +531,7 @@ retrospect_memory_path
 # tooling, so vulture (60%) flags the frozen-dataclass field as unused.
 observed_epoch
 # _reset_for_tests — clears process-wide rate-limit snapshot state; called
-# only from tests/forge/test_http.py and tests/forge/test_rate_limit.py, and
+# only from tests/scm/forge/test_http.py and tests/scm/forge/test_rate_limit.py, and
 # vulture only scans src/.
 _reset_for_tests
 
