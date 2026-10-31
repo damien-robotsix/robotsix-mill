@@ -8,11 +8,12 @@ from robotsix_mill.agents import coding
 from robotsix_mill.core.states import State
 from robotsix_mill.scm.vcs import git_ops
 from robotsix_mill.stages.implement import ImplementStage
-from tests.stages.implement.conftest import _ticket, _write_file_map
-from tests.stages.implement.test_implement import (
+from tests.stages.implement.conftest import (
     _clone_repo_to,
     _fake_agent,
     _git,
+    _ticket,
+    _write_file_map,
     make_bare_repo,
 )
 
