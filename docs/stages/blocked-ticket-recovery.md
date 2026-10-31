@@ -136,6 +136,20 @@ the new permissions on the installation. Until you do, a real code failure
 on that private repo can be misread as an account block, so check the
 WARNING and the run's jobs before resuming.
 
+### Out-of-scope CI failure parked on a dependency fix
+
+When the ci-fix agent classifies a red check as out of scope for the
+ticket, the ticket parks `BLOCKED` on a `ci_fix_dependency` fix ticket
+(auto-resumes when that fix reaches DONE). Before spawning a new fix, the
+stage checks whether the most recent fix with the same failure fingerprint
+already merged after the failing run started. If so, it does not spawn a
+duplicate: it refreshes the branch when it is behind, otherwise re-runs
+the failed workflows, and records a history note such as `out-of-scope fix
+<id> already merged; re-running CI instead of re-spawning`. The ticket
+returns to the CI poll. This re-check fires once per merged fix. A failure
+that still recurs after a merge that predates the failing run spawns a new
+fix ticket as usual.
+
 ## Retrying tickets
 
 Transient infrastructure errors (git outages, provider 503s, connection
