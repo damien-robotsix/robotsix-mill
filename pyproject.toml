@@ -75,7 +75,9 @@ default-groups = ["dev"]
 exclude-newer = "7d"
 # pypdf 6.21.1 fixes GHSA-39mj-jf6j-2qj3, GHSA-7mh2-4gg2-979f (6.20.0),
 # GHSA-9mx8-4j7g-633p, GHSA-qfv9-64jg-mh7p (6.20.1) and GHSA-5hx5-vpf9-5wcv
-# (6.21.1). uv resolves 6.21.2 (uploaded 2026-10-21), so the cutoff below is 2026-10-22.
+# (6.21.1). pypdf 6.21.3 fixes CVE-2026-119209 / GHSA-x3rh-gjgm-fmqc and
+# CVE-2026-119208 / GHSA-62m5-6wh8-28x7 (plus the Oct-27 batch). uv resolves
+# 6.21.4 (uploaded 2026-10-28), so the cutoff below is 2026-10-29.
 # pypdf 6.19.0 fixed the Oct-2026 batch of PDF-parsing DoS advisories
 # (CVE-2026-102993..103000 / their GHSA/PYSEC aliases: unbounded memory and
 # long runtimes on malformed font data, /ToUnicode streams, FlateDecode
@@ -85,7 +87,7 @@ exclude-newer = "7d"
 # GHSA-fp3f-mc75-235c / GHSA-fwg2-594c-jp42 fixes.
 # The per-package override lets exactly this one package escape the rolling
 # 7-day window; the cutoff must post-date the release itself (uv resolves
-# 6.21.2, uploaded 2026-10-21).
+# 6.21.4, uploaded 2026-10-28).
 #
 # certifi 2026.10.19 removes the emSign root CAs whose intermediate keys
 # were compromised (GHSA-6q48-6c7w-9gw2). The fix (uploaded 2026-10-20)
