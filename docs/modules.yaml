@@ -343,6 +343,10 @@ modules:
       - tests/stages/implement/test_budget_cap_autosplit.py
       - tests/stages/implement/test_budget_cap_convergence.py
       - tests/stages/implement/test_implement.py
+      - tests/stages/implement/test_implement_rebase_deps.py
+      - tests/stages/implement/test_implement_epic_references.py
+      - tests/stages/implement/test_implement_spawn_guards.py
+      - tests/stages/implement/test_implement_fingerprint.py
       - tests/stages/implement/test_implement_scope_guardrail.py
       - tests/stages/implement/test_implement_preflight.py
       - tests/stages/implement/test_implement_validation.py
