@@ -12,7 +12,7 @@ import json
 import logging
 from datetime import UTC, datetime
 
-from ..core.models import SourceKind, Ticket, TicketKind
+from ..core.models import SourceKind, Ticket, TicketEvent, TicketKind
 from ..core.states import State
 from .base import Outcome, StageContext
 
@@ -78,7 +78,8 @@ def find_merged_fix(
             continue
         if cand.state not in (State.CLOSED, State.DONE):
             return None
-        for ev in ctx.service.history(cand.id):
+        events: list[TicketEvent] = ctx.service.history(cand.id)
+        for ev in events:
             if ev.state == State.DONE:
                 at = ev.at
                 if at.tzinfo is None:

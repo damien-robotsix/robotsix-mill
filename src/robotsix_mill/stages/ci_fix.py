@@ -2215,6 +2215,7 @@ class CIFixStage(Stage):
             if marker.read_text().strip() == fix_id:
                 return None
         except OSError:
+            # No marker yet (first recheck for this fix) — proceed.
             pass
 
         forge = get_forge(ctx.settings, repo_config=ctx.repo_config)
