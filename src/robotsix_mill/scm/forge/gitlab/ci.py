@@ -7,6 +7,7 @@ Split from the monolithic ``gitlab.py``.  Defines
 
 from __future__ import annotations
 
+import fnmatch
 import re
 from typing import Any
 
@@ -205,6 +206,20 @@ class GitLabForgeCIMixin:
         return self._list_pipelines(
             project_path=project_path, branch=branch, head_sha=head_sha
         )
+
+    def list_tag_workflow_runs(self, *, tag_glob: str) -> list[dict[str, Any]]:
+        """Return terminal tag pipelines whose ref (the tag name) matches
+        the fnmatch *tag_glob*, newest first.
+        """
+        from .core import _parse_gitlab_project_path
+
+        project_path = _parse_gitlab_project_path(self._remote_url)  # type: ignore[attr-defined]
+        runs = self._list_pipelines(
+            project_path=project_path, branch=None, head_sha=None, scope="tags"
+        )
+        return [
+            r for r in runs if fnmatch.fnmatchcase(r.get("head_branch") or "", tag_glob)
+        ]
 
     def fetch_workflow_job_logs(self, *, run_id: int, full_log: bool = False) -> str:
         """Fetch concatenated failed-job logs from a pipeline by *run_id*.
@@ -453,14 +468,17 @@ class GitLabForgeCIMixin:
         project_path: str,
         branch: str | None,
         head_sha: str | None,
+        scope: str | None = None,
     ) -> list[dict[str, Any]]:
-        """GET /projects/:id/pipelines?ref=…&sha=…&per_page=30."""
+        """GET /projects/:id/pipelines?ref=…&sha=…&scope=…&per_page=30."""
         pid = self._resolve_project_id(project_path)  # type: ignore[attr-defined]
         params: dict[str, Any] = {"per_page": 30}
         if branch is not None:
             params["ref"] = branch
         if head_sha is not None:
             params["sha"] = head_sha
+        if scope is not None:
+            params["scope"] = scope
 
         r = self._http.get(  # type: ignore[attr-defined]
             f"/projects/{pid}/pipelines",
@@ -483,6 +501,9 @@ class GitLabForgeCIMixin:
                 "html_url": p.get("web_url", ""),
                 "created_at": p.get("created_at", ""),
                 "path": "",
+                # The pipeline ref — a branch name, or the tag name for a
+                # tag pipeline (mirrors GitHub's ``head_branch``).
+                "head_branch": p.get("ref", ""),
             }
             for p in raw
             if p.get("status") in terminal

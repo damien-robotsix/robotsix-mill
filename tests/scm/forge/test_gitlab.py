@@ -1819,6 +1819,7 @@ def test_list_workflow_runs_maps_pipelines(tmp_path, monkeypatch):
             "html_url": "http://gl/pipelines/100",
             "created_at": "2026-03-03T00:00:00Z",
             "path": "",
+            "head_branch": "feature/x",
         },
         {
             "id": 101,
@@ -1830,6 +1831,7 @@ def test_list_workflow_runs_maps_pipelines(tmp_path, monkeypatch):
             "html_url": "http://gl/pipelines/101",
             "created_at": "2026-03-04T00:00:00Z",
             "path": "",
+            "head_branch": "feature/x",
         },
     ]
 
@@ -1874,6 +1876,7 @@ def test_list_workflow_runs_canceled_skipped(tmp_path, monkeypatch):
             "html_url": "http://gl/pipelines/200",
             "created_at": "2026-03-05T00:00:00Z",
             "path": "",
+            "head_branch": "feature/y",
         },
         {
             "id": 201,
@@ -1885,6 +1888,7 @@ def test_list_workflow_runs_canceled_skipped(tmp_path, monkeypatch):
             "html_url": "http://gl/pipelines/201",
             "created_at": "2026-03-06T00:00:00Z",
             "path": "",
+            "head_branch": "feature/y",
         },
     ]
 
@@ -1900,6 +1904,54 @@ def test_list_workflow_runs_empty(tmp_path, monkeypatch):
 
     forge = _forge(tmp_path)
     assert forge.list_workflow_runs() == []
+
+
+def test_list_tag_workflow_runs_filters_on_tag_glob(tmp_path):
+    """Tag pipelines (scope=tags) are filtered on their ref via fnmatch."""
+    pipelines = [
+        {
+            "id": 301,
+            "ref": "v1.2.0",
+            "sha": "t1",
+            "status": "failed",
+            "web_url": "http://gl/pipelines/301",
+            "created_at": "2026-03-08T00:00:00Z",
+        },
+        {
+            "id": 300,
+            "ref": "nightly-1",
+            "sha": "t0",
+            "status": "success",
+            "web_url": "http://gl/pipelines/300",
+            "created_at": "2026-03-07T00:00:00Z",
+        },
+        {
+            "id": 302,
+            "ref": "v1.3.0",
+            "sha": "t2",
+            "status": "running",
+            "web_url": "http://gl/pipelines/302",
+            "created_at": "2026-03-09T00:00:00Z",
+        },
+    ]
+    calls = []
+
+    class _FakeHttp:
+        def get(self, path, **kw):
+            calls.append((path, kw.get("params")))
+            return _make_response(200, pipelines)
+
+    forge = _forge(tmp_path)
+    forge._http = _FakeHttp()
+    forge._resolve_project_id = lambda _path: 42
+
+    runs = forge.list_tag_workflow_runs(tag_glob="v*")
+
+    assert calls == [("/projects/42/pipelines", {"per_page": 30, "scope": "tags"})]
+    assert [r["id"] for r in runs] == [301]
+    assert runs[0]["head_branch"] == "v1.2.0"
+    assert runs[0]["conclusion"] == "failure"
+    assert runs[0]["head_sha"] == "t1"
 
 
 # ---------------------------------------------------------------------------

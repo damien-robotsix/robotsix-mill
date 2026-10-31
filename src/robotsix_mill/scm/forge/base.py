@@ -310,7 +310,8 @@ class Forge(ABC):
 
         Same dict shape as :meth:`list_workflow_runs`, newest first; for a
         tag push ``head_branch`` is the tag name.  The default returns
-        ``[]`` (forge without tag-run support); GitHub overrides it.
+        ``[]`` (forge without tag-run support); GitHub and GitLab
+        override it.
         """
         return []
 
