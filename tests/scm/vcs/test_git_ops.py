@@ -17,7 +17,7 @@ from robotsix_mill.scm.vcs import clone_all_repos, git_ops
 from robotsix_mill.scm.vcs.git_ops import PostPushResult
 
 # ---------------------------------------------------------------------------
-# Helpers — copied verbatim from tests/stages/test_implement.py lines 18–35
+# Helpers — copied verbatim from tests/stages/implement/test_implement.py lines 18–35
 # ---------------------------------------------------------------------------
 
 

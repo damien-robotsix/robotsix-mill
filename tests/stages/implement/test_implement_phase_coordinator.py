@@ -11,7 +11,7 @@ The single-pass collaborator (``_run_single_implement_pass``, which lives on
 the sibling ``ImplementationLogicMixin``) and the sandbox/git/pause seams are
 mocked; a REAL ``TicketService`` (per-test SQLite) and a REAL ``Workspace``
 are used, per repo convention. No full ``ImplementStage().run(...)`` flow is
-driven here — that is covered by ``tests/stages/test_implement.py``.
+driven here — that is covered by ``tests/stages/implement/test_implement.py``.
 """
 
 import json
@@ -37,7 +37,7 @@ from robotsix_mill.stages.implement._shared import (
     _SinglePassResult,
 )
 
-# --- fixtures / helpers (copied from tests/stages/test_implement.py) ------
+# --- fixtures / helpers (copied from tests/stages/implement/test_implement.py) ------
 
 
 @pytest.fixture

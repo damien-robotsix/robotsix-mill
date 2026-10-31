@@ -5,7 +5,7 @@ pipeline — empty drafts, unmet deps, dedup short-circuits, clone
 failure fallback, successful refine (autonomous & gated), auto-approve
 triage, refine triage skip, split children, spec review, epic body
 handling, and memory load/persist.  Mock seams follow the same
-convention as test_implement.py.
+convention as tests/stages/implement/test_implement.py.
 """
 
 from __future__ import annotations
