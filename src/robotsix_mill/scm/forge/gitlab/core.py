@@ -485,9 +485,71 @@ class GitLabForge(
         """
         return []
 
+    def read_repo_file(self, *, path: str, ref: str = "") -> str | None:
+        """Raw text of *path* at *ref* (``""`` → default branch), or ``None``
+        on any error.  Read-only.  Must NEVER raise.
+        """
+        try:
+            project_path = _parse_gitlab_project_path(self._remote_url)
+            return self._read_repo_file(project_path=project_path, path=path, ref=ref)
+        except Exception:
+            return None
+
+    def list_repo_files(self, *, ref: str = "") -> list[str] | None:
+        """Blob paths of the tree at *ref* (``""`` → default branch), or
+        ``None`` on any error.  Read-only.  Must NEVER raise.
+        """
+        try:
+            project_path = _parse_gitlab_project_path(self._remote_url)
+            return self._list_repo_files(project_path=project_path, ref=ref)
+        except Exception:
+            return None
+
     # ------------------------------------------------------------------
     # HTTP seams (monkeypatched in tests)
     # ------------------------------------------------------------------
+
+    def _default_branch(self, project_path: str) -> str:
+        """GET /projects/:encoded_path → ``default_branch``."""
+        from urllib.parse import quote
+
+        r = self._http.get(f"/projects/{quote(project_path, safe='')}")
+        r.raise_for_status()
+        return str(r.json()["default_branch"])
+
+    def _read_repo_file(self, *, project_path: str, path: str, ref: str) -> str:
+        """GET /projects/:id/repository/files/:file_path/raw?ref= → raw text."""
+        from urllib.parse import quote
+
+        if not ref:
+            ref = self._default_branch(project_path)
+        r = self._http.get(
+            f"/projects/{quote(project_path, safe='')}"
+            f"/repository/files/{quote(path, safe='')}/raw",
+            params={"ref": ref},
+        )
+        r.raise_for_status()
+        return r.text
+
+    def _list_repo_files(self, *, project_path: str, ref: str) -> list[str]:
+        """GET /projects/:id/repository/tree?recursive=true[&ref=] (paginated)
+        → blob paths.  GitLab uses the default branch when *ref* is empty.
+        """
+        from urllib.parse import quote
+
+        params: dict[str, Any] = {"recursive": "true"}
+        if ref:
+            params["ref"] = ref
+        return [
+            p
+            for p in _paginated_get(
+                self._http,
+                f"/projects/{quote(project_path, safe='')}/repository/tree",
+                params=params,
+                item_fn=lambda e: e.get("path") if e.get("type") == "blob" else None,
+            )
+            if p
+        ]
 
     def _resolve_project_id(self, project_path: str) -> int:
         """GET /projects/:encoded_path → project id."""
