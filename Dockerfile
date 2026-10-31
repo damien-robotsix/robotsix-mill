@@ -2,7 +2,7 @@
 # Stage 0: ui — vendored @robotsix/ui config panel build output.
 # The package is distributed from git; alpine has no git so install it.
 # =============================================================================
-FROM node:22-alpine AS ui
+FROM node:22-alpine@sha256:025b8e975a61d94e33abeafaad1255ef44e4898cf1a1b6446860009c72e6d284 AS ui
 ARG ROBOTSIX_UI_VERSION=dae969d9b69fd58aea014cd23082bf1d17430c8f  # tag v0.1.41
 # WORKDIR matters: with no working directory the install ran in `/`, which
 # newer npm refuses with `npm error Tracker "idealTree" already exists`.
