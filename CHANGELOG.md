@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.22.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.21.1...v0.22.0) (2026-11-01)
+
+
+### Features
+
+* forge parity: GitLab adapter lacks read_repo_file / list_repo_files (fleet file tools blind on GitLab repos) (20261031T171156Z-forge-parity-gitlab-adapter-lacks-read-r-014a) ([#3539](https://github.com/damien-robotsix/robotsix-mill/issues/3539)) ([72fcd22](https://github.com/damien-robotsix/robotsix-mill/commit/72fcd222598d202973df756dbe64768484ef071f))
+* forge_parity: GitLab adapter lacks get_authenticated_user_login / get_repo_description / head_check_runs (20261031T195224Z-forge-parity-gitlab-adapter-lacks-get-au-3e8e) ([#3546](https://github.com/damien-robotsix/robotsix-mill/issues/3546)) ([9057a7a](https://github.com/damien-robotsix/robotsix-mill/commit/9057a7a2c61c9daec344e0c0c42345cffcb7e4d6))
+
+
+### Bug Fixes
+
+* ci source: attach the failing job/step's error lines instead of the last 20k chars of the whole run log (20261030T132322Z-ci-source-attach-the-failing-job-step-s-43e6) ([#3554](https://github.com/damien-robotsix/robotsix-mill/issues/3554)) ([fb3a917](https://github.com/damien-robotsix/robotsix-mill/commit/fb3a917c689c6ff55f815c84e08e39ecb13018e4))
+* ci_fix: don't spawn a new out-of-scope dependency ticket when a ci_fp-matching fix just merged — re-run CI on the parent's head instead (20261031T145555Z-ci-fix-don-t-spawn-a-new-out-of-scope-de-8ba4) ([#3537](https://github.com/damien-robotsix/robotsix-mill/issues/3537)) ([a6476ed](https://github.com/damien-robotsix/robotsix-mill/commit/a6476eda8ce0052c69c78953b8d92778bc5f3cfc))
+* ci_fix: out-of-scope CI failure — docker-pr-scan-mill / Scan, ci / Tests, Security audit (20261031T091439Z-ci-fix-out-of-scope-ci-failure-docker-pr-bd92) ([#3532](https://github.com/damien-robotsix/robotsix-mill/issues/3532)) ([7fd253c](https://github.com/damien-robotsix/robotsix-mill/commit/7fd253cfbf20250270fd0ea4228d97c254851646))
+* component-security-audit: missing HTTP security headers, unguarded web_fetch SSRF sink, legacy flat openrouter_api_key fallback (20261031T142025Z-component-security-audit-missing-http-se-1ae6) [WIP] ([#3561](https://github.com/damien-robotsix/robotsix-mill/issues/3561)) ([d658e6b](https://github.com/damien-robotsix/robotsix-mill/commit/d658e6b560f87b636fde587fce90a1323b352ef4))
+* forge parity: GitLab adapter lacks get_workflow_file / list_path_commits_since (stale-CI gate inert on GitLab) (20261031T171156Z-forge-parity-gitlab-adapter-lacks-get-wo-dd50) ([#3538](https://github.com/damien-robotsix/robotsix-mill/issues/3538)) ([a87bea6](https://github.com/damien-robotsix/robotsix-mill/commit/a87bea67b6353d9727d2572b974d0c62b90d6ff8))
+* forge parity: GitLab adapter lacks list_tag_workflow_runs (tag pipeline runs invisible) (20261031T171156Z-forge-parity-gitlab-adapter-lacks-list-t-f1ad) ([#3541](https://github.com/damien-robotsix/robotsix-mill/issues/3541)) ([6889c05](https://github.com/damien-robotsix/robotsix-mill/commit/6889c056db5b1118622da5fc5a87f557c2b2d0fc))
+* forge_parity: GitLab adapter lacks commit_ci_conclusion (20261031T195219Z-forge-parity-gitlab-adapter-lacks-commit-2880) ([#3545](https://github.com/damien-robotsix/robotsix-mill/issues/3545)) ([d6f58eb](https://github.com/damien-robotsix/robotsix-mill/commit/d6f58ebd28b2349578bf4544c712ad9a955fb7ae))
+* implement agent prompt: never write substitute test runners or stubs when pytest/ruff is missing — report 'skipped: missing tool' (20261101T094248Z-implement-agent-prompt-never-write-subst-f6fb) ([#3555](https://github.com/damien-robotsix/robotsix-mill/issues/3555)) ([626ace4](https://github.com/damien-robotsix/robotsix-mill/commit/626ace4635a591206cc90b9d5481ceffff75615e))
+* **merge:** skip the full re-poll of an unchanged parked HUMAN_MR_APPROVAL PR ([#3550](https://github.com/damien-robotsix/robotsix-mill/issues/3550)) ([1684fef](https://github.com/damien-robotsix/robotsix-mill/commit/1684fef7c9f1b261dc7ad91c3056068e890f3035))
+* module_curator: re-check docs/modules.yaml on HEAD before implementing an `unclassified:<path>` ticket, and stop follow-up tickets from treating a "no change needed" close as "nothing delivered" (20261101T191900Z-module-curator-re-check-docs-modules-yam-6013) ([#3559](https://github.com/damien-robotsix/robotsix-mill/issues/3559)) ([b8c4148](https://github.com/damien-robotsix/robotsix-mill/commit/b8c414803a09287da0533e622b4f051d0491ff6d))
+* scope-triage: stop the repo awareness gate from rejecting CI-failure tickets because the log tail contains `robotsix-mill[bot]` (20261030T132320Z-scope-triage-stop-the-repo-awareness-gat-6099) ([#3527](https://github.com/damien-robotsix/robotsix-mill/issues/3527)) ([6500c97](https://github.com/damien-robotsix/robotsix-mill/commit/6500c97d6e40ad7550470968c8b45881ba58859e))
+* trace-review: 1 finding(s) for trace `8f5b0e91` (session: robotsix-mill · 20261031T142025Z-component-security-audit-missing-http-se-1ae6) (20261101T193915Z-trace-review-1-finding-s-for-trace-8f5b0-be22) ([#3560](https://github.com/damien-robotsix/robotsix-mill/issues/3560)) ([8073da6](https://github.com/damien-robotsix/robotsix-mill/commit/8073da648519c6f2e907850dc5eb471e453cd176))
+* trace-review: 1 finding(s) for trace `b0644354` (session: robotsix-central-deploy · 20261031T133721Z-component-security-audit-chat-volume-fil-365c) (20261101T193950Z-trace-review-1-finding-s-for-trace-b0644-320a) ([#3562](https://github.com/damien-robotsix/robotsix-mill/issues/3562)) ([6415fde](https://github.com/damien-robotsix/robotsix-mill/commit/6415fde36fc741e8902db8a23d7919ebb6c15a1e))
+* trace-review: 1 finding(s) for trace `fdb0241e` (session: meta · meta-20261030T104836Z-a2bb4829) (20261030T123148Z-trace-review-1-finding-s-for-trace-fdb02-de26) ([#3526](https://github.com/damien-robotsix/robotsix-mill/issues/3526)) ([39d9049](https://github.com/damien-robotsix/robotsix-mill/commit/39d904938705a44a043502f4173c963559854d11))
+* trace-review: file findings about mill's own stage behaviour on the robotsix-mill board (20261101T094304Z-trace-review-file-findings-about-mill-s-1c3b) ([#3556](https://github.com/damien-robotsix/robotsix-mill/issues/3556)) ([49d271f](https://github.com/damien-robotsix/robotsix-mill/commit/49d271fc994a1842a1623665eb1975e80757c195))
+
+
+### Documentation
+
+* Fix broken tests/test_implement.py link and stale test_implement.py path references after module-size splits (20261031T195844Z-fix-broken-tests-test-implement-py-link-4f43) ([#3547](https://github.com/damien-robotsix/robotsix-mill/issues/3547)) ([c671262](https://github.com/damien-robotsix/robotsix-mill/commit/c67126230eca6a56f4e483abe1401df9fd0906e5))
+
 ## [0.21.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.21.0...v0.21.1) (2026-10-30)
 
 
