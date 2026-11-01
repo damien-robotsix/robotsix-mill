@@ -16,6 +16,7 @@ import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from ...core.constants import NO_CHANGE_NEEDED_PREFIX, OBSOLESCENCE_GAP_PREFIX
 from ...core.models import TicketKind
 from ...core.states import State
 
@@ -252,6 +253,18 @@ def _resolve_delivery(
             "canonical": canonical or None,
         }
 
+    # "No change needed" / "gap already resolved" closes shipped nothing,
+    # but the child's goal is already met on main — a follow-up that
+    # re-asserts the same gap would loop (PULL_REQUEST_TEMPLATE.md chain,
+    # 2026-10-21). Not ``delivered``: it cannot cover a sibling's closure.
+    if matched_prefix in (NO_CHANGE_NEEDED_PREFIX, OBSOLESCENCE_GAP_PREFIX):
+        return {
+            "delivered": False,
+            "satisfied": True,
+            "label": "satisfied — no change needed (goal already met on main)",
+            "canonical": None,
+        }
+
     # Freshness/obsolescence non-implementation close — shipped nothing.
     return {"delivered": False, "label": "closed (not delivered)", "canonical": None}
 
@@ -399,6 +412,44 @@ def _closed_no_delivery_children(
     return out
 
 
+_PATH_TOKEN_RE = re.compile(r"[\w.-]+(?:/[\w.-]+)+")
+
+
+def _path_tokens(text: str) -> frozenset[str]:
+    """Repo-relative path-like tokens (containing ``/``) found in *text*."""
+    return frozenset(m.rstrip(".") for m in _PATH_TOKEN_RE.findall(text or ""))
+
+
+def _satisfied_children(
+    svc: Any, children: Any
+) -> list[tuple[str, str, frozenset[str]]]:
+    """``(id, title, gap_paths)`` of terminal children closed as already
+    satisfied ("no change needed" / gap already resolved).
+
+    *gap_paths* are the paths named in the child's title plus the path of
+    a ``module_curator-gap-id: unclassified:<path>`` marker in its
+    description — the gap the child was about.
+    """
+    from ...stages.implement.module_gap_gate import parse_unclassified_gap_path
+
+    out: list[tuple[str, str, frozenset[str]]] = []
+    for c in children:
+        if getattr(c, "state", None) not in _EPIC_CHILD_TERMINAL:
+            continue
+        try:
+            if not _resolve_delivery(svc, c.id).get("satisfied"):
+                continue
+            paths = set(_path_tokens(c.title))
+            marker = parse_unclassified_gap_path(svc.workspace(c).read_description())
+        except Exception:
+            log.debug("satisfied-child lookup failed for %s", c.id, exc_info=True)
+            continue
+        if marker:
+            paths.add(marker)
+        out.append((c.id, c.title, frozenset(paths)))
+    return out
+
+
 def _count_reeval_children(epic_id: str, children: Any) -> int:
     """Count children filed after the epic's initial breakdown.
 
@@ -487,6 +538,11 @@ def _reconcile_child_changes(svc, epic_id: str, result, settings=None) -> None:
             if result.new_children
             else []
         )
+        # Closed siblings whose goal was already met on main ("no change
+        # needed") — a proposal re-asserting the same gap is not new work.
+        satisfied = (
+            _satisfied_children(svc, existing_children) if result.new_children else []
+        )
         for i, child_spec in enumerate(result.new_children):
             if reeval_count >= max_reeval:
                 log.warning(
@@ -543,6 +599,24 @@ def _reconcile_child_changes(svc, epic_id: str, result, settings=None) -> None:
                     epic_id,
                     title.strip(),
                     closed_match,
+                )
+                continue
+            new_paths = _path_tokens(f"{title}\n{body}")
+            satisfied_match = next(
+                (
+                    cid
+                    for cid, t, paths in satisfied
+                    if (paths & new_paths) or _titles_similar(title, t)
+                ),
+                None,
+            )
+            if satisfied_match is not None:
+                log.warning(
+                    "epic %s: skipping follow-up %r — re-asserts the gap of "
+                    "child %s, which closed as already satisfied on main",
+                    epic_id,
+                    title.strip(),
+                    satisfied_match,
                 )
                 continue
             try:
