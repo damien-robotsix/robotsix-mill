@@ -791,7 +791,7 @@ variable and its dotted YAML path.
 | `periodic.trace_review.initial_lookback_hours` | `MILL_TRACE_REVIEW_INITIAL_LOOKBACK_HOURS` | `24` | First-run lookback window when no watermark exists (hours) |
 | `periodic.trace_review.restart_correlation_window_seconds` | `MILL_TRACE_REVIEW_RESTART_CORRELATION_WINDOW_SECONDS` | `60` | Window for correlating incomplete traces with process restarts (seconds) |
 | `periodic.trace_review.dedup_lookback_days` | `MILL_TRACE_REVIEW_DEDUP_LOOKBACK_DAYS` | `7` | Recency window (days) for pre-filing duplicate check |
-| `pipeline.trace_review_target_repo_id` | `MILL_TRACE_REVIEW_TARGET_REPO_ID` | `""` | Target repo for trace-review drafts about mill machinery (stages, prompts, tools, sandbox image, harness); findings about the inspected repo's own code stay on that session's board, and open drafts are deduped across sessions by root-cause fingerprint. Empty → legacy session-board routing for everything. Code default is `""`; `config.example.json` overrides to `robotsix-mill` so mill findings never land on a per-repo board. |
+| `pipeline.trace_review_target_repo_id` | `MILL_TRACE_REVIEW_TARGET_REPO_ID` | `""` | Target repo for trace-review drafts about mill machinery (stages, prompts, tools, sandbox image, harness); findings about the inspected repo's own code stay on that session's board, and open drafts are deduped across sessions by root-cause fingerprint. Empty → the registry's `robotsix-mill` entry when present, else legacy session-board routing for everything. Code default is `""`; `config.example.json` overrides to `robotsix-mill` so mill findings never land on a per-repo board. |
 
 #### data_dir_gc
 

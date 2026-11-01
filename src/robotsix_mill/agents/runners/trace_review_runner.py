@@ -198,6 +198,10 @@ def _trace_gap_id_exists(
 # Finding subject classification + root-cause fingerprint dedup
 # ---------------------------------------------------------------------------
 
+# Registry id of the mill repo — default destination for mill-machinery
+# findings when ``trace_review_target_repo_id`` is unset.
+_DEFAULT_MILL_REPO_ID = "robotsix-mill"
+
 # Path prefixes that belong to the mill's own machinery (stages, prompts,
 # tools, sandbox image, harness).
 _MILL_PATH_PREFIXES = (
@@ -413,17 +417,22 @@ def run_trace_review_pass(
     # True once the configured mill target resolved: mill-machinery
     # findings then always land there, whatever the session's repo.
     mill_target_resolved = False
-    if settings.trace_review_target_repo_id:
+    # Unset → default to the registry's ``robotsix-mill`` entry, so a
+    # finding about mill's own stages/prompts/tools never lands on the
+    # traced repo's board (where implement can only close it as
+    # "wrong board").
+    mill_repo_id = settings.trace_review_target_repo_id or _DEFAULT_MILL_REPO_ID
+    if mill_repo_id:
         try:
             from ...config import get_repos_config
 
             registry = get_repos_config().repos
-            target_rc = registry.get(settings.trace_review_target_repo_id)
-            if target_rc is not None:
+            target_rc = registry.get(mill_repo_id)
+            if target_rc is not None and target_rc.board_id:
                 target_board_id = target_rc.board_id
-                target_repo_id = settings.trace_review_target_repo_id
+                target_repo_id = mill_repo_id
                 mill_target_resolved = True
-            else:
+            elif settings.trace_review_target_repo_id:
                 log.warning(
                     "trace-review: configured target repo %r not "
                     "found — falling back to source board %r",
@@ -720,7 +729,7 @@ def run_trace_review_pass(
         # Route each finding by its subject: mill machinery (stages,
         # prompts, tools, sandbox image, harness) goes to the configured
         # mill target board; only findings about the inspected repo's own
-        # code stay on the session's board. Without a configured target
+        # code stay on the session's board. When no mill board resolves
         # the session's board receives everything (legacy routing).
         trace_session_board = _resolve_board_for_session(
             flags.session_id, settings, source_board_id

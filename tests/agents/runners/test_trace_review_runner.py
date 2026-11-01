@@ -1496,6 +1496,40 @@ class TestFindingSubjectRouting:
         assert len(TicketService(s, board_id="robotsix-chat-board").list()) == 1
         assert len(TicketService(s, board_id="robotsix-mill-board").list()) == 1
 
+    def test_mill_path_finding_lands_on_mill_board_without_configured_target(
+        self, env, monkeypatch
+    ):
+        """A finding whose fix names a ``src/robotsix_mill/...`` path goes
+        to ``robotsix-mill`` even with ``trace_review_target_repo_id``
+        unset and the trace coming from another repo's ticket."""
+        s, chat_rc = env
+        s.trace_review_target_repo_id = ""
+        prompt_finding = TraceFinding(
+            category="tool_error",
+            symptom="implement wrote a substitute check instead of the lint",
+            root_cause="Implement step 4 does not forbid substitute checks.",
+            proposed_solution="Tighten the verification rule.",
+            target_files=["src/robotsix_mill/agents/fs_tools.py"],
+            confidence="high",
+        )
+        self._patch(
+            monkeypatch,
+            [_trace(id="t1", sessionId="robotsix-chat · implement-20261030-0eb5")],
+            [prompt_finding],
+        )
+        result = run_trace_review_pass(session_id="sess", repo_config=chat_rc)
+
+        assert [d["board"] for d in result.drafts_created] == ["robotsix-mill-board"]
+        assert TicketService(s, board_id="robotsix-chat-board").list() == []
+        mill = TicketService(s, board_id="robotsix-mill-board").list()
+        assert len(mill) == 1
+        from robotsix_mill.core.workspace import Workspace
+
+        desc = Workspace(
+            s.workspaces_dir_for("robotsix-mill-board"), mill[0].id
+        ).read_description()
+        assert "robotsix-chat · implement-20261030-0eb5" in desc
+
     def test_same_root_cause_across_sessions_files_once(self, env, monkeypatch):
         s, chat_rc = env
         self._patch(
