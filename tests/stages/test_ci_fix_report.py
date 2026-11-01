@@ -4,6 +4,7 @@ import pytest
 
 from robotsix_mill.agents.report_issue import make_report_issue_tool
 from robotsix_mill.core.service import TicketService
+from robotsix_mill.core.states import State
 from robotsix_mill.stages import ci_fix_report
 from robotsix_mill.stages.ci_fix_report import (
     ROUTE_GITHUB_WORKFLOWS,
@@ -108,3 +109,49 @@ def test_parse_and_route():
 def test_scrub_pipeline_vocabulary():
     out = scrub_pipeline_vocabulary("The ci_fix stage and implement agent")
     assert "ci_fix" not in out and "implement agent" not in out
+
+
+def test_status_note_appends_history_note_and_files_no_ticket(settings, monkeypatch):
+    """robotsix-modules 2026-09-04: 'Agent report: … pushed' and 'DONE: …'
+    progress notes must land on the ticket being fixed, not as tickets."""
+    svc = TicketService(settings, board_id="invest")
+    parent = svc.create("CI red on main", "body")
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.current_session",
+        lambda: f"invest · {parent.id}",
+    )
+    tool = _tool(settings)
+    a = tool("Agent report: gitleaks CI fix pushed", "commit 5019a93")
+    b = tool("DONE: gitleaks CI fix pushed", "commit 5019a93")
+    assert "status note appended to" in a
+    assert "status note appended to" in b
+    assert [t.id for t in svc.list()] == [parent.id]
+    notes = [e.note or "" for e in svc.history(parent.id)]
+    assert any("gitleaks CI fix pushed" in n and "5019a93" in n for n in notes)
+
+
+def test_status_note_without_parent_files_nothing(settings):
+    out = _tool(settings)("DONE: lint fixed")
+    assert "not filed" in out
+    assert TicketService(settings, board_id="invest").list() == []
+
+
+def test_identical_followups_within_window_file_one_ticket(settings, monkeypatch):
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.current_session", lambda: "sess-1"
+    )
+    tool = _tool(settings)
+    a = tool("Agent report: gitleaks config needs an allowlist entry", "x")
+    svc = TicketService(settings, board_id="invest")
+    # Even once the first is closed, a repeat within the window is suppressed.
+    svc.transition(svc.list()[0].id, State.CLOSED)
+    b = tool("gitleaks config needs an allowlist entry", "x")
+    assert a.startswith("report_issue: filed draft ")
+    assert "already filed as" in b
+    assert len(svc.list()) == 1
+
+
+def test_normalise_report_title():
+    assert ci_fix_report.normalise_report_title(
+        "Agent report: Gitleaks CI fix pushed"
+    ) == ci_fix_report.normalise_report_title("DONE:  gitleaks CI fix pushed.")
