@@ -1876,7 +1876,7 @@ def test_credential_status_reports_missing(client):
     assert body["ok"] is False
     assert "openrouter_api_key" in {m["name"] for m in body["missing"]}
     for finding in body["missing"]:
-        assert finding["config_path"].startswith("secrets.")
+        assert finding["config_path"].startswith(("secrets.", "openrouter.keys."))
         assert finding["impact"]
 
 

@@ -514,21 +514,6 @@
           "title": "Ntfy Url",
           "writeOnly": true
         },
-        "openrouter_api_key": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "",
-          "format": "password",
-          "title": "Openrouter Api Key",
-          "writeOnly": true
-        },
         "openrouter_management_key": {
           "anyOf": [
             {

@@ -31,7 +31,7 @@ def _openrouter_missing() -> dict[str, str] | None:
         return None
     return {
         "name": "openrouter_api_key",
-        "config_path": "secrets.openrouter_api_key",
+        "config_path": "openrouter.keys.robotsix-mill",
         "impact": "no LLM stage can run — every ticket will block",
     }
 

@@ -167,6 +167,11 @@ def test_fetch_rejects_non_http(tmp_path):
 
 def test_fetch_argv_is_locked_down(tmp_path, monkeypatch):
     s = _settings(tmp_path)
+    # The SSRF guard resolves the host first; keep it hermetic.
+    monkeypatch.setattr(
+        "robotsix_mill.sandbox._fetch.socket.getaddrinfo",
+        lambda host, port, *a, **kw: [(2, 1, 6, "", ("93.184.216.34", port))],
+    )
     seen = {}
 
     def fake_run(argv, **kw):
@@ -185,6 +190,7 @@ def test_fetch_argv_is_locked_down(tmp_path, monkeypatch):
     assert "no-new-privileges" in a
     assert "-v" not in a  # NO repo/data mount in the fetch container
     assert a[-2:] == ["--", "https://docs.example/api"]  # URL is argv, not shell
+    assert a[a.index("--resolve") + 1] == "docs.example:443:93.184.216.34"
 
 
 def test_fetch_survives_non_utf8_body(tmp_path, monkeypatch):
@@ -193,6 +199,11 @@ def test_fetch_survives_non_utf8_body(tmp_path, monkeypatch):
     replaced with \ufffd and the agent gets a usable text string."""
     s = _settings(tmp_path)
 
+    # The SSRF guard resolves the host first; keep it hermetic.
+    monkeypatch.setattr(
+        "robotsix_mill.sandbox._fetch.socket.getaddrinfo",
+        lambda host, port, *a, **kw: [(2, 1, 6, "", ("93.184.216.34", port))],
+    )
     # Invalid UTF-8: 0xff, 0xfe, 0xe9 are all illegal leading bytes
     raw = b"\xff\xfe\xe9 and some text"
     monkeypatch.setattr(

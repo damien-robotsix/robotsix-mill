@@ -24,7 +24,6 @@
         "github_app_private_key_path": "SECRET",
         "ntfy_token": "SECRET",
         "ntfy_url": "SECRET",
-        "openrouter_api_key": "SECRET",
         "openrouter_management_key": "SECRET",
         "sandbox_push_token": "SECRET",
         "subscriber_shared_secret": "SECRET"

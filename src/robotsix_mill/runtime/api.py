@@ -13,6 +13,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
+from secure import CacheControl, ContentSecurityPolicy, Secure
+from secure.middleware import SecureASGIMiddleware
 
 from ..config import ReposRegistry, Settings
 from ..core.service import AmbiguousTicketId, TransitionError
@@ -27,6 +29,28 @@ from .exception_handlers import (
 )
 from .lifespan import create_lifespan, setup_logging
 from .middleware import RequestIDMiddleware
+
+
+def build_secure_headers() -> Secure:
+    """Return the OWASP security-header set (robotsix-standards
+    http-security-headers.md): ``Preset.BALANCED`` plus ``no-store``.
+
+    CSP relaxations — all here, at the single registration site: the
+    board HTML uses inline ``onclick=`` handlers and an inline module
+    script, and loads ``marked`` (and FastAPI's ``/docs`` Swagger UI)
+    from ``cdn.jsdelivr.net``.
+    """
+    secure_headers = Secure.with_default_headers()
+    for header in secure_headers.headers_list:
+        if isinstance(header, ContentSecurityPolicy):
+            header.script_src("'unsafe-inline'", "https://cdn.jsdelivr.net")
+            # BALANCED sets ``script-src-attr 'none'``; clear it first so
+            # the relaxed value is not ``'none' 'unsafe-inline'``.
+            header.custom_directive("script-src-attr").script_src_attr(
+                "'unsafe-inline'"
+            )
+    secure_headers.headers_list.append(CacheControl().no_store().max_age(0))
+    return secure_headers
 
 
 def create_app(
@@ -107,6 +131,7 @@ def create_app(
     app.add_exception_handler(Exception, catchall_handler)
 
     app.add_middleware(RequestIDMiddleware)
+    app.add_middleware(SecureASGIMiddleware, secure=build_secure_headers())
 
     # Mill-specific static assets (board-mill.js, board-mill.css) are
     # served from a sub-path.  This mount must come BEFORE the /static

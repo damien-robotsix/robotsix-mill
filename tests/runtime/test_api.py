@@ -41,6 +41,24 @@ def test_health(client):
     assert client.get("/health").json()["status"] == "alive"
 
 
+def test_security_headers_on_html_and_api(client):
+    """SecureASGIMiddleware emits the OWASP header set on every response."""
+    for path in ("/", "/health"):
+        h = client.get(path).headers
+        assert h["x-content-type-options"] == "nosniff"
+        assert h["x-frame-options"] == "SAMEORIGIN"
+        assert h["strict-transport-security"].startswith("max-age=31536000")
+        assert h["referrer-policy"] == "strict-origin-when-cross-origin"
+        assert h["cache-control"] == "no-store, max-age=0"
+        csp = h["content-security-policy"]
+        assert "frame-ancestors 'self'" in csp
+        assert "object-src 'none'" in csp
+        # Relaxations for the board's inline handlers + CDN `marked`.
+        assert "script-src-attr 'unsafe-inline'" in csp
+        assert "'none' 'unsafe-inline'" not in csp
+        assert "https://cdn.jsdelivr.net" in csp
+
+
 def test_health_reports_uptime_when_started_at_set(client):
     """The started_at branch: with app.state.started_at set, /health
     returns the started_at isoformat and a non-negative int uptime."""

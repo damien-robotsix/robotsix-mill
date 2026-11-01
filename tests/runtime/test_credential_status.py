@@ -16,8 +16,16 @@ def cfg(monkeypatch, tmp_path):
     def _write(secrets: dict[str, str]) -> None:
         import json
 
+        # The OpenRouter key lives in the canonical openrouter.keys
+        # block, never as a flat secrets entry.
+        secrets = dict(secrets)
+        data: dict = {}
+        or_key = secrets.pop("openrouter_api_key", None)
+        if or_key:
+            data["openrouter"] = {"keys": {"robotsix-mill": or_key}}
+        data["secrets"] = secrets
         path = tmp_path / "config.json"
-        path.write_text(json.dumps({"secrets": secrets}))
+        path.write_text(json.dumps(data))
         monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(path))
         _reset_secrets()
 
@@ -59,7 +67,7 @@ def test_missing_openrouter_key_is_reported(cfg):
     status = get_credential_status(_settings(forge_auth="app"))
     assert status["ok"] is False
     assert [m["name"] for m in status["missing"]] == ["openrouter_api_key"]
-    assert status["missing"][0]["config_path"] == "secrets.openrouter_api_key"
+    assert status["missing"][0]["config_path"] == "openrouter.keys.robotsix-mill"
 
 
 def test_missing_app_id_is_reported(cfg):

@@ -1006,10 +1006,11 @@ def test_openrouter_keys_canonical_source():
     assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-canon"
 
 
-def test_fernet_encrypted_key_lifts_into_canonical(tmp_path, monkeypatch):
-    """When openrouter_api_key lives ONLY in the Fernet-encrypted secrets
-    block, load_settings_block lifts it into the canonical
-    openrouter.keys map."""
+def test_flat_secrets_openrouter_key_is_not_a_fallback(tmp_path, monkeypatch):
+    """A legacy flat ``secrets.openrouter_api_key`` is NOT lifted into
+    the canonical openrouter.keys map, and get_secrets() does not read
+    it — the canonical block is the only source (component standard:
+    no fallback to the historical field)."""
     import json
 
     from robotsix_mill.config import _reset_secrets
@@ -1032,11 +1033,12 @@ def test_fernet_encrypted_key_lifts_into_canonical(tmp_path, monkeypatch):
     }
     cfg_path.write_text(json.dumps(cfg))
 
-    # Settings() should now have the canonical key populated.
+    from robotsix_mill.config import get_secrets
+
     s = Settings()
-    assert s.openrouter is not None
-    assert s.openrouter.keys.get("robotsix-mill") is not None
-    assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-from-fernet"
+    assert s.openrouter is None or "robotsix-mill" not in s.openrouter.keys
+    assert get_secrets().openrouter_api_key is None
+    _reset_secrets()
 
 
 # ===========================================================================
