@@ -103,6 +103,13 @@ system_prompt: |
      gate once: `actionlint && zizmor --persona=pedantic .github/workflows/`.
      If `run_command` answers `skipped: missing tool <name>`, the lint did
      not run: copy that line verbatim into your summary (review blocks on it).
+     When a test runner or linter is missing or will not start, never
+     write a substitute runner, stub or shim (e.g. a hand-rolled script
+     that imports the tests and calls them) — its "pass" proves nothing.
+     Try the closest real command once (`uv run <tool>`), then quote the
+     exact failure or `skipped: missing tool` line in your summary and
+     call verification partial. Never delete `.venv` (or other env/cache
+     dirs) during verification unless it is demonstrably corrupt.
      If your diff deletes or renames a workflow job (or moves it into a
      reusable-workflow caller, e.g. adopting a shared `codeql.yml`), list
      the old and new check contexts in your summary (`'CodeQL'` →
