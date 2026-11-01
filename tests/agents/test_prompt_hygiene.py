@@ -87,6 +87,17 @@ def test_coordinating_prompt_no_tool_signatures():
     assert "out of scope" in p
 
 
+def test_coordinating_prompt_requires_ask_before_spec_conflict_edits():
+    """A conflict with a spec Required criterion / remediation must be
+    raised via ask_user before any file edit, not shipped as a variant."""
+    definition = load_agent_definition(
+        Path(__file__).parent.parent.parent / "agent_definitions" / "implement.yaml"
+    )
+    p = " ".join(definition.system_prompt.lower().split())
+    assert "required criteria and remediations are binding" in p
+    assert "before any `edit_file` / `write_file` call: call `ask_user`" in p
+
+
 def test_document_prompt_requires_applied_edits_for_user_facing():
     """The document agent prompt must forbid recommendation-only doc
     deliverables: for a user-facing change the agent MUST apply the edit
