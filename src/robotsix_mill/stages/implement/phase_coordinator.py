@@ -39,6 +39,7 @@ from ._shared import (
     _SinglePassResult,
     log,
 )
+from .module_gap_gate import check_unclassified_gap
 
 # --- stuck-loop detection thresholds -----------------------------------
 
@@ -397,6 +398,17 @@ class PhaseCoordinatorMixin(_ImplementStageBase):
                         "add a description manually before re-attempting "
                         "implement.",
                     )
+
+        # --- module_curator staleness gate: an ``unclassified:<path>``
+        # gap already claimed in docs/modules.yaml on origin/<target> (or
+        # whose path is gone) is superseded — close it before any agent.
+        if spec_text and ticket.board_id != "meta":
+            gap_note = check_unclassified_gap(
+                repo_dir, effective_target_branch(s, ctx.repo_config), spec_text
+            )
+            if gap_note is not None:
+                log.info("%s: %s", ticket.id, gap_note)
+                return Outcome(State.DONE, gap_note)
 
         # --- prerequisite gate: cheapest pre-agent check, so it runs
         # first. Verify that external symbol/import prerequisites the

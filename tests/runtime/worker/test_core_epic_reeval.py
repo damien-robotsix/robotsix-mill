@@ -1256,3 +1256,104 @@ async def test_cap_excludes_human_mr_approval_from_count(ctx, service, monkeypat
     assert ready_ticket.id in invoked, (
         "READY ticket should be dispatched — HUMAN_MR_APPROVAL does not count"
     )
+
+
+# --- "no change needed" ≠ "nothing delivered" (PULL_REQUEST_TEMPLATE chain) ---
+
+
+def test_resolve_delivery_no_change_needed_is_satisfied():
+    from robotsix_mill.core.constants import NO_CHANGE_NEEDED_PREFIX
+    from robotsix_mill.runtime.worker import _resolve_delivery
+
+    svc = _FakeEpicService(
+        tickets={"N": _ns_ticket("N", State.DONE)},
+        histories={"N": [_ev(State.DONE, f"{NO_CHANGE_NEEDED_PREFIX} — claimed")]},
+    )
+    res = _resolve_delivery(svc, "N")
+    # Satisfied, but never a merged delivery that could cover a closure.
+    assert res["delivered"] is False
+    assert res["satisfied"] is True
+    assert res["label"].startswith("satisfied")
+
+
+def test_resolve_delivery_gap_already_resolved_is_satisfied():
+    from robotsix_mill.core.constants import OBSOLESCENCE_GAP_PREFIX
+    from robotsix_mill.runtime.worker import _resolve_delivery
+
+    svc = _FakeEpicService(
+        tickets={"O": _ns_ticket("O", State.DONE)},
+        histories={"O": [_ev(State.DONE, f"{OBSOLESCENCE_GAP_PREFIX}: claimed")]},
+    )
+    assert _resolve_delivery(svc, "O")["satisfied"] is True
+
+
+def test_reconcile_pr_template_chain_files_no_follow_up_after_63c9():
+    """Replay 63c9 → 27ef → 82ba → 9227: once the classify child closed
+    ``no change needed`` none of the re-asserting follow-ups is filed."""
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.core.constants import NO_CHANGE_NEEDED_PREFIX
+    from robotsix_mill.runtime.worker import _reconcile_child_changes
+
+    epic_id = _epic_id(300)
+    first = _aged_child(
+        60, "Classify .github/PULL_REQUEST_TEMPLATE.md", state=State.DONE
+    )
+    svc = _FakeEpicService(
+        children=[first],
+        tickets={first.id: first},
+        histories={
+            first.id: [_ev(State.DONE, f"{NO_CHANGE_NEEDED_PREFIX} — already in `ci`")]
+        },
+        descriptions={
+            first.id: "<!-- module_curator-gap-id: "
+            "unclassified:.github/PULL_REQUEST_TEMPLATE.md -->"
+        },
+    )
+    result = EpicStatusResult(
+        decision="keep_open",
+        new_children=[
+            {
+                "title": "Classify `.github/PULL_REQUEST_TEMPLATE.md`",
+                "body": "The predecessor was closed without delivering anything.",
+            },
+            {
+                "title": "Verify and claim github pull request template",
+                "body": "Claim `.github/PULL_REQUEST_TEMPLATE.md` in docs/modules.yaml",
+            },
+            {
+                "title": "Claim the PR template in the ci module",
+                "body": "Add .github/PULL_REQUEST_TEMPLATE.md to the ci module.",
+            },
+        ],
+    )
+
+    _reconcile_child_changes(svc, epic_id, result)
+
+    assert not any(c[0] == "create" for c in svc.calls)
+
+
+def test_reconcile_satisfied_child_does_not_block_unrelated_follow_up():
+    from robotsix_mill.agents.epic_status import EpicStatusResult
+    from robotsix_mill.core.constants import NO_CHANGE_NEEDED_PREFIX
+    from robotsix_mill.runtime.worker import _reconcile_child_changes
+
+    epic_id = _epic_id(300)
+    first = _aged_child(
+        60, "Classify .github/PULL_REQUEST_TEMPLATE.md", state=State.DONE
+    )
+    svc = _FakeEpicService(
+        children=[first],
+        tickets={first.id: first},
+        histories={first.id: [_ev(State.DONE, f"{NO_CHANGE_NEEDED_PREFIX} — ok")]},
+    )
+    result = EpicStatusResult(
+        decision="keep_open",
+        new_children=[
+            {"title": "Classify scripts/gen_completions.py", "body": "unowned"}
+        ],
+    )
+
+    _reconcile_child_changes(svc, epic_id, result)
+
+    created = [c[1] for c in svc.calls if c[0] == "create"]
+    assert created == ["Classify scripts/gen_completions.py"]

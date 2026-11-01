@@ -49,6 +49,10 @@ system_prompt: |
       and shipped NOTHING itself; the arrow points at the canonical
       ticket and whether THAT ticket merged.
     - `unstarted` / `in_progress` — no PR merged; delivered NOTHING.
+    - `satisfied — no change needed (…)` — the child shipped no diff
+      because its goal was ALREADY met on `main`. Treat that goal as
+      satisfied: never propose a follow-up child that re-asserts the
+      same gap.
   Only `merged` children represent shipped scope. A dedup-closed,
   unstarted, or in-progress child is NOT evidence that any work landed.
 
