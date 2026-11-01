@@ -624,6 +624,7 @@ modules:
       - lychee.toml
       - .python-version
       - .trivyignore
+      - .audit-ignore
       - .secrets.baseline
       - mypy-baseline.txt
       - mypy-baseline-test.txt
@@ -636,7 +637,6 @@ modules:
       - tests/script_loader.py
       - tests/dev_tooling/test_check_config_docs_sync.py
       - tests/dev_tooling/test_check_config_sync.py
-      - tests/dev_tooling/test_check_cve_ignore_sync.py
       - tests/dev_tooling/test_docs_nav.py
       - tests/dev_tooling/test_emit_config_schema.py
       - tests/dev_tooling/test_modules_yaml_coverage.py

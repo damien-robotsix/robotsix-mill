@@ -106,8 +106,9 @@ extracted package): no such in-repo copy exists.
   `robotsix-github-workflows/.../python-ci.yml`) can silently add new
   pre-test checks (such as `uv audit`). Before merging such a bump,
   confirm the consolidated `ci / Tests` job still honors the existing
-  advisory/CVE-ignore policy — the `audit-ignore` set in `ci.yml`
-  must mirror the `--ignore` set in `security-audit.yml`, and any
+  advisory/CVE-ignore policy — every ignored advisory lives in the
+  single-source `.audit-ignore` file read by both `ci.yml` and
+  `security-audit.yml` (never an inline `audit-ignore` input), and any
   newly-introduced gating check must be reconciled per the "every new
   CI check must gate or be removed" rule.
 - Don't reintroduce a regression a test or this file already guards.
