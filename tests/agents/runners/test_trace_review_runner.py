@@ -16,6 +16,7 @@ from robotsix_mill.agents.runners.trace_review_classifier import (
     _Baselines,
     _classify_trace,
     _compute_baselines,
+    _dedupe_tool_spans,
     _median,
 )
 from robotsix_mill.agents.runners.trace_review_runner import (
@@ -473,6 +474,52 @@ class TestClassifier:
         obs = [_obs("read_file") for _ in range(n)]
         flags = _classify_trace(_trace(), settings, observations=obs)
         assert any("repeated_tool read_file" in f for f in flags.flags)
+
+    @staticmethod
+    def _paired_call(i: int, name: str = "run_command"):
+        """One tool call as exported: a SPAN wrapping a TOOL twin."""
+        start = f"2026-10-31T14:{i // 60:02d}:{i % 60:02d}.000Z"
+        end = f"2026-10-31T14:{i // 60:02d}:{i % 60:02d}.900Z"
+        span = _obs(name, id=f"s{i}", startTime=start, endTime=end)
+        tool = _obs(
+            name,
+            type="TOOL",
+            id=f"t{i}",
+            parentObservationId=f"s{i}",
+            startTime=start.replace(".000Z", ".001Z"),
+            endTime=end.replace(".900Z", ".899Z"),
+        )
+        return [span, tool]
+
+    def test_tool_span_pairs_counted_once_for_repeated_tool(self, settings):
+        """TOOL + SPAN twins of one call must count as a single call."""
+        n = settings.trace_review_max_repeated_tool
+        obs = [o for i in range(n) for o in self._paired_call(i)]
+        flags = _classify_trace(_trace(), settings, observations=obs)
+        assert not any("repeated_tool" in f for f in flags.flags)
+
+    def test_tool_span_pairs_counted_once_for_observation_storm(self, settings):
+        baselines = self._baselines(
+            obs_threshold=45,
+            obs_median=15,
+            cost_threshold=1.0,
+            cost_median=0.3,
+        )
+        obs = [o for i in range(30) for o in self._paired_call(i)]
+        flags = _classify_trace(
+            _trace(), settings, observations=obs, baselines=baselines
+        )
+        assert not any("observation_storm" in f for f in flags.flags)
+
+    def test_dedupe_matches_by_time_nesting_without_parent_link(self):
+        span = _obs("read_file", startTime="a1", endTime="a9")
+        tool = _obs("read_file", type="TOOL", startTime="a2", endTime="a8")
+        other = _obs("read_file", startTime="b1", endTime="b9")
+        assert _dedupe_tool_spans([span, tool, other]) == [tool, other]
+
+    def test_dedupe_keeps_unpaired_spans(self):
+        obs = [_obs("read_file") for _ in range(3)]
+        assert _dedupe_tool_spans(obs) == obs
 
     def test_observations_none_only_runs_summary_flags(self, settings):
         """When observations are unavailable (Langfuse fetch failed),
