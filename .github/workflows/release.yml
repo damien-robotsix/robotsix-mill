@@ -18,31 +18,12 @@ jobs:
   lint:
     name: Dockerfile lint (hadolint)
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
     permissions:
       contents: read
-    env:
-      UV_MALWARE_CHECK: "1"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387  # v3.5.0
-        with:
-          dockerfile: Dockerfile
-          failure-threshold: warning
-
-      - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387  # v3.5.0
-        with:
-          dockerfile: sandbox/Dockerfile
-          failure-threshold: warning
-
-      - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387  # v3.5.0
-        with:
-          dockerfile: sandbox/proxy/Dockerfile
-          failure-threshold: warning
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/lint-dockerfile.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
+    with:
+      dockerfiles: "Dockerfile sandbox/Dockerfile sandbox/proxy/Dockerfile"
+      failure-threshold: warning
 
   publish-mill:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'

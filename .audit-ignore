@@ -1,0 +1,18 @@
+# Single-source advisory ignore list, read by the shared python-ci.yml
+# (`audit-ignore-file`) and by security-audit.yml through
+# robotsix-github-workflows' scripts/audit_ignore.py.
+#
+# Format: one `ID  # reason  # expires: YYYY-MM-DD` per line. A reason is
+# required; once the expiry date passes the audit fails until the entry is
+# re-reviewed (dropped or re-dated).
+#
+# pypdf advisories (GHSA-763m-79hh-57f2, GHSA-23w6-3w8w-8484,
+# GHSA-jp53-mhqp-8xcg, GHSA-39mj-jf6j-2qj3, ...) are fixed by the pypdf
+# version uv.lock resolves, so none is ignored here.
+
+PYSEC-2025-183       # pyjwt: disputed "weak encryption" advisory, no fix published; key strength is the caller's responsibility and mill signs RS256 GitHub App tokens with >=2048-bit keys  # expires: 2027-05-01
+MAL-2026-4750        # fastapi: malicious "fastar" dep only in fastapi[standard]; mill depends on fastapi without extras, so it is never installed (advisory since withdrawn)  # expires: 2027-05-01
+GHSA-9xwg-3r6f-jcx2  # pymdown-extensions: Arithmatex XSS fixed in 10.14; uv.lock pins a later version (false positive); transitive docs-only dep, never shipped  # expires: 2027-05-01
+GHSA-jwv3-5hgf-82ww  # cryptography: exponential path-building on duplicate self-signed intermediates, fixed in 49.0.0; uv.lock pins 50.0.0, advisory DB may still flag  # expires: 2027-05-01
+GHSA-m2h6-j472-rp4c  # cryptography: wildcard DNS names escape permittedSubtrees, fixed in 49.0.0; uv.lock pins 50.0.0, advisory DB may still flag  # expires: 2027-05-01
+GHSA-g6cj-pr64-35w5  # cryptography: PKCS#7 EnvelopedData Bleichenbacher oracle, fixed in 50.0.0; uv.lock pins 50.0.0, advisory DB may still flag  # expires: 2027-05-01

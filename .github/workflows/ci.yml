@@ -17,7 +17,7 @@ jobs:
     permissions:
       contents: read
       security-events: write  # shared python-ci.yml uploads scan SARIF to code scanning
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@2de56a85055b60d0f01c406342eda081e68c0c8b
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-ci.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
     with:
       python-version: "3.14"
       uv-version: "0.12.0"
@@ -30,31 +30,8 @@ jobs:
       pytest-args: -n auto
       bandit-severity: "medium"
       mypy-advisory: true
-      # CVE ignores mirroring security-audit.yml:
-      #   PYSEC-2025-183 (pyjwt): disputed advisory — key strength is the
-      #     caller's responsibility; mill supplies ≥2048-bit GitHub App keys.
-      #   MAL-2026-4750 (fastapi): undocument "fastar" dep in fastapi[standard];
-      #     mill depends on fastapi without extras, so the malicious dep is
-      #     never installed.  Advisory since withdrawn (retained for docs).
-      #   GHSA-9xwg-3r6f-jcx2 (pymdown-extensions): XSS in Arithmatex,
-      #     fixed in 10.14; mill's lock pins 10.21.3 — above the fix version.
-      #     pymdown-extensions is a transitive docs-only dependency, never
-      #     shipped or served to users.
-      #   GHSA-jwv3-5hgf-82ww (cryptography): duplicate self-signed
-      #     intermediates can cause exponential path-building; fixed in 49.0.0.
-      #     Pinned 50.0.0 via uv.lock; advisory DB may still flag.
-      #   GHSA-m2h6-j472-rp4c (cryptography): verifier accepts wildcard DNS
-      #     names allowing escape from permittedSubtrees; fixed in 49.0.0.
-      #     Pinned 50.0.0 via uv.lock; advisory DB may still flag.
-      #   GHSA-g6cj-pr64-35w5 (cryptography): PKCS#7 EnvelopedData decryption
-      #     exposes a Bleichenbacher oracle; fixed in 50.0.0.
-      #     Pinned 50.0.0 via uv.lock; advisory DB may still flag.
-      #
-      #   pypdf advisories GHSA-763m-79hh-57f2, GHSA-23w6-3w8w-8484,
-      #     GHSA-jp53-mhqp-8xcg (and the earlier GHSA-fp3f-mc75-235c /
-      #     GHSA-fwg2-594c-jp42) are fixed by pypdf 6.16.1; uv.lock
-      #     resolves 6.16.2, so no pypdf advisory is ignored here.
-      audit-ignore: "PYSEC-2025-183, MAL-2026-4750, GHSA-9xwg-3r6f-jcx2, GHSA-jwv3-5hgf-82ww, GHSA-m2h6-j472-rp4c, GHSA-g6cj-pr64-35w5"
+      # Ignored advisories live in the single-source `.audit-ignore`
+      # (the `audit-ignore-file` default), shared with security-audit.yml.
 
   # ── PR-time image build + blocking Trivy gate (CRITICAL/HIGH, fixable) ──
   # Mirrors the post-merge publish jobs in release.yml so a Dockerfile
@@ -212,11 +189,6 @@ jobs:
           UV_PROJECT_ENVIRONMENT: system
         run: uv run python scripts/check_config_standard_footprint.py
 
-      - name: Check CVE ignore sync (ci.yml ↔ security-audit.yml)
-        env:
-          UV_PROJECT_ENVIRONMENT: system
-        run: uv run python scripts/check_cve_ignore_sync.py
-
       - name: Validate config.schema.json sync
         env:
           UV_PROJECT_ENVIRONMENT: system
@@ -261,20 +233,10 @@ jobs:
           UV_PROJECT_ENVIRONMENT: system
         run: uv run python scripts/check_wheel_contents.py
 
-      - name: Lint main Dockerfile (hadolint)
-        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387  # v3.5.0
-        with:
-          dockerfile: Dockerfile
-          failure-threshold: warning
-
-      - name: Lint sandbox Dockerfile (hadolint)
-        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387  # v3.5.0
-        with:
-          dockerfile: sandbox/Dockerfile
-          failure-threshold: warning
-
-      - name: Lint sandbox proxy Dockerfile (hadolint)
-        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387  # v3.5.0
-        with:
-          dockerfile: sandbox/proxy/Dockerfile
-          failure-threshold: warning
+  hadolint:
+    permissions:
+      contents: read
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/lint-dockerfile.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
+    with:
+      dockerfiles: "Dockerfile sandbox/Dockerfile sandbox/proxy/Dockerfile"
+      failure-threshold: warning
