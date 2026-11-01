@@ -292,11 +292,18 @@ Fill in the `"secrets"` block of `config/config.json` (replace each
 // config/config.json
 {
   "secrets": {
-    "openrouter_api_key": "sk-or-...",
     "forge_token": "ghp_..."
+  },
+  "openrouter": {
+    "keys": { "robotsix-mill": "sk-or-..." }
   }
 }
 ```
+
+The OpenRouter API key (required for any LLM call) lives **only** in the
+canonical top-level `openrouter.keys["robotsix-mill"]` block. The legacy
+flat `secrets.openrouter_api_key` field is no longer read — there is no
+fallback to it (robotsix-standards component standard).
 
 File permissions should be `0600` (it holds real credentials).
 
@@ -1106,7 +1113,6 @@ unset.
 
 | JSON key | Env var override | Description |
 |----------|-----------------|-------------|
-| `openrouter_api_key` | `OPENROUTER_API_KEY` | OpenRouter API key (required for any LLM call) |
 | `openrouter_management_key` | — | OpenRouter management API key for credit balance checks (`GET /api/v1/activity`). Separate from the inference key; leave blank to skip OpenRouter-side fetching. |
 | `forge_token` | `FORGE_TOKEN` | PAT for forge authentication |
 | `github_app_id` | `GITHUB_APP_ID` | GitHub App ID (when `forge_auth=app`) |

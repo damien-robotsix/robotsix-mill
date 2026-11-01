@@ -38,6 +38,9 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "httpx>=0.27",
+    # OWASP HTTP security response headers (robotsix-standards
+    # http-security-headers.md) — SecureASGIMiddleware in runtime/api.py.
+    "secure>=2.0.1",
     "cryptography",
     "pypdf>=6.21.4",
     # Shared kanban-board frontend library: column-per-status board chrome

@@ -26,7 +26,7 @@ def tmp_config_file(tmp_path, monkeypatch):
             "review_enabled": False,
         },
         "secrets": {
-            "openrouter_api_key": "SECRET",
+            "openrouter_management_key": "SECRET",
             "forge_token": "SECRET",
         },
         "repos": {},
@@ -79,8 +79,8 @@ class TestGetConfig:
         assert r.status_code == 200
         data = r.json()
         # Secret fields from Secrets model should be masked
-        if "openrouter_api_key" in data["config"]:
-            assert data["config"]["openrouter_api_key"] == "**********"
+        if "openrouter_management_key" in data["config"]:
+            assert data["config"]["openrouter_management_key"] == "**********"
         if "forge_token" in data["config"]:
             assert data["config"]["forge_token"] == "**********"
 
@@ -112,18 +112,20 @@ class TestPutConfig:
         """PUT /config with a blank or masked secret keeps the stored value."""
         # Write a real secret value first
         raw = json.loads(tmp_config_file.read_text())
-        raw["secrets"]["openrouter_api_key"] = "sk-real-secret"
+        raw["secrets"]["openrouter_management_key"] = "sk-real-secret"
         tmp_config_file.write_text(json.dumps(raw, indent=2))
 
         # Submit a masked value — should keep existing
-        r = config_client.put("/config", json={"openrouter_api_key": "**********"})
+        r = config_client.put(
+            "/config", json={"openrouter_management_key": "**********"}
+        )
         assert r.status_code == 200
 
         raw = json.loads(tmp_config_file.read_text())
         # Secrets block is Fernet-encrypted at rest.
         secrets = decrypt_secrets_block(raw["secrets"])
         assert secrets is not None
-        assert secrets["openrouter_api_key"] == "sk-real-secret"
+        assert secrets["openrouter_management_key"] == "sk-real-secret"
 
     def test_secret_merge_on_write_explicit_overwrites(
         self, config_client, tmp_config_file
@@ -131,22 +133,24 @@ class TestPutConfig:
         """PUT /config with an explicit secret value overwrites the stored value."""
         # Write a real secret value first
         raw = json.loads(tmp_config_file.read_text())
-        raw["secrets"]["openrouter_api_key"] = "sk-old-secret"
+        raw["secrets"]["openrouter_management_key"] = "sk-old-secret"
         tmp_config_file.write_text(json.dumps(raw, indent=2))
 
         # Submit an explicit value — should overwrite
-        r = config_client.put("/config", json={"openrouter_api_key": "sk-new-secret"})
+        r = config_client.put(
+            "/config", json={"openrouter_management_key": "sk-new-secret"}
+        )
         assert r.status_code == 200
 
         raw = json.loads(tmp_config_file.read_text())
         # Secrets block is Fernet-encrypted at rest.
         secrets = decrypt_secrets_block(raw["secrets"])
         assert secrets is not None
-        assert secrets["openrouter_api_key"] == "sk-new-secret"
+        assert secrets["openrouter_management_key"] == "sk-new-secret"
 
     def test_secret_written_to_secrets_block(self, config_client, tmp_config_file):
         """PUT /config writes secret values to the secrets block."""
-        r = config_client.put("/config", json={"openrouter_api_key": "sk-test"})
+        r = config_client.put("/config", json={"openrouter_management_key": "sk-test"})
         assert r.status_code == 200
 
         raw = json.loads(tmp_config_file.read_text())
@@ -154,9 +158,9 @@ class TestPutConfig:
         # Secrets block is Fernet-encrypted at rest.
         secrets = decrypt_secrets_block(raw["secrets"])
         assert secrets is not None
-        assert secrets["openrouter_api_key"] == "sk-test"
+        assert secrets["openrouter_management_key"] == "sk-test"
         # Should NOT be in settings
-        assert "openrouter_api_key" not in raw.get("settings", {})
+        assert "openrouter_management_key" not in raw.get("settings", {})
 
     def test_rejects_unknown_key(self, config_client):
         """PUT /config rejects keys not in the Settings model."""

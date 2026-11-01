@@ -172,10 +172,10 @@ def test_load_secrets_explicit_file(tmp_path):
     """load_secrets with an explicit JSON file reads its secrets: block."""
     json_path = tmp_path / "secrets.json"
     json_path.write_text(
-        '{"secrets": {"openrouter_api_key": "sk-from-file", "forge_token": "ghp-from-file"}}'
+        '{"secrets": {"openrouter_management_key": "sk-from-file", "forge_token": "ghp-from-file"}}'
     )
     s = load_secrets(str(json_path))
-    assert s.openrouter_api_key == "sk-from-file"
+    assert s.openrouter_management_key == "sk-from-file"
     assert s.forge_token == "ghp-from-file"
 
 
@@ -197,20 +197,30 @@ def test_load_secrets_empty_file(tmp_path):
 
 
 # ===========================================================================
-#  openrouter_api_key — canonical fallback
+#  openrouter_api_key — canonical source only
 # ===========================================================================
 
 
-def test_openrouter_api_key_falls_back_to_canonical(tmp_path, monkeypatch):
-    """When the flat field is None, get_secrets().openrouter_api_key
-    falls back to Settings().openrouter.keys['robotsix-mill']."""
+def test_flat_secrets_openrouter_key_is_ignored(tmp_path):
+    """The historical flat ``secrets.openrouter_api_key`` is not read."""
+    json_path = tmp_path / "flat.json"
+    json_path.write_text('{"secrets": {"openrouter_api_key": "sk-flat"}}')
+    s = load_secrets(str(json_path))
+    assert s._openrouter_api_key is None
+    assert "openrouter_api_key" not in Secrets.model_fields
+
+
+def test_openrouter_api_key_reads_canonical(tmp_path, monkeypatch):
+    """get_secrets().openrouter_api_key reads
+    Settings().openrouter.keys['robotsix-mill']."""
     import json
 
     from robotsix_mill.config.settings import Settings
 
-    # Simulate a config that has the canonical top-level block but no
-    # flat openrouter_api_key in secrets.
+    # A config with the canonical top-level block (and a flat key that
+    # must be ignored).
     cfg = {
+        "secrets": {"openrouter_api_key": "sk-flat-ignored"},
         "settings": {"data_dir": str(tmp_path), "api_port": 8077},
         "openrouter": {"keys": {"robotsix-mill": "sk-from-top-level"}},
     }
@@ -224,7 +234,7 @@ def test_openrouter_api_key_falls_back_to_canonical(tmp_path, monkeypatch):
     assert s.openrouter is not None
     assert s.openrouter.keys["robotsix-mill"].get_secret_value() == "sk-from-top-level"
 
-    # get_secrets() should fall back to the canonical source.
+    # get_secrets() reads the canonical source.
     secrets = get_secrets()
     assert secrets.openrouter_api_key == "sk-from-top-level"
 
@@ -238,10 +248,10 @@ def test_secret_sentinel_treated_as_unset(tmp_path):
     """Values equal to the 'SECRET' sentinel are dropped, falling back to None."""
     json_path = tmp_path / "sentinel.json"
     json_path.write_text(
-        '{"secrets": {"openrouter_api_key": "SECRET", "forge_token": "SECRET"}}'
+        '{"secrets": {"openrouter_management_key": "SECRET", "forge_token": "SECRET"}}'
     )
     s = load_secrets(str(json_path))
-    assert s.openrouter_api_key is None
+    assert s.openrouter_management_key is None
     assert s.forge_token is None
 
 
@@ -249,10 +259,10 @@ def test_secret_sentinel_mixed_with_real(tmp_path):
     """SECRET sentinel values are dropped while real values pass through."""
     json_path = tmp_path / "mixed.json"
     json_path.write_text(
-        '{"secrets": {"openrouter_api_key": "sk-real", "forge_token": "SECRET"}}'
+        '{"secrets": {"openrouter_management_key": "sk-real", "forge_token": "SECRET"}}'
     )
     s = load_secrets(str(json_path))
-    assert s.openrouter_api_key == "sk-real"
+    assert s.openrouter_management_key == "sk-real"
     assert s.forge_token is None
 
 
@@ -297,11 +307,11 @@ def test_bare_secrets_reads_main_config_file(monkeypatch, tmp_path):
     cfg = tmp_path / "config.json"
     cfg.write_text(
         '{"settings": {"data_dir": "/tmp/x"},'
-        ' "secrets": {"openrouter_api_key": "sk-main", "github_app_id": "999"}}'
+        ' "secrets": {"openrouter_management_key": "sk-main", "github_app_id": "999"}}'
     )
     monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
     s = Secrets()
-    assert s.openrouter_api_key == "sk-main"
+    assert s.openrouter_management_key == "sk-main"
     assert s.github_app_id == "999"
     assert s.forge_token is None
 
@@ -309,31 +319,33 @@ def test_bare_secrets_reads_main_config_file(monkeypatch, tmp_path):
 def test_get_secrets_reads_main_config_file(monkeypatch, tmp_path):
     """The cached ``get_secrets()`` accessor sees the config file too.
 
-    This is the accessor every call site uses (``get_secrets().openrouter_api_key``).
+    This is the accessor every call site uses (e.g. ``get_secrets().forge_token``).
     """
     cfg = tmp_path / "config.json"
-    cfg.write_text('{"secrets": {"openrouter_api_key": "sk-cached"}}')
+    cfg.write_text('{"secrets": {"openrouter_management_key": "sk-cached"}}')
     monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
     _reset_secrets()
-    assert get_secrets().openrouter_api_key == "sk-cached"
+    assert get_secrets().openrouter_management_key == "sk-cached"
 
 
 def test_robotsix_config_file_points_to_secrets_source(monkeypatch, tmp_path):
     """``ROBOTSIX_CONFIG_FILE`` is the single source for secrets."""
     cfg = tmp_path / "config.json"
-    cfg.write_text('{"secrets": {"openrouter_api_key": "sk-from-cfg"}}')
+    cfg.write_text('{"secrets": {"openrouter_management_key": "sk-from-cfg"}}')
     monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(cfg))
-    assert Secrets().openrouter_api_key == "sk-from-cfg"
+    assert Secrets().openrouter_management_key == "sk-from-cfg"
 
 
 def test_explicit_secrets_file_beats_main_config(monkeypatch, tmp_path):
     """An explicit ``_secrets_file`` still wins over the main config file."""
     main = tmp_path / "config.json"
-    main.write_text('{"secrets": {"openrouter_api_key": "sk-main"}}')
+    main.write_text('{"secrets": {"openrouter_management_key": "sk-main"}}')
     explicit = tmp_path / "explicit.json"
-    explicit.write_text('{"secrets": {"openrouter_api_key": "sk-explicit"}}')
+    explicit.write_text('{"secrets": {"openrouter_management_key": "sk-explicit"}}')
     monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(main))
-    assert Secrets(_secrets_file=str(explicit)).openrouter_api_key == "sk-explicit"
+    assert (
+        Secrets(_secrets_file=str(explicit)).openrouter_management_key == "sk-explicit"
+    )
 
 
 def test_kwargs_override_main_config_file(monkeypatch, tmp_path):

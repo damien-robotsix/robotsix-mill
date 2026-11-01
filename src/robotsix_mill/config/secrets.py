@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 _SECRET_FIELD_NAMES: frozenset[str] = frozenset(
     {
-        "openrouter_api_key",
         "forge_token",
         "sandbox_push_token",
         "github_app_id",
@@ -164,6 +163,14 @@ class Secrets:
             from .loader import load_secrets_block
 
             file_data = load_secrets_block()
+        # The OpenRouter key's only config source is the canonical
+        # ``openrouter.keys`` block (robotsix-standards component
+        # standard: no fallback to the historical flat
+        # ``secrets.openrouter_api_key``).  An explicit kwarg is still
+        # honoured as an in-process override.
+        object.__setattr__(
+            self, "_openrouter_api_key", data.pop("openrouter_api_key", None)
+        )
         data = {**file_data, **data}
 
         # 2. Apply kwargs (dropping "SECRET" sentinels).
@@ -220,9 +227,8 @@ class Secrets:
     def openrouter_api_key(self) -> str | None:
         """Return the OpenRouter API key.
 
-        Backward-compat: when the deprecated flat ``secrets`` field is
-        unset, falls back to the canonical ``openrouter.keys`` source so
-        migrated configs keep existing callers working.
+        Read from the canonical ``openrouter.keys["robotsix-mill"]``
+        config block (unless overridden by the constructor kwarg).
         """
         key = self._openrouter_api_key
         if key is None:
@@ -304,7 +310,7 @@ class Secrets:
             return object.__getattribute__(self, name)
 
         # Log public field access so callers are observable.
-        if name in _SECRET_FIELD_NAMES:
+        if name in _SECRET_FIELD_NAMES or name == "openrouter_api_key":
             import inspect
 
             caller = inspect.currentframe()
