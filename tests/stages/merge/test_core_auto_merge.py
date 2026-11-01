@@ -830,6 +830,8 @@ def test_comment_dedup_different_reason_new_comment(tmp_path, monkeypatch):
     # eligible). Then re-run — the new reason text differs.
     reason_path = ctx.service.workspace(t).artifacts_dir / "merge_reason.txt"
     reason_path.write_text("old different reason", encoding="utf-8")
+    # The unchanged PR would otherwise hit the steady-state skip.
+    (ctx.service.workspace(t).artifacts_dir / "human_mr_steady.json").unlink()
 
     MergeStage().run(t, ctx)
     merge_events_ = [
@@ -1220,3 +1222,99 @@ def test_blocked_closed_unmerged_does_not_delete_branch(tmp_path, monkeypatch):
 
 
 # ============================================================
+
+
+# ============================================================
+# Steady-state HUMAN_MR_APPROVAL polls (GitHub quota, 2026-11-01)
+# ============================================================
+
+
+def _parked_green_pr(monkeypatch, pr, calls):
+    """Green, not-eligible PR: pr_status returns *pr*; check_status is counted."""
+    monkeypatch.setattr(
+        github.GitHubForge, "pr_status", lambda self, *, source_branch: dict(pr)
+    )
+
+    def _check_status(self, *, source_branch):
+        calls.append(source_branch)
+        return {"conclusion": "success", "failing": []}
+
+    monkeypatch.setattr(github.GitHubForge, "check_status", _check_status)
+
+
+_OPEN_PR = {
+    "merged": False,
+    "state": "open",
+    "url": "u",
+    "mergeable": True,
+    "mergeable_state": "clean",
+    "sha": "a" * 40,
+    "number": 7,
+    "author": "mill-bot",
+}
+
+
+def test_parked_green_pr_skips_full_repoll_while_unchanged(tmp_path, monkeypatch):
+    """A second poll of an unchanged parked PR runs only the baseline."""
+    ctx = _gh(tmp_path, auto_merge_enabled="false", review_enabled="true")
+    calls: list[str] = []
+    _parked_green_pr(monkeypatch, _OPEN_PR, calls)
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    assert MergeStage().run(t, ctx).next_state is State.HUMAN_MR_APPROVAL
+    assert MergeStage().run(t, ctx).next_state is State.HUMAN_MR_APPROVAL
+    assert len(calls) == 1
+
+
+def test_parked_pr_new_head_sha_forces_full_repoll(tmp_path, monkeypatch):
+    """A pushed commit (new head sha) re-evaluates CI immediately."""
+    ctx = _gh(tmp_path, auto_merge_enabled="false", review_enabled="true")
+    calls: list[str] = []
+    pr = dict(_OPEN_PR)
+    _parked_green_pr(monkeypatch, pr, calls)
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    MergeStage().run(t, ctx)
+
+    _parked_green_pr(monkeypatch, {**pr, "sha": "b" * 40}, calls)
+    MergeStage().run(t, ctx)
+    assert len(calls) == 2
+
+
+def test_parked_pr_full_repoll_after_window(tmp_path, monkeypatch):
+    """The full re-check still runs once the steady-state window expires."""
+    from robotsix_mill.stages.merge import human_approval
+
+    ctx = _gh(tmp_path, auto_merge_enabled="false", review_enabled="true")
+    calls: list[str] = []
+    _parked_green_pr(monkeypatch, _OPEN_PR, calls)
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    MergeStage().run(t, ctx)
+
+    real_time = human_approval.time.time
+    monkeypatch.setattr(
+        human_approval.time,
+        "time",
+        lambda: real_time() + human_approval._STEADY_FULL_POLL_SECONDS + 1,
+    )
+    MergeStage().run(t, ctx)
+    assert len(calls) == 2
+
+
+def test_parked_pr_merged_by_human_detected_during_steady_state(tmp_path, monkeypatch):
+    """Merge detection (the baseline) is never skipped."""
+    ctx = _gh(tmp_path, auto_merge_enabled="false", review_enabled="true")
+    calls: list[str] = []
+    _parked_green_pr(monkeypatch, _OPEN_PR, calls)
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    MergeStage().run(t, ctx)
+
+    _parked_green_pr(
+        monkeypatch, {**_OPEN_PR, "merged": True, "state": "closed"}, calls
+    )
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert len(calls) == 1

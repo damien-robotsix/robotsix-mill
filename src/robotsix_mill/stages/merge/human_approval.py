@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
+from pathlib import Path
 from typing import Any, cast
 
 from ...config import target_branch_for
@@ -36,6 +38,51 @@ from ._shared import (
     _write_counter,
     log,
 )
+
+# A ticket parked in HUMAN_MR_APPROVAL with green CI waits on a human,
+# often for days.  The full re-evaluation (review status, check-runs,
+# PR files, sensitive-path re-check — each forge call re-resolving the
+# PR by head branch) costs 10-15 GitHub requests per poll, so ~20 parked
+# tickets polled every ``merge_poll_seconds`` drained the shared App
+# installation's whole hourly quota (2026-10-31/11-01: every fleet
+# release-please run and mill's own CI reads 403'd for hours).  While the
+# PR fingerprint is unchanged since the last full poll that ended in a
+# plain human wait, only the cheap baseline (merged/closed detection) runs;
+# a full re-check is forced every ``_STEADY_FULL_POLL_SECONDS``.
+_STEADY_STATE_ARTIFACT = "human_mr_steady.json"
+_STEADY_FULL_POLL_SECONDS = 900
+
+
+def _pr_fingerprint(pr: dict[str, Any]) -> str:
+    """Fingerprint of the PR fields whose change warrants a full re-poll."""
+    return f"{pr.get('sha', '')}|{pr.get('mergeable')}|{pr.get('mergeable_state')}"
+
+
+def _steady_state_fresh(artifacts_dir: Path, pr: dict[str, Any]) -> bool:
+    """True when the last full poll saw this exact PR state recently."""
+    try:
+        data = json.loads(
+            (artifacts_dir / _STEADY_STATE_ARTIFACT).read_text(encoding="utf-8")
+        )
+        at = float(data["at"])
+        fingerprint = str(data["fingerprint"])
+    except OSError, ValueError, KeyError, TypeError:
+        return False
+    if fingerprint != _pr_fingerprint(pr):
+        return False
+    return 0 <= time.time() - at < _STEADY_FULL_POLL_SECONDS
+
+
+def _record_steady_state(artifacts_dir: Path, pr: dict[str, Any]) -> None:
+    """Remember that a full poll ended in a plain human wait for *pr*."""
+    try:
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        (artifacts_dir / _STEADY_STATE_ARTIFACT).write_text(
+            json.dumps({"fingerprint": _pr_fingerprint(pr), "at": time.time()}),
+            encoding="utf-8",
+        )
+    except OSError:
+        log.debug("could not persist %s", _STEADY_STATE_ARTIFACT)
 
 
 class HumanApprovalMixin(_MergeStageBase):
@@ -168,6 +215,10 @@ class HumanApprovalMixin(_MergeStageBase):
         if pr is None:  # type guard: _check_pr_baseline guarantees pr is non-None here
             raise RuntimeError("_check_pr_baseline returned (None, None) — impossible")
 
+        artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
+        if _steady_state_fresh(artifacts_dir, pr):
+            return Outcome(State.HUMAN_MR_APPROVAL)
+
         # --- Review feedback check (opt-in, gated by config flag) ---
         review_outcome = self._review_changes_requested_outcome(
             ticket,
@@ -222,7 +273,6 @@ class HumanApprovalMixin(_MergeStageBase):
             # Route directly to REBASING — the rebase agent will resolve
             # the conflict and the post-rebase handler will route back to
             # the merge loop (WAITING_AUTO_MERGE or HUMAN_MR_APPROVAL).
-            artifacts_dir = ctx.service.workspace(ticket).artifacts_dir
             artifacts_dir.joinpath(_REBASE_FROM_STATE).write_text(
                 State.HUMAN_MR_APPROVAL.value, encoding="utf-8"
             )
@@ -300,6 +350,7 @@ class HumanApprovalMixin(_MergeStageBase):
                 )
             # CI green but not eligible → human approval needed.
             self._maybe_comment(ticket, ctx, eligibility_reason)
+            _record_steady_state(artifacts_dir, pr)
             return Outcome(State.HUMAN_MR_APPROVAL)
 
         if conclusion == "success" and pr.get("mergeable_state") == "behind":
