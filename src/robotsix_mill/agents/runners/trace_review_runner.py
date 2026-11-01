@@ -52,6 +52,7 @@ from .trace_review_classifier import (
     _SELF_REFERENTIAL_TRACE_NAMES,
     _classify_trace,
     _compute_baselines,
+    _dedupe_tool_spans,
     _TraceFlags,
 )
 
@@ -548,7 +549,9 @@ def run_trace_review_pass(
         detail = fetch_trace_detail(settings, trace_id, repo_config=repo_config)
         if detail is None:
             continue
-        obs_counts_by_id[trace_id] = len(detail.get("observations") or [])
+        obs_counts_by_id[trace_id] = len(
+            _dedupe_tool_spans(detail.get("observations") or [])
+        )
         # ``detail`` is intentionally not retained past this iteration.
 
     baselines = _compute_baselines(traces, obs_counts_by_id, settings)

@@ -29,6 +29,7 @@ __all__ = [
     "_TraceFlags",
     "_classify_trace",
     "_compute_baselines",
+    "_dedupe_tool_spans",
 ]
 
 # ---------------------------------------------------------------------------
@@ -81,6 +82,47 @@ def _median(values: Sequence[float]) -> float:
     if n % 2 == 1:
         return float(sorted_v[mid])
     return (sorted_v[mid - 1] + sorted_v[mid]) / 2.0
+
+
+def _dedupe_tool_spans(observations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop the SPAN twin of each TOOL observation.
+
+    The tracing export records every tool invocation twice: a ``TOOL``
+    observation and a ``SPAN`` with the same name and near-identical
+    timings (one nested in the other). Counting both doubled
+    ``observation_storm`` and ``repeated_tool`` counts. A SPAN is
+    treated as a twin — and dropped — when an as-yet-unmatched TOOL
+    observation shares its name and is either its parent/child or
+    time-nested within it (or vice versa). Matching is 1:1, so
+    genuinely distinct calls are never collapsed.
+    """
+    tools = [o for o in observations if o.get("type") == "TOOL"]
+    if not tools:
+        return observations
+    unmatched = list(tools)
+    dropped: set[int] = set()
+
+    def _nested(a: dict[str, Any], b: dict[str, Any]) -> bool:
+        a0, a1 = a.get("startTime") or "", a.get("endTime") or ""
+        b0, b1 = b.get("startTime") or "", b.get("endTime") or ""
+        if not (a0 and a1 and b0 and b1):
+            return False
+        return (a0 <= b0 and b1 <= a1) or (b0 <= a0 and a1 <= b1)
+
+    for o in observations:
+        if o.get("type") != "SPAN" or not o.get("name"):
+            continue
+        for t in unmatched:
+            if t.get("name") != o.get("name"):
+                continue
+            linked = (o.get("id") and t.get("parentObservationId") == o.get("id")) or (
+                t.get("id") and o.get("parentObservationId") == t.get("id")
+            )
+            if linked or _nested(o, t):
+                unmatched.remove(t)
+                dropped.add(id(o))
+                break
+    return [o for o in observations if id(o) not in dropped]
 
 
 def _compute_baselines(
@@ -229,14 +271,16 @@ def _classify_trace(
             flags=flags,
         )
 
-    # Observation-level flags
+    # Observation-level flags — counted on the deduped list so each tool
+    # call's TOOL + SPAN pair is counted once.
+    counted = _dedupe_tool_spans(observations)
     if (
         baselines is not None
         and baselines.obs_threshold is not None
-        and len(observations) > baselines.obs_threshold
+        and len(counted) > baselines.obs_threshold
     ):
         flags.append(
-            f"observation_storm ({len(observations)} obs vs "
+            f"observation_storm ({len(counted)} obs vs "
             f"threshold {baselines.obs_threshold:.0f} = "
             f"{settings.trace_review_obs_multiplier:.1f}× "
             f"median {baselines.obs_median:.0f})"
@@ -247,7 +291,7 @@ def _classify_trace(
     tool_errors = 0
     ask_user_calls = 0
     explore_runs = 0
-    for o in observations:
+    for o in counted:
         name = o.get("name") or ""
 
         # Count tool invocations.
