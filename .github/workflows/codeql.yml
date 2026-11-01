@@ -26,7 +26,7 @@ jobs:
     # Python needs no build; the reusable's autobuild step is a no-op here.
     # Pinned to github-workflows main after #251 unified the codeql-action
     # init/autobuild/analyze pins on v4.39.1 (never pin older than 92c11fd).
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/codeql.yml@464cc48d10a2f4f71fc267c3a4937bb999bcaed3  # main 2026-10-27
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/codeql.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
     with:
       languages: python
       config-file: ./.github/codeql/codeql-config.yml
