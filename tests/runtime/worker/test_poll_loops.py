@@ -942,8 +942,66 @@ class TestCiLogBodyParts:
             "### Job: Tests (id=7) — failing step: Audit dependencies\n"
             "certifi 2024.2.2 GHSA-248v-346w-9cwc\n"
         )
-        parts = _ci_log_body_parts(logs, self._ansi_re)
-        assert parts[0] == "**Failing step:** `Audit dependencies` (job Tests)"
+        parts = _ci_log_body_parts(logs, self._ansi_re, "CI")
+        assert parts[0] == "**Failed:** `CI / Tests › Audit dependencies`"
+
+    @staticmethod
+    def _job(name: str, job_id: int, step: str | None, lines: list[str]) -> str:
+        header = f"### Job: {name} (id={job_id})"
+        if step:
+            header += f" — failing step: {step}"
+        return "\n".join([header + "\n", *lines, "\n"])
+
+    def _multi_job_logs(self, step_lines: int, cleanup_lines: int) -> str:
+        ts = "2026-10-30T12:00:00.0000000Z"
+        middle = self._job(
+            "Security Audit",
+            202,
+            "pip-audit",
+            [f"{ts} auditing package {i}" for i in range(step_lines)]
+            + [
+                f"{ts} certifi 2024.2.2 GHSA-248v-346w-9cwc",
+                f"{ts} ##[error]Found 1 known vulnerability",
+                f"{ts} ##[error]Process completed with exit code 1.",
+            ]
+            + [f"{ts} post-job cleanup cache save {i}" for i in range(cleanup_lines)],
+        )
+        last = self._job(
+            "Publish",
+            203,
+            "Build",
+            [f"{ts} ##[error]Process completed with exit code 2."]
+            + [f"{ts} SBOM row {i}" for i in range(cleanup_lines)],
+        )
+        return f"{middle}\n{last}"
+
+    def test_multi_job_over_cap_keeps_errors_not_cleanup(self):
+        logs = self._multi_job_logs(step_lines=1000, cleanup_lines=2000)
+        assert len(logs) > _CI_LOG_EMBED_MAX_CHARS
+        body = "\n".join(_ci_log_body_parts(logs, self._ansi_re, "CI"))
+        assert (
+            "**Failed:** `CI / Security Audit › pip-audit`; `CI / Publish › Build`"
+        ) in body
+        assert "##[error]Found 1 known vulnerability" in body
+        assert "certifi 2024.2.2 GHSA-248v-346w-9cwc" in body
+        assert "##[error]Process completed with exit code 2." in body
+        assert "post-job cleanup cache save" not in body
+        assert "SBOM row" not in body
+        assert "_Log tail below" not in body
+        assert "Failing-step excerpt below" in body
+        assert "auditing package 0\n" not in body  # excerpted, not whole
+        assert len(body) < 25_000
+
+    def test_multi_job_under_cap_drops_trailing_cleanup(self):
+        logs = self._multi_job_logs(step_lines=50, cleanup_lines=5)
+        body = "\n".join(_ci_log_body_parts(logs, self._ansi_re))
+        assert "**Failed:** `Security Audit › pip-audit`" in body
+        # Under the cap the whole failing-step output stays.
+        assert "auditing package 0" in body
+        assert "##[error]Found 1 known vulnerability" in body
+        assert "post-job cleanup cache save" not in body
+        assert "SBOM row" not in body
+        assert "Failing-step excerpt below" not in body
 
 
 def test_poll_loops_reexports_moved_helpers():

@@ -71,10 +71,19 @@ _REDISPATCH_MAX_ATTEMPTS = 3
 _CI_LOG_EMBED_MAX_CHARS = 20_000
 
 
-# Job-log section header emitted by ``GitHubForgeCIMixin._fetch_workflow_job_logs``.
-_FAILING_STEP_HEADER_RE = re.compile(
-    r"^### Job: (.+?) \(id=[^)]*\) — failing step: (.+)$", re.MULTILINE
+# Job-log section header emitted by ``GitHubForgeCIMixin._fetch_workflow_job_logs``
+# (the ``— failing step:`` suffix is present only when the jobs API named one).
+_JOB_SECTION_HEADER_RE = re.compile(
+    r"^### Job: (.+?) \(id=[^)]*\)(?: — failing step: (.+))?$", re.MULTILINE
 )
+# GitHub Actions error annotation; a failing step's last line is
+# ``##[error]Process completed with exit code N.`` — anything after the
+# last marker is post-step / post-job cleanup noise.
+_CI_ERROR_MARKER = "##[error]"
+# Over-cap excerpt shape per failed job: this many lines around every
+# ``##[error]`` marker, plus this many lines before the step exits.
+_CI_ERROR_CONTEXT_LINES = 10
+_CI_STEP_EXIT_TAIL_LINES = 60
 
 _CI_TITLE_PREFIX_RE = re.compile(r"^\s*CI failure:\s*", re.IGNORECASE)
 
@@ -96,19 +105,105 @@ def _title_names_workflow(title: str, wf_name: str, target: str) -> bool:
     return _word(wf_name) and _word(target)
 
 
-def _ci_log_body_parts(logs: str, ansi_re: re.Pattern[str]) -> list[str]:
-    """Markdown body parts embedding a bounded, ANSI-stripped log tail."""
+def _drop_after_last_error(section: str) -> str:
+    """Cut *section* after its last ``##[error]`` line (cleanup noise)."""
+    lines = section.splitlines()
+    errs = [i for i, line in enumerate(lines) if _CI_ERROR_MARKER in line]
+    if not errs:
+        return section.rstrip()
+    return "\n".join(lines[: errs[-1] + 1])
+
+
+def _error_excerpt(section: str) -> str:
+    """Header, lines around each ``##[error]`` and the lines before the exit."""
+    lines = section.splitlines()
+    keep = {
+        i
+        for i in range(min(3, len(lines)))
+        if i == 0 or lines[i].startswith("Job URL:")
+    }
+    errs = [i for i, line in enumerate(lines) if _CI_ERROR_MARKER in line]
+    end = errs[-1] if errs else len(lines) - 1
+    keep.update(range(max(0, end - _CI_STEP_EXIT_TAIL_LINES), end + 1))
+    for i in errs:
+        keep.update(
+            range(
+                max(0, i - _CI_ERROR_CONTEXT_LINES),
+                min(end + 1, i + _CI_ERROR_CONTEXT_LINES + 1),
+            )
+        )
+    out: list[str] = []
+    prev = -1
+    for i in sorted(keep):
+        if i > prev + 1:
+            out.append("[…]")
+        out.append(lines[i])
+        prev = i
+    return "\n".join(out)
+
+
+def _failed_step_logs(log: str, headers: list[re.Match[str]]) -> tuple[str, bool]:
+    """Narrow per-job sections to their failing-step output.
+
+    Always drops what follows each job's last ``##[error]`` line; when the
+    result still exceeds the embed cap, keeps only the error context and
+    the lines before each step exits, splitting the budget across jobs so
+    an early job's error is never cut off by a later job's output. Returns
+    the text and whether it was excerpted.
+    """
+    bounds = [m.start() for m in headers] + [len(log)]
+    sections = [log[bounds[i] : bounds[i + 1]] for i in range(len(headers))]
+    preamble = log[: bounds[0]].strip()
+    trimmed = "\n\n".join(_drop_after_last_error(s) for s in sections)
+    if preamble:
+        trimmed = preamble + "\n\n" + trimmed
+    if len(trimmed) <= _CI_LOG_EMBED_MAX_CHARS:
+        return trimmed, False
+    share = _CI_LOG_EMBED_MAX_CHARS // len(sections) - 2
+    excerpts = []
+    for s in sections:
+        ex = _error_excerpt(s)
+        if len(ex) > share:
+            # Keep the header line and the end (the exit / last error).
+            head, _, rest = ex.partition("\n")
+            keep = max(0, share - len(head) - 5)
+            ex = head + "\n[…]\n" + rest[len(rest) - keep :]
+        excerpts.append(ex)
+    return "\n\n".join(excerpts), True
+
+
+def _ci_log_body_parts(
+    logs: str, ansi_re: re.Pattern[str], workflow: str = ""
+) -> list[str]:
+    """Markdown body parts embedding the failed job/step log output.
+
+    With ``### Job:`` sections (GitHub job logs), name every failed
+    job/step up front and embed only their failing-step output, excerpted
+    around ``##[error]`` markers when over the cap. Without sections, fall
+    back to a bounded tail of the whole log.
+    """
     stripped = ansi_re.sub("", logs)
     parts: list[str] = []
-    # Name the failing step(s) up front — the job-log section headers
-    # carry them, but the tail truncation below may cut a header off.
-    steps = _FAILING_STEP_HEADER_RE.findall(stripped)
-    if steps:
+    headers = list(_JOB_SECTION_HEADER_RE.finditer(stripped))
+    if headers:
+        prefix = f"{workflow} / " if workflow else ""
         parts.append(
-            "**Failing step:** "
-            + "; ".join(f"`{step.strip()}` (job {job})" for job, step in steps)
+            "**Failed:** "
+            + "; ".join(
+                f"`{prefix}{m.group(1).strip()}"
+                + (f" › {m.group(2).strip()}" if m.group(2) else "")
+                + "`"
+                for m in headers
+            )
         )
         parts.append("")
+        stripped, excerpted = _failed_step_logs(stripped, headers)
+        if excerpted:
+            parts.append(
+                "_Failing-step excerpt below (lines around `##[error]` "
+                "markers and before each step exits — full logs at the run "
+                "link above)._"
+            )
     if len(stripped) > _CI_LOG_EMBED_MAX_CHARS:
         stripped = stripped[-_CI_LOG_EMBED_MAX_CHARS:]
         parts.append(
@@ -780,7 +875,7 @@ class PollLoopsCiMixin(_WorkerBase):
                     "the job). Diff the caller against a green sibling repo."
                 )
             elif logs:
-                body_parts.extend(_ci_log_body_parts(logs, ansi_re))
+                body_parts.extend(_ci_log_body_parts(logs, ansi_re, wf_name))
             elif fetch_error:
                 body_parts.append(
                     "⚠️ **Could not fetch the run logs** after "
