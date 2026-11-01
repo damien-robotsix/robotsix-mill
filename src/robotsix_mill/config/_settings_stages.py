@@ -523,8 +523,8 @@ class _StagesSettings(BaseModel):
     # session's board). Trace-review
     # findings are agent-side improvements (mill code, mill prompts);
     # filing them on each application repo's board scatters work that
-    # belongs in one place. Leave empty to preserve the legacy
-    # source-repo routing.
+    # belongs in one place. Empty → the registry's ``robotsix-mill``
+    # entry when present, else the legacy source-repo routing.
     trace_review_target_repo_id: str = Field(
         description="Target repo for trace-review draft tickets. Empty preserves source-repo routing.",
         default="",
