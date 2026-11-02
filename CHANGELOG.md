@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.22.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.22.0...v0.22.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* ci_fix agent: stop filing 'Agent report:' / 'DONE:' progress notes as board tickets on the target repo (20261031T221127Z-ci-fix-agent-stop-filing-agent-report-do-0c9f) ([#3572](https://github.com/damien-robotsix/robotsix-mill/issues/3572)) ([03062df](https://github.com/damien-robotsix/robotsix-mill/commit/03062dfc32496e364c3fdcefaaf04da204586d67))
+* **ci_fix:** never park a dependency-audit failure as non-code-fixable ([#3570](https://github.com/damien-robotsix/robotsix-mill/issues/3570)) ([be4c267](https://github.com/damien-robotsix/robotsix-mill/commit/be4c267f597997e7b10052fcc7ef2cc06945afea))
+* refine: don't treat the CI log tail in source=ci tickets as a 'prescriptive spec' (stop skipping refine and auto-approving empty specs) (20261101T122020Z-refine-don-t-treat-the-ci-log-tail-in-so-bba9) ([#3573](https://github.com/damien-robotsix/robotsix-mill/issues/3573)) ([74151b1](https://github.com/damien-robotsix/robotsix-mill/commit/74151b10b65a3bfab6729b28ecfce61dc0c55daa))
+
 ## [0.22.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.21.1...v0.22.0) (2026-11-01)
 
 
