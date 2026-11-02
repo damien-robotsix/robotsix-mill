@@ -308,6 +308,15 @@ _STATUS_ONLY_PREFIX_RE = re.compile(
 _STATUS_WORD_RE = re.compile(
     r"\b(?:pushed|fixed|done|completed|resolved)\b", re.IGNORECASE
 )
+# A status word alone is not enough: a real issue title can mention it
+# ("lint still not fixed", "pushed commit breaks docs build").  Any of these
+# markers keeps the report on the issue-filing path.
+_ISSUE_MARKER_RE = re.compile(
+    r"\b(?:not|no|never|still|yet|again|but|without|unable|cannot|can't|"
+    r"isn't|wasn't|didn't|doesn't|won't|break|breaks|broke|broken|"
+    r"fail\w*|error\w*|red|regress\w*|block\w*|crash\w*)\b",
+    re.IGNORECASE,
+)
 
 
 def normalise_report_title(title: str) -> str:
@@ -327,6 +336,8 @@ def normalise_report_title(title: str) -> str:
 def is_status_note(title: str) -> bool:
     """True if *title* announces ci_fix progress/completion, not an issue."""
     t = title or ""
+    if _ISSUE_MARKER_RE.search(t):
+        return False
     return bool(_STATUS_ONLY_PREFIX_RE.match(t) or _STATUS_WORD_RE.search(t))
 
 
@@ -364,6 +375,8 @@ def find_recent_followup(
     """Return a ticket from the same session with the same normalised title
     created within :data:`FOLLOWUP_DEDUP_WINDOW` (any state).
     """
+    if not origin_session:
+        return None
     norm = normalise_report_title(title)
     if not norm:
         return None

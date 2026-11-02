@@ -151,6 +151,35 @@ def test_identical_followups_within_window_file_one_ticket(settings, monkeypatch
     assert len(svc.list()) == 1
 
 
+@pytest.mark.parametrize(
+    "title",
+    [
+        "lint still not fixed after pin bump",
+        "CI red: pushed commit breaks docs build",
+        "startup_failure not resolved by retry",
+    ],
+)
+def test_issue_titles_mentioning_status_words_are_not_status_notes(title):
+    assert not ci_fix_report.is_status_note(title)
+
+
+def test_issue_title_with_status_word_is_still_filed(settings):
+    out = _tool(settings)("lint still not fixed after pin bump", "details")
+    assert out.startswith("report_issue: filed draft ")
+    assert len(TicketService(settings, board_id="invest").list()) == 1
+
+
+def test_followup_dedup_skipped_without_origin_session(settings):
+    svc = TicketService(settings, board_id="invest")
+    svc.create("gitleaks config needs an allowlist entry", "human-filed")
+    assert (
+        ci_fix_report.find_recent_followup(
+            svc, "gitleaks config needs an allowlist entry", None
+        )
+        is None
+    )
+
+
 def test_normalise_report_title():
     assert ci_fix_report.normalise_report_title(
         "Agent report: Gitleaks CI fix pushed"
