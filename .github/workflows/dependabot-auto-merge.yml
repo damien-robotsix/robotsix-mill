@@ -19,4 +19,4 @@ jobs:
     permissions:
       contents: write  # approve and merge the PR
       pull-requests: write  # label and merge the PR
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/dependabot-auto-merge.yml@2de56a85055b60d0f01c406342eda081e68c0c8b  # main
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/dependabot-auto-merge.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0

@@ -22,7 +22,7 @@ jobs:
       contents: read   # the spine's build job checks out this repo
       pages: write     # the spine's deploy job publishes the Pages artifact
       id-token: write  # OIDC auth for actions/deploy-pages
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-docs.yml@8f52551463b98b8845216c644f65ee68d01e95df
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-docs.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
     with:
       docs-install-args: "--group docs"
       # Pin to a concrete 3.14.x patch: a bare "3.14" lets setup-python

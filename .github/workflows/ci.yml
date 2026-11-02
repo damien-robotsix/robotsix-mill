@@ -59,7 +59,7 @@ jobs:
     permissions:
       contents: read
       security-events: write  # upload the Trivy scan SARIF to code scanning
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@92c11fd2be7a9ce80bd60208616271326e0fb08a  # main 2026-10-26
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
     with:
       image-name: ghcr.io/damien-robotsix/robotsix-mill
       dockerfile: Dockerfile
@@ -70,7 +70,7 @@ jobs:
     permissions:
       contents: read
       security-events: write  # upload the Trivy scan SARIF to code scanning
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@92c11fd2be7a9ce80bd60208616271326e0fb08a  # main 2026-10-26
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
     with:
       image-name: ghcr.io/damien-robotsix/robotsix-mill-sandbox
       dockerfile: sandbox/Dockerfile
@@ -81,7 +81,7 @@ jobs:
     permissions:
       contents: read
       security-events: write  # upload the Trivy scan SARIF to code scanning
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@92c11fd2be7a9ce80bd60208616271326e0fb08a  # main 2026-10-26
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/docker-pr-scan.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
     with:
       image-name: ghcr.io/damien-robotsix/robotsix-mill-sandbox-proxy
       dockerfile: sandbox/proxy/Dockerfile
