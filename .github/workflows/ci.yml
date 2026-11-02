@@ -56,6 +56,23 @@ jobs:
       #     resolves 6.16.2, so no pypdf advisory is ignored here.
       audit-ignore: "PYSEC-2025-183, MAL-2026-4750, GHSA-9xwg-3r6f-jcx2, GHSA-jwv3-5hgf-82ww, GHSA-m2h6-j472-rp4c, GHSA-g6cj-pr64-35w5"
 
+  # ── TruffleHog secret scan (robotsix-standards security-posture) ──
+  # The detect-secrets pre-commit hook is bypassable with --no-verify;
+  # this gates in CI. PRs scan only the PR diff. pip-audit is disabled
+  # because python-ci.yml and security-audit.yml already run `uv audit`.
+  secret-scan:
+    permissions:
+      contents: read
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-security.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
+    with:
+      python-version: "3.14"
+      uv-version: "0.12.0"
+      install-extras: "tracing"
+      run-trufflehog: true
+      trufflehog-pr-diff: true
+      trufflehog-extra-args: "--results=verified,unknown"
+      run-pip-audit: false
+
   # ── PR-time image build + blocking Trivy gate (CRITICAL/HIGH, fixable) ──
   # Mirrors the post-merge publish jobs in release.yml so a Dockerfile
   # change that breaks the build or adds a CVE fails the PR, not `main`.
