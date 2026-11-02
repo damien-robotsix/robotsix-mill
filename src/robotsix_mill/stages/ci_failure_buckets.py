@@ -339,6 +339,22 @@ _NON_CODE_FIXABLE_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 
 
+# Dependency-audit signatures (pip-audit / ``uv audit`` / an advisory id).
+# The shared ``python-security.yml`` runs TruffleHog AND the dependency CVE
+# audit in ONE job, which callers name ``secret-scan`` — so a plain
+# vulnerable-dependency failure surfaces under a scanner-looking check name.
+# A lock bump fixes it, so it must never be short-circuited as
+# non-code-fixable (robotsix-linkedin 4034, 2026-11-01: opentelemetry-api
+# CVE parked as "remove the secret from history and rotate it").
+_DEPENDENCY_AUDIT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"found \d+ known vulnerabilit"),
+    re.compile(r"\bpip-audit\b"),
+    re.compile(r"\buv audit\b"),
+    re.compile(r"\bcve-\d{4}-\d+"),
+    re.compile(r"\bghsa-[0-9a-z]{4}-"),
+)
+
+
 def is_non_code_fixable_failure(
     failing: list[dict[str, Any]], failing_summary: str = ""
 ) -> bool:
@@ -352,12 +368,18 @@ def is_non_code_fixable_failure(
     all names blank), returns ``False``: the stage cannot prove the failure is
     non-code-fixable, so it falls through to the normal agent path.
 
-    ``failing_summary`` is accepted for signature parity with
-    :func:`is_formatter_only_failure` but is intentionally unused — the
-    check-name signal is the reliable one for scanner families.
+    ``failing_summary`` is used only as a VETO: when it carries a
+    dependency-audit signature (``Found N known vulnerabilities``, a CVE or
+    GHSA id) the failure is a vulnerable dependency reported by a job that
+    merely shares a scanner-looking name, and the agent can fix it with a
+    lock bump — return ``False``. A log mention can therefore only route a
+    failure TO the agent, never away from it.
     """
     names = [n for n in _check_names(failing) if n]
     if not names:
+        return False
+    summary = (failing_summary or "").lower()
+    if any(p.search(summary) for p in _DEPENDENCY_AUDIT_PATTERNS):
         return False
     return all(
         any(p.search(name.lower()) for p in _NON_CODE_FIXABLE_PATTERNS)
