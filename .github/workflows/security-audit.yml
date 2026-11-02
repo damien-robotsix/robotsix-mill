@@ -38,67 +38,21 @@ jobs:
       - name: Check .trivyignore expiry dates
         run: python scripts/check_trivyignore_expiry.py
 
+      - name: Checkout workflow library (audit-ignore parser)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: damien-robotsix/robotsix-github-workflows
+          ref: 86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
+          path: _workflow-lib
+          persist-credentials: false
+
       - name: Audit dependencies
+        # Ignored advisories (with rationale and expiry) live in the
+        # single-source `.audit-ignore`, shared with ci.yml's python-ci.yml
+        # audit; audit_ignore.py validates it and appends the flags.
         run: |
-          # PYSEC-2025-183 (pyjwt): "weak encryption" advisory disputed
-          # by the supplier — the algorithm strength is determined by
-          # the *key* the caller supplies, not by pyjwt itself. No fix
-          # version is published (the "Fix Versions" column is empty
-          # in the advisory database). pyjwt is a direct dependency
-          # (pyjwt[crypto]>=2 in pyproject.toml) and also transitive
-          # via langfuse (tracing extra). mill calls jwt.encode()
-          # directly with RS256 in forge/auth.py to mint GitHub App
-          # bearer tokens. This is safe because the caller supplies
-          # its own RSA private key (a GitHub App key ≥2048 bits);
-          # the advisory's concern (weak keys) is mitigated — key
-          # strength is the caller's responsibility, and our caller
-          # supplies strong keys. Re-evaluate if a fix version is
-          # ever published.
-          #
-          # MAL-2026-4750 (fastapi 0.136.3): undocument "fastar" dep
-          # injected into fastapi[standard] extras on PyPI.  mill
-          # depends on "fastapi>=0.115" (no extras), so fastapi[standard]
-          # is never installed & the malicious dep is never pulled.
-          # Advisory has since been withdrawn from the OSV database
-          # (2026); retained for documentation.
-          #
-          # GHSA-9xwg-3r6f-jcx2 (pymdown-extensions): XSS in the
-          # Arithmatex extension, fixed in 10.14 (Sep 2024).  mill's
-          # lock pins pymdown-extensions 10.21.3 — well above the fix
-          # version — so this is a false positive from the advisory
-          # database.  pymdown-extensions is a transitive docs-only
-          # dependency (mkdocs-material → pymdown-extensions), never
-          # shipped or served to users.  Safe to ignore.
-          #
-          # GHSA-jwv3-5hgf-82ww (cryptography): duplicate self-signed
-          # intermediates can cause exponential path-building; fixed in
-          # 49.0.0. Pinned 50.0.0 via uv.lock; the advisory database
-          # may still flag this version — safe to ignore.
-          #
-          # GHSA-m2h6-j472-rp4c (cryptography): verifier accepts wildcard
-          # DNS names allowing escape from permittedSubtrees; fixed in
-          # 49.0.0. Pinned 50.0.0 via uv.lock; the advisory database
-          # may still flag this version — safe to ignore.
-          #
-          # GHSA-g6cj-pr64-35w5 (cryptography): PKCS#7 EnvelopedData
-          # decryption exposes a Bleichenbacher oracle; fixed in 50.0.0.
-          # Pinned 50.0.0 via uv.lock; the advisory database may still
-          # flag this version — safe to ignore.
-          #
-          # pypdf advisories GHSA-763m-79hh-57f2, GHSA-23w6-3w8w-8484,
-          # GHSA-jp53-mhqp-8xcg (and the earlier GHSA-fp3f-mc75-235c /
-          # GHSA-fwg2-594c-jp42) plus the Oct-2026 PDF-parsing DoS batch
-          # are fixed by pypdf 6.19.0, and GHSA-39mj-jf6j-2qj3,
-          # GHSA-7mh2-4gg2-979f, GHSA-9mx8-4j7g-633p, GHSA-qfv9-64jg-mh7p
-          # and GHSA-5hx5-vpf9-5wcv by 6.21.1, and later advisories by 6.21.4; uv.lock resolves
-          # 6.21.4, so no pypdf advisory is ignored here.
-          uv audit --frozen \
-            --ignore PYSEC-2025-183 \
-            --ignore MAL-2026-4750 \
-            --ignore GHSA-9xwg-3r6f-jcx2 \
-            --ignore GHSA-jwv3-5hgf-82ww \
-            --ignore GHSA-m2h6-j472-rp4c \
-            --ignore GHSA-g6cj-pr64-35w5
+          python3 _workflow-lib/scripts/audit_ignore.py --format uv -- \
+            uv audit --frozen
 
       - name: Generate SBOM (CycloneDX)
         if: always()
