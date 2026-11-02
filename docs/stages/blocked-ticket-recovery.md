@@ -150,6 +150,17 @@ returns to the CI poll. This re-check fires once per merged fix. A failure
 that still recurs after a merge that predates the failing run spawns a new
 fix ticket as usual.
 
+### ci_fix progress reports are notes, not tickets
+
+Progress or completion reports from the ci-fix agent (titles such as
+`Agent report: … pushed` or `DONE: … fixed`) are not filed as board
+tickets. They are appended to the ticket being fixed as a history note
+(`ci_fix status note: …`). Titles that describe a real problem, even if
+they mention a status word (e.g. "lint still not fixed"), are still filed
+as tickets. A genuine ci-fix follow-up whose normalised title repeats one
+the same session filed within the last hour returns the existing ticket
+instead of filing a duplicate.
+
 ## Retrying tickets
 
 Transient infrastructure errors (git outages, provider 503s, connection
