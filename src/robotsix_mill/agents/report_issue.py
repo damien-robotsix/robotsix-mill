@@ -220,7 +220,19 @@ def make_report_issue_tool(
             # (repo, workflow, run id) and routed by cause — one session
             # must not file a ticket per sighting of the same broken run.
             if agent_name == "ci_fix":
-                from ..stages.ci_fix_report import handle_ci_fix_report
+                from ..stages.ci_fix_report import (
+                    find_recent_followup,
+                    handle_ci_fix_report,
+                    handle_ci_fix_status_note,
+                )
+
+                # Progress/completion notes ("pushed", "DONE:") go onto the
+                # ticket being fixed as a history note, never a new ticket.
+                handled = handle_ci_fix_status_note(
+                    settings, board_id=board_id, title=title, body=body
+                )
+                if handled is not None:
+                    return handled
 
                 handled = handle_ci_fix_report(
                     settings,
@@ -238,6 +250,14 @@ def make_report_issue_tool(
             dup = _check_duplicate(title, body, service)
             if dup:
                 return dup
+            if agent_name == "ci_fix":
+                # Same session re-filing a re-worded follow-up within the
+                # window (even if the first was already closed) is a repeat.
+                recent = find_recent_followup(
+                    service, title, _tracing.current_session()
+                )
+                if recent is not None:
+                    return _dup_notice(recent)
 
             # Step 4: build body
             full_body = _build_body(body, cat, agent_name)

@@ -284,3 +284,108 @@ def handle_ci_fix_report(
 
         _attach_evidence(service, ticket, full_body, evidence)
     return f"report_issue: filed draft {ticket.id} on board {target_board}"
+
+
+# --- ci_fix status / completion notes ---------------------------------------
+#
+# robotsix-modules, 2026-09-04: ci_fix filed "Agent report: gitleaks CI fix
+# pushed" and, 5 s later, "DONE: gitleaks CI fix pushed" as board tickets.
+# Both were rejected by scope-triage but still burned refine + retrospect
+# runs.  A progress note belongs on the ticket being fixed, never as a new
+# ticket; a genuine follow-up is deduped on (origin session, normalised title).
+
+FOLLOWUP_DEDUP_WINDOW = timedelta(hours=1)
+
+_STATUS_PREFIX_RE = re.compile(
+    r"^\s*(?:agent\s+report|done|status|progress|update|completed?)\s*[:\-–—]\s*",
+    re.IGNORECASE,
+)
+# "Agent report:" alone does not make a status note (it may prefix a real
+# issue); these prefixes always do.
+_STATUS_ONLY_PREFIX_RE = re.compile(
+    r"^\s*(?:done|status|progress|update|completed?)\s*[:\-–—]", re.IGNORECASE
+)
+_STATUS_WORD_RE = re.compile(
+    r"\b(?:pushed|fixed|done|completed|resolved)\b", re.IGNORECASE
+)
+# A status word alone is not enough: a real issue title can mention it
+# ("lint still not fixed", "pushed commit breaks docs build").  Any of these
+# markers keeps the report on the issue-filing path.
+_ISSUE_MARKER_RE = re.compile(
+    r"\b(?:not|no|never|still|yet|again|but|without|unable|cannot|can't|"
+    r"isn't|wasn't|didn't|doesn't|won't|break|breaks|broke|broken|"
+    r"fail\w*|error\w*|red|regress\w*|block\w*|crash\w*)\b",
+    re.IGNORECASE,
+)
+
+
+def normalise_report_title(title: str) -> str:
+    """Strip status prefixes (``Agent report:``, ``DONE:`` …), casefold and
+    collapse whitespace/punctuation so re-worded repeats compare equal.
+    """
+    t = (title or "").strip()
+    while True:
+        stripped = _STATUS_PREFIX_RE.sub("", t, count=1)
+        if stripped == t:
+            break
+        t = stripped
+    t = re.sub(r"[^\w#]+", " ", t.casefold())
+    return " ".join(t.split())
+
+
+def is_status_note(title: str) -> bool:
+    """True if *title* announces ci_fix progress/completion, not an issue."""
+    t = title or ""
+    if _ISSUE_MARKER_RE.search(t):
+        return False
+    return bool(_STATUS_ONLY_PREFIX_RE.match(t) or _STATUS_WORD_RE.search(t))
+
+
+def handle_ci_fix_status_note(
+    settings: Settings, *, board_id: str, title: str, body: str
+) -> str | None:
+    """Append a ci_fix status note to the ticket being fixed.
+
+    Returns the tool result string, or ``None`` when *title* is not a
+    status note (the caller then files it normally).  Never creates a ticket.
+    """
+    if not is_status_note(title):
+        return None
+    note = f"ci_fix status note: {title.strip()}"
+    if body and body.strip():
+        note += f"\n\n{body.strip()}"
+    parent_id = _tracing.current_ticket_id()
+    service = TicketService(settings, board_id=board_id)
+    parent = service.get(parent_id) if parent_id else None
+    if parent is None:
+        return (
+            "report_issue: status/completion note not filed — progress notes "
+            "are not tickets (return your structured result instead)"
+        )
+    service.add_history_note(parent.id, note)
+    return f"report_issue: status note appended to {parent.id} — not filed as a ticket"
+
+
+def find_recent_followup(
+    service: TicketService,
+    title: str,
+    origin_session: str | None,
+    now: datetime | None = None,
+) -> Ticket | None:
+    """Return a ticket from the same session with the same normalised title
+    created within :data:`FOLLOWUP_DEDUP_WINDOW` (any state).
+    """
+    if not origin_session:
+        return None
+    norm = normalise_report_title(title)
+    if not norm:
+        return None
+    cutoff = (now or datetime.now(UTC)) - FOLLOWUP_DEDUP_WINDOW
+    for t in service.list():
+        if t.origin_session != origin_session:
+            continue
+        if _aware(t.created_at) < cutoff:
+            continue
+        if normalise_report_title(t.title) == norm:
+            return t
+    return None
