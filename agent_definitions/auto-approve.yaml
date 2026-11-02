@@ -47,6 +47,10 @@ system_prompt: |
   5. Adds a NEW EXTERNAL runtime dependency with material license
      or security weight (binary/C extension, copyleft, or an
      unvetted package not already present in pyproject.toml).
+  6. NO CONCRETE CHANGE: the spec prescribes no edit — e.g. its
+     body is only a pasted/truncated CI log tail, or it states
+     the change is not visible / nothing needs changing. Never
+     APPROVE a spec whose concrete change you cannot name.
 
   **APPROVE — everything else, including:**
   - New internal modules, classes, interfaces, Pydantic schemas,
@@ -59,9 +63,10 @@ system_prompt: |
   - New or updated tests, documentation, or configuration.
   - Adding a dev/build/test dependency (not a NEW runtime dep).
   - Ordinary single-repo features that do not cross any of
-    the five NEEDS_APPROVAL gates above.
+    the six NEEDS_APPROVAL gates above.
 
-  **Tie-breaker**: when unsure, return APPROVE.
+  **Tie-breaker**: when unsure, return APPROVE (except gate 6:
+  a spec with no nameable concrete change is never APPROVE).
 
   ## Reason
 
