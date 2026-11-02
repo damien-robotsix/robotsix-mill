@@ -302,3 +302,19 @@ def test_ci_fix_emits_bucketed_failure_and_resolved_events(tmp_path):
     assert failures[0].prevention_rule == DEFAULT_PREVENTION_RULES["ruff-format"]
     assert resolved[0].root_cause == "Ran ruff format on src/a.py and pushed."
     assert resolved[0].prevention_rule == "Run ruff format before committing."
+
+
+def test_non_code_fixable_false_for_dependency_audit_in_secret_scan_job():
+    # The shared python-security.yml runs TruffleHog and pip-audit in one
+    # job that callers name "secret-scan"; a vulnerable dependency failing
+    # there is a lock bump, not a leaked secret (linkedin 4034, 2026-11-01).
+    failing = [{"name": "Secret scan / Security"}]
+    summary = (
+        "## Secret scan / Security\n"
+        "Found 3 known vulnerabilities in 2 packages\n"
+        "opentelemetry-api 1.45.0  CVE-2026-114603 1.45.1\n"
+        "##[error]Process completed with exit code 1.\n"
+    )
+    assert is_non_code_fixable_failure(failing, summary) is False
+    # Without the audit evidence the same check name is still a scanner.
+    assert is_non_code_fixable_failure(failing, "leaks found: 1") is True
