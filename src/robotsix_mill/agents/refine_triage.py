@@ -274,7 +274,8 @@ def triage_auto_approve(
     the five high-risk gates: security/auth, destructive/irreversible
     operations, cross-repo/infra/CI, public-API breaking changes, or
     new external runtime dependencies with material license or
-    security weight.  The bias is permissive: when unsure whether a
+    security weight — or when the spec prescribes no concrete change
+    (e.g. a bare CI log tail).  The bias is permissive: when unsure whether a
     high-risk condition applies, return APPROVE.
 
     NO tools, NO web, NO explore — just a tiny prompt and a

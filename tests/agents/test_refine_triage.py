@@ -682,6 +682,7 @@ def test_auto_approve_yaml_criteria_permissive_tie_breaker():
         "cross-repo",  # gate 3 — infra/CI
         "public-api",  # gate 4 — breaking
         "external runtime dependency",  # gate 5 — new dep
+        "no concrete change",  # gate 6 — edit-less spec (e.g. CI log tail)
     ]:
         assert phrase in prompt_lower, (
             f"Expected criteria phrase {phrase!r} missing from auto-approve.yaml"
