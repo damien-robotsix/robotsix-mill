@@ -110,18 +110,18 @@ exclude-newer-package = { pypdf = "2026-10-29T00:00:00Z", certifi = "2026-10-21T
 # Keep it >= 0.3.2 in step with the robotsix-llmio pin below: that release
 # renamed `_compute_backoff` to the public `compute_backoff`, and only
 # llmio 13a53e48 onward imports the new name.
-override-dependencies = ["robotsix-http @ git+https://github.com/damien-robotsix/robotsix-http.git@cdfd4d1c42679fef73081439562872792e202dc4"]
+override-dependencies = ["robotsix-http @ git+https://github.com/damien-robotsix/robotsix-http.git@26a59975c450bddc79a5f9044612455035b8b5a8"]
 
 [tool.uv.sources]
-robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "d10ce1479ab4f96d07f23d554f0b4ae68a63bb49" }
-robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "081d680271dfd88f178f09077869eb4dcc1c9c78" }
-robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d916d1c14198dd00bb136605224177289c73352c" }
-robotsix-config = { git = "https://github.com/damien-robotsix/robotsix-config", rev = "0f2e484b59eb306b54ba25fc8bddb5a3e3ad2535" }
-robotsix-github-auth = { git = "https://github.com/damien-robotsix/robotsix-github-auth.git", rev = "22c61e5e0e090b56d4af990c871711aae18ab2be" }
+robotsix-llmio = { git = "https://github.com/damien-robotsix/robotsix-llmio.git", rev = "4ebb6c0cf8398ea8553729d93d64408167119c90" }
+robotsix-board = { git = "https://github.com/damien-robotsix/robotsix-board.git", rev = "d7e10ef72f7239b2a104489cb35199939ae04d9d" }
+robotsix-modules = { git = "https://github.com/damien-robotsix/robotsix-modules.git", rev = "d84617c297130783d422d4044bb4ad96992d0dac" }
+robotsix-config = { git = "https://github.com/damien-robotsix/robotsix-config", rev = "0e45213dd987b5dc5a082c3bc482fbc6be6a67ca" }
+robotsix-github-auth = { git = "https://github.com/damien-robotsix/robotsix-github-auth.git", rev = "5580ab567da82edec53cb25b05296771784ea325" }
 # Direct dependency pin — must stay in lockstep with the transitive
 # override-dependencies rev above (robotsix-github-auth / robotsix-llmio pin
 # robotsix-http to ancestor revs; the override unifies them on cdfd4d1c).
-robotsix-http = { git = "https://github.com/damien-robotsix/robotsix-http.git", rev = "cdfd4d1c42679fef73081439562872792e202dc4" }
+robotsix-http = { git = "https://github.com/damien-robotsix/robotsix-http.git", rev = "26a59975c450bddc79a5f9044612455035b8b5a8" }
 
 [project.scripts]
 robotsix-mill = "robotsix_mill.cli:main"
