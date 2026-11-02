@@ -23,7 +23,7 @@ jobs:
   audit:
     name: Security audit
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 30  # dependency audit + CycloneDX SBOM generation over the full lockfile
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -78,7 +78,7 @@ jobs:
   license-audit:
     name: License audit
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 30  # full uv sync with tracing extras before scanning every package license
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
