@@ -1080,3 +1080,88 @@ def test_green_next_tag_run_closes_tag_ticket(tmp_path, monkeypatch):
 
     assert result["closed"] == 1
     assert service.get(t.id).state is State.DONE
+
+
+# --- deleted workflow file ----------------------------------------------------
+
+
+def test_deleted_workflow_file_closes_still_red_ticket(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        _FakeForge,
+        "list_repo_files",
+        lambda self, *, ref="": ["README.md", ".github/workflows/other.yml"],
+        raising=False,
+    )
+    settings, service = _prepare(
+        tmp_path,
+        monkeypatch,
+        runs=[
+            {
+                "name": "ci / tests",
+                "head_sha": "abc123",
+                "conclusion": "failure",
+                "id": 100,
+                "html_url": "https://x/run/100",
+                "created_at": "2026-09-01T00:00:00Z",
+            }
+        ],
+    )
+    t = _ci_ticket(service, settings, f_sha="abc123")
+
+    result = _run(settings)
+
+    assert result["closed"] == 1
+    assert service.get(t.id).state is State.DONE
+    notes = [e.note or "" for e in service.history(t.id)]
+    assert any(".github/workflows/ci.yml removed from main" in n for n in notes)
+
+
+def test_present_workflow_file_still_red_not_closed(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        _FakeForge,
+        "list_repo_files",
+        lambda self, *, ref="": [".github/workflows/ci.yml"],
+        raising=False,
+    )
+    settings, service = _prepare(
+        tmp_path,
+        monkeypatch,
+        runs=[
+            {
+                "name": "ci / tests",
+                "head_sha": "abc123",
+                "conclusion": "failure",
+                "id": 100,
+                "html_url": "https://x/run/100",
+                "created_at": "2026-09-01T00:00:00Z",
+            }
+        ],
+    )
+    t = _ci_ticket(service, settings, f_sha="abc123")
+
+    assert _run(settings)["closed"] == 0
+    assert service.get(t.id).state is State.DRAFT
+
+
+def test_workflow_path_deleted_never_guesses():
+    class _F:
+        def __init__(self, files):
+            self.files = files
+
+        def list_repo_files(self, *, ref=""):
+            return self.files
+
+    path = ".github/workflows/release.yml"
+    assert car.workflow_path_deleted(_F(["a.py"]), path, "main") is True
+    assert car.workflow_path_deleted(_F([path]), path, "main") is False
+    # Forge error / empty tree / missing method → unverifiable → False.
+    assert car.workflow_path_deleted(_F(None), path, "main") is False
+    assert car.workflow_path_deleted(_F([]), path, "main") is False
+    assert car.workflow_path_deleted(object(), path, "main") is False
+    # Dynamic (non-file) workflows never resolve to a tree entry.
+    assert (
+        car.workflow_path_deleted(
+            _F(["a.py"]), "dynamic/github-code-scanning/codeql", "main"
+        )
+        is False
+    )

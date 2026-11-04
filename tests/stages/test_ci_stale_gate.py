@@ -168,6 +168,47 @@ def test_recent_run_with_workflow_change_proceeds():
     assert evaluate_stale_ci(forge, _ticket(), _body(), stale_days=14, now=NOW) is None
 
 
+# --- deleted workflow --------------------------------------------------------
+
+
+class _TreeForge(FakeForge):
+    def __init__(self, files: list[str] | None, **kw: Any) -> None:
+        super().__init__(**kw)
+        self.files = files
+
+    def list_repo_files(self, *, ref=""):
+        return self.files
+
+
+def test_deleted_workflow_file_closes():
+    forge = _TreeForge(["README.md"], runs=[_RED])
+    v = evaluate_stale_ci(forge, _ticket(), _body(), stale_days=14, now=NOW)
+    assert v is not None and v.action == "close"
+    assert v.note == (
+        f"Stale CI failure: workflow file {WF_PATH} removed from main HEAD; "
+        "failure no longer reproducible. No change needed."
+    )
+
+
+def test_present_workflow_file_still_red_proceeds():
+    forge = _TreeForge([WF_PATH], runs=[_RED])
+    assert evaluate_stale_ci(forge, _ticket(), _body(), stale_days=14, now=NOW) is None
+
+
+def test_unreadable_tree_still_red_proceeds():
+    forge = _TreeForge(None, runs=[_RED])
+    assert evaluate_stale_ci(forge, _ticket(), _body(), stale_days=14, now=NOW) is None
+
+
+def test_filing_closes_deleted_workflow_ticket(settings, service):
+    t = service.create(
+        title="CI failure: CI on main", description=_body(), source=SourceKind.CI
+    )
+    forge = _TreeForge(["README.md"], runs=[_RED])
+    _worker(settings)._apply_stale_ci_gate(service, forge, t, _body())
+    assert service.get(t.id).state is State.DONE
+
+
 # --- upstream-only -----------------------------------------------------------
 
 

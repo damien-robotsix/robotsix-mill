@@ -59,6 +59,7 @@ log = logging.getLogger("robotsix_mill.ci_auto_close")
 _TITLE_RE = re.compile(r"CI failure: (.+?) on (\S+)$", re.IGNORECASE)
 # Body markers written by the CI monitor (``poll_loops_ci._poll_one_repo_ci``).
 _BODY_WF_RE = re.compile(r"\*\*Workflow:\*\*\s*(.+)")
+_BODY_PATH_RE = re.compile(r"\*\*Path:\*\*\s*(\S+)")
 _BODY_COMMIT_RE = re.compile(r"\*\*Commit:\*\*\s*`([0-9a-fA-F]{6,})`")
 _BODY_CREATED_RE = re.compile(r"\*\*Created:\*\*\s*(\d{4}-\d{2}-\d{2}T[0-9:.]+Z?)")
 # First GitHub Actions run URL in the body (``.../actions/runs/<id>``). The
@@ -151,6 +152,51 @@ def _resolve_anchors(
     return r_wf, r_branch, r_sha, r_created, "run-url"
 
 
+def _workflow_path(forge: Any, body: str) -> str | None:
+    """Return the failing workflow file path: the body ``**Path:**`` marker,
+    else the ``path`` of the first ``actions/runs/<id>`` run in *body*.
+    """
+    m = _BODY_PATH_RE.search(body or "")
+    if m:
+        return m.group(1)
+    run_id = _run_url_id(body)
+    if run_id is None:
+        return None
+    try:
+        run = forge.get_workflow_run(run_id=run_id)
+    except Exception:
+        return None
+    return (run or {}).get("path") or None
+
+
+def workflow_path_deleted(forge: Any, path: str | None, branch: str | None) -> bool:
+    """True only when the tree at *branch* HEAD was read and lacks *path*.
+
+    Dynamic (non-file) workflow paths such as GitHub's
+    ``dynamic/github-code-scanning/codeql`` and any forge error answer
+    ``False`` — never close on an unverifiable absence.
+    """
+    if not path or not branch or not path.endswith((".yml", ".yaml")):
+        return False
+    if path.startswith("dynamic/"):
+        return False
+    try:
+        files = forge.list_repo_files(ref=branch)
+    except Exception:
+        return False
+    if not isinstance(files, list) or not files:
+        return False
+    return path not in files
+
+
+def deleted_workflow_note(path: str, branch: str) -> str:
+    """Close note for a ticket whose workflow file no longer exists."""
+    return (
+        f"workflow file {path} removed from {branch} HEAD; failure no longer "
+        "reproducible. No change needed."
+    )
+
+
 def _failing_head(body: str) -> str | None:
     """Return the failing commit SHA from the body ``**Commit:**`` marker."""
     if not body:
@@ -217,7 +263,29 @@ def _close(
         log.warning("ci_auto_close: could not close %s", ticket_id, exc_info=True)
 
 
-def _maybe_close(
+def _close_if_workflow_deleted(
+    service: TicketService, forge: Any, ticket: Any, body: str, target: str
+) -> bool:
+    """Close *ticket* when its failing workflow file was deleted on *target*
+    (e.g. a release.yml replaced by release-please): it can never go green.
+    """
+    path = _workflow_path(forge, body)
+    if not path or not workflow_path_deleted(forge, path, target):
+        return False
+    log.info("ci_auto_close: close %s — workflow file %s deleted", ticket.id, path)
+    try:
+        service.mark_done(
+            ticket.id,
+            note=f"CI auto-close: {deleted_workflow_note(path, target)}",
+            author=_AUTHOR,
+        )
+    except Exception:
+        log.warning("ci_auto_close: could not close %s", ticket.id, exc_info=True)
+        return False
+    return True
+
+
+def _maybe_close(  # noqa: C901 — sequential anchor/MR/deleted/green checks, each with its own skip
     service: TicketService,
     settings: Settings,
     repo_config: Any,
@@ -279,6 +347,9 @@ def _maybe_close(
             exc_info=True,
         )
         return False  # cannot tell whether an MR exists — skip, never guess
+
+    if _close_if_workflow_deleted(service, forge, ticket, body, target):
+        return True
 
     try:
         runs = forge.list_workflow_runs(branch=target)

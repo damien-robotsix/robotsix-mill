@@ -8,6 +8,8 @@ time (``poll_loops_ci``), at refine entry and on human approval:
 
 * **green-since** — the workflow has completed green on the target branch
   at or after the failing commit (same rule as ci-auto-close) → close;
+* **deleted-workflow** — the workflow file is absent at the target branch
+  HEAD → close;
 * **stale-run** — the failing run is older than ``ci_stale_failure_days``
   and the workflow file changed on the target branch since → close;
 * **upstream-only** — every failing job/step lives inside a reusable
@@ -35,6 +37,8 @@ from ..agents.runners.ci_auto_close_runner import (
     _green_since_failure,
     _resolve_anchors,
     _run_url_id,
+    deleted_workflow_note,
+    workflow_path_deleted,
 )
 from ..core.constants import STALE_CI_FAILURE_PREFIX
 from ..core.models import SourceKind
@@ -458,7 +462,15 @@ def evaluate_stale_ci(
     path = m.group(1) if m else (failing or {}).get("path")
     created = created or (failing or {}).get("created_at")
 
-    # 2. Stale-run check.
+    # 2. Deleted-workflow check: the file is gone at branch HEAD, so the
+    # failure can never reproduce (or go green) again.
+    if path and workflow_path_deleted(forge, path, branch):
+        return StaleCiVerdict(
+            "close",
+            f"{STALE_CI_FAILURE_PREFIX} {deleted_workflow_note(path, branch)}",
+        )
+
+    # 3. Stale-run check.
     created_ts = _parse_ts(created)
     now = now or datetime.now(UTC)
     if created_ts and path and now - created_ts > timedelta(days=stale_days):
@@ -473,7 +485,7 @@ def evaluate_stale_ci(
                 f"{branch} since (commit {commits[0]}). No change needed.",
             )
 
-    # 3. Upstream-only check.
+    # 4. Upstream-only check.
     return _upstream_verdict(forge, run_id, path, wf, branch, created_ts, siblings)
 
 

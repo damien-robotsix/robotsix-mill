@@ -682,6 +682,7 @@ class PollLoopsCiMixin(_WorkerBase):
         ansi_re: re.Pattern[str],
     ) -> None:
         """Execute one CI monitor poll cycle for a single repo."""
+        from ...agents.runners.ci_auto_close_runner import workflow_path_deleted
         from ...core.service import TicketService
         from ...scm.forge import get_forge
 
@@ -767,6 +768,24 @@ class PollLoopsCiMixin(_WorkerBase):
             # Cheap first guard: avoid re-filing or re-commenting
             # for the exact same failing commit.
             if key in seen:
+                continue
+
+            # Deleted-workflow guard: never file for a workflow file that is
+            # absent at the branch HEAD (e.g. a stale run of a release.yml
+            # since replaced by release-please) — it cannot reproduce.
+            if run_target == target and workflow_path_deleted(
+                forge, wf_path, run_target
+            ):
+                log.info(
+                    "CI monitor (%s): skip %s (run %s) — workflow file %s "
+                    "absent at %s HEAD",
+                    repo_label,
+                    wf_name,
+                    run_id_val,
+                    wf_path,
+                    run_target,
+                )
+                seen[key] = now
                 continue
 
             # Account-block suppression: when GitHub refused to START the
