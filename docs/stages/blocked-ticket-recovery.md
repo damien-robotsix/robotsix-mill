@@ -214,6 +214,20 @@ against its own branch rather than `origin/main`. If neither ticket can
 be found, nothing is filed and the agent is told to return its structured
 result instead.
 
+### CI failure on a deleted workflow is not filed or is auto-closed
+
+A failing run whose workflow file no longer exists at the target branch
+HEAD (for example a `release.yml` replaced by release-please) cannot
+reproduce, so the CI monitor does not file a `CI failure: <workflow> on
+<branch>` ticket for it. The run is marked seen and skipped. The same
+check runs in the ci auto-close pass and the stale-CI gate: an open
+`source=ci` ticket whose workflow file is absent at branch HEAD is
+closed to `DONE` with a note such as `workflow file <path> removed from
+<branch> HEAD; failure no longer reproducible`, without a refine or
+implement pass. The check only fires when the branch tree was read and
+lacks the path; dynamic (non-file) workflow names and forge errors leave
+the ticket untouched.
+
 ### Operator-only prerequisites go to the human gate, not auto-implement
 
 The refine fast-path does not auto-approve a draft that asks for an
