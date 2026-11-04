@@ -167,6 +167,24 @@ immediate failure. Failures with a different check name but the same
 signature are still matched. Failures without a recognised signature
 fall back to the check-name fingerprint only, as before.
 
+### Gate added by the ticket's own diff is fixed in scope
+
+When a ticket adds a CI gate (a lint, format or analyzer step under
+`.github/workflows/`) and that gate fails on pre-existing debt, the
+debt is part of the ticket: the gate cannot merge without it. Before
+accepting an OUT_OF_SCOPE verdict, the ci-fix stage compares the failing
+step's `run:` command with the lines the branch adds to
+`.github/workflows/**` (`git diff origin/<target>...HEAD`). If the
+command was added by this branch, the verdict is overridden to IN_SCOPE:
+the agent is told the gate is in scope, the debt is fixed on the same
+branch, and no `ci_fix_dependency` ticket is spawned. The history note
+reads `ci-fix overrode OUT_OF_SCOPE → IN_SCOPE` and lists the command.
+
+Any dependency fix that is spawned also records the toolchain versions the
+workflow pins (for example `flutter-version` or `python-version`) in its
+description under **CI toolchain pins**, so the fix uses the same
+formatter or linter version as CI.
+
 ### ci_fix progress reports are notes, not tickets
 
 Progress or completion reports from the ci-fix agent (titles such as
