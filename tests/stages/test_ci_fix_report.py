@@ -151,6 +151,56 @@ def test_report_citing_pushed_commit_attaches_to_parent(settings, monkeypatch):
     assert any("651eb1c" in n for n in notes)
 
 
+def _with_parent(settings, monkeypatch):
+    svc = TicketService(settings, board_id="invest")
+    parent = svc.create("Harden npm audit CI gate", "body")
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.current_session",
+        lambda: f"invest · {parent.id}",
+    )
+    return svc, parent
+
+
+def test_pushed_fix_with_infra_cause_is_routed_not_swallowed(settings, monkeypatch):
+    svc, parent = _with_parent(settings, monkeypatch)
+    out = _tool(settings)(
+        "Pushed the fix but CI still fails",
+        f"Committed and pushed as commit 651eb1c. Run {_RUN_URL} still "
+        "fails: spending limit needs to be increased.",
+        "error",
+    )
+    assert out.startswith("report_issue: not filed")
+    assert "status note appended" not in out
+    assert not any("651eb1c" in (e.note or "") for e in svc.history(parent.id))
+
+
+def test_pushed_fix_with_remaining_reusable_workflow_failure_is_routed(
+    settings, monkeypatch
+):
+    _with_parent(settings, monkeypatch)
+    out = _tool(settings)(
+        "Lint fix pushed, workflow failure remains",
+        "Committed and pushed the lint fix; remaining failure is in run "
+        "18099999999 at `uses: damien-robotsix/robotsix-github-workflows/"
+        ".github/workflows/python-ci.yml@abc`.",
+        "error",
+    )
+    assert "on board gw-board" in out
+    assert len(TicketService(settings, board_id="gw-board").list()) == 1
+
+
+def test_pushed_fix_with_remaining_repo_failure_is_filed(settings, monkeypatch):
+    svc, parent = _with_parent(settings, monkeypatch)
+    out = _tool(settings)(
+        "Docs build broken after lint fix",
+        "Pushed the fix as commit 651eb1c but the docs job still fails in "
+        "run 18000000003.",
+        "error",
+    )
+    assert out.startswith("report_issue: filed draft ")
+    assert len(svc.list()) == 2
+
+
 def test_retract_draft_reports_file_nothing(settings, monkeypatch):
     svc = TicketService(settings, board_id="invest")
     parent = svc.create("Harden npm audit CI gate", "body")

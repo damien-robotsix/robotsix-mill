@@ -368,17 +368,36 @@ _RETRACT_TITLE_RE = re.compile(
     r"^\s*(?:close|closing|ignore|retract(?:ed|ing)?)\b", re.IGNORECASE
 )
 _MILL_BRANCH_RE = re.compile(r"\bmill/(\d{8}T\d{6}Z-[\w-]+)")
+# "Pushed the fix but CI still fails: spending limit needs to be increased" is
+# an escalation, not a status note: completion wording only counts when the
+# report names no outstanding problem.
+_REMAINING_PROBLEM_RE = re.compile(
+    r"\bstill\b|\bbut\b[^.\n]*\bfail\w*|\bremaining\b|\bneeds? to be\b|"
+    r"startup[_ -]failure|\bnot (?:yet )?fixed\b",
+    re.IGNORECASE,
+)
+
+
+def _reports_remaining_problem(text: str) -> bool:
+    """True if *text* names an outstanding failure or a non-repo CI cause."""
+    if _REMAINING_PROBLEM_RE.search(text):
+        return True
+    report = parse_ci_report("", text)
+    return report is not None and route_ci_report(report, text) != ROUTE_REPO
 
 
 def is_completion_report(title: str, body: str) -> bool:
     """True if *title*/*body* report already-pushed work or retract an
     earlier draft — never new work, whatever the title says.
+
+    Completion wording is ignored when the report also names a remaining
+    problem; retract / close-out wording always counts.
     """
     text = f"{title or ''}\n{body or ''}"
+    if _RETRACT_RE.search(text) or _RETRACT_TITLE_RE.match(title or ""):
+        return True
     return bool(
-        _COMPLETION_BODY_RE.search(text)
-        or _RETRACT_RE.search(text)
-        or _RETRACT_TITLE_RE.match(title or "")
+        _COMPLETION_BODY_RE.search(text) and not _reports_remaining_problem(text)
     )
 
 

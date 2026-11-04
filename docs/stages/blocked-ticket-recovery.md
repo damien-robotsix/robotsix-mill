@@ -228,6 +228,18 @@ implement pass. The check only fires when the branch tree was read and
 lacks the path; dynamic (non-file) workflow names and forge errors leave
 the ticket untouched.
 
+### Completion wording with a remaining problem is filed, not swallowed
+
+A ci-fix report that uses completion wording (`committed and pushed`,
+`pushed the fix`, a commit SHA) is a status note only when its body names
+no remaining problem. Words such as `still`, `remaining`, `needs to be`,
+`not fixed`, `but … fail`, a `startup_failure`, or a failure cause outside
+the repo (a spending limit, or a failure in `robotsix-github-workflows`)
+mark it as an escalation. Escalations go through the normal routing:
+GitHub-side account/infra causes are not filed (the infra-block path owns
+them), github-workflows failures go to that board, and repo failures are
+filed as a draft. Retract and close-out wording is always a status note.
+
 ### Operator-only prerequisites go to the human gate, not auto-implement
 
 The refine fast-path does not auto-approve a draft that asks for an
