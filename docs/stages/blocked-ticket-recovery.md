@@ -196,6 +196,24 @@ as tickets. A genuine ci-fix follow-up whose normalised title repeats one
 the same session filed within the last hour returns the existing ticket
 instead of filing a duplicate.
 
+### ci_fix completion and retract reports are notes, whatever the title
+
+A ci-fix report is also treated as a note, not a ticket, when its body
+reports work the run already pushed (e.g. `PUSH_OK`, "committed and
+pushed", "pushed commit `651eb1c`") or retracts an earlier draft
+(e.g. "previously filed", "inadvertently filed", "closing the previously
+filed draft", "no action needed on this draft"). A retract-style title
+(`Close …`, `Ignore …`, `Retract …`) also counts. Such a report is never
+filed as a new draft, so the run does not create tickets describing
+work it has already finished.
+
+The note lands on the ticket ci_fix was invoked for. If the body names a
+`mill/<ticket-id>` branch whose ticket exists on the board, the note goes
+to that ticket instead, so its verification checks the cited commit
+against its own branch rather than `origin/main`. If neither ticket can
+be found, nothing is filed and the agent is told to return its structured
+result instead.
+
 ### Operator-only prerequisites go to the human gate, not auto-implement
 
 The refine fast-path does not auto-approve a draft that asks for an
