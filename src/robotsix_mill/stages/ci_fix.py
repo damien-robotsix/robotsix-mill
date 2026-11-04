@@ -67,6 +67,12 @@ from .ci_fix_codeql import (
     _partition_open_alerts,
     _try_codeql_fp_triage,
 )
+from .ci_fix_gate import (
+    failing_run_commands,
+    self_introduced_gate_commands,
+    self_introduced_gate_hint,
+    workflow_toolchain_pins,
+)
 from .ci_fix_helpers import (
     _CI_ATTEMPT_CHECKSET,
     _CI_FAILURE_FINGERPRINT,
@@ -1113,7 +1119,20 @@ class CIFixStage(Stage):
         if cap_outcome is not None:
             return cap_outcome
 
-        result = self._invoke_agent(ticket, ctx, repo_dir, branch, failing_summary)
+        # Deterministic self-introduced-gate check: when the failing step's
+        # ``run:`` command was ADDED by this ticket's own workflow diff, the
+        # debt the new gate reports is part of this ticket. Tell the agent
+        # up front, and never accept an OUT_OF_SCOPE verdict for it below.
+        self_gate_cmds = self_introduced_gate_commands(
+            failing_summary, repo_dir, target_branch_for(s, ctx.repo_config)
+        )
+        agent_summary = (
+            f"{self_introduced_gate_hint(self_gate_cmds)}\n{failing_summary}"
+            if self_gate_cmds
+            else failing_summary
+        )
+
+        result = self._invoke_agent(ticket, ctx, repo_dir, branch, agent_summary)
 
         # Write the per-cycle ci_fix.md artifact and an informative
         # history note (both best-effort) so the ticket history surfaces
@@ -1126,8 +1145,10 @@ class CIFixStage(Stage):
             return self._finalize_success(ticket, ctx, repo_dir, branch)
 
         if result is not None and result.status == "OUT_OF_SCOPE":
+            if self_gate_cmds:
+                return self._reject_self_introduced_gate(ticket, ctx, self_gate_cmds)
             return self._handle_out_of_scope(
-                ticket, ctx, branch, result, failing_summary, head_sha
+                ticket, ctx, branch, result, failing_summary, head_sha, repo_dir
             )
 
         # FAILED, or None on crash — the agent could not turn CI green within
@@ -1825,6 +1846,33 @@ class CIFixStage(Stage):
             return Outcome(State.IMPLEMENT_COMPLETE)
         return None
 
+    def _reject_self_introduced_gate(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        commands: list[str],
+    ) -> Outcome:
+        """Override OUT_OF_SCOPE when this ticket's diff added the failing gate.
+
+        The failing step's ``run:`` command appears in the lines this branch
+        adds to ``.github/workflows/**`` — the ticket introduced the gate, so
+        the pre-existing debt it reports must be fixed on this branch. Never
+        spawn a ``ci_fix_dependency`` ticket; re-poll so the ci-fix agent
+        re-runs with the in-scope hint (the identical-failure guard and the
+        total-attempt cap bound the loop).
+        """
+        try:
+            ctx.service.add_history_note(
+                ticket.id,
+                "ci-fix overrode OUT_OF_SCOPE → IN_SCOPE: the failing step(s) "
+                "were added by this ticket's own workflow diff, so the debt "
+                "they report is fixed on this branch (no dependency ticket): "
+                + ", ".join(f"`{c}`" for c in commands),
+            )
+        except Exception:
+            log.warning("%s: failed to record self-introduced-gate note", ticket.id)
+        return Outcome(State.IMPLEMENT_COMPLETE)
+
     def _refresh_stale_branch_once(
         self,
         ticket: Ticket,
@@ -2016,6 +2064,7 @@ class CIFixStage(Stage):
         failing_summary: str,
         head_sha: str,
         out_of_scope_alerts: list[dict[str, Any]],
+        repo_dir: str = "",
     ) -> Outcome:
         """Spawn or reuse a dependency-fix ticket for the out-of-scope failure.
 
@@ -2083,6 +2132,18 @@ class CIFixStage(Stage):
         evidence = build_failing_run_evidence(failing_summary)
         if evidence:
             description += f"\n{evidence}"
+        # Record the toolchain versions the workflow pins (flutter-version,
+        # python-version, …) so the fixer uses the same formatter/linter
+        # version as CI instead of whatever the sandbox has.
+        if repo_dir:
+            pins = workflow_toolchain_pins(
+                repo_dir, failing_run_commands(failing_summary)
+            )
+            if pins:
+                description += (
+                    "\n**CI toolchain pins (use the same versions as CI):**\n"
+                    + "".join(f"- `{p}`\n" for p in pins)
+                )
         block_reason = "CI failure is out of scope for this ticket"
 
         # Dedup fingerprint from the failing CHECK NAMES only — an
@@ -2151,6 +2212,7 @@ class CIFixStage(Stage):
         result: CiFixResult,
         failing_summary: str,
         head_sha: str = "",
+        repo_dir: str = "",
     ) -> Outcome:
         """Route an out-of-scope CI failure to a dedicated fix ticket.
 
@@ -2190,7 +2252,14 @@ class CIFixStage(Stage):
             return merged_outcome
 
         return self._spawn_or_reuse_fix(
-            ticket, ctx, branch, result, failing_summary, head_sha, out_of_scope_alerts
+            ticket,
+            ctx,
+            branch,
+            result,
+            failing_summary,
+            head_sha,
+            out_of_scope_alerts,
+            repo_dir,
         )
 
     def _recheck_after_merged_fix(
