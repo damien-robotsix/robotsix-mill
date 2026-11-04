@@ -34,6 +34,25 @@ from ._shared import _ImplementContext, _SinglePassResult, log
 _NO_DIFF_DIAGNOSTIC_TAG = "no-diff-diagnostic"
 
 
+def _base_sha_tag(repo_dir: Path | None) -> str:
+    """`` (base <sha12>)`` for an empty-diff close note, or ``""``.
+
+    With an empty diff and no commits beyond the target, HEAD *is* the
+    base the spec was found satisfied at.  Epic delivery classification
+    (``runtime/worker/epic.py::_resolve_delivery``) reads it back to report
+    the ``already_satisfied`` outcome with its base SHA.  Best-effort.
+    """
+    if repo_dir is None:
+        return ""
+    try:
+        from ...scm.vcs import git_ops
+
+        sha = git_ops.head_sha(Path(repo_dir)).strip()
+    except Exception:
+        return ""
+    return f" (base {sha[:12]})" if re.fullmatch(r"[0-9a-f]{7,40}", sha) else ""
+
+
 def _classify_no_diff_reason(
     short_circuit_verify: Any,
     new_msgs: bytes | None,
@@ -387,19 +406,20 @@ def _run_no_change_contradiction_check(
             # No contradiction — close DONE.
             rationale = no_change_rationale.strip()
             short = rationale[:400] + ("…" if len(rationale) > 400 else "")
+            base_tag = _base_sha_tag(repo_dir)
             cls._finalize(
                 ctx,
                 ticket,
                 repo_dir,
                 branch,
-                f"no change needed — {rationale}",
+                f"no change needed{base_tag} — {rationale}",
                 ok=True,
                 reference_files=ref_files,
                 extra_roots=extra_roots,
             )
             return _SinglePassResult(
                 next_action="return",
-                outcome=Outcome(State.DONE, f"no change needed — {short}"),
+                outcome=Outcome(State.DONE, f"no change needed{base_tag} — {short}"),
             )
         if not resuming:
             # Empty diff on a fresh run: the working tree is clean AND
@@ -547,7 +567,10 @@ def _run_no_change_contradiction_check(
             # Genuine no-op: clean working tree, no commits beyond the
             # base, no gitignored writes, no lost edits. The spec is
             # already satisfied — terminate DONE instead of looping.
-            done_note = "already satisfied — no changes needed (empty diff vs base)"
+            done_note = (
+                "already satisfied — no changes needed (empty diff vs "
+                f"base){_base_sha_tag(repo_dir)}"
+            )
             cls._finalize(
                 ctx,
                 ticket,

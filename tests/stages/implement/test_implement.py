@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -400,6 +401,26 @@ def test_no_changes_terminates_done_when_already_satisfied(
     out = ImplementStage().run(t, ctx)
     assert out.next_state is State.DONE
     assert "already satisfied" in out.note.lower()
+    _assert_already_satisfied_delivery(out.note)
+
+
+def _assert_already_satisfied_delivery(note):
+    """The close note records the base SHA and the epic delivery classifier
+    reports it as ``already_satisfied`` — not "closed (not delivered)"."""
+    from types import SimpleNamespace
+
+    from robotsix_mill.runtime.worker import _resolve_delivery
+
+    m = re.search(r"\(base ([0-9a-f]{12})\)", note)
+    assert m, note
+    svc = SimpleNamespace(
+        get=lambda tid: SimpleNamespace(id=tid, state=State.DONE),
+        history=lambda tid: [SimpleNamespace(state=State.DONE, note=note)],
+    )
+    res = _resolve_delivery(svc, "T")
+    assert res["outcome"] == "already_satisfied"
+    assert res["base_sha"] == m.group(1)
+    assert "not delivered" not in res["label"]
 
 
 def test_spec_mandate_blocks_empty_diff_done(ctx_factory, tmp_path, monkeypatch):
@@ -861,6 +882,7 @@ def test_no_change_needed_with_rationale_transitions_to_done(
     assert out.next_state is State.DONE
     assert "no change needed" in out.note.lower()
     assert "1234" in out.note  # rationale carried into the note
+    _assert_already_satisfied_delivery(out.note)
 
 
 def test_no_change_needed_empty_rationale_terminates_done(

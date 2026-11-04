@@ -178,6 +178,29 @@ as tickets. A genuine ci-fix follow-up whose normalised title repeats one
 the same session filed within the last hour returns the existing ticket
 instead of filing a duplicate.
 
+### Work already present at base is reported as "already satisfied"
+
+When a ticket's goal is already met on the target branch, it closes
+`DONE` with an `already satisfied` note instead of being implemented.
+Two paths produce this close:
+
+- **Refine deliverable-exists gate.** A remediation draft that names a
+  file to create (e.g. `Create new test file: src/config-panel/collect.test.ts`)
+  closes at refine when every such path already exists at the target
+  branch HEAD. The note cites the base SHA and the commit that added
+  each file. Implement is not run. User-authored drafts, meta-board
+  tickets, and tickets that already carry a branch are never closed by
+  this gate.
+- **Implement empty-diff close.** An implement pass that finds nothing
+  to change, with no lost work, closes `DONE` and records the base SHA
+  (`no change needed (base <sha12>) — …` or `already satisfied — no
+  changes needed (empty diff vs base) (base <sha12>)`).
+
+In epic status and the board's delivery summary, these children are shown
+as `satisfied — already met at base <sha12>`, not as
+`closed (not delivered)`. Their goal is treated as met, so the epic does
+not file a follow-up that re-asserts the same gap.
+
 ## Retrying tickets
 
 Transient infrastructure errors (git outages, provider 503s, connection
