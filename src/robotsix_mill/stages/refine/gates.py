@@ -266,6 +266,46 @@ class RefineGatesMixin:
         return None
 
     @staticmethod
+    def _run_deliverable_exists_gate(
+        ctx: StageContext,
+        ticket: Ticket,
+        draft: str,
+        repo_dir: Path | None,
+        s: Settings,
+    ) -> Outcome | None:
+        """Close a remediation draft whose file-to-create already exists.
+
+        Deterministic (no LLM): when every "Create new … file: <path>"
+        deliverable in the draft exists at the target branch HEAD, return
+        ``Outcome(State.DONE, "already satisfied — …")`` with the base SHA
+        and introducing commit, so implement is never enqueued.  Skipped
+        for user-authored drafts (deliberate human intent), meta-board
+        tickets, and tickets that already carry an implementation branch.
+        """
+        if ticket.source == SourceKind.USER or ticket.board_id == "meta":
+            return None
+        if ticket.branch:
+            return None
+        from ...config import target_branch_for
+        from .deliverable_exists import check_deliverables_exist
+
+        try:
+            note = check_deliverables_exist(
+                draft, repo_dir, target_branch_for(s, ctx.repo_config)
+            )
+        except Exception:
+            log.warning(
+                "%s: deliverable-exists gate failed, proceeding with refine",
+                ticket.id,
+                exc_info=True,
+            )
+            return None
+        if note is None:
+            return None
+        log.info("%s: deliverable-exists gate — %s", ticket.id, note)
+        return Outcome(State.DONE, note)
+
+    @staticmethod
     def _run_obsolescence_gate(
         ctx: StageContext,
         ticket: Ticket,

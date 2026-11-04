@@ -16,7 +16,11 @@ import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from ...core.constants import NO_CHANGE_NEEDED_PREFIX, OBSOLESCENCE_GAP_PREFIX
+from ...core.constants import (
+    ALREADY_SATISFIED_PREFIX,
+    NO_CHANGE_NEEDED_PREFIX,
+    OBSOLESCENCE_GAP_PREFIX,
+)
 from ...core.models import TicketKind
 from ...core.states import State
 
@@ -24,6 +28,9 @@ if TYPE_CHECKING:
     from ...scm.forge.base import BranchInfo
 
 log = logging.getLogger("robotsix_mill.worker")
+
+# ``base <sha>`` as recorded in an already-satisfied close note.
+_BASE_SHA_RE = re.compile(r"\bbase ([0-9a-f]{7,40})\b")
 
 
 _EPIC_CHILD_TERMINAL = frozenset(
@@ -257,11 +264,28 @@ def _resolve_delivery(
     # but the child's goal is already met on main — a follow-up that
     # re-asserts the same gap would loop (PULL_REQUEST_TEMPLATE.md chain,
     # 2026-10-21). Not ``delivered``: it cannot cover a sibling's closure.
-    if matched_prefix in (NO_CHANGE_NEEDED_PREFIX, OBSOLESCENCE_GAP_PREFIX):
+    # Reported as the distinct ``already_satisfied`` outcome (with the base
+    # SHA when the close note records one), never "closed (not delivered)"
+    # — that label sent operators chasing a correct no-op (robotsix-ui
+    # collect.test.ts remediation, 2026-10-10).
+    if matched_prefix in (
+        NO_CHANGE_NEEDED_PREFIX,
+        OBSOLESCENCE_GAP_PREFIX,
+        ALREADY_SATISFIED_PREFIX,
+    ):
+        sha_match = _BASE_SHA_RE.search(note)
+        base_sha = sha_match.group(1) if sha_match else None
+        label = (
+            f"satisfied — already met at base {base_sha[:12]} (no change needed)"
+            if base_sha
+            else "satisfied — no change needed (goal already met on main)"
+        )
         return {
             "delivered": False,
             "satisfied": True,
-            "label": "satisfied — no change needed (goal already met on main)",
+            "outcome": "already_satisfied",
+            "base_sha": base_sha,
+            "label": label,
             "canonical": None,
         }
 

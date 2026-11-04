@@ -1287,6 +1287,40 @@ def test_resolve_delivery_gap_already_resolved_is_satisfied():
     assert _resolve_delivery(svc, "O")["satisfied"] is True
 
 
+@pytest.mark.parametrize(
+    "note",
+    [
+        "no change needed (base 0123456789ab) — collect.test.ts already exists",
+        (
+            "already satisfied — no changes needed (empty diff vs base) "
+            "(base 0123456789ab)"
+        ),
+        (
+            "already satisfied — deliverable already exists at origin/main "
+            "(base 0123456789ab): `a/b.test.ts`; nothing to create"
+        ),
+    ],
+)
+def test_resolve_delivery_already_satisfied_outcome_with_base_sha(note):
+    """Implement no-change + empty diff (and the refine deliverable-exists
+    gate) report ``already_satisfied`` with the base SHA — never
+    "closed (not delivered)" (robotsix-ui collect.test.ts, 2026-10-10)."""
+    from robotsix_mill.runtime.worker import _resolve_delivery
+
+    svc = _FakeEpicService(
+        tickets={"S": _ns_ticket("S", State.DONE)},
+        histories={"S": [_ev(State.DONE, note)]},
+    )
+    res = _resolve_delivery(svc, "S")
+    assert res["outcome"] == "already_satisfied"
+    assert res["satisfied"] is True
+    assert res["delivered"] is False
+    assert res["base_sha"] == "0123456789ab"
+    assert res["label"].startswith("satisfied")
+    assert "0123456789ab" in res["label"]
+    assert "not delivered" not in res["label"]
+
+
 def test_reconcile_pr_template_chain_files_no_follow_up_after_63c9():
     """Replay 63c9 → 27ef → 82ba → 9227: once the classify child closed
     ``no change needed`` none of the re-asserting follow-ups is filed."""

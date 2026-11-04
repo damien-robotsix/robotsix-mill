@@ -124,6 +124,17 @@ class RefineStage(RefineGatesMixin, RefineAgentMixin, Stage):
                 ctx, ticket, stale, ws, input_hash
             )
 
+        # Phase 2.1: deliverable-exists gate — a remediation draft whose
+        # "create new file: <path>" deliverable already exists at the
+        # target HEAD closes as already satisfied without implement.
+        satisfied = RefineStage._run_deliverable_exists_gate(
+            ctx, ticket, draft, repo_dir, s
+        )
+        if satisfied is not None:
+            return RefineStage._guard_implementation_done(
+                ctx, ticket, satisfied, ws, input_hash
+            )
+
         # Phase 2.15: doc-only gate — deterministic check that skips
         # the multi-LLM refine analysis when a draft touches only
         # documentation files.  Runs before any LLM-invoking gate.

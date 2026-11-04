@@ -49,7 +49,8 @@ system_prompt: |
       and shipped NOTHING itself; the arrow points at the canonical
       ticket and whether THAT ticket merged.
     - `unstarted` / `in_progress` — no PR merged; delivered NOTHING.
-    - `satisfied — no change needed (…)` — the child shipped no diff
+    - `satisfied — …` (e.g. `satisfied — no change needed (…)` or
+      `satisfied — already met at base <sha> (…)`) — the child shipped no diff
       because its goal was ALREADY met on `main`. Treat that goal as
       satisfied: never propose a follow-up child that re-asserts the
       same gap.

@@ -28,6 +28,11 @@ SCOPE_TRIAGE_REPO_AWARENESS_GATE_PREFIX: str = "scope-triage repo awareness gate
 DEPENDENCY_BLOCKED_PREFIX: str = "dependency gate:"
 EXTERNAL_SCOPE_PREFIX: str = "external scope gate:"
 NO_CHANGE_NEEDED_PREFIX: str = "no change needed"
+# Written when the deliverable already exists at base: implement's
+# empty-diff fresh-run close, and refine's deliverable-exists gate
+# (``stages/refine/deliverable_exists.py``).  Reported as the distinct
+# ``already_satisfied`` delivery outcome, never "closed (not delivered)".
+ALREADY_SATISFIED_PREFIX: str = "already satisfied"
 # Written by the stale-CI gate (``stages/ci_stale_gate.py``) when a
 # ``CI failure: <wf> on main`` ticket is already fixed on main.
 STALE_CI_FAILURE_PREFIX: str = "Stale CI failure:"
@@ -42,6 +47,7 @@ NON_IMPLEMENTATION_CLOSE_PREFIXES: tuple[str, ...] = (
     DEPENDENCY_BLOCKED_PREFIX,
     EXTERNAL_SCOPE_PREFIX,
     NO_CHANGE_NEEDED_PREFIX,
+    ALREADY_SATISFIED_PREFIX,
     STALE_CI_FAILURE_PREFIX,
 )
 
