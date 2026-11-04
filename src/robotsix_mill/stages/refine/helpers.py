@@ -12,6 +12,7 @@ call each other by bare name (e.g. ``_resolve_next_state`` →
 
 from __future__ import annotations
 
+import fnmatch
 import itertools
 import logging
 import re
@@ -136,6 +137,60 @@ def ops_shape_marker(text: str) -> str | None:
         if m is not None:
             return m.group(0)
     return None
+
+
+# -- operator-prerequisite detection ------------------------------------
+
+# Markers that a draft needs an operator ACTION (a repo-settings toggle, a
+# hosting control-panel change) or an operator-supplied FACT no agent can
+# produce.  The mechanical fast-path must not auto-approve such a draft
+# into implement — implement can only ASK_USER and block (live bb70: PVR
+# toggle; a4e7: "Operator confirms the PHP version ... Do not guess it").
+# Small, extensible list — no NLP generalisation.
+_OPERATOR_PREREQ_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\boperator confirms\b", re.IGNORECASE),
+    re.compile(r"\brepo(?:sitory)? owner\b", re.IGNORECASE),
+    re.compile(r"\bdo not guess\b", re.IGNORECASE),
+    re.compile(r"\bsettings\s*(?:→|->)", re.IGNORECASE),
+    re.compile(r"\bin the [^\n]*\bcontrol panel\b", re.IGNORECASE),
+    re.compile(r"\ba settings change, not a file change\b", re.IGNORECASE),
+    re.compile(r"\bchecked in repo settings\b", re.IGNORECASE),
+)
+
+
+def operator_prerequisite_lines(text: str) -> list[str]:
+    """Return the stripped lines of *text* carrying an operator-only marker.
+
+    Empty when no line matches.  Pure function — used by the refine
+    fast-path gate to route operator-prerequisite drafts to a human gate
+    instead of auto-approving them into implement.
+    """
+    return [
+        line.strip()
+        for line in text.splitlines()
+        if any(p.search(line) for p in _OPERATOR_PREREQ_PATTERNS)
+    ]
+
+
+_PATH_TOKEN_RE = re.compile(r"[\w.*/\-]+")
+
+
+def cited_sensitive_paths(text: str, globs: list[str]) -> list[tuple[str, str]]:
+    """Return ``(path, glob)`` pairs for path tokens in *text* matching *globs*.
+
+    Uses the same ``fnmatch`` semantics as the merge gate's
+    sensitive-path check over ``auto_merge_sensitive_globs``.
+    """
+    hits: list[tuple[str, str]] = []
+    for raw in _PATH_TOKEN_RE.findall(text or ""):
+        token = raw.rstrip(".,;:")
+        if not token or any(token == p for p, _ in hits):
+            continue
+        for pattern in globs:
+            if fnmatch.fnmatch(token, pattern):
+                hits.append((token, pattern))
+                break
+    return hits
 
 
 def _load_refine_memory(s: Settings, memory_board_id: str) -> str:

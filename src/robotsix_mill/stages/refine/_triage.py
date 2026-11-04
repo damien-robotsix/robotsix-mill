@@ -33,7 +33,9 @@ from .helpers import (
     _summarize_spec_for_auto_approve,
     _triage_note_signals_wrong_repo,
     _verify_branch_merged,
+    cited_sensitive_paths,
     log,
+    operator_prerequisite_lines,
     ops_shape_marker,
 )
 from .scanner_disposition import ScannerDisposition, resolve_scanner_disposition
@@ -967,6 +969,26 @@ def handle_triage_decision(
                 state=State.HUMAN_ISSUE_APPROVAL,
             )
 
+    # --- operator-prerequisite gate ---
+    # A draft that needs an operator action (repo-settings toggle, hosting
+    # control panel) or an operator-supplied fact ("Operator confirms ...
+    # Do not guess it") cannot be completed by implement — it would only
+    # ASK_USER and block (live bb70 / a4e7).  Route it to the human gate
+    # ahead of the fast-path, quoting the matched lines.  Like the
+    # ops-shape gate, this returns an explicit state.
+    operator_lines = operator_prerequisite_lines(draft)
+    if operator_lines:
+        quoted = "; ".join(repr(line[:160]) for line in operator_lines[:5])
+        return _triage_outcome(
+            ctx,
+            ws,
+            draft,
+            ticket.id,
+            f"operator prerequisite detected (matched lines: {quoted}) — "
+            f"requires operator action/input, not auto-implement",
+            state=State.HUMAN_ISSUE_APPROVAL,
+        )
+
     # --- mechanical draft fast-path ---
     # Empty/whitespace drafts cannot be auto-approved — they'd
     # create an infinite loop (approve → refine produces empty
@@ -1055,6 +1077,14 @@ def handle_triage_decision(
                             extract_paths_from_draft=True,
                         )
                     elif auto.decision == "NEEDS_APPROVAL":
+                        # Fail closed: a NEEDS_APPROVAL verdict citing a
+                        # merge-gate sensitive path (CI/deploy workflows,
+                        # secrets) must not be downgraded to APPROVE by the
+                        # later auto-approve pass in _resolve_next_state
+                        # (live a4e7).
+                        sensitive = cited_sensitive_paths(
+                            auto.reason, s.auto_merge_sensitive_globs or []
+                        )
                         return _triage_outcome(
                             ctx,
                             ws,
@@ -1063,12 +1093,20 @@ def handle_triage_decision(
                             f"mechanical draft fast-path — "
                             f"auto-approve NEEDS_APPROVAL (skipped refine): "
                             f"{auto.reason} "
-                            f"[checks: {checks_summary}]",
+                            f"[checks: {checks_summary}]"
+                            + (
+                                " — sensitive path cited: "
+                                + ", ".join(f"{p!r} (glob {g!r})" for p, g in sensitive)
+                                + "; failing closed to human approval"
+                                if sensitive
+                                else ""
+                            ),
                             source=ticket.source,
                             triage_note=(
                                 f"{triage.reason} | fast-path checks: {checks_summary}"
                             ),
                             extract_paths_from_draft=True,
+                            state=(State.HUMAN_ISSUE_APPROVAL if sensitive else None),
                         )
             except Exception:
                 log.warning(
