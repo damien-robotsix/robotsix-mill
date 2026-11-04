@@ -1844,3 +1844,73 @@ def test_only_latest_tag_run_per_workflow_is_considered(tmp_path, monkeypatch):
     _run_one_cycle(worker, monkeypatch)
 
     assert [t for t in ctx.service.list() if t.source == SourceKind.CI] == []
+
+
+def _run_monitor_once(ctx, monkeypatch):
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+    loop = asyncio.new_event_loop()
+
+    async def _run_one_cycle():
+        async def _fast_sleep(s):
+            if s >= 1:
+                raise asyncio.CancelledError()
+
+        monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker._ci_monitor_poll_loop()
+
+    loop.run_until_complete(_run_one_cycle())
+    loop.close()
+
+
+def _release_run():
+    return {
+        "id": 30846162938,
+        "name": "Auto Release",
+        "path": ".github/workflows/release.yml",
+        "workflow_id": 300,
+        "head_sha": "abc",
+        "conclusion": "startup_failure",
+        "html_url": "http://run/30846162938",
+        "created_at": "2026-08-03T00:00:00Z",
+    }
+
+
+def test_deleted_workflow_file_is_not_filed(tmp_path, monkeypatch):
+    """A failing run whose workflow file is absent at branch HEAD is skipped
+    (and marked seen) instead of filed.
+    """
+    ctx = _ctx(
+        tmp_path,
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    forge = _make_fake_forge(monkeypatch, runs=[_release_run()])
+    forge.list_repo_files = lambda *, ref="": [".github/workflows/ci.yml"]
+
+    _run_monitor_once(ctx, monkeypatch)
+
+    assert [t for t in ctx.service.list() if t.source == "ci"] == []
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    assert "300:abc" in json.loads(state_path.read_text("utf-8"))["seen"]
+
+
+def test_present_workflow_file_failure_is_filed(tmp_path, monkeypatch):
+    """Still-failing workflow whose file exists at HEAD is filed as today."""
+    ctx = _ctx(
+        tmp_path,
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    forge = _make_fake_forge(monkeypatch, runs=[_release_run()])
+    forge.list_repo_files = lambda *, ref="": [".github/workflows/release.yml"]
+
+    _run_monitor_once(ctx, monkeypatch)
+
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 1
+    assert "Auto Release" in ci_tickets[0].title
