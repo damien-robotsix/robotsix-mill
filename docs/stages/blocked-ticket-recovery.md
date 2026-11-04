@@ -150,6 +150,23 @@ returns to the CI poll. This re-check fires once per merged fix. A failure
 that still recurs after a merge that predates the failing run spawns a new
 fix ticket as usual.
 
+### Recurring CI failure: prior fixes linked, prevent-recurrence required
+
+A `ci_fix_dependency` fix ticket is keyed on a log-derived failure
+signature in addition to the check-name fingerprint. Right now only npm
+`ERESOLVE` peer-dependency conflicts are recognised, keyed as the failing
+step plus the conflicting packages (e.g. `npm ci ERESOLVE
+typescript/typescript-eslint`, with versions stripped). The signature is
+stored as a `ci_sig:` label. When a new fix ticket carries a signature
+that matches a `ci_fix_dependency` ticket on the same board that is closed
+or done and was created within the last 90 days, the new ticket gets a
+`## Recurrence` section. It links the prior ticket ids (and their PR
+branches) and adds the requirement to prevent recurrence (e.g. a Dependabot
+ignore/group or a commented version pin) in addition to fixing the
+immediate failure. Failures with a different check name but the same
+signature are still matched. Failures without a recognised signature
+fall back to the check-name fingerprint only, as before.
+
 ### ci_fix progress reports are notes, not tickets
 
 Progress or completion reports from the ci-fix agent (titles such as
