@@ -42,7 +42,7 @@ from ..scm.forge.auth import (
 )
 from ..scm.forge.github import _parse_owner_repo
 from ..scm.vcs import git_ops
-from . import ci_fix_audit, dependency_fix
+from . import ci_fix_audit, ci_fix_recurrence, dependency_fix
 from ._ci_fix_checkpoint import (
     CiFixCheckpoint,
     build_ci_fix_checkpoint_resume_history,
@@ -2093,10 +2093,30 @@ class CIFixStage(Stage):
         # differently and the label dedup never matched across parents:
         # each spawned its own duplicate fix ticket for the same repo-wide
         # failure (6 duplicates in 35 minutes, 2026-09-01).
-        fingerprint = _ci_failure_fingerprint(
-            check_names,
-            ctx.repo_config.board_id if ctx.repo_config else "",
-        )
+        board_id = ctx.repo_config.board_id if ctx.repo_config else ""
+        fingerprint = _ci_failure_fingerprint(check_names, board_id)
+        dedup_labels = [f"ci_fp:{fingerprint}"]
+
+        # Recurrence detection: the same root failure (e.g. an npm ERESOLVE
+        # a Dependabot bump keeps reintroducing) can surface under different
+        # check names, so it is keyed on a log-derived signature instead.
+        # A match against a closed fix ticket demands a recurrence guard.
+        signature = ci_fix_recurrence.extract_failure_signature(failing_summary)
+        if signature:
+            sig_label = ci_fix_recurrence.signature_label(signature)
+            dedup_labels.append(sig_label)
+            if board_id:
+                try:
+                    prior = ci_fix_recurrence.find_prior_fixes(ctx, sig_label, board_id)
+                except Exception:
+                    log.warning(
+                        "%s: recurrence lookup failed", ticket.id, exc_info=True
+                    )
+                    prior = []
+                if prior:
+                    description += ci_fix_recurrence.format_recurrence_section(
+                        signature, prior
+                    )
         outcome = dependency_fix.spawn_dependency_fix(
             ticket,
             ctx,
@@ -2105,7 +2125,7 @@ class CIFixStage(Stage):
             source_kind=SourceKind.CI_FIX_DEPENDENCY,
             block_reason_prefix=block_reason,
             priority=ticket.priority,
-            dedup_labels=[f"ci_fp:{fingerprint}"],
+            dedup_labels=dedup_labels,
         )
 
         # Clear the depends-on relationship that spawn_dependency_fix set
