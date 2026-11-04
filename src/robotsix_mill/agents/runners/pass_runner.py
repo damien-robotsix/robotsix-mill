@@ -325,6 +325,38 @@ def _title_fingerprint_match(
     return None
 
 
+# Filler verbs agents prepend to gap ids ("add_…", "enforce_…") that carry no
+# identity — dropped so ``enforce_dart_format_ci`` matches ``dart_format_ci``.
+_GAP_ID_STOPWORDS: frozenset[str] = frozenset({"add", "enforce", "check"})
+
+
+def canonical_gap_id(gap_id: str) -> str:
+    """Return an order-insensitive dedup key for *gap_id*.
+
+    Lowercases, splits on ``_`` / ``-``, drops filler stopwords, then sorts
+    and re-joins the tokens, so ``ci_dart_format_gate`` and
+    ``dart_format_ci_gate`` collapse to the same key. Falls back to the
+    lowercased id when every token is a stopword.
+    """
+    raw = gap_id.strip().lower()
+    tokens = [t for t in re.split(r"[_\-]+", raw) if t]
+    kept = sorted(t for t in tokens if t not in _GAP_ID_STOPWORDS)
+    return "_".join(kept) if kept else raw
+
+
+def _find_prior_gap(
+    verified: dict[str, dict[str, Any]], gap_id: str
+) -> dict[str, Any] | None:
+    """Look up *gap_id* in *verified*, exact first then by canonical key."""
+    if gap_id in verified:
+        return verified[gap_id]
+    key = canonical_gap_id(gap_id)
+    for prior_id, info in verified.items():
+        if canonical_gap_id(prior_id) == key:
+            return info
+    return None
+
+
 def _verify_prior_proposals(
     service: TicketService,
     settings: Settings,
@@ -1005,7 +1037,10 @@ def _create_one_draft(
     # re-filing the same finding on every run when the draft lands on
     # the pass's own board.
     target_verified = _verify_prior_on_board(settings, target_board_id, source_label)
-    if gap_id and gap_id in target_verified:
+    # Canonical (token-order-insensitive) match: ``ci_dart_format_gate`` and
+    # ``dart_format_ci_gate`` name the same finding.
+    prior = _find_prior_gap(target_verified, gap_id) if gap_id else None
+    if prior is not None:
         log.info(
             "%s draft %d skipped — gap_id %r already exists on target board %s "
             "(ticket %s, state %s)",
@@ -1013,13 +1048,13 @@ def _create_one_draft(
             i,
             gap_id,
             target_board_id,
-            target_verified[gap_id]["ticket_id"],
-            target_verified[gap_id]["state"],
+            prior["ticket_id"],
+            prior["state"],
         )
         _add_observed_on_evidence(
             target_service,
             settings,
-            target_verified[gap_id]["ticket_id"],
+            prior["ticket_id"],
             body,
             source_label,
         )
