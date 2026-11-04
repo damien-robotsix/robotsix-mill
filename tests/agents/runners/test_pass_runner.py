@@ -14,6 +14,7 @@ from robotsix_mill.agents.runners.pass_runner import (
     _strip_unverified_filed_annotations,
     _test_file_exists_for_gap,
     _verify_prior_proposals,
+    canonical_gap_id,
     is_policy_addition,
     load_memory,
     persist_memory,
@@ -3118,6 +3119,64 @@ def test_same_board_gap_id_dedup(tmp_path, monkeypatch):
     # Still only one ticket in the DB.
     tickets = service.list()
     assert len(tickets) == 1
+
+    db.reset_engine()
+
+
+def test_canonical_gap_id_ignores_token_order():
+    """Gap ids differing only in token order dedup to one key."""
+    assert canonical_gap_id("ci_dart_format_gate") == "ci_dart_format_gate"
+    assert canonical_gap_id("dart_format_ci_gate") == canonical_gap_id(
+        "ci_dart_format_gate"
+    )
+    assert canonical_gap_id("enforce-dart-format-CI-gate") == canonical_gap_id(
+        "add_dart_format_ci_gate_check"
+    )
+    assert canonical_gap_id("dart_format_ci_gate") != canonical_gap_id(
+        "dart_analyze_ci_gate"
+    )
+    # All-stopword ids keep a non-empty key.
+    assert canonical_gap_id("add_check") == "add_check"
+
+
+def test_same_board_gap_id_dedup_token_order(tmp_path):
+    """An open audit ticket under one token ordering suppresses a new
+    draft whose gap_id is the same tokens in another order."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    def _draft(title: str, gap_id: str):
+        res = _FakeAgentResult(
+            updated_memory="mem",
+            draft_titles=[title],
+            draft_bodies=["Add dart format check to the analyze job."],
+            gap_ids=[gap_id],
+        )
+        return _create_one_draft(
+            i=0,
+            res=res,
+            gap_ids=[gap_id],
+            draft_target_repo_ids=[""],
+            source_label=SourceKind.AUDIT,
+            service=service,
+            settings=settings,
+            origin_session="test-session",
+            repo_dir=None,
+        )
+
+    info, verified = _draft("Enforce dart formatting in CI", "ci_dart_format_gate")
+    assert info is not None
+    assert verified == "ci_dart_format_gate"
+
+    info2, verified2 = _draft(
+        "Add dart format check to CI analyze job", "dart_format_ci_gate"
+    )
+    assert info2 is None, "reordered gap_id must be deduped"
+    assert verified2 == ""
+    tasks = [t for t in service.list() if t.kind == TicketKind.TASK]
+    assert len(tasks) == 1
 
     db.reset_engine()
 
