@@ -341,22 +341,72 @@ def is_status_note(title: str) -> bool:
     return bool(_STATUS_ONLY_PREFIX_RE.match(t) or _STATUS_WORD_RE.search(t))
 
 
+# robotsix-board, 2026-09-18: one ci_fix session filed four drafts in six
+# minutes — "Fixed … Committed and pushed.", "Closing the previously-filed
+# draft …", "I inadvertently filed a draft …" and a completion report for a
+# commit on a ``mill/<ticket-id>`` branch.  Their titles carried issue words
+# ("failures"), so the title check alone let them through.  A body that
+# reports work the run already pushed, or that retracts an earlier draft,
+# is a status note regardless of the title.
+_COMPLETION_BODY_RE = re.compile(
+    r"\bPUSH_OK\b|\bcommitted and pushed\b|"
+    r"\b(?:fix(?:es)?|commits?|changes?)\s+"
+    r"(?:(?:was|were|has been|have been|already|now)\s+)*pushed\b|"
+    r"\bpushed\s+(?:the\s+|a\s+|my\s+)?(?:fix(?:es)?|commits?|changes?)\b|"
+    r"\bpushed\s+(?:as|in|to\s+\S+\s+as)\s+(?:commit\s+)?`?[0-9a-f]{7,40}\b",
+    re.IGNORECASE,
+)
+_RETRACT_RE = re.compile(
+    r"\b(?:previously[- ]filed|inadvertently filed|mistakenly filed|"
+    r"accidentally filed|filed (?:in error|by mistake)|"
+    r"no action (?:is )?needed on this (?:draft|ticket)|"
+    r"clos(?:e|ing) (?:the )?(?:previous(?:ly[- ]filed)?|earlier) (?:draft|ticket)|"
+    r"ignore (?:this|the previous|the earlier) (?:draft|ticket))\b",
+    re.IGNORECASE,
+)
+_RETRACT_TITLE_RE = re.compile(
+    r"^\s*(?:close|closing|ignore|retract(?:ed|ing)?)\b", re.IGNORECASE
+)
+_MILL_BRANCH_RE = re.compile(r"\bmill/(\d{8}T\d{6}Z-[\w-]+)")
+
+
+def is_completion_report(title: str, body: str) -> bool:
+    """True if *title*/*body* report already-pushed work or retract an
+    earlier draft — never new work, whatever the title says.
+    """
+    text = f"{title or ''}\n{body or ''}"
+    return bool(
+        _COMPLETION_BODY_RE.search(text)
+        or _RETRACT_RE.search(text)
+        or _RETRACT_TITLE_RE.match(title or "")
+    )
+
+
 def handle_ci_fix_status_note(
     settings: Settings, *, board_id: str, title: str, body: str
 ) -> str | None:
     """Append a ci_fix status note to the ticket being fixed.
 
-    Returns the tool result string, or ``None`` when *title* is not a
-    status note (the caller then files it normally).  Never creates a ticket.
+    Returns the tool result string, or ``None`` when the report is neither a
+    status note nor a completion/retract report (the caller then files it
+    normally).  Never creates a ticket.  When the body names a
+    ``mill/<ticket-id>`` branch whose ticket exists, the note lands there so
+    that ticket's verification checks the cited commit against its branch.
     """
-    if not is_status_note(title):
+    if not (is_status_note(title) or is_completion_report(title, body)):
         return None
     note = f"ci_fix status note: {title.strip()}"
     if body and body.strip():
         note += f"\n\n{body.strip()}"
-    parent_id = _tracing.current_ticket_id()
     service = TicketService(settings, board_id=board_id)
-    parent = service.get(parent_id) if parent_id else None
+    parent = None
+    for branch_ticket in _MILL_BRANCH_RE.findall(f"{title}\n{body}"):
+        parent = service.get(branch_ticket)
+        if parent is not None:
+            break
+    if parent is None:
+        parent_id = _tracing.current_ticket_id()
+        parent = service.get(parent_id) if parent_id else None
     if parent is None:
         return (
             "report_issue: status/completion note not filed — progress notes "
