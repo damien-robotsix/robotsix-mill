@@ -130,6 +130,63 @@ def test_status_note_appends_history_note_and_files_no_ticket(settings, monkeypa
     assert any("gitleaks CI fix pushed" in n and "5019a93" in n for n in notes)
 
 
+def test_report_citing_pushed_commit_attaches_to_parent(settings, monkeypatch):
+    """robotsix-board 2026-09-18: a completion report citing the commit the
+    same run pushed must land on the parent ticket, not become a draft —
+    even when the title reads like an issue."""
+    svc = TicketService(settings, board_id="invest")
+    parent = svc.create("Harden npm audit CI gate", "body")
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.current_session",
+        lambda: f"invest · {parent.id}",
+    )
+    out = _tool(settings)(
+        "ci_fix: pre-commit eslint failures in npm-audit script",
+        "Fixed the eslint errors. Committed and pushed as commit 651eb1c "
+        "(git_push_with_lease returned PUSH_OK).",
+    )
+    assert "status note appended to" in out
+    assert [t.id for t in svc.list()] == [parent.id]
+    notes = [e.note or "" for e in svc.history(parent.id)]
+    assert any("651eb1c" in n for n in notes)
+
+
+def test_retract_draft_reports_file_nothing(settings, monkeypatch):
+    svc = TicketService(settings, board_id="invest")
+    parent = svc.create("Harden npm audit CI gate", "body")
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.current_session",
+        lambda: f"invest · {parent.id}",
+    )
+    tool = _tool(settings)
+    a = tool(
+        "Close resolved: trailing newlines added to scripts",
+        "Closing the previously-filed draft ticket.",
+    )
+    b = tool(
+        "Ignore ci-fix already-resolved trailing newline report",
+        "I inadvertently filed a draft ticket; no action needed on this draft.",
+    )
+    assert "status note appended to" in a and "status note appended to" in b
+    assert [t.id for t in svc.list()] == [parent.id]
+
+
+def test_completion_report_attaches_to_mill_branch_ticket(settings, monkeypatch):
+    svc = TicketService(settings, board_id="invest")
+    other = svc.create("Unrelated parent", "body")
+    branch_ticket = svc.create("Harden npm audit CI gate", "body")
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.tracing.current_session",
+        lambda: f"invest · {other.id}",
+    )
+    out = _tool(settings)(
+        "eslint failures in npm audit script",
+        f"Fix pushed to mill/{branch_ticket.id} as commit 651eb1c.",
+    )
+    assert f"status note appended to {branch_ticket.id}" in out
+    assert {t.id for t in svc.list()} == {other.id, branch_ticket.id}
+
+
 def test_status_note_without_parent_files_nothing(settings):
     out = _tool(settings)("DONE: lint fixed")
     assert "not filed" in out
