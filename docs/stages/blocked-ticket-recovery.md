@@ -196,6 +196,24 @@ as tickets. A genuine ci-fix follow-up whose normalised title repeats one
 the same session filed within the last hour returns the existing ticket
 instead of filing a duplicate.
 
+### Operator-only prerequisites go to the human gate, not auto-implement
+
+The refine fast-path does not auto-approve a draft that asks for an
+operator action or an operator-supplied fact. Implement cannot perform
+these, so it would only ask the operator and block. A draft is held at
+`HUMAN_ISSUE_APPROVAL` when any line matches an operator-only marker,
+such as `Operator confirms`, `Repo owner`, `Do not guess`, `Settings →`,
+`in the … control panel`, `(a settings change, not a file change)` or
+`checked in repo settings`. The history note quotes the matched lines
+with the prefix `operator prerequisite detected`.
+
+A separate fail-closed rule applies when the fast-path classifier returns
+`NEEDS_APPROVAL` and cites a path matching `auto_merge_sensitive_globs`
+(for example `.github/workflows/**`). The ticket is held at
+`HUMAN_ISSUE_APPROVAL` with the note `sensitive path cited`, and the later
+auto-approve pass cannot downgrade it to `APPROVE`. Drafts with neither
+signal keep the normal fast-path behaviour.
+
 ### Work already present at base is reported as "already satisfied"
 
 When a ticket's goal is already met on the target branch, it closes
