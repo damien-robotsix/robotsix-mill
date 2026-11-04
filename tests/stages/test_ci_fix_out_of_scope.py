@@ -937,3 +937,63 @@ def test_out_of_scope_stale_branch_refresh_capped_at_one(tmp_path, monkeypatch):
     assert update_calls == []
     fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
     assert len(fixes) == 1
+
+
+_GATE_CMD = "dart format --output=none --set-exit-if-changed ."
+
+
+def test_self_introduced_gate_overrides_out_of_scope(tmp_path, monkeypatch):
+    """OUT_OF_SCOPE for a gate the ticket's diff added never spawns a
+    ci_fix_dependency ticket; the agent is told the debt is in scope."""
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch, alert_paths=())
+    monkeypatch.setattr(
+        github.GitHubForge, "list_code_scanning_alerts", lambda self, **k: []
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.self_introduced_gate_commands",
+        lambda summary, repo_dir, target: [_GATE_CMD],
+    )
+    seen: list[str] = []
+
+    def _agent(**k):
+        seen.append(k["failing_summary"])
+        return _oos_result()
+
+    monkeypatch.setattr("robotsix_mill.stages.ci_fix.run_ci_fix_agent", _agent)
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY) == []
+    assert seen and "introduced by THIS ticket" in seen[0]
+    assert _GATE_CMD in seen[0]
+
+
+def test_out_of_scope_description_records_toolchain_pins(tmp_path, monkeypatch):
+    """The spawned dependency ticket records the toolchain version the
+    workflow pins, so the fixer formats with the same version as CI."""
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch, alert_paths=("src/untouched.py",))
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    t = _fixing_ci(ctx)
+    repo_dir = _setup_repo(ctx, t)
+    wf = tmp_path / repo_dir / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text(
+        "jobs:\n  analyze:\n    steps:\n"
+        "      - uses: subosito/flutter-action@abc\n"
+        "        with:\n          flutter-version: 3.47.2\n"
+    )
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    fix = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)[0]
+    desc = ctx.service.workspace(fix).read_description()
+    assert "CI toolchain pins" in desc
+    assert "flutter-version: 3.47.2" in desc
