@@ -402,6 +402,165 @@ def test_retrospect_followup_without_ops_markers_falls_through(
 
 
 # ===========================================================================
+# Operator-prerequisite gate + NEEDS_APPROVAL sensitive-path fail-closed
+# ===========================================================================
+
+# Verbatim description of robotsix-website ticket bb70 (survey).
+_BB70_DRAFT = """\
+**Gap:** `SECURITY.md` tells reporters to email `admin@robotsix.net` (lines 3-4) and has a response-time and coordinated-disclosure section (lines 6-13). It does not mention GitHub's Private Vulnerability Reporting (PVR), and it does not say what is in scope. The site has a user-submission surface (the survey feature under `www/42/`, which stores data in SQLite and the `SURVEY_DB_PATH` env var described in README.md) and a security-header configuration (`www/.htaccess`), so reporters need to know which parts are in scope.
+
+**Comparator / reference:** GitHub's community-health guidance (https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions/creating-a-default-community-health-file) recommends that SECURITY.md state how to report, the scope of accepted reports, and the expected response timeline, and that it be paired with PVR under Settings → Security. This URL came from the cached knowledge base and was not re-fetched in this run, so verify it before relying on it.
+
+**Suggested change (repo-local, no code):**
+1. Repo owner enables *Private vulnerability reporting* under Settings → Security (a settings change, not a file change).
+2. In `SECURITY.md`, keep the email as a fallback and add a line pointing to `https://github.com/damien-robotsix/robotsix-website/security/advisories/new` as the preferred channel.
+3. Add a short `## Scope` section: in scope = PHP pages under `www/`, the survey feature, and the HTTP headers in `www/.htaccess`; out of scope = OVH hosting infrastructure and third-party services.
+4. Leave the existing response-time and coordinated-disclosure sections as they are.
+
+**Acceptance:** `SECURITY.md` names PVR as the preferred channel and has a Scope section; the PVR toggle is on (checked in repo settings). No CI change is needed.
+
+**Standards check:** the standards checkout was not reachable this run, so I could not confirm whether robotsix-standards already defines a security-policy convention. If it does, this ticket should follow it rather than the local wording.
+
+Observed on: robotsix-website
+
+<!-- survey-gap-id: security-policy-private-vulnerability-reporting -->
+"""
+
+# Verbatim description of robotsix-website ticket a4e7 (survey).
+_A4E7_DRAFT = """\
+**Gap (verified in tree):** the PHP runtime is not declared anywhere in the repo, so CI and deploy test against whatever PHP the self-hosted runner's apt repository provides.
+
+- `composer.json` (whole file) has no `require.php` constraint and no `config.platform.php`. Its only keys are `name`, `description`, `require-dev` (`phpunit/phpunit ^11.0`), `config` (`sort-packages`, `allow-plugins`) and `scripts.test`.
+- `.github/workflows/ci.yml:28` installs PHP with `apt-get install php-cli php-sqlite3`; `ci.yml:61` installs `php-cli php-sqlite3 php-xml php-mbstring php-pcov composer` for the `phpunit` job; `.github/workflows/deploy.yml:46` installs `php-cli` with no version. Nothing selects a PHP version, and a grep for `setup-php`, `php-version`, `.php-version` and `ovhconfig` found no pin.
+- Consequence: `php -l`, the static render (`php www/index.php > …`), the lang-parity script and `composer install` all run on a PHP version chosen by the runner image, not by the project. A runner upgrade can change the PHP version and turn `main` red, or let syntax that the production host does not support pass the gate. This is the same class of unpinned-toolchain drift that ticket 8235 addressed for `npx html-validate`.
+
+**Proposed change (repo-local):**
+1. Operator confirms the PHP version the OVH shared-hosting plan actually runs (OVH control panel, PHP version for the `robotsix.net` hosting). Do not guess it.
+2. Add the constraint to `composer.json` so Composer enforces it: `"require": { "php": "^X.Y" }` and `"config": { "platform": { "php": "X.Y.0" } }`. The `platform` setting makes `composer install` resolve dependencies against the production PHP version even on a newer runner. Canonical reference: https://getcomposer.org/doc/06-config.md#platform (not verified in this run; the web lookup tool failed).
+3. Pin the apt PHP package in `ci.yml` (both jobs) and `deploy.yml` to the same minor version, e.g. `php8.X-cli`, or install via `shivammathur/setup-php@<sha>` with `php-version: 'X.Y'`. Keep it in sync with step 2.
+4. Add a single line to `AGENT.md` naming the target PHP version and where it is enforced, so the constraint is discoverable.
+
+**Acceptance:** `composer validate` passes; `composer install` fails fast on a PHP version outside the declared range; both workflows print the same PHP minor version in their install step.
+
+**Why not fleet-wide:** the standards checkout was unreachable this run, so I could not confirm whether robotsix-standards already defines a PHP runtime convention. If it does, this ticket should adopt it rather than add a local variant.
+
+Observed on: robotsix-website
+
+<!-- survey-gap-id: php-runtime-version-undeclared -->
+"""
+
+
+@pytest.mark.parametrize(
+    ("draft", "expected_line"),
+    [
+        (_BB70_DRAFT, "Repo owner enables"),
+        (_A4E7_DRAFT, "Operator confirms the PHP version"),
+    ],
+    ids=["bb70-pvr-toggle", "a4e7-operator-php-version"],
+)
+def test_operator_prerequisite_draft_routes_to_human_gate(
+    ctx_factory, monkeypatch, tmp_path, draft, expected_line
+):
+    """A survey draft that needs an operator action or operator-supplied
+    fact is NOT auto-approved by the fast-path, even when auto-approve
+    would say APPROVE — it lands in HUMAN_ISSUE_APPROVAL with the matched
+    lines quoted."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="survey")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+    auto_approve_calls: list[dict] = []
+
+    def _spy_auto_approve(**kw):
+        auto_approve_calls.append(kw)
+        return refining.AutoApproveResult(decision="APPROVE", reason="ok")
+
+    monkeypatch.setattr(refining, "triage_auto_approve", _spy_auto_approve)
+
+    out = _run_agent(ctx, t, tmp_path, draft=draft)
+
+    assert out.next_state == State.HUMAN_ISSUE_APPROVAL
+    assert "operator prerequisite detected" in out.note
+    assert expected_line in out.note
+    assert auto_approve_calls == []
+    assert calls == []
+
+
+def test_needs_approval_citing_sensitive_path_cannot_become_approve(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """a4e7 sub-defect: the fast-path classifier says NEEDS_APPROVAL and
+    cites `.github/workflows/*.yml`; the later auto-approve pass in
+    _resolve_next_state must not downgrade it to APPROVE."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="survey")
+    _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+    verdicts = iter(
+        [
+            refining.AutoApproveResult(
+                decision="NEEDS_APPROVAL",
+                reason=(
+                    "The change modifies CI and deployment pipelines.\n"
+                    "- `composer.json`\n"
+                    "- `.github/workflows/ci.yml` (PHP installation)\n"
+                    "- `.github/workflows/deploy.yml` (PHP installation)"
+                ),
+            ),
+        ]
+    )
+    approve = refining.AutoApproveResult(decision="APPROVE", reason="repo-local")
+    monkeypatch.setattr(
+        refining, "triage_auto_approve", lambda **kw: next(verdicts, approve)
+    )
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft="Pin the PHP version in `composer.json` and both CI workflows.",
+    )
+
+    assert out.next_state == State.HUMAN_ISSUE_APPROVAL
+    assert "sensitive path cited" in out.note
+    assert ".github/workflows/ci.yml" in out.note
+    assert "auto-approve: APPROVE" not in out.note
+
+
+def test_plain_draft_keeps_fast_path_behaviour(ctx_factory, monkeypatch, tmp_path):
+    """No operator markers, no sensitive path → fast-path unchanged."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="survey")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda **kw: refining.AutoApproveResult(
+            decision="APPROVE", reason="Mechanical rename"
+        ),
+    )
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft="Rename `old_func` to `new_func` in `src/foo/bar.py`.",
+    )
+
+    assert out.next_state == State.READY
+    assert out.note.startswith("mechanical draft fast-path")
+    assert "operator prerequisite" not in out.note
+    assert calls == []
+
+
+# ===========================================================================
 # _no_change_path — external-fix claim re-verification branch
 # ===========================================================================
 

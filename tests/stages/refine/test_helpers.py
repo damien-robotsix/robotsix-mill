@@ -28,6 +28,8 @@ from robotsix_mill.stages.refine.helpers import (
     _advisory_candidate_id,
     _strip_advisory_block,
     _triage_note_signals_wrong_repo,
+    cited_sensitive_paths,
+    operator_prerequisite_lines,
     ops_shape_marker,
     verify_claim,
 )
@@ -1230,3 +1232,48 @@ def test_ops_shape_marker_hits(text):
 def test_ops_shape_marker_misses_plain_code_prose(text):
     """Plain code-change prose returns None — no false positive."""
     assert ops_shape_marker(text) is None
+
+
+# ---------------------------------------------------------------------------
+# operator_prerequisite_lines / cited_sensitive_paths
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "1. Operator confirms the PHP version. Do not guess it.",
+        "Repo owner enables the toggle.",
+        "Enable it under Settings → Security.",
+        "Change the PHP version in the OVH control panel.",
+        "(a settings change, not a file change)",
+        "the PVR toggle is on (checked in repo settings).",
+    ],
+)
+def test_operator_prerequisite_lines_hits(text):
+    assert operator_prerequisite_lines(f"intro\n{text}\noutro") == [text]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Rename `old_func` to `new_func` in `src/foo/bar.py`.",
+        "Add a `Settings` field to the config model.",
+        "",
+    ],
+)
+def test_operator_prerequisite_lines_misses_plain_code_prose(text):
+    assert operator_prerequisite_lines(text) == []
+
+
+def test_cited_sensitive_paths_matches_workflow_globs():
+    globs = [".github/workflows/**", ".env*"]
+    reason = (
+        "Modifies CI.\n- `.github/workflows/ci.yml` (lint)\n"
+        "- `.github/workflows/deploy.yml`.\n- `composer.json`"
+    )
+    assert cited_sensitive_paths(reason, globs) == [
+        (".github/workflows/ci.yml", ".github/workflows/**"),
+        (".github/workflows/deploy.yml", ".github/workflows/**"),
+    ]
+    assert cited_sensitive_paths("Mechanical rename in `src/a.py`.", globs) == []
