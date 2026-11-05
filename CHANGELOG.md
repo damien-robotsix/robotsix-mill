@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.23.0...v0.23.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* refine: a fast-path auto-approve APPROVE verdict must be final, not re-judged by a second LLM auto-approve in _resolve_next_state (20261105T161618Z-refine-a-fast-path-auto-approve-approve-8f1d) ([#3589](https://github.com/damien-robotsix/robotsix-mill/issues/3589)) ([c5232c8](https://github.com/damien-robotsix/robotsix-mill/commit/c5232c8b652cf716a971a01f30cb4bb4b236a572))
+
 ## [0.23.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.22.1...v0.23.0) (2026-11-04)
 
 
