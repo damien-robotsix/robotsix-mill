@@ -1075,6 +1075,10 @@ def handle_triage_decision(
                                 f" | fast-path checks: {checks_summary}"
                             ),
                             extract_paths_from_draft=True,
+                            # The APPROVE verdict is final: without an
+                            # explicit state, _resolve_next_state would
+                            # re-run auto-approve and could flip it.
+                            state=State.READY,
                         )
                     elif auto.decision == "NEEDS_APPROVAL":
                         # Fail closed: a NEEDS_APPROVAL verdict citing a

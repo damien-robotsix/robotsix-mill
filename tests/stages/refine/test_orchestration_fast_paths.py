@@ -143,6 +143,48 @@ def test_mechanical_draft_fast_path_triggered_for_user_tickets(
     assert calls == []  # full refine agent never invoked
 
 
+def test_mechanical_draft_fast_path_approve_is_final(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A fast-path APPROVE verdict routes to READY with exactly one
+    auto-approve call — a disagreeing second verdict must never run."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="user")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+    from robotsix_mill.agents.refining import AutoApproveResult
+    from robotsix_mill.stages.refine import helpers
+
+    auto_calls: list[dict] = []
+
+    def _spy_auto_approve(**kw):
+        auto_calls.append(kw)
+        if len(auto_calls) == 1:
+            return AutoApproveResult(decision="APPROVE", reason="Mechanical rename")
+        return AutoApproveResult(decision="NEEDS_APPROVAL", reason="second opinion")
+
+    def _no_second_pass(*a, **kw):
+        raise AssertionError("second auto-approve must not run")
+
+    monkeypatch.setattr(refining, "triage_auto_approve", _spy_auto_approve)
+    monkeypatch.setattr(helpers, "_auto_approve_triage_with_retry", _no_second_pass)
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft="Rename `old_func` to `new_func` in `src/foo/bar.py`.",
+    )
+
+    assert out.next_state == State.READY
+    assert len(auto_calls) == 1
+    assert out.note.startswith("mechanical draft fast-path")
+    assert "APPROVE" in out.note
+    assert calls == []
+
+
 def test_mechanical_draft_fast_path_not_triggered_for_ci_tickets(
     ctx_factory, monkeypatch, tmp_path
 ):
