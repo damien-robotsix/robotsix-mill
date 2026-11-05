@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.23.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.22.1...v0.23.0) (2026-11-04)
+
+
+### Features
+
+* ci source: skip or auto-close `CI failure: <workflow> on <branch>` tickets when the workflow file is gone at branch HEAD or a newer run is green (20261104T180924Z-ci-source-skip-or-auto-close-ci-failure-7afb) ([#3584](https://github.com/damien-robotsix/robotsix-mill/issues/3584)) ([bf210f6](https://github.com/damien-robotsix/robotsix-mill/commit/bf210f6e60c3664d73261ea2cf2155a193b10f48))
+* ci_fix_dependency: detect a recurring out-of-scope failure signature and require a recurrence guard instead of re-applying the same revert (20261104T140017Z-ci-fix-dependency-detect-a-recurring-out-1761) ([#3577](https://github.com/damien-robotsix/robotsix-mill/issues/3577)) ([b471aee](https://github.com/damien-robotsix/robotsix-mill/commit/b471aee281ddd48cca44999ea74b0901fea88c79))
+
+
+### Bug Fixes
+
+* audit: dedup gap_ids regardless of token order (`ci_dart_format_gate` vs `dart_format_ci_gate` filed twice) (20261104T140519Z-audit-dedup-gap-ids-regardless-of-token-d4ef) ([#3579](https://github.com/damien-robotsix/robotsix-mill/issues/3579)) ([a08cb5a](https://github.com/damien-robotsix/robotsix-mill/commit/a08cb5a48b091d93b0a8198d0861ac57312c932a))
+* ci_fix: count a failure as in-scope when the failing CI step was added by the ticket's own diff (20261104T140519Z-ci-fix-count-a-failure-as-in-scope-when-e140) ([#3580](https://github.com/damien-robotsix/robotsix-mill/issues/3580)) ([4d91d5e](https://github.com/damien-robotsix/robotsix-mill/commit/4d91d5e01ec52c77e0fbccb780a12fdfdde8258a))
+* ci_fix: stop filing self-reported 'fixed/close/ignore' completion notes as new draft tickets; record them on the originating ticket instead (20261104T180937Z-ci-fix-stop-filing-self-reported-fixed-c-a5e8) ([#3583](https://github.com/damien-robotsix/robotsix-mill/issues/3583)) ([1abc8ab](https://github.com/damien-robotsix/robotsix-mill/commit/1abc8ab4de449be4e039720097f92f2f9b30ca6d))
+* implement/delivery: record 'already satisfied at base' as its own outcome and short-circuit remediation tickets whose deliverable already exists (20261104T140017Z-implement-delivery-record-already-satisf-e199) ([#3578](https://github.com/damien-robotsix/robotsix-mill/issues/3578)) ([81a4d3a](https://github.com/damien-robotsix/robotsix-mill/commit/81a4d3a7343f4dc35e7de6712f0fbf6f9fe7c935))
+* refine/fast-path: detect operator-only prerequisites in draft specs and route to human_issue_approval instead of auto-approving into implement (20261104T155613Z-refine-fast-path-detect-operator-only-pr-88c7) ([#3582](https://github.com/damien-robotsix/robotsix-mill/issues/3582)) ([e9e9308](https://github.com/damien-robotsix/robotsix-mill/commit/e9e93084407d53dc21084bb2911a16e2b237aecb))
+
 ## [0.22.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.22.0...v0.22.1) (2026-11-02)
 
 
