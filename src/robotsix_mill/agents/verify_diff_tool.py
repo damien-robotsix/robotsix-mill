@@ -48,13 +48,22 @@ def _run_verify_diff(
 
     # Optional: cross-check expected file fingerprints.
     if expected_files:
-        changed = _parse_changed_files(stat_output) | set(untracked)
+        tracked = _parse_changed_files(stat_output)
+        changed = tracked | set(untracked)
         missing = [f for f in expected_files if f not in changed]
-        unexpected = [f for f in changed if f not in expected_files]
+        unexpected = sorted(f for f in tracked if f not in expected_files)
+        # Untracked files are usually ones the agent just created on
+        # purpose — report them as new rather than as "NOT expected".
+        new_unlisted = [f for f in untracked if f not in expected_files]
         if missing:
             lines.append(f"verify_diff WARNING: expected but NOT in diff: {missing}")
         if unexpected:
             lines.append(f"verify_diff NOTE: in diff but NOT expected: {unexpected}")
+        if new_unlisted:
+            lines.append(
+                "verify_diff NOTE: new, not yet staged (not in expected_files "
+                f"— list new files there too): {new_unlisted}"
+            )
         if not missing and not unexpected:
             lines.append("verify_diff: all expected files present in diff")
 

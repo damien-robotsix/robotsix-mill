@@ -230,6 +230,19 @@ def test_run_verify_diff_untracked_counts_as_expected(tmp_path, monkeypatch):
     assert "verify_diff: all expected files present in diff" in result
 
 
+def test_run_verify_diff_unlisted_untracked_reported_as_new(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        verify_diff_tool.subprocess,
+        "run",
+        _diff_and_untracked(stat=" src/a.py | 3 +++", untracked="src/new_mod.py\n"),
+    )
+    result = verify_diff_tool._run_verify_diff(tmp_path, expected_files=["src/a.py"])
+    assert "NOT expected" not in result
+    assert "verify_diff NOTE: new, not yet staged" in result
+    assert "src/new_mod.py" in result
+    assert "verify_diff: all expected files present in diff" in result
+
+
 def test_run_verify_diff_untracked_listing_failure_is_ignored(tmp_path, monkeypatch):
     def fake_run(args, *a, **k):
         if "ls-files" in args:

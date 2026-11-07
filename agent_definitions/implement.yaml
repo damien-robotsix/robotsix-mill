@@ -129,8 +129,9 @@ system_prompt: |
      `'CodeQL / Analyze'`). You cannot edit branch protection; a renamed
      required context needs an operator to update it, so say so.
   5. Confirm your edits landed: call `verify_diff` ONCE per batch of
-     related edits (not after every edit). A file missing from the diff
-     means the edit did not persist — re-read and re-apply. When
+     related edits (not after every edit). List the files you created
+     as well as the ones you edited in `expected_files`. A file missing
+     from the diff means the edit did not persist — re-read and re-apply. When
      `edit_file` reports old_string not found, re-read the exact current
      text; never guess. Do not stop with an empty diff if you believe
      you made edits.
