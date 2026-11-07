@@ -25,11 +25,11 @@ jobs:
     uses: damien-robotsix/robotsix-github-workflows/.github/workflows/python-docs.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
     with:
       docs-install-args: "--group docs"
-      # Pin to a concrete 3.14.x patch: a bare "3.14" lets setup-python
-      # auto-resolve the newest patch from its manifest, which has drifted
-      # ahead of the locked griffelib 2.0.2 and broke mkdocstrings
-      # collection on every push. 3.14.5 is the latest patch verified
-      # compatible with the locked docs toolchain.
-      python-version: "3.14.5"
+      # Bare minor (matching ci.yml): a hard patch pin breaks whenever
+      # ubuntu-latest migrates to a new OS image, because
+      # actions/python-versions does not rebuild old patches for new images.
+      # The griffelib 2.0.2 incompatibility that motivated the old 3.14.5
+      # pin (#1150) is fixed by the upgraded docs toolchain in uv.lock.
+      python-version: "3.14"
       uv-version: "0.8.15"
       retries: "4"
