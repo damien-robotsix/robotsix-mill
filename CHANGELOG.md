@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.23.2](https://github.com/damien-robotsix/robotsix-mill/compare/v0.23.1...v0.23.2) (2026-11-07)
+
+
+### Bug Fixes
+
+* ci_fix: out-of-scope CI failure — docker-pr-scan-proxy / Scan (20261106T083839Z-ci-fix-out-of-scope-ci-failure-docker-pr-5ca3) ([#3592](https://github.com/damien-robotsix/robotsix-mill/issues/3592)) ([7af0669](https://github.com/damien-robotsix/robotsix-mill/commit/7af06696df3bec63f5d6a6e262ba3edd8613875b))
+* trace-review: 1 finding(s) for trace `ce09ea0e` (session: robotsix-chat · 20261106T231736Z-module-size-split-src-robotsix-chat-repo-b9d2) (20261107T033609Z-trace-review-1-finding-s-for-trace-ce09e-346d) ([#3594](https://github.com/damien-robotsix/robotsix-mill/issues/3594)) ([6e48117](https://github.com/damien-robotsix/robotsix-mill/commit/6e4811701fc0ddd70dbd1aac5a8a847cac315d0f))
+
 ## [0.23.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.23.0...v0.23.1) (2026-11-05)
 
 
