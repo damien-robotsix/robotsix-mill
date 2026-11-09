@@ -2552,6 +2552,42 @@ def test_ticket_with_comments_is_eventful_and_gets_the_agent(ctx_factory, monkey
     assert "skipped" not in (out.note or "")
 
 
+@pytest.mark.parametrize("author", ["ci-stale-gate", "ci-auto-close"])
+def test_ci_ticket_closed_by_ci_gate_skips_the_agent(ctx_factory, monkeypatch, author):
+    """A ci ticket force-closed from draft whose only comment is the
+    automated closer's mark_done note is uneventful → no LLM pass."""
+    from robotsix_mill.core.models import SourceKind
+
+    ctx = ctx_factory(retrospect_skip_uneventful="true")
+    calls: list = []
+    _patch_agent_seams(monkeypatch, calls)
+
+    t = ctx.service.create(
+        "CI failure: docs on main", "failing run", source=SourceKind.CI
+    )
+    ctx.service.mark_done(t.id, note="stale failing run superseded", author=author)
+    out = RetrospectStage().run(ctx.service.get(t.id), ctx)
+
+    assert out.next_state is State.CLOSED
+    assert "retrospect skipped" in (out.note or "")
+    assert calls == []
+
+
+def test_non_ci_ticket_with_ci_gate_author_comment_is_eventful(
+    ctx_factory, monkeypatch
+):
+    ctx = ctx_factory(retrospect_skip_uneventful="true")
+    calls: list = []
+    _patch_agent_seams(monkeypatch, calls)
+
+    t = _ticket(ctx)
+    ctx.service.add_comment(t.id, "closed", author="ci-stale-gate")
+    out = RetrospectStage().run(ctx.service.get(t.id), ctx)
+
+    assert len(calls) == 1
+    assert "skipped" not in (out.note or "")
+
+
 def test_blocked_history_is_eventful(ctx_factory, monkeypatch):
     from robotsix_mill.stages.retrospect import _eventful_states
 

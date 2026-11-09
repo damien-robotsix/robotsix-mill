@@ -310,6 +310,20 @@ _EVENTFUL_STATES = frozenset(
 )
 
 
+# Automated closers of ci-source tickets: their mark_done note is stored as a
+# comment, but carries nothing a retrospect could learn from.
+_CI_AUTO_CLOSE_AUTHORS = frozenset({"ci-stale-gate", "ci-auto-close"})
+
+
+def _human_comments(ticket: Any, comments: list[Any]) -> list[Any]:
+    """*comments* minus a ci ticket's automated-closer notes."""
+    if getattr(ticket, "source", None) != SourceKind.CI:
+        return comments
+    return [
+        c for c in comments if getattr(c, "author", None) not in _CI_AUTO_CLOSE_AUTHORS
+    ]
+
+
 def _eventful_states(history: Any) -> list[str]:
     """State names in *history* that mark a ticket as worth a retrospect."""
     seen: list[str] = []
@@ -883,7 +897,7 @@ class RetrospectStage(Stage):
             eventful = _eventful_states(history)
             uneventful = (
                 not eventful
-                and not comments
+                and not _human_comments(ticket, comments)
                 and int(getattr(ticket, "review_rounds", 0) or 0) == 0
                 and int(getattr(ticket, "implement_cycles", 0) or 0) <= 1
             )
