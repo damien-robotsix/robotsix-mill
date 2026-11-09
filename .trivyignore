@@ -10,3 +10,13 @@
 # never invoked. Trivy classifies as CRITICAL despite CVSS=medium; safe
 # to suppress in our deployment model.
 CVE-2026-40355  # expires: 2026-11-24
+
+# CVE-2026-78661 — golang.org/x/net/html DoS via crafted HTML input, in
+# golang.org/x/net v0.60.0 compiled into the upstream `gh` binary
+# (usr/bin/gh) that Dockerfile and sandbox/Dockerfile install from GitHub's
+# apt repo. No fixed `gh` release exists yet: as of 2026-11-09 the latest tag
+# (v2.103.3) pins x/net v0.60.0 and cli/cli trunk only v0.61.0 (fix: 0.62.0).
+# Impact is limited to a crash of a short-lived CLI process talking to
+# GitHub's API. Drop this entry once a `gh` release with x/net >= 0.62.0
+# ships (the unpinned apt install picks it up on rebuild).
+CVE-2026-78661  # expires: 2026-11-23
