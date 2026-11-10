@@ -537,6 +537,52 @@ async def test_stop_awaits_inflight_passes(ctx, monkeypatch):
     assert call_task.done()
 
 
+async def test_bespoke_pass_is_tracked_for_shutdown_drain(ctx, monkeypatch):
+    """A bespoke pass must run via ``_tracked_to_thread`` so ``stop()``
+    drains it; a plain ``asyncio.to_thread`` left long bespoke audits
+    to be killed mid-run and stamped 'interrupted by process restart'."""
+    import contextlib
+
+    from robotsix_mill.agents.runners import bespoke_runner
+    from robotsix_mill.runtime import tracing as tr
+
+    @contextlib.contextmanager
+    def fake_root(sid, name=None, repo_config=None, **kwargs):
+        yield tr._NoopRootIO()
+
+    monkeypatch.setattr(tr, "start_ticket_root_span", fake_root)
+
+    def fake_pass(**kwargs):
+        return SimpleNamespace(drafts_created=[])
+
+    monkeypatch.setattr(bespoke_runner, "run_bespoke_pass", fake_pass)
+
+    sleeps = 0
+
+    async def fake_sleep(delay: float) -> None:
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps >= 2:  # initial delay, then post-pass interval → stop
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+    w = Worker(ctx, run_registry=None)
+    tracked: list = []
+
+    async def recording_tracked(fn, *args, **kwargs):
+        tracked.append(fn)
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(w, "_tracked_to_thread", recording_tracked)
+
+    definition = SimpleNamespace(name="csa", interval_seconds=3600)
+    with pytest.raises(asyncio.CancelledError):
+        await w._run_bespoke_loop(ctx.repo_config, definition, "/tmp/clone")
+
+    assert tracked == [fake_pass]
+
+
 async def test_stop_grace_timeout_does_not_hang(ctx, monkeypatch):
     """If a pass runs past ``shutdown_grace_seconds`` stop() logs a
     warning and proceeds — it must never hang the process."""

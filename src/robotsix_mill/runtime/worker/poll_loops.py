@@ -259,7 +259,9 @@ class PollLoopsMixin(PollLoopsCiMixin, PollLoopsDependabotMixin, _WorkerBase):
                     label,
                     repo_config=repo_config,
                 ):
-                    result = await asyncio.to_thread(
+                    # Tracked so ``stop()`` drains an in-flight bespoke
+                    # pass instead of killing it mid-run on restart.
+                    result = await self._tracked_to_thread(
                         bespoke_runner.run_bespoke_pass,
                         session_id=session_id,
                         definition=definition,
