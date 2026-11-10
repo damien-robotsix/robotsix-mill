@@ -10,7 +10,7 @@ Does NOT test:
 - ``load_agent_definition`` (test_yaml_loader.py)
 - ``build_preseed_history`` internals (test_fs_tools.py)
 - ``call_with_retry`` (test_retry.py)
-- ``load_memory`` / ``persist_memory`` (test_pass_runner.py)
+- ``load_memory`` / ``persist_memory`` (test_pass_runner_memory.py)
 """
 
 from __future__ import annotations
