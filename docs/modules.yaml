@@ -281,6 +281,7 @@ modules:
       - src/robotsix_mill/stages/implement/phase_coordinator.py
       - src/robotsix_mill/stages/implement/phase_coordinator_preflight.py
       - src/robotsix_mill/stages/implement/validation.py
+      - src/robotsix_mill/stages/implement/validation_baseline.py
       - src/robotsix_mill/stages/implement/validation_cleanup.py
       - src/robotsix_mill/stages/implement/implementation_logic.py
       - src/robotsix_mill/stages/implement/budget_cap_autosplit.py
