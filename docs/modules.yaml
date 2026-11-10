@@ -140,7 +140,11 @@ modules:
       - src/robotsix_mill/scm/vcs/__init__.py
       - tests/scm/vcs/__init__.py
       - tests/scm/vcs/test_clone_all_repos.py
-      - tests/scm/vcs/test_git_ops.py
+      - tests/scm/vcs/_git_test_helpers.py
+      - tests/scm/vcs/test_git_ops_basics.py
+      - tests/scm/vcs/test_git_ops_misc.py
+      - tests/scm/vcs/test_git_ops_push_reconcile.py
+      - tests/scm/vcs/test_git_ops_rebase.py
       - tests/scm/vcs/test_rebase_exempt_paths_in_step.py
       - docs/scm/vcs/**/*
     dependencies: []
