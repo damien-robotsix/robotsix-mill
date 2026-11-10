@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.23.3](https://github.com/damien-robotsix/robotsix-mill/compare/v0.23.2...v0.23.3) (2026-11-10)
+
+
+### Bug Fixes
+
+* bespoke:component-security-audit/website interrupted by process restart again (2× in ~5h, latest 2026-11-10 03:31) (20261110T041836Z-bespoke-component-security-audit-website-2b90) ([#3607](https://github.com/damien-robotsix/robotsix-mill/issues/3607)) ([954ef24](https://github.com/damien-robotsix/robotsix-mill/commit/954ef241ec2e7ba65c8a7ceaed8ab63d0eb327d5))
+* ci_fix: the merged-fix recheck guard should decide by commit ancestry (is the fix's merge commit in head_sha?), not by whether the run started before the merge (20261109T233041Z-ci-fix-the-merged-fix-recheck-guard-shou-c4bf) ([#3601](https://github.com/damien-robotsix/robotsix-mill/issues/3601)) ([9527bb2](https://github.com/damien-robotsix/robotsix-mill/commit/9527bb23cca34db1d9a1a3cfb1b3f86e7d0cea64))
+* module size: verify import paths and re-exports after module_size splits (20261110T024557Z-module-size-verify-import-paths-and-re-e-2ac5) ([#3606](https://github.com/damien-robotsix/robotsix-mill/issues/3606)) ([c723b6f](https://github.com/damien-robotsix/robotsix-mill/commit/c723b6faa892264b2d9d84c48add604542ec5b68))
+* retrospect: skip the LLM pass for ci-source tickets force-closed by ci-stale-gate / ci-auto-close (20261109T210134Z-retrospect-skip-the-llm-pass-for-ci-sour-644d) ([#3598](https://github.com/damien-robotsix/robotsix-mill/issues/3598)) ([6b212ca](https://github.com/damien-robotsix/robotsix-mill/commit/6b212caff5700c3ce9e9202b352f25dfef01e092))
+
+
+### Documentation
+
+* module size: check test coverage and documentation drift after module_size splits (20261110T024557Z-module-size-check-test-coverage-and-docu-515e) ([#3605](https://github.com/damien-robotsix/robotsix-mill/issues/3605)) ([9692e34](https://github.com/damien-robotsix/robotsix-mill/commit/9692e348c0486ba3d433af4f4680467cd8d25046))
+
 ## [0.23.2](https://github.com/damien-robotsix/robotsix-mill/compare/v0.23.1...v0.23.2) (2026-11-07)
 
 

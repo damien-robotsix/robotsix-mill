@@ -1,3 +1,3 @@
 """robotsix-mill: self-contained LLM-driven ticket solver."""
 
-__version__ = "0.23.2"
+__version__ = "0.23.3"
