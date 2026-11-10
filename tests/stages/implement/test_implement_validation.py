@@ -22,6 +22,9 @@ from robotsix_mill.core.models import SourceKind
 from robotsix_mill.core.states import State
 from robotsix_mill.stages.base import Outcome
 from robotsix_mill.stages.implement import validation as validation_mod
+from robotsix_mill.stages.implement import (
+    validation_baseline as validation_baseline_mod,
+)
 from robotsix_mill.stages.implement import validation_cleanup as validation_cleanup_mod
 from robotsix_mill.stages.implement._shared import (
     _ScopeGuardrailResult,
@@ -143,7 +146,9 @@ def test_prerequisite_gate_disabled_is_noop(monkeypatch):
         called = True
         raise AssertionError("checker must not run when gate disabled")
 
-    monkeypatch.setattr(validation_mod.prerequisite, "run_prerequisite_check", _boom)
+    monkeypatch.setattr(
+        validation_baseline_mod.prerequisite, "run_prerequisite_check", _boom
+    )
     out = ValidationMixin._run_prerequisite_gate(
         _prereq_ctx(),
         SimpleNamespace(id="T-1"),
@@ -157,7 +162,7 @@ def test_prerequisite_gate_disabled_is_noop(monkeypatch):
 
 def test_prerequisite_gate_blocks_on_unmet(monkeypatch):
     monkeypatch.setattr(
-        validation_mod.prerequisite,
+        validation_baseline_mod.prerequisite,
         "run_prerequisite_check",
         lambda *a, **kw: {"unmet": ["symbol foo.bar", "import baz"]},
     )
@@ -176,7 +181,7 @@ def test_prerequisite_gate_blocks_on_unmet(monkeypatch):
 
 def test_prerequisite_gate_proceeds_when_all_met(monkeypatch):
     monkeypatch.setattr(
-        validation_mod.prerequisite,
+        validation_baseline_mod.prerequisite,
         "run_prerequisite_check",
         lambda *a, **kw: {"unmet": []},
     )
@@ -194,7 +199,9 @@ def test_prerequisite_gate_swallows_checker_error(monkeypatch):
     def _raise(*a, **kw):
         raise RuntimeError("sandbox blew up")
 
-    monkeypatch.setattr(validation_mod.prerequisite, "run_prerequisite_check", _raise)
+    monkeypatch.setattr(
+        validation_baseline_mod.prerequisite, "run_prerequisite_check", _raise
+    )
     out = ValidationMixin._run_prerequisite_gate(
         _prereq_ctx(),
         SimpleNamespace(id="T-1"),
@@ -559,14 +566,18 @@ def _install_baseline_seams(
     raise_in_agent=False,
 ):
     """Patch the git/target/test-agent seams; return a recorder namespace."""
-    monkeypatch.setattr(validation_mod, "target_branch_for", lambda *a: target)
+    monkeypatch.setattr(validation_baseline_mod, "target_branch_for", lambda *a: target)
     monkeypatch.setattr(
-        validation_mod.git_ops, "remote_branch_sha", lambda *a: remote_sha
+        validation_baseline_mod.git_ops, "remote_branch_sha", lambda *a: remote_sha
     )
-    monkeypatch.setattr(validation_mod.git_ops, "head_sha", lambda *a: head_sha)
+    monkeypatch.setattr(
+        validation_baseline_mod.git_ops, "head_sha", lambda *a: head_sha
+    )
     checkouts: list = []
     monkeypatch.setattr(
-        validation_mod.git_ops, "checkout", lambda repo, ref: checkouts.append(ref)
+        validation_baseline_mod.git_ops,
+        "checkout",
+        lambda repo, ref: checkouts.append(ref),
     )
     agent_calls: list[dict] = []
 
@@ -1589,7 +1600,9 @@ def test_scope_guardrail_standard_config_all_reverted_skips_guard(monkeypatch):
 )
 def test_classify_baseline_verdict(ci_conclusion, network_dependent, expected):
     assert (
-        validation_mod.classify_baseline_verdict(ci_conclusion, network_dependent)
+        validation_baseline_mod.classify_baseline_verdict(
+            ci_conclusion, network_dependent
+        )
         == expected
     )
 
@@ -1602,7 +1615,7 @@ def test_classify_baseline_verdict_oom_always_proceeds(ci_conclusion):
     suite OOM'd at the 1g cap, and the gate spawned bogus baseline-fix
     ticket fe7b (PR #3188)."""
     assert (
-        validation_mod.classify_baseline_verdict(
+        validation_baseline_mod.classify_baseline_verdict(
             ci_conclusion, False, resource_exhausted=True
         )
         == "proceed"
@@ -1627,7 +1640,7 @@ def test_baseline_check_ci_green_overrides_sandbox_fail(tmp_path, monkeypatch):
 
     # Stub forge.commit_ci_conclusion to return green.
     monkeypatch.setattr(
-        validation_mod,
+        validation_baseline_mod,
         "get_forge",
         lambda *a, **kw: SimpleNamespace(
             commit_ci_conclusion=lambda sha: {
@@ -1662,7 +1675,7 @@ def test_baseline_check_ci_red_still_blocks(tmp_path, monkeypatch):
     ctx = _baseline_ctx(tmp_path)
 
     monkeypatch.setattr(
-        validation_mod,
+        validation_baseline_mod,
         "get_forge",
         lambda *a, **kw: SimpleNamespace(
             commit_ci_conclusion=lambda sha: {
@@ -1695,7 +1708,7 @@ def test_baseline_check_ci_unavailable_network_signature_proceeds(
     ctx = _baseline_ctx(tmp_path)
 
     monkeypatch.setattr(
-        validation_mod,
+        validation_baseline_mod,
         "get_forge",
         lambda *a, **kw: SimpleNamespace(commit_ci_conclusion=lambda sha: None),
     )
@@ -1719,7 +1732,7 @@ def test_baseline_check_ci_unavailable_real_failure_blocks(tmp_path, monkeypatch
     ctx = _baseline_ctx(tmp_path)
 
     monkeypatch.setattr(
-        validation_mod,
+        validation_baseline_mod,
         "get_forge",
         lambda *a, **kw: SimpleNamespace(commit_ci_conclusion=lambda sha: None),
     )
@@ -1740,7 +1753,7 @@ def test_baseline_check_forge_raises_treated_as_unavailable(tmp_path, monkeypatc
     ctx = _baseline_ctx(tmp_path)
 
     monkeypatch.setattr(
-        validation_mod,
+        validation_baseline_mod,
         "get_forge",
         lambda *a, **kw: SimpleNamespace(
             commit_ci_conclusion=lambda sha: (_ for _ in ()).throw(RuntimeError("boom"))
