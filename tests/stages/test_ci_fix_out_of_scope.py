@@ -674,9 +674,15 @@ def test_out_of_scope_fix_done_auto_resumes_original(tmp_path, monkeypatch):
     assert states.count(State.HUMAN_ISSUE_APPROVAL) <= 1
 
 
-def _merged_fix_then_rerun(tmp_path, monkeypatch, run_created_at):
+def _merged_fix_then_rerun(
+    tmp_path, monkeypatch, run_created_at, merge_sha=None, in_head=None
+):
     """Spawn a fix, merge it (DONE), then re-enter OOS on the resumed parent
-    with a failing run on the parent's head created at *run_created_at*."""
+    with a failing run on the parent's head created at *run_created_at*.
+
+    With *merge_sha*, the fix's DONE note cites a PR whose forge record
+    carries that merge commit, and the ancestry check answers *in_head*.
+    """
     ctx = _gh(tmp_path)
     _oos_forge(monkeypatch)
     monkeypatch.setattr(
@@ -689,8 +695,30 @@ def _merged_fix_then_rerun(tmp_path, monkeypatch, run_created_at):
     assert out.next_state is State.BLOCKED
     ctx.service.transition(t.id, State.BLOCKED, note=out.note)
     fix = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)[0]
-    ctx.service.transition(fix.id, State.DONE)  # PR merged
+    pr_url = "https://github.com/o/r/pull/9"
+    ctx.service.transition(fix.id, State.DONE, note=f"merged: {pr_url}")
     assert ctx.service.get(t.id).state is State.FIXING_CI
+
+    looked_up: list[str] = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status_by_url",
+        lambda self, *, url: (
+            looked_up.append(url)
+            or ({"merged": True, "merge_commit_sha": merge_sha} if merge_sha else None)
+        ),
+    )
+    ancestry: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix._merge_in_head",
+        lambda repo, sha, head, target: ancestry.append((sha, head)) or in_head,
+    )
+    updates: list[str] = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "update_branch",
+        lambda self, *, source_branch: updates.append(source_branch) or {},
+    )
 
     monkeypatch.setattr(
         github.GitHubForge,
@@ -711,6 +739,12 @@ def _merged_fix_then_rerun(tmp_path, monkeypatch, run_created_at):
         lambda self, *, run_id: reruns.append(run_id) or {"rerun": True},
     )
     out2 = CIFixStage().run(ctx.service.get(t.id), ctx)
+    assert looked_up == [pr_url]
+    if merge_sha is None:
+        assert ancestry == []
+    if in_head is not None:
+        assert ancestry and ancestry[0][0] == merge_sha
+    reruns.extend(f"update:{b}" for b in updates)
     return ctx, t, fix, out2, reruns
 
 
@@ -739,6 +773,72 @@ def test_out_of_scope_fix_merged_before_run_still_spawns(tmp_path, monkeypatch):
     fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
     assert len(fixes) == 2
     assert fix.id in {f.id for f in fixes}
+
+
+def test_out_of_scope_fix_merged_not_in_head_refreshes_no_respawn(
+    tmp_path, monkeypatch
+):
+    """The fix merged but its merge commit is not in the parent head: even
+    though the failing run was created AFTER the merge, the failure is stale
+    by construction — refresh the branch, do not spawn a duplicate fix."""
+    ctx, t, fix, out, actions = _merged_fix_then_rerun(
+        tmp_path, monkeypatch, "2999-01-01T00:00:00Z", "m3rge", in_head=False
+    )
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert len(actions) == 1 and str(actions[0]).startswith("update:")
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert [f.id for f in fixes] == [fix.id]
+    notes = [e.note or "" for e in ctx.service.history(t.id)]
+    assert any(
+        f"out-of-scope fix {fix.id} merged but not in head; refreshed branch" in n
+        for n in notes
+    )
+
+
+def test_out_of_scope_fix_merged_in_head_still_fails_spawns(tmp_path, monkeypatch):
+    """The fix's merge commit IS in the parent head and the run still fails:
+    a genuine recurrence, so a new dependency ticket is spawned — even when
+    the failing run predates the merge."""
+    ctx, _t, fix, out, actions = _merged_fix_then_rerun(
+        tmp_path, monkeypatch, "2000-01-01T00:00:00Z", "m3rge", in_head=True
+    )
+    assert out.next_state is State.BLOCKED
+    assert actions == []
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert len(fixes) == 2
+    assert fix.id in {f.id for f in fixes}
+
+
+def test_merge_in_head_real_git(tmp_path):
+    """_merge_in_head answers ancestry from the clone and None when a commit
+    is unknown."""
+    import subprocess
+
+    from robotsix_mill.stages.ci_fix import _merge_in_head
+
+    repo = tmp_path / "r"
+    repo.mkdir()
+
+    def git(*a):
+        return subprocess.run(
+            ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *a],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    git("init", "-q")
+    git("commit", "-q", "--allow-empty", "-m", "base")
+    base = git("rev-parse", "HEAD")
+    git("commit", "-q", "--allow-empty", "-m", "fix")
+    fix = git("rev-parse", "HEAD")
+    git("checkout", "-q", "-b", "side", base)
+    git("commit", "-q", "--allow-empty", "-m", "side")
+    side = git("rev-parse", "HEAD")
+
+    assert _merge_in_head(str(repo), base, side, "main") is True
+    assert _merge_in_head(str(repo), fix, side, "main") is False
+    assert _merge_in_head(str(repo), "0" * 40, side, "main") is None
 
 
 def test_in_scope_done_still_pushes_no_fix_ticket(tmp_path, monkeypatch):

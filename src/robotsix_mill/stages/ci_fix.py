@@ -308,6 +308,41 @@ def _emit_ci_failure_event(
         log.exception("%s: failed to emit CI_FAILURE event", ticket.id)
 
 
+def _merge_in_head(
+    repo_dir: str, merge_sha: str, head_sha: str, target_branch: str
+) -> bool | None:
+    """Whether commit *merge_sha* is an ancestor of *head_sha* in *repo_dir*.
+
+    Fetches ``origin/<target_branch>`` once when *merge_sha* is not yet in
+    the clone. Returns ``None`` when either commit is unavailable or git
+    fails, so the caller can fall back to a weaker heuristic.
+    """
+    repo = Path(repo_dir)
+    if not (repo / ".git").exists():
+        return None
+
+    def _git(*args: str) -> int:
+        try:
+            return subprocess.run(  # noqa: S603
+                ["git", "-C", str(repo), *args],  # noqa: S607
+                capture_output=True,
+                text=True,
+                timeout=60,
+            ).returncode
+        except OSError, subprocess.SubprocessError:
+            return -1
+
+    def _has(sha: str) -> bool:
+        return _git("cat-file", "-e", f"{sha}^{{commit}}") == 0
+
+    if not _has(merge_sha):
+        git_ops.refresh_origin_target(repo, target_branch)
+    if not _has(merge_sha) or not _has(head_sha):
+        return None
+    rc = _git("merge-base", "--is-ancestor", merge_sha, head_sha)
+    return {0: True, 1: False}.get(rc)
+
+
 def _emit_ci_fix_resolved_event(
     ticket: Ticket,
     ctx: StageContext,
@@ -2246,7 +2281,7 @@ class CIFixStage(Stage):
             return transient_outcome
 
         merged_outcome = self._recheck_after_merged_fix(
-            ticket, ctx, branch, failing_summary, head_sha
+            ticket, ctx, branch, failing_summary, head_sha, repo_dir
         )
         if merged_outcome is not None:
             return merged_outcome
@@ -2269,15 +2304,21 @@ class CIFixStage(Stage):
         branch: str,
         failing_summary: str,
         head_sha: str,
+        repo_dir: str = "",
     ) -> Outcome | None:
         """Re-run CI instead of re-spawning when the fix already merged.
 
         When the most recent dependency ticket with this failure's
-        ``ci_fp:`` fingerprint merged AFTER the failing run on *head_sha*
-        started, the red result is stale: refresh the branch if it is
-        behind, else re-run the failed workflows, and re-poll. One-shot per
-        merged fix ticket (recorded in an artifact), so a failure that
-        genuinely persists after the re-check still spawns a new ticket.
+        ``ci_fp:`` fingerprint has merged, check whether its merge commit
+        is an ancestor of *head_sha*: if NOT, the failure is stale by
+        construction (whatever the run timestamps) and the branch is
+        refreshed; if it IS, the failure genuinely recurred and the caller
+        spawns. Only when the merge commit cannot be resolved does the
+        older heuristic apply: the fix merged AFTER every failing run on
+        *head_sha* started → refresh the branch if it is behind, else
+        re-run the failed workflows. One-shot per merged fix ticket
+        (recorded in an artifact), so a failure that genuinely persists
+        after the re-check still spawns a new ticket.
 
         Returns ``Outcome(State.IMPLEMENT_COMPLETE)`` when a re-check was
         triggered, else ``None`` (caller proceeds to spawn).
@@ -2297,9 +2338,10 @@ class CIFixStage(Stage):
             return None
         if merged is None:
             return None
-        fix_id, merged_at = merged
+        fix_id, merged_at, merge_sha = merged
 
-        marker = ctx.service.workspace(ticket).artifacts_dir / _CI_MERGED_RECHECK
+        workspace = ctx.service.workspace(ticket)
+        marker = workspace.artifacts_dir / _CI_MERGED_RECHECK
         try:
             if marker.read_text().strip() == fix_id:
                 return None
@@ -2308,6 +2350,38 @@ class CIFixStage(Stage):
             pass
 
         forge = get_forge(ctx.settings, repo_config=ctx.repo_config)
+
+        in_head = (
+            _merge_in_head(
+                repo_dir or str(workspace.dir / "repo"),
+                merge_sha,
+                head_sha,
+                target_branch_for(ctx.settings, ctx.repo_config),
+            )
+            if merge_sha
+            else None
+        )
+        if in_head is True:
+            # The fix is in this head and CI still fails: genuine recurrence.
+            return None
+        if in_head is False:
+            try:
+                forge.update_branch(source_branch=branch)
+            except Exception as exc:
+                log.warning("%s: merged-fix branch refresh failed: %s", ticket.id, exc)
+                return None
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text(fix_id)
+            try:
+                ctx.service.add_history_note(
+                    ticket.id,
+                    f"out-of-scope fix {fix_id} merged but not in head; "
+                    "refreshed branch instead of re-spawning",
+                )
+            except Exception:
+                log.warning("%s: failed to record merged-fix note", ticket.id)
+            return Outcome(State.IMPLEMENT_COMPLETE)
+
         try:
             runs = [
                 r

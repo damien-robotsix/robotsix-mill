@@ -10,13 +10,17 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import UTC, datetime
 
 from ..core.models import SourceKind, Ticket, TicketEvent, TicketKind
 from ..core.states import State
+from ..scm.forge import get_forge
 from .base import Outcome, StageContext
 
 log = logging.getLogger("robotsix_mill.stages.dependency_fix")
+
+_PR_URL_RE = re.compile(r"https?://\S+/(?:pull|merge_requests)/\d+")
 
 
 def _parse_labels(raw: str | None) -> list[str]:
@@ -58,17 +62,36 @@ def _label_dedup(
     return None
 
 
+def _merge_commit_sha(ctx: StageContext, note: str | None) -> str | None:
+    """Best-effort merge commit SHA of the PR cited in a DONE *note*
+    (``merged: <PR url>``). ``None`` when no URL or the lookup fails.
+    """
+    m = _PR_URL_RE.search(note or "")
+    if not m:
+        return None
+    try:
+        forge = get_forge(ctx.settings, repo_config=ctx.repo_config)
+        pr = forge.pr_status_by_url(url=m.group(0))
+    except Exception as exc:
+        log.warning("merge-commit lookup for %s failed: %s", m.group(0), exc)
+        return None
+    sha = (pr or {}).get("merge_commit_sha")
+    return sha if isinstance(sha, str) and sha else None
+
+
 def find_merged_fix(
     ctx: StageContext,
     dedup_labels: list[str],
     board_id: str,
-) -> tuple[str, datetime] | None:
-    """Return ``(id, merged_at)`` of a just-merged fix for *dedup_labels*.
+) -> tuple[str, datetime, str | None] | None:
+    """Return ``(id, merged_at, merge_sha)`` of a just-merged fix for *dedup_labels*.
 
     Looks at the MOST RECENT ticket on *board_id* carrying any of
     *dedup_labels* (any state). Returns it only when it is DONE/CLOSED
     and its history shows it reached DONE (PR merged); ``merged_at`` is
-    the time of that first DONE event. Returns ``None`` otherwise — an
+    the time of that first DONE event and ``merge_sha`` the merged PR's
+    merge commit, resolved from the event's ``merged: <PR url>`` note
+    (``None`` when it cannot be resolved). Returns ``None`` otherwise — an
     open match is handled by :func:`_label_dedup`, and a ticket closed
     without a merge (e.g. "no change needed") fixed nothing.
     """
@@ -84,7 +107,7 @@ def find_merged_fix(
                 at = ev.at
                 if at.tzinfo is None:
                     at = at.replace(tzinfo=UTC)
-                return cand.id, at
+                return cand.id, at, _merge_commit_sha(ctx, ev.note)
         return None
     return None
 
