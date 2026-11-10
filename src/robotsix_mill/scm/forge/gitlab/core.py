@@ -57,8 +57,12 @@ def _map_merge_status(merge_status: str) -> bool | None:
 
 
 def _mr_status_dict(mr: dict[str, Any]) -> dict[str, Any]:
-    """Build the canonical 6-key status dict from a GitLab MR payload."""
-    return {
+    """Build the canonical 6-key status dict from a GitLab MR payload.
+
+    A merged MR additionally carries ``merge_commit_sha`` (the squash
+    commit when the MR was squash-merged without a merge commit).
+    """
+    status: dict[str, Any] = {
         "merged": mr["state"] == "merged",
         "state": mr["state"],
         "url": mr["web_url"],
@@ -67,6 +71,10 @@ def _mr_status_dict(mr: dict[str, Any]) -> dict[str, Any]:
         "number": mr["iid"],
         "author": (mr.get("author") or {}).get("username", ""),
     }
+    merge_sha = mr.get("merge_commit_sha") or mr.get("squash_commit_sha")
+    if status["merged"] and merge_sha:
+        status["merge_commit_sha"] = merge_sha
+    return status
 
 
 class GitLabForge(

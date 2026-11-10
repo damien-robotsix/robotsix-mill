@@ -29,7 +29,7 @@ def _parse_pr_detail(pr: dict[str, Any]) -> dict[str, Any]:
     mergeable = pr.get("mergeable")
     if mergeable_state in (None, "unknown"):
         mergeable = None
-    return {
+    status: dict[str, Any] = {
         "merged": bool(pr.get("merged")),
         "state": pr.get("state", "open"),
         "url": pr.get("html_url", ""),
@@ -39,6 +39,11 @@ def _parse_pr_detail(pr: dict[str, Any]) -> dict[str, Any]:
         "number": pr["number"],
         "author": (pr.get("user") or {}).get("login", ""),
     }
+    # Only meaningful once merged: on an open PR GitHub reports the
+    # transient test-merge commit here.
+    if pr.get("merged") and pr.get("merge_commit_sha"):
+        status["merge_commit_sha"] = pr["merge_commit_sha"]
+    return status
 
 
 def _app_or_any(app_id: Any) -> int | None:
