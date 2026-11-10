@@ -29,7 +29,10 @@ from ._shared import (
     _ScopeGuardrailResult,
     log,
 )
-from .validation_baseline import BaselineGateMixin
+from .validation_baseline import (  # noqa: F401 - re-exported
+    BaselineGateMixin,
+    classify_baseline_verdict,
+)
 from .validation_cleanup import (
     ValidationCleanupMixin,
     _full_file_diff,

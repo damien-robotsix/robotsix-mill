@@ -1622,6 +1622,23 @@ def test_classify_baseline_verdict_oom_always_proceeds(ci_conclusion):
     )
 
 
+def test_validation_module_keeps_pre_split_public_names():
+    """The module-size split moved helpers out of ``validation.py``; the
+    original import path must still expose every pre-split name."""
+    for name in (
+        "ValidationMixin",
+        "classify_baseline_verdict",
+        "_OperatorResolution",
+        "_operator_escalation_resolution",
+        "_spawn_scope_split_tickets",
+    ):
+        assert hasattr(validation_mod, name), name
+    assert (
+        validation_mod.classify_baseline_verdict
+        is validation_baseline_mod.classify_baseline_verdict
+    )
+
+
 # ---------------------------------------------------------------------------
 # _run_baseline_check — CI cross-check integration tests
 # ---------------------------------------------------------------------------
