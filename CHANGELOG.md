@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.23.3...v0.24.0) (2026-11-10)
+
+
+### Features
+
+* module_curator: run a repo-wide stale-path sweep in the reorg child's implement/review step so old paths in non-Python files do not need follow-up tickets (20261110T111702Z-module-curator-run-a-repo-wide-stale-pat-9a46) ([#3608](https://github.com/damien-robotsix/robotsix-mill/issues/3608)) ([c5dfdb7](https://github.com/damien-robotsix/robotsix-mill/commit/c5dfdb7a9cdc4ae826555ca7cf660a7114451e89))
+
 ## [0.23.3](https://github.com/damien-robotsix/robotsix-mill/compare/v0.23.2...v0.23.3) (2026-11-10)
 
 
