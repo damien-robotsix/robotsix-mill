@@ -158,6 +158,23 @@ agent to implement the listed items. If the agent defers items again on
 that retry, the ticket is `BLOCKED` for human review (resumable). A
 deferral mentioned only in the summary does not count.
 
+### Post-move stale-reference sweep
+
+After the scope guardrail and before the test gate, the stage runs a
+deterministic sweep (`stale_path_gate.py`) for passes that **rename**
+files (detected with `git diff -M` against the merge base, including
+untracked new files). For every moved file it greps the whole working
+tree — tracked and untracked files, everything except `CHANGELOG.md` —
+for the old repo-relative path, its `src/`-stripped form, and (for
+Python files) the old dotted module name, unless that module is still
+importable (e.g. `foo.py` → `foo/__init__.py`). Any hit re-prompts once
+with a `[STALE-PATHS]` block listing each `file:line`; hits remaining on
+that retry block the ticket for human review. This makes the sweep, not
+the spec's hand-maintained path list, authoritative for module reorgs:
+`.secrets.baseline`, `pyproject.toml` per-file-ignores, `*.md`, and
+`vulture_whitelist.py` references are fixed in the same PR. The sweep
+fails open on git errors and is a no-op when nothing was renamed.
+
 ### Operator approval constraints
 
 The note the operator writes on the `human_issue_approval → ready` (or
@@ -290,6 +307,7 @@ assembled from four mixins plus a top-level core module:
 | `validation_baseline.py` | ~400 | `BaselineGateMixin`: prerequisite check and baseline test-gate run, plus `classify_baseline_verdict`. |
 | `validation_cleanup.py` | ~400 | `ValidationCleanupMixin`: deterministic, LLM-free artifact cleanup used by the scope guardrail (binary artifacts, vendored-dependency filtering, standard config-file auto-revert). |
 | `implementation_logic.py` | ~600 | Agent passes and test gate: invokes `run_implement_agent`, handles `AgentBudgetError`/`AgentRunError`, runs the test command, runs the smoke gate, and feeds results into `ValidationResult.decide`. Also contains `_select_agent_level` for the level-bypass logic. |
+| `stale_path_gate.py` | ~250 | Post-move stale-reference sweep: greps old paths / dotted module names of files the pass renamed and re-prompts (then blocks) on any hit. |
 | `file_operations.py` | ~550 | Clone/branch setup and repo-change inspection: `_clone_and_branch`, `_any_repo_has_changes`, path-escape guards, formatter-reversion detection, and edit-claim diagnostics. |
 | `core.py` | ~200 | Top-level entry point: `ImplementStage` class (`name="implement"`, `input_state=READY`) composed from the four mixins. Delegates orchestration to `phase_coordinator`; the core module is thin glue. |
 | `_shared.py` | ~100 | Shared constants and types used across the mixins. |

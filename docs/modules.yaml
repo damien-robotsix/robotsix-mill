@@ -289,6 +289,7 @@ modules:
       - src/robotsix_mill/stages/implement/implementation_editing.py
       - src/robotsix_mill/stages/implement/file_operations.py
       - src/robotsix_mill/stages/implement/module_gap_gate.py
+      - src/robotsix_mill/stages/implement/stale_path_gate.py
       - src/robotsix_mill/stages/deliver.py
       - src/robotsix_mill/stages/document.py
       - src/robotsix_mill/stages/review.py
@@ -365,6 +366,7 @@ modules:
       - tests/stages/implement/test_loop_escalation_guards.py
       - tests/stages/implement/test_reference_files_normalize.py
       - tests/stages/implement/test_module_gap_gate.py
+      - tests/stages/implement/test_stale_path_gate.py
       - tests/stages/test_implement_package_dag.py
       - tests/stages/implement/test_shared.py
       - tests/stages/implement/__init__.py
