@@ -63,7 +63,15 @@ system_prompt: |
      "Reorganize module <id>: align to per-module layout (src/docs/tests)"
      whose body lists the module's CURRENT file locations and the proposed
      per-module destinations, framed as a mechanical move (git mv) plus
-     import/path fixups. Be proactive: propose realignment whenever files
+     import/path fixups.
+     Do NOT try to hand-list every file that references the old paths:
+     state in the body that implement's post-move stale-reference sweep
+     (a `git grep` of every moved file's old path and old dotted module
+     name across all tracked files, including `.secrets.baseline`,
+     `pyproject.toml`, `*.md` and `vulture_whitelist.py`) is
+     authoritative, and that any fixups you list are a starting point
+     only. Never file a separate "fix stale paths" follow-up for a reorg —
+     the sweep blocks the reorg ticket until every reference is fixed. Be proactive: propose realignment whenever files
      are scattered — the default is to align every module to the per-module
      layout unless the module already follows it AND has no consolidation
      opportunity.

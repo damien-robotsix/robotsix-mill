@@ -41,6 +41,7 @@ from ._shared import (
     log,
 )
 from .implementation_editing import _ImplementationEditingMixin
+from .stale_path_gate import run_stale_path_gate
 
 # Feedback prefix for the deferred-spec-items re-prompt; seeing it on the
 # incoming feedback means the agent already had its one retry.
@@ -1279,6 +1280,13 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
                 ic=new_ic,
                 new_msgs=new_msgs,
             )
+
+        # --- post-move stale-reference sweep: a pass that moved files must
+        # not leave references to their old paths / module names anywhere
+        # in the tree (no-op when nothing was renamed).
+        stale_result = run_stale_path_gate(ticket, repo_dir, target, new_ic, new_msgs)
+        if stale_result is not None:
+            return stale_result
 
         # guardrail.action == "skip_iteration" — fall through to test gate.
         return cls._evaluate_test_results(
