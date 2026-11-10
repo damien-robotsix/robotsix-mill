@@ -71,7 +71,7 @@ class BaselineGateMixin(_ImplementStageBase):
         ticket: Ticket,
         spec: str,
         repo_dir: Path,
-        s,
+        s: Settings,
     ) -> Outcome | None:
         """Deterministic pre-agent gate for external prerequisites.
 
@@ -135,7 +135,7 @@ class BaselineGateMixin(_ImplementStageBase):
         repo_dir: Path,
         branch: str,
         resuming: bool,
-        settings,
+        settings: Settings,
     ) -> Outcome | None:
         """Run the test gate on the base branch BEFORE the agent loop.
 
@@ -335,7 +335,9 @@ class BaselineGateMixin(_ImplementStageBase):
         return cls._spawn_baseline_fix(ctx, ticket, diag, base_sha, settings)
 
     @classmethod
-    def _baseline_fix_title(cls, settings, base_sha: str, target_branch: str) -> str:
+    def _baseline_fix_title(
+        cls, settings: Settings, base_sha: str, target_branch: str
+    ) -> str:
         """Deterministic title for the baseline-fix ticket of *base_sha*.
 
         Shared by :meth:`_run_baseline_check` (idempotency guard) and
@@ -344,11 +346,14 @@ class BaselineGateMixin(_ImplementStageBase):
         return f"baseline: pre-existing test failures — {target_branch} {base_sha[:8]}"
 
     @classmethod
-    def _baseline_fix_already_resolved(cls, ctx, ticket, fix_title) -> str | None:
+    def _baseline_fix_already_resolved(
+        cls, ctx: StageContext, ticket: Ticket, fix_title: str
+    ) -> str | None:
         """Return the id of an already-completed baseline-fix this ticket
         depends on (same title => same base_sha), else None.
         """
-        for dep_id in ctx.service._parse_depends_on(ticket):
+        # mypy mis-infers the return as "list?[str]" (repo-wide quirk).
+        for dep_id in ctx.service._parse_depends_on(ticket):  # type: ignore[attr-defined]
             dep = ctx.service.get(dep_id)
             if (
                 dep is not None
