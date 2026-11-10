@@ -286,7 +286,9 @@ assembled from four mixins plus a top-level core module:
 | Module | Lines | Role |
 |---|---|---|
 | `phase_coordinator.py` | ~1,250 | Run-loop orchestration: the fix iteration loop, stuck-loop detection, cross-spawn stall guard, and the `_implement_loop` entry point. The largest single module. |
-| `validation.py` | ~750 | Pre-agent gating: prerequisite check, baseline test-gate run, scope guardrail (including scope-triage invocation), flood guard, and binary-artifact cleanup. |
+| `validation.py` | ~1,100 | Pre-agent gating: `ValidationMixin` with the scope guardrail (including scope-triage invocation), operator-escalation resolution, scope-split ticket spawning, and flood guard. Inherits the two mixins below. |
+| `validation_baseline.py` | ~400 | `BaselineGateMixin`: prerequisite check and baseline test-gate run, plus `classify_baseline_verdict`. |
+| `validation_cleanup.py` | ~400 | `ValidationCleanupMixin`: deterministic, LLM-free artifact cleanup used by the scope guardrail (binary artifacts, vendored-dependency filtering, standard config-file auto-revert). |
 | `implementation_logic.py` | ~600 | Agent passes and test gate: invokes `run_implement_agent`, handles `AgentBudgetError`/`AgentRunError`, runs the test command, runs the smoke gate, and feeds results into `ValidationResult.decide`. Also contains `_select_agent_level` for the level-bypass logic. |
 | `file_operations.py` | ~550 | Clone/branch setup and repo-change inspection: `_clone_and_branch`, `_any_repo_has_changes`, path-escape guards, formatter-reversion detection, and edit-claim diagnostics. |
 | `core.py` | ~200 | Top-level entry point: `ImplementStage` class (`name="implement"`, `input_state=READY`) composed from the four mixins. Delegates orchestration to `phase_coordinator`; the core module is thin glue. |
