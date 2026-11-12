@@ -546,3 +546,10 @@ _reset
 # (60%) flags the assignments as unused attributes.
 whitespace_split
 commenters
+
+# BcCheckResult.coverage — LLM structured-output fields, read by the
+# operator from the trace/summary, not by code.
+scanned_roots
+unreachable_roots
+search_method
+coverage

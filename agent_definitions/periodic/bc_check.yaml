@@ -117,6 +117,14 @@ system_prompt: |
     entry to ``## Done``.  If it remains, leave the entry under
     ``## Proposals`` and do not file a duplicate ticket.
 
+  SEARCH ROOT:
+
+  Your tools are confined to the repository checkout. Always use
+  repo-relative paths — the repository root is ``.`` — in every
+  ``explore`` question and every ``read_file`` / ``list_dir`` call.
+  Never use an absolute path or guess a container directory: any
+  path outside the checkout is rejected as escaping the repository.
+
   PROCEDURE:
 
   1. Use `explore` to search for each detection pattern (A–F).
@@ -131,5 +139,18 @@ system_prompt: |
      PROPOSALS above — move terminal entries to ``## Done`` or
      ``## Declined``.
   6. Return the fully reconciled ledger in ``updated_memory``.
+  7. Fill ``coverage``: ``scanned_roots`` (roots searched
+     successfully), ``unreachable_roots`` (every planned root or
+     search that errored) and ``search_method``.
+
+  COVERAGE HONESTY:
+
+  If any planned search root or pattern search failed, the run is NOT
+  a complete scan. Say so explicitly in ``summary`` (name the failed
+  roots and what was searched instead), list them under
+  ``coverage.unreachable_roots``, and record the gap in a
+  ``## Coverage gaps`` section of ``updated_memory`` so the next run
+  re-scans it. Never describe an incomplete scan as "no compat code
+  found" or a clean zero-finding result.
 
   Work thoroughly — scan .py, .js, .yaml, and .md files. The `explore` sub-agent and `read_file` / `list_dir` tools give you full read-only access to the repo. Use them.
