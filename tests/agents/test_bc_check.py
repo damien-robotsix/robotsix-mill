@@ -63,6 +63,39 @@ def test_bc_check_system_prompt_covers_all_six_patterns():
     assert "list_dir" in p
 
 
+def test_bc_check_system_prompt_uses_repo_relative_root():
+    """The prompt must not hardcode an absolute container path as the scan
+    root (a run once targeted the container dir, outside the sandboxed
+    checkout, and every search failed)."""
+    p = bc_check_agent.SYSTEM_PROMPT
+    assert "/" + "app" not in p
+    assert "repo-relative" in p
+    assert "``.``" in p
+
+
+def test_bc_check_system_prompt_requires_coverage_honesty():
+    """A failed search root must be reported, not presented as a clean scan."""
+    p = " ".join(bc_check_agent.SYSTEM_PROMPT.split())
+    assert "unreachable_roots" in p
+    assert "NOT a complete scan" in p
+    assert "## Coverage gaps" in p
+
+
+def test_bc_check_result_has_coverage():
+    """BcCheckResult carries a coverage object in its schema."""
+    schema = bc_check_agent.BcCheckResult.model_json_schema()
+    assert "coverage" in schema["properties"]
+    result = bc_check_agent.BcCheckResult(
+        coverage={
+            "scanned_roots": ["."],
+            "unreachable_roots": ["src"],
+            "search_method": "explore",
+        }
+    )
+    assert result.coverage.unreachable_roots == ["src"]
+    assert bc_check_agent.BcCheckResult().coverage.scanned_roots == []
+
+
 def test_bc_check_dynamic_kwargs_default_request_limit():
     """Default Settings produce an explicit request_limit of 80, replacing
     the implicit pydantic-ai default of 50 that a broad LLM repo scan could

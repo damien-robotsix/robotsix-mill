@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from ..config import Settings
 from .periodic_base import (
     PeriodicAgentResult,
@@ -24,7 +26,37 @@ SYSTEM_PROMPT: str = load_periodic_system_prompt("bc_check")
 
 MAX_GAPS = 12
 
-BcCheckResult = PeriodicAgentResult
+
+class BcCheckCoverage(BaseModel):
+    """What the scan actually reached, so a 0-draft run is verifiable."""
+
+    scanned_roots: list[str] = Field(
+        default_factory=list,
+        description="Repo-relative roots that were searched successfully (e.g. '.').",
+    )
+    unreachable_roots: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Planned search roots that failed (tool error, path outside the "
+            "repository). Non-empty means the scan was INCOMPLETE."
+        ),
+    )
+    search_method: str = Field(
+        default="",
+        description="How the patterns were searched (e.g. 'explore AST/grep over .').",
+    )
+
+
+class BcCheckResult(PeriodicAgentResult):
+    """``PeriodicAgentResult`` plus a ``coverage`` report of the scan."""
+
+    coverage: BcCheckCoverage = Field(
+        default_factory=BcCheckCoverage,
+        description=(
+            "ALWAYS fill: scanned_roots, unreachable_roots, search_method. "
+            "List every planned root that failed under unreachable_roots."
+        ),
+    )
 
 
 def _bc_check_dynamic_kwargs(settings: Settings) -> dict[str, Any]:
