@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.24.0...v0.24.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* trace-review: 2 finding(s) for trace `fc88fc4e` (session: robotsix-modules · bc_check-20261112T192722Z-94435b84) (20261112T202822Z-trace-review-2-finding-s-for-trace-fc88f-10f1) ([#3612](https://github.com/damien-robotsix/robotsix-mill/issues/3612)) ([b1d9b1d](https://github.com/damien-robotsix/robotsix-mill/commit/b1d9b1d295a486e6e0c78735c7f4b515aa6b9366))
+
 ## [0.24.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.23.3...v0.24.0) (2026-11-10)
 
 
