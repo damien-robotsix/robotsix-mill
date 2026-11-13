@@ -82,7 +82,7 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: publish-sandbox
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 30  # pulls the multi-GB sandbox image from GHCR before running the smoke test
     permissions:
       contents: read
       packages: read  # pull the just-published image from GHCR for the smoke test
