@@ -17,7 +17,7 @@ def test_config_sync_system_prompt_covers_key_dimensions():
     """The config-sync agent prompt must cover key inspection dimensions."""
     p = config_syncing.SYSTEM_PROMPT.lower()
     for kw in (
-        "config.py",
+        "src/robotsix_mill/config/",
         "config.example.json",
         "repos.example.yaml",
         "docs/config/configuration.md",
@@ -27,6 +27,12 @@ def test_config_sync_system_prompt_covers_key_dimensions():
         "memory",
     ):
         assert kw in p, f"config-sync prompt missing dimension cue: {kw}"
+    # The model is the config/ package, not a stale single-file path.
+    assert "src/robotsix_mill/config.py" not in p
+    # Ledger ticket IDs must be stored in full; sweeps report coverage.
+    assert "full form" in p
+    assert "coverage count" in p
+    assert "partial" in p
     # Must use explore/read_file/list_dir tools.
     assert "explore" in p
     assert "read_file" in p

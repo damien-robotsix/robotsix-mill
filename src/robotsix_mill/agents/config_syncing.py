@@ -4,8 +4,8 @@ The authoritative config source is the single committed template
 ``config/config.example.json`` (every non-secret knob with its default,
 plus a ``secrets:`` block of ``SECRET`` sentinels).  The live file
 ``config/config.json`` (gitignored) is its real-valued counterpart.
-This agent cross-references the template against
-``src/robotsix_mill/config.py`` (the Pydantic model that consumes it)
+This agent cross-references the template against the
+``src/robotsix_mill/config/`` package (the Pydantic model that consumes it)
 and ``docs/config/configuration.md`` (when present) to catch drift: settings
 declared in code but missing from the JSON template, JSON keys with no
 matching field, documented defaults that disagree with the model
@@ -33,13 +33,16 @@ from .prompt_blocks import section
 SYSTEM_PROMPT = """\
 You are the config-sync agent for an autonomous software project.
 Your sole job is to detect drift between the Pydantic config model
-in ``src/robotsix_mill/config.py`` and the layered JSON config
-files that feed it.
+in the ``src/robotsix_mill/config/`` package and the layered JSON
+config files that feed it.  (There is no ``config.py`` single file —
+the model is the package.)
 
 AUTHORITATIVE FILES (read these, in order):
 
-- ``src/robotsix_mill/config.py`` — the Pydantic ``Settings`` and
-  ``Secrets`` classes are the source of truth for what knobs exist.
+- ``src/robotsix_mill/config/`` (package; the ``_settings_*.py``,
+  ``settings.py`` and ``secrets.py`` modules) — the Pydantic
+  ``Settings`` and ``Secrets`` classes are the source of truth for
+  what knobs exist.
   Extract every field: name, type, default, and JSON key path (the
   JSON→env mapping is in ``src/robotsix_mill/config/loader.py``).
 - ``config/config.example.json`` — the committed single-file config
@@ -65,7 +68,7 @@ NOT AUTHORITATIVE (do NOT flag these as drift sources):
 
 CLASSIFY FINDINGS:
 
-- **missing-from-json**: a field exists in ``config.py`` with a
+- **missing-from-json**: a field exists in the config package with a
   JSON mapping but no corresponding key in ``config.example.json``
   (its non-secret section or its ``secrets:`` block) /
   ``repos.example.json`` (as appropriate for which class it lives on).
@@ -122,7 +125,14 @@ structure and content.
    ticket.  Be conservative — only file when there is a specific,
    actionable gap.  Vague observations are skipped.
 5. Update the memory ledger to record new gaps, mark addressed ones,
-   and track what has been proposed (to avoid duplicates).
+   and track what has been proposed (to avoid duplicates).  Always
+   record ticket IDs in their FULL form, slug included (e.g.
+   ``20250331T142315Z-add-billing-endpoint-3a1f``) — never a bare
+   timestamp prefix like ``20250331T142315Z``; ``read_ticket``
+   rejects truncated IDs.  If an existing ledger entry carries a
+   truncated ID, replace it with the full ID from the verified-state
+   table (or drop the ID and note it as unknown) rather than reusing
+   it.
 6. Return the updated memory ledger verbatim in ``updated_memory``.
 
 For each gap you decide to propose as a draft ticket, provide:
@@ -130,6 +140,23 @@ For each gap you decide to propose as a draft ticket, provide:
 - ``draft_body``: concrete description of the gap and suggested
   improvement — cite the specific alias, file, and default value
 - ``gap_id``: a short snake_case identifier for dedup in the memory
+
+COVERAGE DISCIPLINE:
+
+- The field-by-field default comparison must report an explicit
+  coverage count: ``<checked>/<found>`` Field defaults compared
+  against ``config.example.json``.  State this count in your
+  ``summary``.
+- When coverage is below 100 %, say so plainly — mark the report as
+  **partial** and list which modules/fields were not checked.  Never
+  present a truncated sweep as complete.
+- When delegating the sweep to ``explore``, ask it to enumerate the
+  config package file by file (one ``_settings_*.py`` module at a
+  time) and NOT to cap grep output with ``head``; if output is large,
+  write it to a temp file and page through it.
+- ``scripts/check_config_sync.py`` already checks key presence and
+  numeric default parity deterministically in CI; spend your budget
+  on what it does not cover (non-numeric defaults, docs).
 
 CONTEXT AND BUDGET DISCIPLINE:
 
@@ -254,7 +281,7 @@ def run_config_sync_agent(
 ) -> ConfigSyncResult:
     """Run the config-sync configuration drift inspection pass.
 
-    Inspects ``config.py``, ``.env``, and ``docs/config/configuration.md``
+    Inspects the ``config/`` package, ``.env``, and ``docs/config/configuration.md``
     for missing, stale, and drifted settings and returns a structured
     ``ConfigSyncResult`` with draft tickets for newly-discovered gaps.
 
