@@ -56,14 +56,13 @@ def build_bridged_git_tools(
     - *token_cache_clear* is called before retrying a push that failed
       with an auth error, forcing the provider to mint a fresh token.
     """
+
     # Resolve the token provider: prefer the explicit callable, fall back
     # to wrapping the static token string.
-    if token_provider is not None:
-        _get_token = token_provider
-    elif token is not None:
-        _get_token = lambda: token
-    else:
-        _get_token = lambda: None
+    def _static_token() -> str | None:
+        return token
+
+    _get_token = token_provider if token_provider is not None else _static_token
 
     def git_fetch(target_branch: str | None = None, branch: str | None = None) -> str:
         """Fetch ``origin/<target_branch>`` to refresh the local

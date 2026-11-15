@@ -206,7 +206,7 @@ def build_fleet_file_tools(
 
 # Register in the system-wide capability catalog so the prompt-tool-consistency
 # guard and smoke tests recognise the tool names.
-from .tool_registry import ToolInfo, ToolRegistry
+from .tool_registry import ToolInfo, ToolRegistry  # noqa: E402
 
 ToolRegistry.register(
     ToolInfo(

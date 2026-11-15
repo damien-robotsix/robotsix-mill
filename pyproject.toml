@@ -206,6 +206,8 @@ line-length = 88
 
 [tool.ruff.lint]
 extend-select = [
+    "E",
+    "W",
     "S",
     "DTZ001", "DTZ002", "DTZ003",
     "C90",
@@ -223,7 +225,11 @@ extend-select = [
     "I",
     "UP",
 ]
-ignore = ["D105", "D107", "D205", "D415"]
+# E501: line length is enforced by `ruff format` (line-length 88, the
+# whole tree is formatter-clean).  The ~730 residual E501 hits are long
+# string literals, URLs and comments the formatter deliberately leaves
+# alone; rewrapping them is churn with no correctness value.
+ignore = ["D105", "D107", "D205", "D415", "E501"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
@@ -274,6 +280,12 @@ convention = "google"
 # gen_completions.py inserts src/ into sys.path before importing
 # robotsix_mill.cli and shtab — E402 is expected.
 "scripts/gen_completions.py" = ["S", "E402"]
+# check_config_sync.py likewise inserts the repo root and src/ into
+# sys.path before importing robotsix_mill — E402 is expected.
+"scripts/check_config_sync.py" = ["E402"]
+# The fake CI log fixture reproduces GitHub Actions output verbatim,
+# including the trailing space after empty `with:` inputs (W291).
+"tests/stages/test_ci_stale_gate.py" = ["W291"]
 # vulture_whitelist.py is a tool configuration file whose syntax
 # (bare-name expressions marking "used" identifiers for vulture's
 # dead-code scanner) triggers B018 ("useless expression") and F821
