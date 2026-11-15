@@ -1064,6 +1064,42 @@ def test_maybe_install_prefix_uv_path(tmp_path):
     assert "sandbox project install failed" in prefix
 
 
+def test_maybe_install_prefix_drops_non_venv_dotvenv(tmp_path):
+    """A ``.venv`` that is not a virtualenv (no ``pyvenv.cfg``) is removed
+    before ``uv sync`` so uv can recreate it; a real venv is kept."""
+    import shutil
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        '[project]\nname = "x"\n[tool.uv.sources]\nfoo = { git = "https://x" }\n',
+        encoding="utf-8",
+    )
+    (repo / "uv.lock").write_text("", encoding="utf-8")
+    s = _settings(
+        tmp_path,
+        data_dir=str(tmp_path),
+        sandbox_data_mount=str(tmp_path),
+        sandbox_proxy_url="http://sandbox-proxy:8888",
+    )
+    guard = "if [ -e .venv ] && [ ! -f .venv/pyvenv.cfg ]; then rm -rf .venv; fi; "
+    prefix = sandbox._maybe_install_prefix("true", repo, s)
+    assert guard + "UV_MALWARE_CHECK=0 uv sync" in prefix
+
+    sh = shutil.which("sh")
+    if sh is None:
+        pytest.skip("no sh")
+    (repo / ".venv" / "lib").mkdir(parents=True)
+    subprocess.run([sh, "-c", guard], cwd=repo, check=True)
+    assert not (repo / ".venv").exists()
+
+    (repo / ".venv").mkdir()
+    (repo / ".venv" / "pyvenv.cfg").write_text("home = /usr\n", encoding="utf-8")
+    subprocess.run([sh, "-c", guard], cwd=repo, check=True)
+    assert (repo / ".venv" / "pyvenv.cfg").exists()
+
+
 def test_maybe_install_prefix_pep508_git_dep(tmp_path):
     """PEP 508 ``@ git+https://`` (no [tool.uv.sources]) + uv.lock →
     emits uv sync --frozen --no-dev."""

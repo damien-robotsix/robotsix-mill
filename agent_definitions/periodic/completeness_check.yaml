@@ -134,6 +134,14 @@ system_prompt: |
     their entries to a ``## Done`` section with a short note.  For
     gaps you decided to ignore, move them to ``## Ignored`` with a
     one-line reason.
+  - **One pass per carried item.**  An open (unfiled, unconfirmed)
+    ledger item carried over from a prior run may be investigated at
+    most ONCE per scan — one ``explore`` question, no repeated
+    grep/find passes.  If that pass cannot confirm it as a real gap in
+    THIS repo, move it to ``## Ignored`` as "out of scope /
+    unresolvable" with the evidence (e.g. "tests import
+    ``other_pkg``, not this repo's package") instead of carrying it
+    forward as still open.
   - **CRITICAL — memory consistency rule:** Only write "Filed" or
     "Filed this run" annotations for gaps whose gap IDs appear in
     your ``gap_ids`` output list.  The ``gap_ids`` list is the

@@ -631,7 +631,15 @@ def _maybe_install_prefix(command: str, repo_dir: Path, settings: Settings) -> s
         # the OSV error and the "image deps only" banner.  The real
         # supply-chain gate lives in CI (UV_MALWARE_CHECK=1 in the
         # workflows), which is untouched.
-        uv = "UV_MALWARE_CHECK=0 uv sync --frozen --no-dev --quiet 2>&1"
+        # A ``.venv`` without ``pyvenv.cfg`` (a stray dir, or a half-written
+        # env) makes uv refuse with "cannot be used because it is not a
+        # compatible environment but cannot be recreated because it is not
+        # a virtual environment" — every run_command then falls back to
+        # image deps only. Drop it so uv can recreate a real one.
+        uv = (
+            "if [ -e .venv ] && [ ! -f .venv/pyvenv.cfg ]; then rm -rf .venv; fi; "
+            "UV_MALWARE_CHECK=0 uv sync --frozen --no-dev --quiet 2>&1"
+        )
         # When the repo declares [tool.uv.sources] AND a uv.lock exists,
         # prefer `uv sync --frozen --no-dev` over pip.  pip has no
         # [tool.uv.sources] equivalent and cannot resolve git-sourced
