@@ -1139,7 +1139,7 @@ def post_push_check(
 # Re-exports from git_diff — keep git_ops as the single import target for
 # callers so no call-site changes are needed.
 # ---------------------------------------------------------------------------
-from .git_diff import (
+from .git_diff import (  # noqa: E402
     DEFAULT_REBASE_DROP_EXEMPT_PATHS,
     _paths_from_diff,
     added_files,

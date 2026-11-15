@@ -1054,5 +1054,5 @@ def prune_package_cache(settings: Settings) -> int:
 
 # Re-exports from submodules so `from robotsix_mill.sandbox import run`
 # still works unchanged.
-from ._fetch import fetch as fetch
-from ._lifecycle import run as run
+from ._fetch import fetch as fetch  # noqa: E402
+from ._lifecycle import run as run  # noqa: E402
