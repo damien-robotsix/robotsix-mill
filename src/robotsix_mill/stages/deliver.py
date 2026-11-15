@@ -177,6 +177,29 @@ def _meta_triage_was_fallback(artifacts_dir: Path) -> bool:
     return isinstance(data, dict) and bool(data.get("fallback"))
 
 
+def _delegated_verification_section(artifacts_dir: Path) -> str:
+    """PR-body section for verification steps the implement sandbox could not run.
+
+    Reads the ``delegated_verification.json`` artifact written by the
+    implement stage's deferred-spec gate (e.g. ``docker build`` with no
+    daemon). Returns ``""`` when the artifact is absent or unreadable.
+    """
+    path = artifacts_dir / "delegated_verification.json"
+    if not path.exists():
+        return ""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return ""
+    if not isinstance(data, list):
+        return ""
+    items = [str(i).strip() for i in data if str(i).strip()]
+    if not items:
+        return ""
+    lines = "\n".join(f"- {i}" for i in items)
+    return f"\n\n## Verification delegated to CI\n\n{lines}"
+
+
 def _write_pr_urls(artifacts_dir: Path, entries: list[dict[str, Any]]) -> None:
     """Atomically (re)write the ``pr_urls.json`` manifest.
 
@@ -793,6 +816,7 @@ class DeliverStage(Stage):
         else:
             body = spec[:8000]
 
+        body += _delegated_verification_section(ws.artifacts_dir)
         body += f"\n\n---\nAutomated by robotsix-mill · ticket `{ticket.id}`"
         if s.pr_summary_enabled:
             body += (

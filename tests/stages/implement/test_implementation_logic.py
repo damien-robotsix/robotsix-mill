@@ -2031,6 +2031,59 @@ class TestRunDeferredSpecGate:
         assert result.next_action == "return"
         assert result.outcome.next_state == State.BLOCKED
         assert "ready fallback" in result.outcome.note
+        assert "agent deferred spec items after retry" in result.outcome.note
+
+    def test_verification_only_items_do_not_block(self, tmp_path):
+        """Structured and heuristic verification-only items proceed and are
+        recorded for the PR body."""
+        import json
+
+        heuristic = (
+            "Check with `docker build --progress=plain .` that the image "
+            "still builds — no Docker daemon in the sandbox"
+        )
+        for feedback in (None, "[SPEC-DEFERRED] Your previous pass left ..."):
+            result = _Stage._run_deferred_spec_gate(
+                ticket=FakeTicket(),
+                deferred_spec_items=[heuristic],
+                ic=_ic(feedback=feedback),
+                updated_ref_files=None,
+                updated_prev_summary="prev",
+                new_msgs=b"ms",
+                deferred_verification_items=["rebuild the image, check USER 1000"],
+                artifacts_dir=tmp_path,
+            )
+            assert result is None
+            recorded = json.loads(
+                (tmp_path / "delegated_verification.json").read_text()
+            )
+            assert recorded == ["rebuild the image, check USER 1000", heuristic]
+
+    def test_unimplemented_item_mixed_with_verification_still_blocks(self, tmp_path):
+        result = _Stage._run_deferred_spec_gate(
+            ticket=FakeTicket(),
+            deferred_spec_items=["ready fallback"],
+            ic=_ic(feedback="[SPEC-DEFERRED] Your previous pass left ..."),
+            updated_ref_files=None,
+            updated_prev_summary="prev",
+            new_msgs=b"ms",
+            deferred_verification_items=["docker build check"],
+            artifacts_dir=tmp_path,
+        )
+        assert result is not None
+        assert result.outcome.next_state == State.BLOCKED
+        assert "ready fallback" in result.outcome.note
+
+    def test_heuristic_ignores_docker_work_items(self):
+        from robotsix_mill.stages.implement.implementation_logic import (
+            _is_verification_only,
+        )
+
+        assert not _is_verification_only("Add a docker build step to ci.yml")
+        assert _is_verification_only(
+            "Remediation step 5 (rebuild the image and check it starts as "
+            "USER 1000) not done: no daemon"
+        )
 
 
 # ---------------------------------------------------------------------------

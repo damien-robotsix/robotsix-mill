@@ -482,6 +482,35 @@ def test_zero_diff_guard_happy_path_unaffected(tmp_path, monkeypatch):
     assert t.id in seen["title"]
 
 
+def test_pr_body_lists_verification_delegated_to_ci(tmp_path, monkeypatch):
+    """Verification steps implement could not run land in the PR body."""
+    remote, _ = _bare(tmp_path)
+    ctx = _ctx(
+        tmp_path,
+        forge_kind="github",
+        forge_remote_url=remote,
+        FORGE_TOKEN="t",
+    )
+    seen = {}
+
+    def fake_pr(self, *, source_branch, title, body):
+        seen["body"] = body
+        return "https://github.com/o/r/pull/43"
+
+    monkeypatch.setattr(github.GitHubForge, "open_merge_request", fake_pr)
+    t, _ = _ticket_with_branch(ctx, remote)
+    (ctx.service.workspace(t).artifacts_dir / "delegated_verification.json").write_text(
+        '["Check with `docker build .` that the image still builds"]',
+        encoding="utf-8",
+    )
+
+    out = DeliverStage().run(t, ctx)
+
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "## Verification delegated to CI" in seen["body"]
+    assert "- Check with `docker build .` that the image still builds" in seen["body"]
+
+
 # --- cross-repo target (push to fork, PR fork→upstream) ----------------
 
 
