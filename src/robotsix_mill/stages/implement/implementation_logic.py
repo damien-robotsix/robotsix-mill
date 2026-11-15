@@ -47,6 +47,36 @@ from .stale_path_gate import run_stale_path_gate
 # incoming feedback means the agent already had its one retry.
 _SPEC_DEFERRED_MARKER = "[SPEC-DEFERRED]"
 
+# Artifact listing verification steps the sandbox could not run (no Docker
+# daemon, …); deliver appends them to the PR body under "Verification
+# delegated to CI".
+_DELEGATED_VERIFICATION_FILENAME = "delegated_verification.json"
+
+# Fallback for agents that put a sandbox-unrunnable verification step in
+# ``deferred_spec_items`` instead of ``deferred_verification_items``. Kept
+# narrow: only image build/run checks the sandbox has no daemon for.
+_VERIFICATION_ONLY_RE = re.compile(
+    r"docker\s+(?:build|run|compose\s+up)\b"
+    r"|no\s+docker\s+daemon"
+    r"|\brebuild\b.{0,40}\bimage\b"
+    r"|\bimage\b.{0,40}\b(?:still\s+)?(?:builds|starts)\b",
+    re.IGNORECASE,
+)
+# …and the item must read as a check, not as work ("add a docker build
+# step to CI" is an unimplemented edit, not a verification).
+_VERIFICATION_VERB_RE = re.compile(
+    r"\b(?:check|checks|verify|confirm|rebuild|no\s+docker\s+daemon)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_verification_only(item: str) -> bool:
+    """True when a deferred item is only a sandbox-unrunnable image check."""
+    return bool(
+        _VERIFICATION_ONLY_RE.search(item) and _VERIFICATION_VERB_RE.search(item)
+    )
+
+
 # ---------------------------------------------------------------------------
 # Post-summary verification gate
 # ---------------------------------------------------------------------------
@@ -602,16 +632,45 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         updated_ref_files: list[Any] | None,
         updated_prev_summary: str | None,
         new_msgs: bytes | None,
+        deferred_verification_items: list[str] | None = None,
+        artifacts_dir: Path | None = None,
     ) -> _SinglePassResult | None:
         """Keep a knowingly-partial implementation out of code review.
 
-        Returns ``None`` when the agent deferred nothing. Otherwise the
-        first time it re-prompts with a ``[SPEC-DEFERRED]`` feedback
-        block listing the items. If the agent defers items again on that
-        re-prompt, the ticket is blocked for human review.
+        Returns ``None`` when the agent deferred nothing, or when every
+        deferred item is a verification step the sandbox cannot run
+        (``deferred_verification_items`` plus ``deferred_spec_items``
+        matching :func:`_is_verification_only`). Those are written to
+        ``artifacts_dir`` so deliver lists them in the PR body for CI to
+        run. Otherwise the first time it re-prompts with a
+        ``[SPEC-DEFERRED]`` feedback block listing the unimplemented
+        items. If the agent defers items again on that re-prompt, the
+        ticket is blocked for human review.
         """
-        items = [i.strip() for i in deferred_spec_items if i and i.strip()]
+        all_items = [i.strip() for i in deferred_spec_items if i and i.strip()]
+        items = [i for i in all_items if not _is_verification_only(i)]
+        verification = [
+            i.strip() for i in (deferred_verification_items or []) if i and i.strip()
+        ] + [i for i in all_items if _is_verification_only(i)]
         if not items:
+            if verification:
+                log.info(
+                    "%s: verification delegated to CI — %s",
+                    ticket.id,
+                    "; ".join(verification),
+                )
+                if artifacts_dir is not None:
+                    try:
+                        (artifacts_dir / _DELEGATED_VERIFICATION_FILENAME).write_text(
+                            json.dumps(verification, indent=2), encoding="utf-8"
+                        )
+                    except OSError:
+                        log.warning(
+                            "%s: failed to write %s",
+                            ticket.id,
+                            _DELEGATED_VERIFICATION_FILENAME,
+                            exc_info=True,
+                        )
             return None
         listing = "; ".join(items)
         if (ic.feedback or "").startswith(_SPEC_DEFERRED_MARKER):
@@ -1181,6 +1240,10 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
         ) = success[:7]
         # Optional 8th element: spec items the agent knowingly deferred.
         deferred_spec_items: list[str] = list(success[7]) if len(success) > 7 else []
+        # Optional 9th element: verification steps the sandbox cannot run.
+        deferred_verification_items: list[str] = (
+            list(success[8]) if len(success) > 8 else []
+        )
 
         pause = cls._maybe_handle_pause(
             ctx,
@@ -1234,6 +1297,8 @@ class ImplementationLogicMixin(_ImplementationEditingMixin, _ImplementStageBase)
             updated_ref_files=updated_ref_files,
             updated_prev_summary=updated_prev_summary,
             new_msgs=new_msgs,
+            deferred_verification_items=deferred_verification_items,
+            artifacts_dir=ws.artifacts_dir,
         )
         if deferred_result is not None:
             return deferred_result

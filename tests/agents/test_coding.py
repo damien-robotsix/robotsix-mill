@@ -179,6 +179,19 @@ def test_deferred_spec_items_returned(settings, tmp_path, monkeypatch):
     assert out[7] == ["ready fallback when branch is gone"]
 
 
+def test_deferred_verification_items_returned(settings, tmp_path, monkeypatch):
+    """Sandbox-unrunnable verification items reach the stage as the 9th element."""
+    result = _make_result().model_copy(
+        update={"deferred_verification_items": ["docker build check"]}
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.agents.coordinating.run_coordinator",
+        lambda **kw: result,
+    )
+    out = _call(settings, tmp_path)
+    assert out[8] == ["docker build check"]
+
+
 # ------------------------------------------------------------------
 # 2. UsageLimitExceeded → AgentBudgetError
 # ------------------------------------------------------------------

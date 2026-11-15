@@ -90,11 +90,13 @@ def run_implement_agent(
     target_branch: str = "main",
     ci_log_fetch_fn: Callable[[int, bool], str] | None = None,
     checkpoint: Any | None = None,
-) -> tuple[str, list[str], str, bytes | None, bytes | None, bool, str, list[str]]:
+) -> tuple[
+    str, list[str], str, bytes | None, bytes | None, bool, str, list[str], list[str]
+]:
     """Run ONE coordinator pass for this ticket. Returns
     ``(summary, reference_files, updated_memory, conversation_state,
     new_messages, no_change_needed, no_change_rationale,
-    deferred_spec_items)``.
+    deferred_spec_items, deferred_verification_items)``.
     ``conversation_state`` is the full transcript (for resume);
     ``new_messages`` is only what this run added (for pause detection).
     The last two fields let implement signal "no edits needed, ticket
@@ -270,4 +272,5 @@ def run_implement_agent(
         result.no_change_needed,
         result.no_change_rationale,
         result.deferred_spec_items,
+        result.deferred_verification_items,
     )

@@ -278,6 +278,11 @@ system_prompt: |
     Never only mention a skipped requirement in the summary. A
     non-empty list sends you back for another pass, then blocks the
     ticket for human review. It never advances to code review.
+  - If every edit is done and only a verification step the sandbox
+    cannot run is left (e.g. `docker build` / `docker run` with no
+    Docker daemon), list it in ``deferred_verification_items`` instead,
+    NOT in ``deferred_spec_items``. Those do not block: they are added to
+    the PR body under "Verification delegated to CI" for CI to run.
   - Commit subjects / PR titles must be conventional (feat:/fix:/chore:/
     docs:/refactor:/test:/ci:); release-please generates the changelog.
     Never edit `CHANGELOG.md` and never write changelog fragments. If

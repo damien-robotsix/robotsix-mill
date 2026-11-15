@@ -62,6 +62,11 @@ class ImplementResult(BaseModel):
     # once to finish them, then blocks for human review (trace bffbb10a:
     # a summary admitting a skipped spec item still shipped).
     deferred_spec_items: list[str] = []
+    # Spec verification steps the agent finished the code for but could
+    # not run in the sandbox (e.g. ``docker build`` with no daemon). These
+    # do not block: the stage proceeds and lists them in the PR body under
+    # "Verification delegated to CI" so the repo's CI runs the check.
+    deferred_verification_items: list[str] = []
 
     @model_validator(mode="before")
     @classmethod
