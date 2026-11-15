@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.24.2](https://github.com/damien-robotsix/robotsix-mill/compare/v0.24.1...v0.24.2) (2026-11-15)
+
+
+### Bug Fixes
+
+* ci_fix: out-of-scope CI failure — ci / Tests, Security audit (20261115T041417Z-ci-fix-out-of-scope-ci-failure-ci-tests-f16b) ([#3621](https://github.com/damien-robotsix/robotsix-mill/issues/3621)) ([4f617aa](https://github.com/damien-robotsix/robotsix-mill/commit/4f617aa37afdaae8d0461f5e778adde6974a360b))
+* trace-review: 1 finding(s) for trace `c9017cea` (session: robotsix-file-hub · 20261114T093013Z-ci-failure-ci-on-main-b255) (20261115T033936Z-trace-review-1-finding-s-for-trace-c9017-d1f6) ([#3620](https://github.com/damien-robotsix/robotsix-mill/issues/3620)) ([6b869e7](https://github.com/damien-robotsix/robotsix-mill/commit/6b869e74126d6dbd485fe79fa8f8d9736adc449a))
+* trace-review: 2 finding(s) for trace `35dfaf12` (session: robotsix-chat · completeness_check-20261114T210347Z-9b402b1e) (20261115T033833Z-trace-review-2-finding-s-for-trace-35dfa-1c09) ([#3618](https://github.com/damien-robotsix/robotsix-mill/issues/3618)) ([a6f4c00](https://github.com/damien-robotsix/robotsix-mill/commit/a6f4c0039af32748aab4e40045f746a9f2676966))
+* trace-review: 3 finding(s) for trace `5952f407` (session: robotsix-mill · config_sync-20261114T221044Z-76cc5f85) (20261115T033903Z-trace-review-3-finding-s-for-trace-5952f-5f1c) ([#3619](https://github.com/damien-robotsix/robotsix-mill/issues/3619)) ([428a38d](https://github.com/damien-robotsix/robotsix-mill/commit/428a38d51fd22d3567c86e46bacd52daba25c4f0))
+
 ## [0.24.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.24.0...v0.24.1) (2026-11-12)
 
 
