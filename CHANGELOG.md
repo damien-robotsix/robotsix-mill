@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.24.2...v0.25.0) (2026-11-15)
+
+
+### Features
+
+* implement: don't block on deferred items that are only sandbox-unrunnable verification steps (e.g. `docker build`) when CI covers them (20261115T125237Z-implement-don-t-block-on-deferred-items-3fd8) ([#3624](https://github.com/damien-robotsix/robotsix-mill/issues/3624)) ([bc71a58](https://github.com/damien-robotsix/robotsix-mill/commit/bc71a58d714ded25fc035bfc884ea9e3e6a7799d))
+
 ## [0.24.2](https://github.com/damien-robotsix/robotsix-mill/compare/v0.24.1...v0.24.2) (2026-11-15)
 
 
