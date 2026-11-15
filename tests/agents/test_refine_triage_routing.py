@@ -687,6 +687,40 @@ def test_summarize_spec_for_auto_approve_truncates_long_spec():
     assert result.startswith(header)
 
 
+def test_summarize_spec_for_auto_approve_keeps_scope_after_long_problem():
+    """A bulky Problem section must not crowd out Scope / Acceptance."""
+    from robotsix_mill.stages.refine.helpers import _summarize_spec_for_auto_approve
+
+    problem = "## Problem\n" + ("- log " + "y" * 80 + "\n") * 60
+    tail = (
+        "## Scope\n- src/robotsix_mill/foo.py: bump timeout\n"
+        "## Acceptance criteria\n- [ ] timeout is 30s\n"
+    )
+    result = _summarize_spec_for_auto_approve(problem + tail)
+    assert len(result) <= 2000
+    assert "… (truncated for auto-approve" in result
+    assert result.startswith("## Problem\n")
+    assert "## Scope\n- src/robotsix_mill/foo.py: bump timeout" in result
+    assert "- [ ] timeout is 30s" in result
+
+
+def test_summarize_spec_for_auto_approve_collapses_log_fence_keeps_tail():
+    """A long fenced CI log is collapsed to head + tail (where the error is)."""
+    from robotsix_mill.stages.refine.helpers import _summarize_spec_for_auto_approve
+
+    log = "".join(f"step {i} " + "z" * 40 + "\n" for i in range(100))
+    spec = (
+        "CI failure: Tests on main\n\n```\n"
+        + log
+        + "FAILED tests/test_x.py::test_y - AssertionError\n```\n"
+    )
+    result = _summarize_spec_for_auto_approve(spec)
+    assert len(result) <= 2000
+    assert "lines elided" in result
+    assert "FAILED tests/test_x.py::test_y - AssertionError" in result
+    assert result.startswith("CI failure: Tests on main")
+
+
 def test_auto_approve_receives_summarized_spec(
     ctx, service, monkeypatch, tmp_path, repo_config
 ):

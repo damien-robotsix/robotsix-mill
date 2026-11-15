@@ -815,28 +815,113 @@ def _triage_note_signals_wrong_repo(triage_note: str | None) -> bool:
     return any(p in lower for p in _WRONG_REPO_PATTERNS)
 
 
+# Headings whose sections carry the decision-relevant content (what to
+# change, where, and how success is judged).  When a spec must be cut,
+# these are kept ahead of narrative / log sections.
+_AUTO_APPROVE_PRIORITY_HEADING = re.compile(
+    r"scope|acceptance|criteria|change|fix|solution|remediation|plan"
+    r"|implementation|required|proposed|files",
+    re.IGNORECASE,
+)
+_HEADING_LINE = re.compile(r"^#{1,6}\s")
+# Fenced blocks longer than this are collapsed to their head + tail.
+_FENCE_KEEP_HEAD = 2
+_FENCE_KEEP_TAIL = 8
+
+
+def _collapse_long_fences(spec: str) -> str:
+    """Collapse long fenced blocks (CI log tails, tracebacks) to their
+    first and last lines — the error lines sit at the tail of a log.
+    """
+    out: list[str] = []
+    block: list[str] | None = None
+    for line in spec.split("\n"):
+        if line.lstrip().startswith("```"):
+            if block is None:
+                out.append(line)
+                block = []
+                continue
+            if len(block) > _FENCE_KEEP_HEAD + _FENCE_KEEP_TAIL + 1:
+                elided = len(block) - _FENCE_KEEP_HEAD - _FENCE_KEEP_TAIL
+                block = [
+                    *block[:_FENCE_KEEP_HEAD],
+                    f"… ({elided} lines elided)",
+                    *block[-_FENCE_KEEP_TAIL:],
+                ]
+            out.extend(block)
+            out.append(line)
+            block = None
+            continue
+        if block is not None:
+            block.append(line)
+        else:
+            out.append(line)
+    if block is not None:  # unterminated fence — keep as-is
+        out.extend(block)
+    return "\n".join(out)
+
+
+def _cut_at_newline(text: str, limit: int) -> str:
+    """Return the longest newline-aligned prefix of *text* within *limit*."""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    last_nl = cut.rfind("\n")
+    return cut[: last_nl + 1] if last_nl > 0 else cut
+
+
 def _summarize_spec_for_auto_approve(spec: str, max_chars: int = 2000) -> str:
     """Return a bounded summary of *spec* for the auto-approve classifier.
 
     The auto-approve classifier only needs to detect design decisions —
-    it doesn't need the full verbose spec.  Keep the first *max_chars*
-    characters (which covers ## Problem + ## Scope + start of
-    ## Acceptance criteria for typical specs), newline-aligned so
-    sections aren't truncated mid-word.  When the spec is already within
-    the limit, return it unchanged.
+    it doesn't need the full verbose spec.  When the spec is already
+    within *max_chars* it is returned unchanged.  Otherwise long fenced
+    blocks (log tails) are collapsed first; if that is still too long,
+    the decision-relevant sections (Scope, Acceptance criteria, Proposed
+    solution, …) get the budget before the remaining sections, so a
+    bulky problem statement or log can't crowd out what the change is.
+    Every section keeps its heading and opening lines; sections keep
+    their original order and are cut newline-aligned.
     """
     if len(spec) <= max_chars:
         return spec
     note = "\n… (truncated for auto-approve — full spec is available)"
-    # Truncate to max_chars minus note length, then back up to the last newline.
-    effective = max_chars - len(note)
-    if effective <= 0:
+    budget = max_chars - len(note)
+    if budget <= 0:
         return spec[:max_chars]
-    truncated = spec[:effective]
-    last_nl = truncated.rfind("\n")
-    if last_nl > 0:
-        truncated = truncated[:last_nl]
-    return truncated + note
+
+    collapsed = _collapse_long_fences(spec)
+    if len(collapsed) <= budget:
+        return collapsed + note
+
+    # Split into sections at markdown headings (preamble = first section).
+    sections: list[str] = []
+    for line in collapsed.splitlines(keepends=True):
+        if not sections or _HEADING_LINE.match(line):
+            sections.append(line)
+        else:
+            sections[-1] += line
+
+    def _is_priority(section: str) -> bool:
+        first = section.split("\n", 1)[0]
+        return bool(
+            _HEADING_LINE.match(first) and _AUTO_APPROVE_PRIORITY_HEADING.search(first)
+        )
+
+    order = [i for i, sec in enumerate(sections) if _is_priority(sec)]
+    order += [i for i in range(len(sections)) if i not in order]
+    # First give every section a small floor (its heading + opening
+    # lines) so none vanishes, then hand the rest out priority-first.
+    floor = min(300, budget // len(sections))
+    kept = [_cut_at_newline(sec, floor) for sec in sections]
+    remaining = budget - sum(len(k) for k in kept)
+    for i in order:
+        if remaining <= 0:
+            break
+        grown = _cut_at_newline(sections[i], len(kept[i]) + remaining)
+        remaining -= len(grown) - len(kept[i])
+        kept[i] = grown
+    return "".join(kept).rstrip("\n") + note
 
 
 def _operator_already_approved(ctx: StageContext, ticket_id: str) -> bool:
