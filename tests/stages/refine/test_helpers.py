@@ -32,6 +32,8 @@ from robotsix_mill.stages.refine.helpers import (
     operator_prerequisite_lines,
     ops_shape_marker,
     verify_claim,
+    workflow_change_review_kind,
+    workflow_sensitive_disposition,
 )
 from robotsix_mill.stages.refine.spec_validation import (
     _count_distinct_backtick_paths,
@@ -1277,3 +1279,73 @@ def test_cited_sensitive_paths_matches_workflow_globs():
         (".github/workflows/deploy.yml", ".github/workflows/**"),
     ]
     assert cited_sensitive_paths("Mechanical rename in `src/a.py`.", globs) == []
+
+
+def test_workflow_change_review_kind_approves_additive_ci_changes():
+    """The four robotsix-ui stalls + other additive CI/config changes must
+    classify as additive (auto-approve-safe)."""
+    additive = [
+        # #1: raising the Python floor 3.9->3.10 + adding a 3.10/3.12 matrix
+        "raising the Python floor 3.9\u21923.10 (and adding a 3.10/3.12 CI matrix)",
+        # #2: relocating Python tests out of the shipped wheel
+        "relocating Python tests out of the shipped wheel",
+        # #3: replacing the hand-rolled python job with the shared python-ci reusable
+        "replacing the hand-rolled python job with the shared python-ci reusable",
+        # #4: adding an npm ecosystem block to dependabot.yml
+        "adding an `npm` ecosystem block to dependabot.yml",
+        "add a .prettierignore and an extend-select lint table",
+        "pin the reusable workflow to a SHA",
+        "add python-version: ['3.10', '3.12'] to the matrix",
+    ]
+    for text in additive:
+        assert workflow_change_review_kind(text) == "additive", repr(text)
+
+
+def test_workflow_change_review_kind_fails_closed_on_destructive():
+    """Permissions/token scope, secrets, required checks, deploy/release
+    targets and reusable-workflow removal must classify destructive."""
+    destructive = [
+        "bump python-version and set permissions: write-all",
+        "pass GITHUB_TOKEN and secrets.MY_TOKEN to the deploy job",
+        "add a required status check on the merge gate",
+        "introduce an environment: production deploy step",
+        "-    uses: org/.github/workflows/security.yml@<sha>",
+        "remove the shared codeql reusable call",
+    ]
+    for text in destructive:
+        assert workflow_change_review_kind(text) == "destructive", repr(text)
+
+
+def test_workflow_change_review_kind_ambiguous_defaults_fail_closed():
+    assert workflow_change_review_kind("tweak the workflow slightly") == "ambiguous"
+    assert workflow_change_review_kind("") == "ambiguous"
+
+
+def test_workflow_sensitive_disposition_additive_workflow_only_approves():
+    sens = [(".github/workflows/ci.yml", ".github/workflows/**")]
+    assert workflow_sensitive_disposition(
+        sens, "Bump python-version 3.9 to 3.10 and add a matrix"
+    ) == ("approve", "additive/config-only workflow change")
+
+
+def test_workflow_sensitive_disposition_fails_closed():
+    sens = [(".github/workflows/ci.yml", ".github/workflows/**")]
+    # Destructive workflow change → fail closed.
+    assert (
+        workflow_sensitive_disposition(sens, "add permissions: write-all")[0]
+        == "fail_closed"
+    )
+    # Ambiguous workflow change → fail closed.
+    assert (
+        workflow_sensitive_disposition(sens, "tweak the workflow")[0] == "fail_closed"
+    )
+    # Non-workflow sensitive glob (secrets / .env) → always fail closed,
+    # even when the change itself is additive.
+    assert (
+        workflow_sensitive_disposition(
+            [(".env", ".env*")], "Bump python-version 3.9 to 3.10"
+        )[0]
+        == "fail_closed"
+    )
+    # Nothing cited → no disposition.
+    assert workflow_sensitive_disposition([], "Bump python-version") == ("none", "")

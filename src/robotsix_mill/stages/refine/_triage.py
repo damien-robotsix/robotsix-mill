@@ -37,6 +37,7 @@ from .helpers import (
     log,
     operator_prerequisite_lines,
     ops_shape_marker,
+    workflow_sensitive_disposition,
 )
 from .scanner_disposition import ScannerDisposition, resolve_scanner_disposition
 from .spec_validation import _draft_has_complete_spec, _fast_path_scope_checks
@@ -1089,6 +1090,39 @@ def handle_triage_decision(
                         sensitive = cited_sensitive_paths(
                             auto.reason, s.auto_merge_sensitive_globs or []
                         )
+                        # Content-aware exception to the blanket workflow
+                        # glob: a workflow-sensitive citation that describes
+                        # an additive/config-only change (dependabot blocks,
+                        # version/matrix bumps, test relocations, lint/ignore
+                        # tables, reusable-SHA pins) is APPROVE-safe and is
+                        # approved deterministically — only destructive
+                        # workflow changes (token/secret scope, required
+                        # checks, deploy/release targets, reusable-workflow
+                        # removal) and non-workflow sensitive globs
+                        # (secrets, .env) fail closed.
+                        disposition, disposition_reason = (
+                            workflow_sensitive_disposition(
+                                sensitive, f"{ticket.title}\n\n{draft}"
+                            )
+                        )
+                        if disposition == "approve":
+                            return _triage_outcome(
+                                ctx,
+                                ws,
+                                draft,
+                                ticket.id,
+                                f"mechanical draft fast-path — "
+                                f"auto-approve APPROVE (additive workflow "
+                                f"change, content-gated): {auto.reason} "
+                                f"[checks: {checks_summary}]",
+                                source=ticket.source,
+                                triage_note=(
+                                    f"{triage.reason} | fast-path checks: "
+                                    f"{checks_summary}"
+                                ),
+                                extract_paths_from_draft=True,
+                                state=State.READY,
+                            )
                         return _triage_outcome(
                             ctx,
                             ws,
@@ -1101,7 +1135,7 @@ def handle_triage_decision(
                             + (
                                 " — sensitive path cited: "
                                 + ", ".join(f"{p!r} (glob {g!r})" for p, g in sensitive)
-                                + "; failing closed to human approval"
+                                + f"; content gate: {disposition_reason}"
                                 if sensitive
                                 else ""
                             ),

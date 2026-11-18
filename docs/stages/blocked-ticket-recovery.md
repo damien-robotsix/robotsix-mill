@@ -251,11 +251,25 @@ such as `Operator confirms`, `Repo owner`, `Do not guess`, `Settings →`,
 `checked in repo settings`. The history note quotes the matched lines
 with the prefix `operator prerequisite detected`.
 
-A separate fail-closed rule applies when the fast-path classifier returns
+A fail-closed rule applies when the fast-path classifier returns
 `NEEDS_APPROVAL` and cites a path matching `auto_merge_sensitive_globs`
 (for example `.github/workflows/**`). The ticket is held at
 `HUMAN_ISSUE_APPROVAL` with the note `sensitive path cited`, and the later
-auto-approve pass cannot downgrade it to `APPROVE`. Drafts with neither
+auto-approve pass cannot downgrade it to `APPROVE`.
+
+The workflow glob (`.github/workflows/**`) is content-gated: a citation
+that describes an **additive/config-only** change — appending a dependabot
+ecosystem/group/ignore block, bumping a `python-version` / matrix entry,
+relocating test files, adding a `.prettierignore` / lint table, or
+pinning/re-pinning a reusable workflow SHA — is auto-approved
+deterministically. Only **destructive** workflow changes — altering
+token/secret/permission scope (`permissions:`, `GITHUB_TOKEN`,
+`secrets:`), changing required status checks / branch protection / merge
+gates, adding or altering deploy/release/environment targets, or
+removing/replacing an existing reusable-workflow call — and any
+non-workflow sensitive glob (secrets, `.env`) fail closed to human
+approval. On the merge side, a PR whose workflow diff cannot be proven
+additive also remains ineligible for auto-merge. Drafts with neither
 signal keep the normal fast-path behaviour.
 
 ### Work already present at base is reported as "already satisfied"

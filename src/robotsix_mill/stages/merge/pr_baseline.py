@@ -28,6 +28,7 @@ from ...core.models import SourceKind, Ticket
 from ...core.states import State
 from ...scm.forge import Forge, get_forge
 from ..base import Outcome, StageContext
+from ..refine.helpers import _WORKFLOW_SENSITIVE_GLOB
 from ._base import _MergeStageBase
 from ._shared import (
     _PR_MISSING_COUNT,
@@ -306,7 +307,13 @@ class PrBaselineMixin(_MergeStageBase):
                         f"allowed: {sorted(allowed)}"
                     )
 
-            # 6. No sensitive paths touched.
+            # 6. No sensitive paths touched.  Hits on the workflow glob are
+            # content-gated: additive/config-only workflow diffs
+            # (version/matrix bumps, dependabot config, test relocations,
+            # lint tables, reusable-SHA pins) may auto-merge; destructive
+            # ones (token/secret scope, required checks, deploy/release
+            # targets, reusable-workflow removal) and any non-workflow
+            # sensitive glob (secrets, .env) always block.
             if not skip_sensitive_path_check:
                 try:
                     files = forge.pr_files(source_branch=ticket.branch or "")
@@ -314,13 +321,69 @@ class PrBaselineMixin(_MergeStageBase):
                     # Fail-closed: any error fetching files → not eligible.
                     return False, "failed to fetch PR file list"
                 sensitive = s.auto_merge_sensitive_globs or []
+                workflow_hits: list[str] = []
                 for f in files:
                     path = f.get("path", "")
                     for pattern in sensitive:
                         if fnmatch.fnmatch(path, pattern):
-                            return False, (
-                                f"sensitive path touched: {path!r} "
-                                f"(matched glob {pattern!r})"
-                            )
+                            if pattern == _WORKFLOW_SENSITIVE_GLOB:
+                                workflow_hits.append(path)
+                            else:
+                                return False, (
+                                    f"sensitive path touched: {path!r} "
+                                    f"(matched glob {pattern!r})"
+                                )
+                if workflow_hits:
+                    additive, reason = self._workflow_diff_is_additive(ctx, ticket)
+                    if not additive:
+                        return False, (
+                            f"sensitive path touched: {workflow_hits[0]!r} "
+                            f"(matched glob {_WORKFLOW_SENSITIVE_GLOB!r}); "
+                            f"content gate: {reason}"
+                        )
 
         return True, "eligible"
+
+    def _workflow_diff_is_additive(
+        self, ctx: StageContext, ticket: Ticket
+    ) -> tuple[bool, str]:
+        """Return ``(True, reason)`` iff the PR's workflow diff is additive.
+
+        Fetches ``git diff origin/<target>...HEAD`` for the workflow
+        directory from the workspace clone and classifies it with the
+        refine stage's content-aware workflow gate.  Any failure to
+        obtain or verify the diff returns ``(False, reason)`` — the
+        sensitive-path gate fails closed when the diff cannot be proven
+        additive.
+        """
+        import subprocess as _subprocess
+
+        from robotsix_mill.stages import merge as _facade
+
+        from ...scm.vcs import git_ops
+        from ..refine.helpers import workflow_change_review_kind
+
+        repo_dir = _facade._workspace_repo_dir(ctx, ticket)
+        if repo_dir is None:
+            return False, "no workspace clone for workflow diff"
+        target = target_branch_for(ctx.settings, ctx.repo_config)
+        try:
+            diff = git_ops._git(
+                Path(repo_dir),
+                "diff",
+                "--no-color",
+                f"origin/{target}...HEAD",
+                "--",
+                ".github/workflows/",
+                timeout=60,
+            )
+        except (OSError, _subprocess.SubprocessError) as e:
+            return False, f"workflow diff unavailable: {e}"
+        if not diff.strip():
+            return False, "workflow diff empty"
+        kind = workflow_change_review_kind(diff)
+        if kind == "additive":
+            return True, "additive/config-only workflow change"
+        if kind == "ambiguous":
+            return False, "workflow change not proven additive/config-only"
+        return False, "destructive workflow change"
