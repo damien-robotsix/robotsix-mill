@@ -2138,6 +2138,25 @@ class CIFixStage(Stage):
             f"**Required change area:** {result.required_change_area}\n\n"
             f"**Why out of scope:** {result.out_of_scope_reason}\n"
         )
+        # The OUT_OF_SCOPE verdict spawns THIS ticket as the fix — there is
+        # no sibling ci_fix_dependency ticket behind it.  The ci-fix prompt's
+        # triage template tells the SOURCE ticket to "report OUT_OF_SCOPE
+        # (routed to a ci_fix_dependency ticket) and do not fix it in this
+        # one"; when the LLM echoes that phrasing into required_change_area,
+        # the spawned spec self-delegates and its implement pass closes with
+        # an empty diff while the advisory stays red on main
+        # (ci-fix-noop-close-without-verifying-advisory-resolved, robotsix-http
+        # 20261118T180519Z-…-2dfb).  State ownership explicitly so the
+        # spawned ticket instructs implement to perform the change itself.
+        description += (
+            "\n**This ticket IS the dependency fix.** The OUT_OF_SCOPE verdict "
+            "that routed this failure here raised this ticket as the fix — "
+            "there is no separate sibling fix ticket, so the required change "
+            "area above must be performed BY THIS TICKET's implement pass "
+            "(e.g. run the named `uv lock --upgrade-package <pkg>` command and "
+            "commit the updated `uv.lock`). Do not treat it as handled "
+            "elsewhere.\n"
+        )
         if out_of_scope_alerts:
             # Name the specific out-of-scope rule ids + paths so the dependency
             # fixer knows exactly which alerts to address (AC3).

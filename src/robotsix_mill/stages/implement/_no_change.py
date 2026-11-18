@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import re
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -172,6 +173,163 @@ def _is_ci_failure_ticket(ticket: Any) -> bool:
         return True
     title = str(getattr(ticket, "title", "") or "").strip()
     return bool(_CI_FAILURE_TITLE_RE.match(title))
+
+
+def _is_ci_fix_dependency_ticket(ticket: Any) -> bool:
+    """True for tickets the ci_fix OUT_OF_SCOPE verdict spawned as the fix.
+
+    ``source == "ci_fix_dependency"`` is authoritative — such a ticket IS
+    the dependency fix (there is no sibling fixer behind it), so an empty
+    diff on it must be verified rather than trusted.
+    """
+    return (
+        str(getattr(ticket, "source", "") or "").strip().lower() == "ci_fix_dependency"
+    )
+
+
+# Phrases that claim the failing change is owned by another ticket.  The
+# ci-fix prompt tells the SOURCE ticket to "report OUT_OF_SCOPE (routed to a
+# ci_fix_dependency ticket) and do not fix it in this one"; when the LLM
+# echoes that into ``required_change_area`` the spawned spec self-delegates
+# and its implement pass closes with an empty diff while the advisory stays
+# red on main (ci-fix-noop-close-without-verifying-advisory-resolved,
+# robotsix-http 20261118T180519Z-…-2dfb).  On a ci_fix_dependency ticket any
+# of these is inherently self-referential — this ticket is the fix.
+_SELF_DELEGATION_PHRASES: tuple[str, ...] = (
+    "handled by a dedicated",
+    "handled by a sibling",
+    "handled by another ticket",
+    "handled elsewhere",
+    "handled in another ticket",
+    "dedicated ci_fix_dependency ticket",
+    "routed to a ci_fix_dependency ticket",
+    "delegated to a dedicated",
+    "delegated to a sibling",
+    "another ticket will handle",
+    "will be handled by",
+    "to be handled by",
+    "do not fix it in this one",
+    "must not fix it in this one",
+    "do not fix in this one",
+)
+
+# ``uv lock --upgrade-package <pkg>`` — the command a ci_fix_dependency
+# ticket's spec names for a transitive-dependency advisory bump.
+_UPGRADE_PACKAGE_RE = re.compile(
+    r"uv\s+lock\s+--upgrade-package\s+([A-Za-z0-9][A-Za-z0-9._-]*)",
+    re.IGNORECASE,
+)
+# The version a bump claim targets, e.g. ">=1.45.2" / "to 1.45.2" in
+# "bump <pkg> to >=1.45.2 via `uv lock --upgrade-package <pkg>`".  The
+# version usually PRECEDES the command, so it is searched from the first
+# mention of the package rather than after the command match.  Best-effort:
+# only ``x.y.z``-style versions are compared.
+_CLAIMED_VERSION_RE = re.compile(
+    r"(?:>=\s*|to\s+(?:>=)?\s*)v?(\d+(?:\.\d+){1,3})", re.IGNORECASE
+)
+# Fallback when neither ">=x.y.z" nor "to x.y.z" appears near the package.
+_FIRST_VERSION_RE = re.compile(r"v?(\d+(?:\.\d+){1,3})")
+
+
+def _claims_change_handled_elsewhere(*texts: str | None) -> bool:
+    """True when *texts* (spec + no-change rationale) self-delegate the fix."""
+    joined = " ".join((t or "").strip().lower() for t in texts)
+    return any(phrase in joined for phrase in _SELF_DELEGATION_PHRASES)
+
+
+def _dotted_version(v: str) -> tuple[int, ...] | None:
+    """``(1, 45, 2)`` for ``"1.45.2"``; ``None`` for non dotted-numeric."""
+    if not re.fullmatch(r"\d+(\.\d+)*", v.strip()):
+        return None
+    return tuple(int(part) for part in v.strip().split("."))
+
+
+def _lockfile_resolves_bump(repo_dir: Path, spec_text: str) -> bool | None:
+    """Whether ``uv.lock`` in *repo_dir* already satisfies the spec's bump.
+
+    ``True``/``False`` when the spec names a concrete
+    ``uv lock --upgrade-package <pkg>`` plus a dotted version and the lock is
+    readable; ``None`` when it cannot be deterministically verified here
+    (no such claim, no ``uv.lock``, unparseable version) — callers then rely
+    on the self-delegation marker check alone.
+    """
+    m = _UPGRADE_PACKAGE_RE.search(spec_text or "")
+    if m is None:
+        return None
+    pkg = m.group(1).lower()
+    text = spec_text or ""
+    pkg_pos = text.lower().find(pkg)
+    tail = text[pkg_pos:] if pkg_pos != -1 else text
+    vm = _CLAIMED_VERSION_RE.search(tail)
+    if vm is None:
+        vm = _FIRST_VERSION_RE.search(tail)
+    if vm is None:
+        return None
+    target = _dotted_version(vm.group(1))
+    if target is None:
+        return None
+    lock_path = repo_dir / "uv.lock"
+    if not lock_path.is_file():
+        return None
+    try:
+        lock = tomllib.loads(lock_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(lock, dict):
+        return None
+    entries = lock.get("package", []) or []
+    if not isinstance(entries, list):
+        return None
+    locked: list[tuple[int, ...]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("name") or "").lower() != pkg:
+            continue
+        dv = _dotted_version(str(entry.get("version") or ""))
+        if dv is not None:
+            locked.append(dv)
+    if not locked:
+        return None
+    return any(dv >= target for dv in locked)
+
+
+def _ci_fix_dependency_noop_diag(
+    ticket: Any, repo_dir: Path, spec_text: str, claim_text: str
+) -> str | None:
+    """Diagnostic when a ci_fix_dependency ticket must not close as a no-op.
+
+    A ci_fix_dependency ticket is the fix the ci_fix OUT_OF_SCOPE verdict
+    spawned — closing it "correct no-op" merely because the spec says the
+    work is "handled elsewhere" guarantees nothing ever runs the bump
+    (observed: robotsix-http 20261118T180519Z-…-2dfb).  Block unless the
+    claim is concrete AND the lockfile actually carries the bump.
+    """
+    if not _is_ci_fix_dependency_ticket(ticket):
+        return None
+    if _claims_change_handled_elsewhere(spec_text, claim_text):
+        return (
+            "[Diagnostic] implement concluded ``no_change_needed`` with an "
+            "empty diff on a ci_fix_dependency ticket, but the spec/rationale "
+            "says the failing change is 'handled by a dedicated ci_fix_dependency "
+            "ticket' / handled elsewhere. That is self-delegation: this ticket "
+            "IS the ci_fix_dependency fix the OUT_OF_SCOPE verdict spawned — "
+            "there is no sibling fixer, so nothing else will run the named "
+            "``uv lock --upgrade-package`` and the advisory stays unresolved on "
+            "main. Perform the required change in THIS ticket (run the bump "
+            "command and commit the updated uv.lock); close without a diff only "
+            "if uv.lock already pins the fixed version."
+        )
+    if _lockfile_resolves_bump(repo_dir, spec_text) is False:
+        return (
+            "[Diagnostic] implement concluded ``no_change_needed`` with an "
+            "empty diff on a ci_fix_dependency ticket, but the workspace "
+            "uv.lock still pins the old version the spec names for "
+            "``uv lock --upgrade-package``. The advisory is not resolved, so a "
+            "no-op DONE would leave the CI failure live. Run the bump in THIS "
+            "ticket and commit the updated uv.lock."
+        )
+    return None
 
 
 def _run_no_change_contradiction_check(
@@ -403,6 +561,36 @@ def _run_no_change_contradiction_check(
                         "once the workflow is green)",
                     ),
                 )
+            # Guard: a ci_fix_dependency ticket must not close as a "correct
+            # no-op" merely because the spec text says the work is handled
+            # elsewhere.  That ticket IS the fix, so an empty-diff DONE that
+            # cites self-delegation (or that the uv.lock bump did not land)
+            # leaves the advisory red on main and the parked source PR keeps
+            # re-running CI against the same fingerprint.  Block so the pass
+            # re-runs and performs the bump itself.
+            ci_dep_diag = _ci_fix_dependency_noop_diag(
+                ticket, repo_dir, spec_text, f"{no_change_rationale}\n{summary}"
+            )
+            if ci_dep_diag:
+                diag = f"{no_change_rationale.strip() or summary}\n\n{ci_dep_diag}"
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    diag,
+                    ok=False,
+                    reference_files=ref_files,
+                    extra_roots=extra_roots,
+                )
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(
+                        State.BLOCKED,
+                        "ci_fix dependency-fix no-op without a verified "
+                        "lockfile bump (spec self-delegates or uv.lock unfixed)",
+                    ),
+                )
             # No contradiction — close DONE.
             rationale = no_change_rationale.strip()
             short = rationale[:400] + ("…" if len(rationale) > 400 else "")
@@ -564,6 +752,33 @@ def _run_no_change_contradiction_check(
                         "unverified 'already fixed' claim (cited commit not at origin/main)",
                     ),
                 )
+            # Guard: ci_fix_dependency no-op (fresh-run empty diff) — same
+            # self-delegation / unverified-bump check as the no_change_needed
+            # path above; an empty diff here also proves nothing about the
+            # advisory being resolved.
+            ci_dep_diag = _ci_fix_dependency_noop_diag(
+                ticket, repo_dir, spec_text, no_change_summary
+            )
+            if ci_dep_diag:
+                diag = f"{no_change_summary}\n\n{ci_dep_diag}"
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    diag,
+                    ok=False,
+                    reference_files=ref_files,
+                    extra_roots=extra_roots,
+                )
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(
+                        State.BLOCKED,
+                        "ci_fix dependency-fix no-op without a verified "
+                        "lockfile bump (fresh run)",
+                    ),
+                )
             # Genuine no-op: clean working tree, no commits beyond the
             # base, no gitignored writes, no lost edits. The spec is
             # already satisfied — terminate DONE instead of looping.
@@ -658,6 +873,32 @@ def _run_no_change_contradiction_check(
                     outcome=Outcome(
                         State.BLOCKED,
                         "spec demands code change but diff is empty (resume)",
+                    ),
+                )
+            # Guard: ci_fix_dependency no-op (resume with empty diff) — same
+            # self-delegation / unverified-bump check; a resumed empty diff
+            # from a prior session still does not resolve the advisory.
+            ci_dep_diag = _ci_fix_dependency_noop_diag(
+                ticket, repo_dir, spec_text, summary or ""
+            )
+            if ci_dep_diag:
+                diag = f"{summary or 'Agent found no work to do.'}\n\n{ci_dep_diag}"
+                cls._finalize(
+                    ctx,
+                    ticket,
+                    repo_dir,
+                    branch,
+                    diag,
+                    ok=False,
+                    reference_files=ref_files,
+                    extra_roots=extra_roots,
+                )
+                return _SinglePassResult(
+                    next_action="return",
+                    outcome=Outcome(
+                        State.BLOCKED,
+                        "ci_fix dependency-fix no-op without a verified "
+                        "lockfile bump (resuming run)",
                     ),
                 )
             resume_done_note = (

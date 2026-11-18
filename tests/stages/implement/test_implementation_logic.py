@@ -1096,6 +1096,201 @@ class TestEvaluateTestResults:
         )
         assert result.outcome.next_state is State.DONE
 
+    def test_no_change_needed_on_ci_fix_dependency_self_delegation_blocks(
+        self, monkeypatch
+    ):
+        """A ci_fix_dependency ticket whose spec/rationale says the bump is
+        "handled by a dedicated ci_fix_dependency ticket" must NOT close as a
+        no-op — that ticket IS the fix, so nothing else will run the bump.
+
+        Regression (2026-11-18): robotsix-http 20261118T180519Z-…-2dfb closed
+        as a "correct no-op" with an empty diff because the spec delegated to
+        itself; the opentelemetry-api advisory stayed red on main and the
+        parked source PR re-ran CI against the same fingerprint until BLOCKED.
+        """
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+        finalize_calls: list[dict] = []
+
+        def _fake_finalize(cls, ctx, ticket, repo_dir, branch, summary, *, ok, **kw):
+            finalize_calls.append({"ok": ok, "summary": summary})
+
+        monkeypatch.setattr(_Stage, "_finalize", classmethod(_fake_finalize))
+
+        class _DepFixTicket(FakeTicket):
+            source = "ci_fix_dependency"
+
+        spec = (
+            "## Out-of-scope CI failure routed from 20261118T173536Z-…-ea0e\n\n"
+            "**Required change area:** uv.lock (bump opentelemetry-api to "
+            ">=1.45.2 via `uv lock --upgrade-package opentelemetry-api`) — "
+            "handled by a dedicated ci_fix_dependency ticket.\n"
+        )
+        result = self._call(
+            monkeypatch,
+            ticket=_DepFixTicket(),
+            ic=_ic(spec=spec),
+            no_change_needed=True,
+            no_change_rationale=(
+                "the ticket spec explicitly states the bump is handled by a "
+                "dedicated ci_fix_dependency ticket"
+            ),
+        )
+        assert result.next_action == "return"
+        assert result.outcome.next_state is State.BLOCKED
+        assert "ci_fix dependency-fix no-op" in result.outcome.note
+        assert finalize_calls and finalize_calls[0]["ok"] is False
+        assert "[Diagnostic]" in finalize_calls[0]["summary"]
+        assert "self-delegation" in finalize_calls[0]["summary"]
+
+    def test_no_change_needed_ci_fix_dependency_spec_only_blocked(self, monkeypatch):
+        """The self-delegating wording blocks even when it sits only in the
+        spec (the implement agent was misled by it) and the rationale is a
+        bare "already satisfied"."""
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+
+        class _DepFixTicket(FakeTicket):
+            source = "ci_fix_dependency"
+
+        result = self._call(
+            monkeypatch,
+            ticket=_DepFixTicket(),
+            ic=_ic(
+                spec=(
+                    "**Required change area:** uv.lock bump — handled by a "
+                    "dedicated ci_fix_dependency ticket."
+                )
+            ),
+            no_change_needed=True,
+            no_change_rationale="already satisfied",
+        )
+        assert result.outcome.next_state is State.BLOCKED
+
+    def test_no_change_needed_ci_fix_dependency_without_marker_stays_done(
+        self, monkeypatch
+    ):
+        """A ci_fix_dependency ticket with a concrete no-change claim and no
+        self-delegation keeps the DONE path (no false block when the claim is
+        genuine and no lockfile is present to contradict it)."""
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+
+        class _DepFixTicket(FakeTicket):
+            source = "ci_fix_dependency"
+
+        result = self._call(
+            monkeypatch,
+            ticket=_DepFixTicket(),
+            ic=_ic(
+                spec=(
+                    "**Required change area:** uv.lock (bump opentelemetry-api "
+                    "to >=1.45.2 via `uv lock --upgrade-package "
+                    "opentelemetry-api`)."
+                )
+            ),
+            no_change_needed=True,
+            no_change_rationale="uv.lock already pins a version above 1.45.2",
+        )
+        assert result.outcome.next_state is State.DONE
+
+    def test_no_change_needed_ci_fix_dependency_unfixed_lock_blocks(
+        self, tmp_path, monkeypatch
+    ):
+        """Spec names a concrete uv.lock bump but the workspace uv.lock still
+        pins the old (vulnerable) version → the no-op close is blocked even
+        without self-delegating wording."""
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+        (tmp_path / "uv.lock").write_text(
+            "version = 1\n\n"
+            "[[package]]\n"
+            'name = "opentelemetry-api"\n'
+            'version = "1.45.1"\n',
+            encoding="utf-8",
+        )
+        finalize_calls: list[dict] = []
+
+        def _fake_finalize(cls, ctx, ticket, repo_dir, branch, summary, *, ok, **kw):
+            finalize_calls.append({"ok": ok, "summary": summary})
+
+        monkeypatch.setattr(_Stage, "_finalize", classmethod(_fake_finalize))
+
+        class _DepFixTicket(FakeTicket):
+            source = "ci_fix_dependency"
+
+        result = self._call(
+            monkeypatch,
+            ticket=_DepFixTicket(),
+            repo_dir=tmp_path,
+            ic=_ic(
+                spec=(
+                    "**Required change area:** uv.lock (bump opentelemetry-api "
+                    "to >=1.45.2 via `uv lock --upgrade-package "
+                    "opentelemetry-api`)."
+                )
+            ),
+            no_change_needed=True,
+            no_change_rationale="already satisfied",
+        )
+        assert result.outcome.next_state is State.BLOCKED
+        assert finalize_calls and finalize_calls[0]["ok"] is False
+        assert "uv.lock still pins" in finalize_calls[0]["summary"]
+
+    def test_no_change_needed_ci_fix_dependency_fixed_lock_stays_done(
+        self, tmp_path, monkeypatch
+    ):
+        """When uv.lock actually carries the bumped version the no-op close is
+        legitimate (the advisory is resolved)."""
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+        (tmp_path / "uv.lock").write_text(
+            "version = 1\n\n"
+            "[[package]]\n"
+            'name = "opentelemetry-api"\n'
+            'version = "1.45.2"\n',
+            encoding="utf-8",
+        )
+
+        class _DepFixTicket(FakeTicket):
+            source = "ci_fix_dependency"
+
+        result = self._call(
+            monkeypatch,
+            ticket=_DepFixTicket(),
+            repo_dir=tmp_path,
+            ic=_ic(
+                spec=(
+                    "**Required change area:** uv.lock (bump opentelemetry-api "
+                    "to >=1.45.2 via `uv lock --upgrade-package "
+                    "opentelemetry-api`)."
+                )
+            ),
+            no_change_needed=True,
+            no_change_rationale="already satisfied",
+        )
+        assert result.outcome.next_state is State.DONE
+
     def test_no_change_needed_with_open_review_directives_blocks(self, monkeypatch):
         """no_change_needed + empty diff while a review directive is open → BLOCKED.
 

@@ -424,6 +424,48 @@ def test_out_of_scope_description_names_untouched_alert(tmp_path, monkeypatch):
     assert "src/untouched.py" in desc
 
 
+def test_out_of_scope_fix_ticket_spec_owns_the_bump(tmp_path, monkeypatch):
+    """The spawned ci_fix_dependency ticket's spec must instruct ITS implement
+    pass to perform the change — even when the LLM put self-delegating "handled
+    by a dedicated ci_fix_dependency ticket" wording into required_change_area.
+
+    Regression (ci-fix-noop-close-without-verifying-advisory-resolved,
+    robotsix-http 20261118T180519Z-…-2dfb): the routing spec said the bump was
+    handled by a sibling ticket that does not exist, so implement closed with an
+    empty diff and the advisory stayed red on main."""
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(
+            required_change_area=(
+                "uv.lock (bump opentelemetry-api to >=1.45.2 via "
+                "`uv lock --upgrade-package opentelemetry-api`) — handled by a "
+                "dedicated ci_fix_dependency ticket"
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    fix = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)[0]
+    desc = ctx.service.workspace(fix).read_description()
+    # The concrete command survives verbatim…
+    assert "`uv lock --upgrade-package opentelemetry-api`" in desc
+    # …but the self-delegating ownership gap is neutralized: the spawned
+    # ticket states plainly that IT is the fix and implement must run the bump.
+    assert "**This ticket IS the dependency fix.**" in desc
+    assert "BY THIS TICKET's implement pass" in desc
+    assert "Do not treat it as handled elsewhere" in desc
+
+
 _FIXTURE_JOB_LOG = "\n".join(
     [
         "### Job: Tests (id=1) — failing step: Run tests",
