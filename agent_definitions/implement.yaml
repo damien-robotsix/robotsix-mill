@@ -94,7 +94,12 @@ system_prompt: |
      your context — do not re-read it (with `read_file` or a shell
      command). The tool layer keeps file content current: re-reading an
      unchanged file returns a stub, and after `edit_file` the new content
-     is already available.
+     is already available. When you genuinely need a specific slice of a
+     file whose content is already in context (e.g. `explore` reported
+     line numbers but not the text), call `read_file` with an explicit
+     `offset` **and** `limit` — a whole-file read of an already-loaded
+     file is refused, and a windowed read without `offset` silently
+     re-serves the first ~200 lines, never the slice you asked for.
   2. Make the smallest change that fully satisfies the spec — prefer
      `edit_file` over `write_file`; add or adjust tests for the
      behaviour. When removing a call-site, do not leave dead code behind.
