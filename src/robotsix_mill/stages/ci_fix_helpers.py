@@ -974,3 +974,117 @@ def _check_upstream_ci_breakage(
         f"This ticket resumes automatically once `{target}` is green again "
         f"(upstream_ci_recovery pass); resume it by hand to retry sooner."
     )
+
+
+# Deterministic signal that an OUT_OF_SCOPE verdict attributes the failure
+# to the CI *environment* (runner/toolchain drift — e.g. a hosted-runner
+# image upgrade to a JDK the repo's pinned Gradle wrapper cannot use) rather
+# than to the ticket's diff.  The stage only accepts such a verdict after it
+# has consulted the target branch's latest CI run for the same check; the
+# classifier keys on the environment/toolchain vocabulary in the verdict's
+# reason text.  Deliberately toolchain-specific so a verdict about code debt
+# (e.g. an out-of-diff CodeQL alert) never matches and stays on today's path.
+_ENV_DRIFT_RE = re.compile(
+    r"(?:github-?hosted|hosted|ci )?runner"
+    r"|runner (?:image|now defaults|version|upgrade)"
+    r"|ubuntu-?(?:latest|2[0-9]|24|22)"
+    r"|\bjava\b|java\s+[0-9]+|jdk-?[0-9]+"
+    r"|\bgradle\b|gradle[ -]wrapper"
+    r"|\bxcode\b|node(?:js)?\s+[0-9]+"
+    r"|pre-?installed|\btoolchain\b"
+    r"|environment[ -]drift|environment-wide"
+)
+
+
+def is_environment_drift_attribution(reason: str) -> bool:
+    """Whether an OUT_OF_SCOPE *reason* attributes the failure to the CI
+    environment (runner image / pre-installed toolchain drift) rather than
+    the ticket's diff.
+
+    Pure deterministic text matching over the verdict's reason — no LLM, no
+    I/O.  Conservative-by-construction is fine: a false negative simply keeps
+    today's behaviour (the verdict is recorded on the agent's reasoning
+    alone), whereas a false positive only ever triggers an extra, read-only
+    forge consultation of the target branch before the verdict is recorded.
+    """
+    return bool(_ENV_DRIFT_RE.search((reason or "").lower()))
+
+
+def confirm_failure_on_target(
+    settings: Any,
+    repo_config: Any,
+    repo_dir: str,
+    failing: list[dict[str, Any]],
+    *,
+    target: str,
+) -> tuple[bool, str]:
+    """Consult the target branch's latest CI run for the PR's failing checks.
+
+    The ci-fix sandbox cannot list main's workflow runs (its ``gh`` is
+    unauthenticated), so an OUT_OF_SCOPE verdict attributed to environment
+    drift used to rest on inference alone.  This helper gives the stage a
+    host-side, forge-authenticated read path: it resolves the target branch's
+    current head from the forge's latest workflow runs and aggregates that
+    commit's CI conclusion, then checks whether the SAME check name(s) the PR
+    is failing on also fail there — the same signal ``_check_upstream_ci_breakage``
+    relies on.
+
+    Returns ``(confirmed, evidence)``:
+
+    * ``(True, ...)`` when the target branch's head CI fails at least one of
+      the PR's failing check names — the failure is environment-wide, so the
+      caller may record the OUT_OF_SCOPE verdict and park on the shared fix.
+    * ``(False, reason)`` when the target is green/pending, has no CI status,
+      cannot be resolved, or the consultation itself fails — the caller MUST
+      NOT record an out-of-scope verdict on that evidence alone.
+
+    *evidence* is a one-line human-readable summary for the ticket history.
+    """
+    from ..scm.forge import get_forge
+
+    pr_names = {chk.get("name", "") for chk in failing if chk.get("name")}
+
+    try:
+        forge = get_forge(settings, repo_config=repo_config)
+    except Exception:
+        return False, "could not build forge to consult target CI"
+
+    target_sha = _current_target_head_sha(forge, target)
+    if target_sha is None:
+        try:
+            target_sha = git_ops.remote_branch_sha(Path(repo_dir), target)
+        except Exception:
+            return False, f"`{target}` head could not be resolved"
+
+    if target_sha is None:
+        return False, f"`{target}` head could not be resolved"
+
+    try:
+        target_ci = forge.commit_ci_conclusion(sha=target_sha)
+    except Exception:
+        return False, f"failed to read CI conclusion for `{target}` ({target_sha[:8]})"
+
+    if target_ci is None:
+        return False, f"no CI status available for `{target}` ({target_sha[:8]})"
+
+    conclusion = target_ci.get("conclusion")
+    if conclusion != "failure":
+        return (
+            False,
+            f"`{target}` head {target_sha[:8]} CI is {conclusion or 'unknown'}",
+        )
+
+    target_failing = {
+        chk.get("name", "") for chk in target_ci.get("failing", []) if chk.get("name")
+    }
+    common = sorted(pr_names & target_failing)
+    if not common:
+        other = ", ".join(sorted(target_failing)) or "(none)"
+        return (
+            False,
+            f"`{target}` head {target_sha[:8]} is red on different check(s): {other}",
+        )
+    return True, (
+        f"`{target}` head {target_sha[:8]} fails the same check(s): "
+        + ", ".join(common)
+    )
