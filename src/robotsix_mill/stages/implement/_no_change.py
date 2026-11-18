@@ -227,8 +227,6 @@ _UPGRADE_PACKAGE_RE = re.compile(
 _CLAIMED_VERSION_RE = re.compile(
     r"(?:>=\s*|to\s+(?:>=)?\s*)v?(\d+(?:\.\d+){1,3})", re.IGNORECASE
 )
-# Fallback when neither ">=x.y.z" nor "to x.y.z" appears near the package.
-_FIRST_VERSION_RE = re.compile(r"v?(\d+(?:\.\d+){1,3})")
 
 
 def _claims_change_handled_elsewhere(*texts: str | None) -> bool:
@@ -248,10 +246,11 @@ def _lockfile_resolves_bump(repo_dir: Path, spec_text: str) -> bool | None:
     """Whether ``uv.lock`` in *repo_dir* already satisfies the spec's bump.
 
     ``True``/``False`` when the spec names a concrete
-    ``uv lock --upgrade-package <pkg>`` plus a dotted version and the lock is
-    readable; ``None`` when it cannot be deterministically verified here
-    (no such claim, no ``uv.lock``, unparseable version) — callers then rely
-    on the self-delegation marker check alone.
+    ``uv lock --upgrade-package <pkg>`` plus an explicit target
+    (``>=x.y.z`` / ``to x.y.z``) and the lock is readable; ``None`` when it
+    cannot be deterministically verified here (no such claim, no explicit
+    target, no ``uv.lock``, unparseable version) — callers then rely on the
+    self-delegation marker check alone.
     """
     m = _UPGRADE_PACKAGE_RE.search(spec_text or "")
     if m is None:
@@ -260,9 +259,14 @@ def _lockfile_resolves_bump(repo_dir: Path, spec_text: str) -> bool | None:
     text = spec_text or ""
     pkg_pos = text.lower().find(pkg)
     tail = text[pkg_pos:] if pkg_pos != -1 else text
+    # Require an explicit target (">=x.y.z" / "to x.y.z") per the ci-fix prompt
+    # template before treating a bump claim as verified.  A bare first-version
+    # fallback can match the OLD (vulnerable) version the spec merely names
+    # (e.g. "…1.45.1 is vulnerable… bump via `uv lock --upgrade-package <pkg>`")
+    # and falsely report the lock already satisfies the bump against a still-
+    # pinned old version — a false DONE.  Without an explicit target we cannot
+    # deterministically verify here, so return None (2026-11-18 review).
     vm = _CLAIMED_VERSION_RE.search(tail)
-    if vm is None:
-        vm = _FIRST_VERSION_RE.search(tail)
     if vm is None:
         return None
     target = _dotted_version(vm.group(1))
@@ -307,6 +311,34 @@ def _ci_fix_dependency_noop_diag(
     """
     if not _is_ci_fix_dependency_ticket(ticket):
         return None
+    # A lockfile that genuinely carries the bumped version means the advisory
+    # is resolved at HEAD — close DONE even if the spec uses delegation
+    # wording.  This ordering matters: the spawned spec now appends "Do not
+    # treat it as handled elsewhere." (ci_fix._spawn_or_reuse_fix), and a bare
+    # substring self-delegation check would fire on that exact sentence and
+    # over-block every real ticket whose advisory is already fixed on main
+    # (a fixed-lock ticket would strand in BLOCKED and the parked source PR
+    # never auto-resume — the opposite of remediation #3, 2026-11-18 review).
+    # Delegation wording only matters when the lockfile does NOT verify.
+    lock_resolves = _lockfile_resolves_bump(repo_dir, spec_text)
+    if lock_resolves is True:
+        return None
+    if lock_resolves is False:
+        # Concrete contradiction — the workspace lockfile still pins the old
+        # version.  Emit the accurate lockfile diagnostic rather than the
+        # self-delegation one: a real spawned spec appends "Do not treat it as
+        # handled elsewhere." and the substring self-delegation check would
+        # otherwise fire on that negation sentence and misreport the spec as
+        # delegating (it says the opposite).  The delegation heuristic is only
+        # consulted when the lockfile cannot be deterministically verified.
+        return (
+            "[Diagnostic] implement concluded ``no_change_needed`` with an "
+            "empty diff on a ci_fix_dependency ticket, but the workspace "
+            "uv.lock still pins the old version the spec names for "
+            "``uv lock --upgrade-package``. The advisory is not resolved, so a "
+            "no-op DONE would leave the CI failure live. Run the bump in THIS "
+            "ticket and commit the updated uv.lock."
+        )
     if _claims_change_handled_elsewhere(spec_text, claim_text):
         return (
             "[Diagnostic] implement concluded ``no_change_needed`` with an "
@@ -319,15 +351,6 @@ def _ci_fix_dependency_noop_diag(
             "main. Perform the required change in THIS ticket (run the bump "
             "command and commit the updated uv.lock); close without a diff only "
             "if uv.lock already pins the fixed version."
-        )
-    if _lockfile_resolves_bump(repo_dir, spec_text) is False:
-        return (
-            "[Diagnostic] implement concluded ``no_change_needed`` with an "
-            "empty diff on a ci_fix_dependency ticket, but the workspace "
-            "uv.lock still pins the old version the spec names for "
-            "``uv lock --upgrade-package``. The advisory is not resolved, so a "
-            "no-op DONE would leave the CI failure live. Run the bump in THIS "
-            "ticket and commit the updated uv.lock."
         )
     return None
 
