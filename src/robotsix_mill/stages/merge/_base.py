@@ -30,8 +30,10 @@ class _MergeStageBase:
         _auto_merge_eligible: ClassVar[Any]
         _multi_repo_fix_ci: ClassVar[Any]
         # Seams on PrBaselineMixin (_check_pr_baseline) and HumanApprovalMixin
-        # (_try_auto_merge, _try_update_branch_for_conflict), called
-        # cross-mixin from CIPollMixin and AutoMergeGateMixin.
+        # (_try_auto_merge, _try_update_branch_for_conflict,
+        # _try_skip_sensitive_path_for_approved_diff), called cross-mixin
+        # from CIPollMixin and AutoMergeGateMixin.
         _check_pr_baseline: ClassVar[Any]
         _try_auto_merge: ClassVar[Any]
         _try_update_branch_for_conflict: ClassVar[Any]
+        _try_skip_sensitive_path_for_approved_diff: ClassVar[Any]

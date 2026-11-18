@@ -1433,3 +1433,241 @@ def test_auto_merge_destructive_workflow_change_still_blocks(tmp_path, monkeypat
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.HUMAN_MR_APPROVAL
     assert merge_called == []
+
+
+# ============================================================
+# G. Approved-diff sentinel: no re-trip on merge retries
+# ============================================================
+
+
+def _approved_diff_hash(files):
+    """Compute the merge gate's content-stable PR diff fingerprint."""
+    import hashlib
+    import json
+
+    pairs = sorted((f.get("path", ""), f.get("sha", "")) for f in files)
+    return hashlib.sha256(json.dumps(pairs, sort_keys=True).encode()).hexdigest()
+
+
+def _write_approved_diff_sentinel(ctx, ticket, files):
+    """Write the approved-diff sentinel as if a human approved ``files``."""
+    art = ctx.service.workspace(ticket).artifacts_dir
+    art.mkdir(parents=True, exist_ok=True)
+    art.joinpath("approved_diff_hash.txt").write_text(
+        _approved_diff_hash(files), encoding="utf-8"
+    )
+
+
+def test_waiting_auto_merge_reenqueue_with_approved_diff_skips_gate(
+    tmp_path, monkeypatch
+):
+    """A re-enqueued WAITING_AUTO_MERGE PR whose workflow diff a human
+    already approved must NOT re-trip the sensitive-path gate — it
+    auto-merges instead of looping back to HUMAN_MR_APPROVAL."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    files = [{"path": ".github/workflows/deploy.yml", "sha": "aaaa1111"}]
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "abc1234",
+            "author": "mill-bot",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: files,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
+    )
+    _mock_workflow_diff(monkeypatch, "+permissions: write-all\n")
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    _write_approved_diff_sentinel(ctx, t, files)  # human approved this diff
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="re-enqueued")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert merge_called
+
+
+def test_waiting_auto_merge_changed_diff_still_requires_fresh_approval(
+    tmp_path, monkeypatch
+):
+    """When the workflow diff fingerprint changed since the last approval,
+    the gate must re-trip — a stale approval must not auto-merge new
+    content."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    files = [{"path": ".github/workflows/deploy.yml", "sha": "aaaa1111"}]
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "abc1234",
+            "author": "mill-bot",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "pending", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: files,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_review_status",
+        lambda self, *, source_branch: None,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
+    )
+    _mock_workflow_diff(monkeypatch, "+permissions: write-all\n")
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    # Approval was for a DIFFERENT diff than the PR currently carries.
+    _write_approved_diff_sentinel(
+        ctx, t, [{"path": ".github/workflows/deploy.yml", "sha": "deadbeef"}]
+    )
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="re-enqueued")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+
+
+def test_human_mr_approval_prior_approval_survives_pr_files_fetch_failure(
+    tmp_path, monkeypatch
+):
+    """A transient 'failed to fetch PR file list' must NOT discard a prior
+    approval: with a stored approved-diff sentinel the destructive-workflow
+    gate is skipped instead of looping the ticket back through approval."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    files = [{"path": ".github/workflows/deploy.yml", "sha": "aaaa1111"}]
+
+    def _pr_files_boom(*args, **kwargs):
+        raise RuntimeError("transient forge failure")
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "abc1234",
+            "author": "mill-bot",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+    monkeypatch.setattr(github.GitHubForge, "pr_files", _pr_files_boom)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
+    )
+    _mock_workflow_diff(monkeypatch, "+permissions: write-all\n")
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    _write_approved_diff_sentinel(ctx, t, files)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert merge_called
+
+
+def test_waiting_auto_merge_prior_approval_survives_pr_files_fetch_failure(
+    tmp_path, monkeypatch
+):
+    """The WAITING_AUTO_MERGE re-enqueue path must also honor a prior
+    approval when the PR file list fetch is transiently failing — it must
+    not push the ticket back into the approval loop."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    files = [{"path": ".github/workflows/deploy.yml", "sha": "aaaa1111"}]
+
+    def _pr_files_boom(*args, **kwargs):
+        raise RuntimeError("transient forge failure")
+
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "abc1234",
+            "author": "mill-bot",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+    monkeypatch.setattr(github.GitHubForge, "pr_files", _pr_files_boom)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
+    )
+    _mock_workflow_diff(monkeypatch, "+permissions: write-all\n")
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+    _write_approved_diff_sentinel(ctx, t, files)
+    ctx.service.transition(t.id, State.WAITING_AUTO_MERGE, note="re-enqueued")
+    t = ctx.service.get(t.id)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert merge_called

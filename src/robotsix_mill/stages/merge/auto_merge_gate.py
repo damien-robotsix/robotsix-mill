@@ -64,6 +64,15 @@ class AutoMergeGateMixin(_MergeStageBase):
         eligible, reason = self._auto_merge_eligible(
             ticket, ctx, pr_head_sha=feature_tip_sha, forge=forge, pr=pr
         )
+        if not eligible and self._try_skip_sensitive_path_for_approved_diff(
+            ticket, ctx, forge, pr, branch, feature_tip_sha
+        ):
+            # A re-enqueued PR whose workflow diff a human already approved
+            # must not re-trip the sensitive-path / destructive-workflow
+            # gate on every merge retry.  The approved-diff sentinel (or a
+            # live APPROVED review) lifts the block; a transient
+            # "failed to fetch PR file list" must not discard it.
+            eligible = True
         if not eligible:
             self._maybe_comment(ticket, ctx, reason)
             return Outcome(State.HUMAN_MR_APPROVAL, reason)
