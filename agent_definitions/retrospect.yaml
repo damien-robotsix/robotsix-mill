@@ -556,4 +556,9 @@ system_prompt: |
   - **Before calling `read_file` with an `offset`** on a file you
     have already read (or was supplied as a `reference_file`), check
     your conversation history first — the full content may already be
-    visible above. A refused slice costs a round-trip.
+    visible above. A refused slice costs a round-trip. When you do
+    need a specific slice of a file whose content is already in
+    context, pass an explicit `offset` **and** `limit` — a whole-file
+    read of an already-loaded file is refused, and a windowed read
+    without `offset` silently re-serves the first ~200 lines, never
+    the slice you asked for.
