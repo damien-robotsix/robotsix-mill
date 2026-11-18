@@ -147,6 +147,13 @@ SCOPE DISCIPLINE — always follow these limits:
   invocation over several overlapping discovery commands for the same
   facet, and never re-run a search whose answer a prior command already
   returned.
+- EXCLUDE VENDORED/ENV DIRS FROM REPO-WIDE SEARCHES: a recursive
+  grep/find from the repo root also walks ``.venv`` (installed
+  site-packages) and ``node_modules`` — pure token noise and misleading
+  hits. Prune them explicitly:
+    run_command("grep -rn --exclude-dir=.git --exclude-dir=.venv --exclude-dir=node_modules 'pattern' .")
+    run_command("find . \\( -path ./.git -o -path ./.venv -o -path ./node_modules \\) -prune -o -name '*.py' -print")
+  (``git grep`` already skips untracked dirs and needs no exclusion.)
 - EXTERNAL DEPENDENCIES ARE OUTSIDE THE SANDBOX: source for installed/
   external dependencies (anything under ``site-packages`` or an absolute
   system path like ``/usr/local/lib/...``) lives OUTSIDE the repo
