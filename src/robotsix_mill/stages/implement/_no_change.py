@@ -213,6 +213,25 @@ _SELF_DELEGATION_PHRASES: tuple[str, ...] = (
     "do not fix in this one",
 )
 
+# The ownership sentence ``ci_fix._spawn_or_reuse_fix`` appends to EVERY
+# spawned ci_fix_dependency spec — "…must be performed BY THIS TICKET's
+# implement pass … Do not treat it as handled elsewhere."  That sentence is a
+# NEGATION (an instruction that this ticket IS the fix and must NOT be read as
+# delegated), but it contains the bare substring "handled elsewhere", which the
+# phrase set above would otherwise trip on.  On a non-lockfile (code-scanning)
+# spawn there is no ``uv lock --upgrade-package`` command, so
+# ``_lockfile_resolves_bump`` returns ``None`` and control falls to the phrase
+# detector — without stripping the negation, every genuine empty-diff no-op
+# (alert already fixed at HEAD) would BLOCK with a factually wrong
+# self-delegation diagnostic through all three no-op paths
+# (2026-11-18 review: code-scanning spawn, e.g. …names_untouched_alert).  Strip
+# it before matching so the detector reads the spec's ACTUAL delegation claim —
+# a genuine "handled by a dedicated ci_fix_dependency ticket" echo is still
+# caught, only the standard negation sentence is ignored.
+_SPAWNED_OWNERSHIP_NEGATION_RE = re.compile(
+    r"do\s+not\s+treat\s+it\s+as\s+handled\s+elsewhere\b", re.IGNORECASE
+)
+
 # ``uv lock --upgrade-package <pkg>`` — the command a ci_fix_dependency
 # ticket's spec names for a transitive-dependency advisory bump.
 _UPGRADE_PACKAGE_RE = re.compile(
@@ -232,6 +251,13 @@ _CLAIMED_VERSION_RE = re.compile(
 def _claims_change_handled_elsewhere(*texts: str | None) -> bool:
     """True when *texts* (spec + no-change rationale) self-delegate the fix."""
     joined = " ".join((t or "").strip().lower() for t in texts)
+    # The spawned spec's standard ownership sentence negates delegation — drop
+    # it first so its bare "handled elsewhere" substring isn't read as a claim
+    # that the failing change is handled by another ticket (it says the
+    # opposite).  Without this, every genuine no-op on a non-lockfile
+    # (code-scanning) spawn would be mis-blocked as self-delegation
+    # (2026-11-18 review).
+    joined = _SPAWNED_OWNERSHIP_NEGATION_RE.sub("", joined)
     return any(phrase in joined for phrase in _SELF_DELEGATION_PHRASES)
 
 
@@ -339,6 +365,14 @@ def _ci_fix_dependency_noop_diag(
             "no-op DONE would leave the CI failure live. Run the bump in THIS "
             "ticket and commit the updated uv.lock."
         )
+    # No lockfile-verifiable bump claim (e.g. a non-lockfile code-scanning
+    # spawn, or a spec whose bump lacks an explicit >=x.y.z / to x.y.z
+    # target): the only thing that can justify a block is genuine
+    # self-delegation wording.  ``_claims_change_handled_elsewhere`` strips
+    # the standard "Do not treat it as handled elsewhere." ownership sentence
+    # _spawn_or_reuse_fix appends to every spawned spec, so a non-lockfile
+    # spawn whose alert is already fixed at HEAD closes DONE instead of being
+    # misread as delegating (2026-11-18 review).
     if _claims_change_handled_elsewhere(spec_text, claim_text):
         return (
             "[Diagnostic] implement concluded ``no_change_needed`` with an "

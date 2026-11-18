@@ -1467,6 +1467,124 @@ class TestEvaluateTestResults:
         # The negation sentence must not be misreported as self-delegation.
         assert "self-delegation" not in finalize_calls[0]["summary"]
 
+    def test_no_change_needed_ci_fix_dependency_real_spawned_no_lockfile_spec_stays_done(
+        self, tmp_path, monkeypatch
+    ):
+        """Regression (2026-11-18 review): a NON-lockfile (code-scanning) spawn
+        — whose spec still carries the unconditionally-appended "Do not treat
+        it as handled elsewhere." ownership sentence but has NO `uv lock
+        --upgrade-package` command — must NOT be read as self-delegation.
+
+        ``_lockfile_resolves_bump`` returns ``None`` for such a spec (no
+        upgrade command to verify), so control falls to the phrase detector.  A
+        bare-substring "handled elsewhere" match on the negation sentence would
+        BLOCK every genuine no-op (alert already fixed at HEAD) with a
+        factually wrong self-delegation diagnostic, through all three no-op
+        paths, stranding the ticket with no verification channel to escape.
+        The negation sentence is stripped before the delegation check, so this
+        closes DONE."""
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+        finalize_calls: list[dict] = []
+
+        def _fake_finalize(cls, ctx, ticket, repo_dir, branch, summary, *, ok, **kw):
+            finalize_calls.append({"ok": ok, "summary": summary})
+
+        monkeypatch.setattr(_Stage, "_finalize", classmethod(_fake_finalize))
+
+        class _DepFixTicket(FakeTicket):
+            source = "ci_fix_dependency"
+
+        # Real non-lockfile spawned shape (mirrors
+        # test_out_of_scope_description_names_untouched_alert): a code-scanning
+        # alert with no uv bump command, plus the standard appended ownership
+        # sentence.  No uv.lock in the workspace (nothing to verify against).
+        spec = (
+            "## Out-of-scope CI failure routed from 20261118T173536Z-…-ea0e\n\n"
+            "**Failing check:** analyze (codeql)\n\n"
+            "**Required change area:** fix the py/clear-text-logging alert in "
+            "src/untouched.py\n\n"
+            "**Out-of-scope code-scanning alert(s):** `py/clear-text-logging` "
+            "at `src/untouched.py`\n\n"
+            "**This ticket IS the dependency fix.** The OUT_OF_SCOPE verdict "
+            "that routed this failure here raised this ticket as the fix — "
+            "there is no separate sibling fix ticket, so the required change "
+            "area above must be performed BY THIS TICKET's implement pass "
+            "(e.g. run the named `uv lock --upgrade-package <pkg>` command and "
+            "commit the updated `uv.lock`). Do not treat it as handled "
+            "elsewhere."
+        )
+        result = self._call(
+            monkeypatch,
+            ticket=_DepFixTicket(),
+            repo_dir=tmp_path,
+            ic=_ic(spec=spec),
+            no_change_needed=True,
+            no_change_rationale=(
+                "the py/clear-text-logging alert in src/untouched.py is no "
+                "longer present at HEAD"
+            ),
+        )
+        assert result.next_action == "return"
+        assert result.outcome.next_state is State.DONE
+        assert finalize_calls and finalize_calls[0]["ok"] is True
+        assert "self-delegation" not in finalize_calls[0]["summary"]
+
+    def test_no_change_needed_ci_fix_dependency_real_spawned_no_lockfile_genuine_delegation_blocks(
+        self, tmp_path, monkeypatch
+    ):
+        """Stripping the standard ownership sentence must NOT neutralize real
+        self-delegation: a non-lockfile spawn whose spec still carries a
+        genuine "handled by a dedicated ci_fix_dependency ticket" echo must
+        still BLOCK (only the negation sentence is ignored, not the actual
+        delegation claim)."""
+        self._install_default_patches(monkeypatch)
+        monkeypatch.setattr(
+            _Stage,
+            "_any_repo_has_changes",
+            lambda *a, **kw: False,
+        )
+        finalize_calls: list[dict] = []
+
+        def _fake_finalize(cls, ctx, ticket, repo_dir, branch, summary, *, ok, **kw):
+            finalize_calls.append({"ok": ok, "summary": summary})
+
+        monkeypatch.setattr(_Stage, "_finalize", classmethod(_fake_finalize))
+
+        class _DepFixTicket(FakeTicket):
+            source = "ci_fix_dependency"
+
+        spec = (
+            "## Out-of-scope CI failure routed from 20261118T173536Z-…-ea0e\n\n"
+            "**Failing check:** analyze (codeql)\n\n"
+            "**Required change area:** fix the py/clear-text-logging alert in "
+            "src/untouched.py — handled by a dedicated ci_fix_dependency "
+            "ticket\n\n"
+            "**This ticket IS the dependency fix.** The OUT_OF_SCOPE verdict "
+            "that routed this failure here raised this ticket as the fix — "
+            "there is no separate sibling fix ticket, so the required change "
+            "area above must be performed BY THIS TICKET's implement pass "
+            "(e.g. run the named `uv lock --upgrade-package <pkg>` command and "
+            "commit the updated `uv.lock`). Do not treat it as handled "
+            "elsewhere."
+        )
+        result = self._call(
+            monkeypatch,
+            ticket=_DepFixTicket(),
+            repo_dir=tmp_path,
+            ic=_ic(spec=spec),
+            no_change_needed=True,
+            no_change_rationale="already satisfied",
+        )
+        assert result.next_action == "return"
+        assert result.outcome.next_state is State.BLOCKED
+        assert finalize_calls and finalize_calls[0]["ok"] is False
+        assert "self-delegation" in finalize_calls[0]["summary"]
+
     def test_no_change_needed_with_open_review_directives_blocks(self, monkeypatch):
         """no_change_needed + empty diff while a review directive is open → BLOCKED.
 
