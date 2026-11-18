@@ -561,3 +561,139 @@ def test_filing_leaves_real_failure_in_draft(settings, service):
     )
     _worker(settings)._apply_stale_ci_gate(service, FakeForge(runs=[_RED]), t, _body())
     assert service.get(t.id).state is State.DRAFT
+
+
+# --- companion ticket on the github-workflows board --------------------------
+#
+# An upstream-only failure must leave a trace where the fix can happen: the
+# ci source guarantees a companion ticket on the github-workflows board
+# naming the reusable, the pinned SHA, the failing job and the consumer.
+
+
+@pytest.fixture
+def gw_board(monkeypatch):
+    from robotsix_mill.stages import ci_fix_report
+
+    monkeypatch.setattr(ci_fix_report, "_github_workflows_board_id", lambda: "gw-board")
+    return "gw-board"
+
+
+class _OwnerForge(FakeForge):
+    _owner_repo = ("o", "consumer")
+
+
+def test_upstream_verdict_carries_attribution_fields():
+    forge = _OwnerForge(
+        runs=[_RED],
+        jobs=[_job("ci / Audit", "Audit dependencies")],
+        wf_text=_REUSABLE_WF,
+    )
+    v = evaluate_stale_ci(forge, _ticket(), _body(), stale_days=14, now=NOW)
+    assert v is not None and v.action == "block"
+    assert v.upstream_ref == (
+        "damien-robotsix/robotsix-github-workflows/.github/workflows/"
+        "python-ci.yml@deadbeef"
+    )
+    assert v.failing_jobs == ("ci / Audit",)
+    assert v.consumer == "o/consumer"
+
+
+def test_check_ticket_files_companion_on_workflows_board(
+    settings, repo_config, gw_board, monkeypatch
+):
+    import robotsix_mill.scm.forge as forge_mod
+    from robotsix_mill.core.service import TicketService
+    from robotsix_mill.stages import ci_stale_gate
+
+    forge = _OwnerForge(
+        runs=[_RED],
+        jobs=[_job("ci / Audit", "Audit dependencies")],
+        wf_text=_REUSABLE_WF,
+    )
+    monkeypatch.setattr(forge_mod, "get_forge", lambda *a, **kw: forge)
+
+    t = _ticket()
+    v = ci_stale_gate.check_ticket(settings, repo_config, t, _body())
+    assert v is not None and v.action == "block"
+
+    gw = TicketService(settings, board_id=gw_board)
+    tickets = gw.list()
+    assert len(tickets) == 1
+    comp = tickets[0]
+    assert comp.source == SourceKind.AGENT
+    assert comp.title == (
+        "Reusable workflow failure: python-ci.yml@deadbeef for o/consumer"
+    )
+    desc = gw.workspace(comp).read_description()
+    assert (
+        "damien-robotsix/robotsix-github-workflows/.github/workflows/"
+        "python-ci.yml@deadbeef" in desc
+    )
+    assert "o/consumer" in desc
+    assert "ci / Audit" in desc
+    assert "<!-- ci-upstream: consumer=o/consumer;ref=" in desc
+
+    # Idempotent across gate passes (filing, refine entry, approval): the
+    # second pass reuses the open companion instead of duplicating it.
+    ci_stale_gate.check_ticket(settings, repo_config, t, _body())
+    assert len(gw.list()) == 1
+
+
+def test_filing_upstream_only_files_companion(settings, service, gw_board):
+    from robotsix_mill.core.service import TicketService
+
+    t = service.create(
+        title="CI failure: CI on main", description=_body(), source=SourceKind.CI
+    )
+    forge = _OwnerForge(
+        runs=[_RED],
+        jobs=[_job("ci / Audit", "Audit dependencies")],
+        wf_text=_REUSABLE_WF,
+    )
+    _worker(settings)._apply_stale_ci_gate(service, forge, t, _body())
+    assert service.get(t.id).state is State.BLOCKED
+    gw = TicketService(settings, board_id=gw_board)
+    assert len(gw.list()) == 1
+    desc = gw.workspace(gw.list()[0]).read_description()
+    assert "python-ci.yml@deadbeef" in desc and "o/consumer" in desc
+
+
+def test_repo_setting_block_files_no_companion(settings, service, gw_board):
+    from robotsix_mill.core.service import TicketService
+
+    forge = FakeForge(
+        runs=[_RED],
+        jobs=[_job("release / release-please", "Create app token")],
+        wf_text=_RELEASE_WF,
+        log_text=_EMPTY_APP_ID_LOG,
+    )
+    v = evaluate_stale_ci(forge, _ticket(), _body(), stale_days=14, now=NOW)
+    assert v is not None and v.action == "block"
+    assert v.upstream_ref == "" and v.failing_jobs == () and v.consumer == ""
+
+    t = service.create(
+        title="CI failure: CI on main", description=_body(), source=SourceKind.CI
+    )
+    _worker(settings)._apply_stale_ci_gate(service, forge, t, _body())
+    assert TicketService(settings, board_id=gw_board).list() == []
+
+
+def test_refine_upstream_only_files_companion(ctx, service, monkeypatch, gw_board):
+    from robotsix_mill.core.service import TicketService
+    from robotsix_mill.stages.refine import RefineStage
+
+    _green_forge(
+        monkeypatch,
+        _OwnerForge(
+            runs=[_RED],
+            jobs=[_job("ci / Audit", "Audit dependencies")],
+            wf_text=_REUSABLE_WF,
+        ),
+    )
+    t = service.create(
+        title="CI failure: CI on main", description=_body(), source=SourceKind.CI
+    )
+    outcome = RefineStage().run(t, ctx)
+    assert outcome.next_state is State.BLOCKED
+    gw = TicketService(ctx.settings, board_id=gw_board)
+    assert len(gw.list()) == 1
