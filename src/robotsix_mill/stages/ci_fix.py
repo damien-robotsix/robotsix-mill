@@ -91,6 +91,8 @@ from .ci_fix_helpers import (
     _write_counter,
     _write_text,
     build_failing_run_evidence,
+    confirm_failure_on_target,
+    is_environment_drift_attribution,
 )
 from .ci_infra_block import (
     INFRA_ACCOUNT_BLOCKED,
@@ -1183,7 +1185,14 @@ class CIFixStage(Stage):
             if self_gate_cmds:
                 return self._reject_self_introduced_gate(ticket, ctx, self_gate_cmds)
             return self._handle_out_of_scope(
-                ticket, ctx, branch, result, failing_summary, head_sha, repo_dir
+                ticket,
+                ctx,
+                branch,
+                result,
+                failing_summary,
+                head_sha,
+                repo_dir,
+                failing,
             )
 
         # FAILED, or None on crash — the agent could not turn CI green within
@@ -2248,6 +2257,7 @@ class CIFixStage(Stage):
         failing_summary: str,
         head_sha: str = "",
         repo_dir: str = "",
+        failing: list[dict[str, Any]] | None = None,
     ) -> Outcome:
         """Route an out-of-scope CI failure to a dedicated fix ticket.
 
@@ -2258,6 +2268,13 @@ class CIFixStage(Stage):
         logic to :func:`~.dependency_fix.spawn_dependency_fix`, which is shared
         with the implement-stage baseline check (and, later, verify /
         review / merge).
+
+        When the verdict attributes the failure to the CI *environment* (e.g.
+        a hosted-runner JDK upgrade incompatible with the pinned Gradle
+        wrapper), the OUT_OF_SCOPE verdict is only accepted after the latest
+        target-branch CI run for the failing check is consulted
+        (:meth:`_verify_env_drift_on_target`) — never on the agent's
+        inference alone, since the sandbox's ``gh`` is unauthenticated.
         """
         # Deterministic in-diff guard: the LLM's OUT_OF_SCOPE verdict must not
         # be the only safety net. If ANY open code-scanning alert lives in this
@@ -2286,6 +2303,18 @@ class CIFixStage(Stage):
         if merged_outcome is not None:
             return merged_outcome
 
+        # Environment-drift confirmation gate: an OUT_OF_SCOPE verdict
+        # attributed to the CI environment (runner/toolchain drift) is only
+        # recorded after the latest target-branch CI run for the failing
+        # check confirms the same failure — otherwise the verdict rests on
+        # the agent's inference alone (the sandbox's gh is unauthenticated)
+        # and is treated as ticket-introduced instead.
+        env_outcome = self._verify_env_drift_on_target(
+            ticket, ctx, result, failing_summary, repo_dir, failing
+        )
+        if env_outcome is not None:
+            return env_outcome
+
         return self._spawn_or_reuse_fix(
             ticket,
             ctx,
@@ -2296,6 +2325,89 @@ class CIFixStage(Stage):
             out_of_scope_alerts,
             repo_dir,
         )
+
+    def _verify_env_drift_on_target(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        result: CiFixResult,
+        failing_summary: str,
+        repo_dir: str,
+        failing: list[dict[str, Any]] | None = None,
+    ) -> Outcome | None:
+        """Accept an environment-drift OUT_OF_SCOPE verdict only on evidence.
+
+        When ``result.out_of_scope_reason`` attributes the failure to the CI
+        environment (runner image / pre-installed toolchain drift), consult
+        the target branch's latest CI run for the failing check via the
+        host-side forge and:
+
+        * **confirmed** (the same check fails on the target branch): record a
+          history note with the evidence and return ``None`` so the caller
+          proceeds to park on the shared dependency-fix ticket.
+        * **not confirmed** (target green/pending, no CI status, unresolvable
+          head, or a consultation error): do NOT record the OUT_OF_SCOPE
+          verdict — the failure may be ticket-introduced.  Return
+          ``Outcome(State.IMPLEMENT_COMPLETE)`` so the stage re-polls and the
+          agent re-runs in-scope (the identical-failure guard and the
+          total-attempt cap bound the loop).
+
+        Returns ``None`` (proceed to spawn) when the verdict is NOT
+        environment-drift attributed, so today's path for out-of-diff code
+        debt (e.g. CodeQL alerts) is untouched.
+        """
+        if not is_environment_drift_attribution(result.out_of_scope_reason):
+            return None
+
+        try:
+            target = target_branch_for(ctx.settings, ctx.repo_config)
+            confirmed, evidence = confirm_failure_on_target(
+                ctx.settings,
+                ctx.repo_config,
+                repo_dir,
+                failing or [],
+                target=target,
+            )
+        except Exception:
+            log.exception(
+                "%s: environment-drift OUT_OF_SCOPE consultation failed — "
+                "suppressing the unverified verdict",
+                ticket.id,
+            )
+            confirmed, evidence = False, "consultation raised unexpectedly"
+
+        if confirmed:
+            note = (
+                "ci-fix confirmed OUT_OF_SCOPE for an environment-wide CI "
+                f"failure: the failing check also fails on `{target}` "
+                f"({evidence}). Parking on the shared dependency-fix ticket."
+            )
+            try:
+                ctx.service.add_history_note(ticket.id, note)
+            except Exception:
+                log.warning(
+                    "%s: failed to record env-drift confirmation note", ticket.id
+                )
+            return None
+
+        note = (
+            "ci-fix overrode OUT_OF_SCOPE → IN_SCOPE: the failure was "
+            f"attributed to environment drift but is NOT confirmed on "
+            f"`{target}` ({evidence}). An OUT_OF_SCOPE verdict is only "
+            "recorded after the latest target CI run for the check is "
+            "consulted (the sandbox's gh cannot verify main) — the failure "
+            "is treated as likely ticket-introduced and re-polled for an "
+            "in-scope fix (the identical-failure guard + attempt cap bound "
+            "the loop)."
+        )
+        try:
+            ctx.service.add_history_note(ticket.id, note)
+        except Exception:
+            log.warning(
+                "%s: failed to record env-drift suppress note",
+                ticket.id,
+            )
+        return Outcome(State.IMPLEMENT_COMPLETE, note)
 
     def _recheck_after_merged_fix(
         self,

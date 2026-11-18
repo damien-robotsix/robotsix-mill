@@ -1097,3 +1097,140 @@ def test_out_of_scope_description_records_toolchain_pins(tmp_path, monkeypatch):
     desc = ctx.service.workspace(fix).read_description()
     assert "CI toolchain pins" in desc
     assert "flutter-version: 3.47.2" in desc
+
+
+# ---------------------------------------------------------------------------
+# Environment-drift OUT_OF_SCOPE: verdict only recorded after the latest
+# target-branch CI run for the check is consulted (gh is unauthenticated in
+# the sandbox, so the stage must verify via the host-side forge).
+# ---------------------------------------------------------------------------
+
+
+def _env_drift_result(**over):
+    kwargs = {
+        "status": "OUT_OF_SCOPE",
+        "summary": "CI environment drift — not this ticket's diff",
+        "out_of_scope_reason": (
+            "the CI runner now defaults to Java 25.0.5, incompatible with "
+            "Gradle 8.14.3 pinned in "
+            "android/gradle/wrapper/gradle-wrapper.properties"
+        ),
+        "failing_check": "ci / Tests",
+        "required_change_area": ".github/workflows/ci.yml (pin a JDK via setup-java)",
+    }
+    kwargs.update(over)
+    return CiFixResult(**kwargs)
+
+
+def _env_drift_forge(monkeypatch, *, target_conclusion="failure", same_check=True):
+    """Wire the forge seams for an env-drift OUT_OF_SCOPE run.
+
+    *check_status* reports a ``ci / Tests`` failure (the PR's failing check);
+    ``commit_ci_conclusion`` on the target branch head reports
+    *target_conclusion* for that same check when *same_check* is set, so the
+    host-side consultation either confirms (``failure``) or refutes
+    (``success``) the environment-wide attribution.
+    """
+    _oos_forge(monkeypatch)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch, require_checks=False: {
+            "conclusion": "failure",
+            "failing": [
+                {
+                    "name": "ci / Tests",
+                    "summary": "run",
+                    "text": None,
+                    "annotations": [],
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch, require_checks=False: {"sha": "abc123"},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, *, branch=None, head_sha=None: [{"head_sha": "mainabc"}],
+    )
+    failing_names = [{"name": "ci / Tests"}] if same_check else [{"name": "other / X"}]
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "commit_ci_conclusion",
+        lambda self, *, sha: {
+            "conclusion": target_conclusion,
+            "failing": failing_names if target_conclusion == "failure" else [],
+            "pending": [],
+        },
+    )
+
+
+def test_out_of_scope_env_drift_confirmed_on_target_spawns_and_parks(
+    tmp_path, monkeypatch
+):
+    """Env-drift OUT_OF_SCOPE with the SAME check failing on the target
+    branch head records the verdict on evidence and parks on the shared
+    dependency-fix ticket (AC2)."""
+    ctx = _gh(tmp_path)
+    _env_drift_forge(monkeypatch)
+    # The pre-agent upstream guard would BLOCK first on the same target
+    # failure; bypass it so the env-drift OUT_OF_SCOPE gate is exercised.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix._check_upstream_ci_breakage",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _env_drift_result(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert len(fixes) == 1
+
+    notes = " ".join(e.note or "" for e in ctx.service.history(t.id) if e.note)
+    assert "confirmed OUT_OF_SCOPE" in notes
+    assert "mainabc" in notes
+
+
+def test_out_of_scope_env_drift_unconfirmed_on_target_is_suppressed(
+    tmp_path, monkeypatch
+):
+    """Env-drift OUT_OF_SCOPE with the target branch GREEN does NOT record
+    the verdict: the failure may be ticket-introduced, so the stage re-polls
+    (IMPLEMENT_COMPLETE) instead of parking (AC1)."""
+    ctx = _gh(tmp_path)
+    _env_drift_forge(monkeypatch, target_conclusion="success")
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _env_drift_result(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.IMPLEMENT_COMPLETE
+    assert "overrode OUT_OF_SCOPE" in (out.note or "")
+
+    assert ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY) == []
+    notes = " ".join(e.note or "" for e in ctx.service.history(t.id) if e.note)
+    assert "overrode OUT_OF_SCOPE" in notes
+    assert "ci / Tests" in notes
