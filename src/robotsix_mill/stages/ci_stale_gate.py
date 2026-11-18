@@ -42,6 +42,7 @@ from ..agents.runners.ci_auto_close_runner import (
 )
 from ..core.constants import STALE_CI_FAILURE_PREFIX
 from ..core.models import SourceKind
+from ..core.states import DONE_OR_CLOSED
 from .ci_infra_block import REPO_SETTING_BLOCK_MARKER
 
 log = logging.getLogger("robotsix_mill.ci_stale_gate")
@@ -74,6 +75,14 @@ class StaleCiVerdict:
     # setting to add and the repo to add it on — drives one escalation.
     setting: str | None = None
     repo: str = ""
+    # Set for an upstream-only block (every failing job lives inside a
+    # robotsix-github-workflows reusable): the pinned ``uses:`` ref
+    # (``owner/repo/path@sha``), the failing run-job names and the affected
+    # consumer repo — the ingredients of the companion ticket filed on the
+    # github-workflows board (see :func:`file_upstream_companion`).
+    upstream_ref: str = ""
+    failing_jobs: tuple[str, ...] = ()
+    consumer: str = ""
 
 
 def is_ci_failure_ticket(ticket: Any) -> bool:
@@ -158,11 +167,13 @@ def _upstream_ref(run_job: dict[str, Any], wf_jobs: dict[str, Any]) -> str | Non
 
 def _upstream_only(
     forge: Any, run_id: int | None, path: str | None
-) -> tuple[str, list[dict[str, Any]]] | None:
-    """Return ``(upstream ref, caller job/step dicts)`` when EVERY failing job
-    of *run_id* is internal to a ``robotsix-github-workflows`` reusable
-    workflow / composite action.  The caller dicts are the workflow-file
-    entries that call the upstream code (used to name caller-side secrets).
+) -> tuple[str, list[dict[str, Any]], list[str]] | None:
+    """Return ``(upstream ref, caller job/step dicts, failing job names)``
+    when EVERY failing job of *run_id* is internal to a
+    ``robotsix-github-workflows`` reusable workflow / composite action.  The
+    caller dicts are the workflow-file entries that call the upstream code
+    (used to name caller-side secrets); the failing job names name the run
+    jobs for the companion ticket filed on the github-workflows board.
     """
     if run_id is None or not path:
         return None
@@ -188,7 +199,11 @@ def _upstream_only(
     refs = [_upstream_ref(j, wf_jobs) for j in failing]
     if not refs or any(r is None for r in refs):
         return None
-    return str(refs[0]), _caller_entries(failing, wf_jobs)
+    return (
+        str(refs[0]),
+        _caller_entries(failing, wf_jobs),
+        [str(j.get("name") or "") for j in failing],
+    )
 
 
 def _caller_entries(
@@ -504,7 +519,7 @@ def _upstream_verdict(
     upstream = _upstream_only(forge, run_id, path)
     if not upstream:
         return None
-    ref, callers = upstream
+    ref, callers, failing_jobs = upstream
     sibs: Iterable[tuple[str, Any]] = ()
     if siblings is not None:
         try:
@@ -536,6 +551,9 @@ def _upstream_verdict(
         "block",
         f"Not fixable from this repo: failure is internal to {ref}. "
         f"ci-auto-close will close this once '{wf}' goes green on {branch}.",
+        upstream_ref=ref,
+        failing_jobs=tuple(failing_jobs),
+        consumer=_forge_repo(forge),
     )
 
 
@@ -592,6 +610,134 @@ def escalate_verdict(settings: Any, verdict: StaleCiVerdict, ticket_id: str) -> 
         log.warning("ci_stale_gate: escalation failed for %s", ticket_id, exc_info=True)
 
 
+# --- companion ticket on the github-workflows board -------------------------
+#
+# An upstream-only failure (every failing job inside a robotsix-github-
+# workflows reusable) can only go green once the WORKFLOWS repo fixes the
+# reusable and the consumer advances its pin — the consumer repo cannot fix
+# it.  ``block until green, auto-close when green`` alone discards the
+# evidence the moment the owning side fixes it (the consumer ticket closes
+# with no trace reaching the workflows repo).  So the ci source guarantees a
+# companion failure ticket on the github-workflows board naming the reusable,
+# the pinned SHA, the failing job and the affected consumer.
+
+_UPSTREAM_COMPANION_MARKER_RE = re.compile(r"<!-- ci-upstream: (.*?) -->")
+
+
+def _companion_marker(consumer: str, ref: str) -> str:
+    """Hidden HTML-comment dedup marker embedding the companion's identity."""
+    return f"<!-- ci-upstream: consumer={consumer};ref={ref} -->"
+
+
+def _find_open_upstream_companion(service: Any, consumer: str, ref: str) -> Any | None:
+    """Return an open companion ticket on *service*'s board that already
+    names the same (consumer, pinned ref), else ``None`` — the dedup key that
+    makes filing idempotent across the gate's three call sites (filing,
+    refine entry, human approval).
+    """
+    for t in service.list():
+        if t.state in DONE_OR_CLOSED:
+            continue
+        try:
+            desc = service.workspace(t).read_description() or ""
+        except Exception:
+            log.debug(
+                "ci_stale_gate: companion dedup — unreadable description for %s",
+                t.id,
+            )
+            continue
+        m = _UPSTREAM_COMPANION_MARKER_RE.search(desc)
+        if not m:
+            continue
+        fields = dict(
+            part.split("=", 1) for part in m.group(1).split(";") if "=" in part
+        )
+        if fields.get("consumer") == consumer and fields.get("ref") == ref:
+            return t
+    return None
+
+
+def _companion_text(verdict: StaleCiVerdict) -> tuple[str, str]:
+    """``(title, body)`` of the companion ticket for an upstream-only verdict.
+
+    Names the reusable workflow file, the pinned ``uses:`` ref (``@sha``),
+    the failing run-job(s) and the affected consumer — the four facts the
+    workflows-repo maintainer needs to reproduce and fix the regression.
+    """
+    ref = verdict.upstream_ref
+    path, _, sha = ref.partition("@")
+    file = path.rsplit("/", 1)[-1] if path else ref
+    sha8 = sha[:8]
+    title = (
+        f"Reusable workflow failure: {file}@{sha8} for {verdict.consumer}"
+        if sha8
+        else f"Reusable workflow failure: {file} for {verdict.consumer}"
+    )
+    jobs = "; ".join(verdict.failing_jobs) or "n/a"
+    body = (
+        f"**Automated companion ticket for an upstream CI failure.**\n\n"
+        f"A main-CI failure in `{verdict.consumer}` was classified as "
+        f"internal to a reusable workflow owned by this repo; the consumer "
+        f"cannot fix it. Green on the consumer only returns when this repo "
+        f"fixes the reusable AND the consumer advances its pin.\n\n"
+        f"- **Reusable:** `{path}`\n"
+        f"- **Pinned ref:** `{ref}`\n"
+        f"- **Failing job(s):** `{jobs}`\n"
+        f"- **Affected consumer:** `{verdict.consumer}`\n\n"
+        f"The consumer-board CI ticket stays blocked until its workflow "
+        f"goes green on main, then closes automatically. Track and fix the "
+        f"regression here.\n\n"
+        f"{_companion_marker(verdict.consumer, verdict.upstream_ref)}\n"
+    )
+    return title, body
+
+
+def file_upstream_companion(settings: Any, verdict: StaleCiVerdict) -> bool:
+    """Guarantee a companion failure ticket exists for an upstream-only
+    *verdict* on the github-workflows board.
+
+    Returns ``True`` when the companion exists (filed now, or already open
+    from a previous gate pass — the dedup key is the consumer + pinned ref),
+    ``False`` when it could not be resolved or filed.  Best-effort and never
+    raises: a companion failure must not break the gate's own decision.
+    """
+    if not (verdict.upstream_ref and verdict.consumer):
+        return False
+    try:
+        from .ci_fix_report import _github_workflows_board_id
+
+        board_id = _github_workflows_board_id()
+    except Exception:
+        log.warning(
+            "ci_stale_gate: could not resolve github-workflows board",
+            exc_info=True,
+        )
+        return False
+    from ..core.service import TicketService
+
+    service = TicketService(settings, board_id=board_id)
+    try:
+        if _find_open_upstream_companion(
+            service, verdict.consumer, verdict.upstream_ref
+        ):
+            return True
+    except Exception:
+        # A lookup failure should not suppress the trace — file anyway (a
+        # duplicate is preferable to no companion).
+        log.warning("ci_stale_gate: companion dedup lookup failed", exc_info=True)
+    title, body = _companion_text(verdict)
+    try:
+        service.create(title, body, source=SourceKind.AGENT)
+    except Exception:
+        log.warning(
+            "ci_stale_gate: could not file companion for %s",
+            verdict.upstream_ref,
+            exc_info=True,
+        )
+        return False
+    return True
+
+
 def check_ticket(
     settings: Any, repo_config: Any, ticket: Any, body: str
 ) -> StaleCiVerdict | None:
@@ -617,4 +763,6 @@ def check_ticket(
         return None
     if verdict is not None:
         escalate_verdict(settings, verdict, ticket.id)
+        if verdict.upstream_ref:
+            file_upstream_companion(settings, verdict)
     return verdict

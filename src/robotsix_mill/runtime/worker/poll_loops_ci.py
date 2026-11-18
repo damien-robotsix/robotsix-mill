@@ -642,6 +642,7 @@ class PollLoopsCiMixin(_WorkerBase):
         from ...stages.ci_stale_gate import (
             escalate_verdict,
             evaluate_stale_ci,
+            file_upstream_companion,
             sibling_forges,
         )
 
@@ -658,6 +659,8 @@ class PollLoopsCiMixin(_WorkerBase):
             if verdict is None:
                 return
             escalate_verdict(self.ctx.settings, verdict, ticket.id)
+            if verdict.upstream_ref:
+                file_upstream_companion(self.ctx.settings, verdict)
             log.info(
                 "CI monitor: stale-CI gate %s %s — %s",
                 verdict.action,
