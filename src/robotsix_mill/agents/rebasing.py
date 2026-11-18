@@ -11,13 +11,19 @@ the per-repo token — the agent stays network-isolated and never
 sees credentials.  On a lease rejection the agent inspects the
 remote ancestry and auto-recovers when the remote only carries
 its own prior rebase push (no foreign commits).
+
+Also hosts the rebase-supersede judge (:func:`run_supersede_check`):
+when the post-rebase integrity check reports implement-stage files
+absent from the diff, this LLM compares the ticket spec against the
+target's actual content to separate genuine drops from changes the
+target already satisfies.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel
 
@@ -31,6 +37,105 @@ class RebaseResult(BaseModel):
     status: Literal["DONE", "FAILED"]
     summary: str
     updated_memory: str = ""
+
+
+#: Char cap per file when embedding origin/<target> content into the
+#: supersede-check prompt — the judge needs enough to compare the spec
+#: against the target's version, not a full dump of a giant file.
+_SUPERSEDE_EMBED_MAX_CHARS = 4000
+
+
+class SupersedeVerdict(BaseModel):
+    """Whether origin/<target> already satisfies the spec for one file."""
+
+    path: str
+    superseded: bool = False
+    reason: str = ""
+
+
+class SupersedeResult(BaseModel):
+    """Structured output from the rebase-supersede judge."""
+
+    verdicts: list[SupersedeVerdict] = []
+    summary: str = ""
+
+
+def run_supersede_check(
+    *,
+    settings: Settings,
+    repo_dir: Path,
+    target: str,
+    spec: str,
+    dropped_files: list[str],
+    target_contents: dict[str, str],
+) -> SupersedeResult:
+    """Decide which of *dropped_files* origin/<target> already satisfies.
+
+    The deterministic post-rebase integrity check compares bytes, not
+    meaning: it reports an implement-stage file as dropped whenever the
+    target lacks the branch's exact blob, even when the target already
+    implements the spec's requirement for that file through different
+    content (e.g. a CI job that migrated into a shared reusable
+    workflow). This LLM judgement compares the ticket spec against the
+    target's actual content (captured host-side with
+    ``git show origin/<target>:<path>``) and returns a per-file verdict.
+
+    This is the mockable seam — tests monkeypatch it to avoid real LLM
+    calls.
+    """
+    if not get_secrets().openrouter_api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is not set")
+
+    from .yaml_loader import load_and_run_agent
+
+    blocks: list[str] = []
+    for path in dropped_files:
+        content = target_contents.get(path, "")
+        heading = f"origin/{target}:{path}"
+        if not content:
+            blocks.append(
+                f"### `{path}`\n\n**{heading}** — the file does not exist on "
+                f"origin/{target}, so origin/{target} cannot already satisfy "
+                "the spec for it. Verdict: superseded=false.\n"
+            )
+            continue
+        if len(content) > _SUPERSEDE_EMBED_MAX_CHARS:
+            content = (
+                content[:_SUPERSEDE_EMBED_MAX_CHARS]
+                + f"\n…[truncated at {_SUPERSEDE_EMBED_MAX_CHARS} chars]"
+            )
+        blocks.append(
+            f"### `{path}`\n\n**{heading}** (content on origin/{target}):\n"
+            f"```\n{content}\n```\n"
+        )
+
+    user_prompt = (
+        "A rebase collapsed the implement-stage changes to the files below, "
+        "and the deterministic post-rebase check cannot tell whether that is "
+        "a genuine loss or the target branch already delivering the change "
+        "(it compares bytes, not meaning). For each file, compare the ticket "
+        "spec's required change for that file against the file's actual "
+        f"content on origin/{target} shown below.\n\n"
+        "## Ticket spec (the planned change)\n\n"
+        f"{spec}\n\n"
+        "## Files absent from the post-rebase diff\n\n"
+        + "\n".join(blocks)
+        + "\nReturn a verdict for every file: superseded=true when "
+        f"origin/{target} already satisfies the spec for that file, "
+        "superseded=false otherwise, with a one-line reason."
+    )
+
+    result = load_and_run_agent(
+        settings=settings,
+        definition_name="rebase_supersede",
+        tools=[],
+        prompt=user_prompt,
+        what="rebase supersede check",
+        repo_dir=Path(repo_dir),
+        system_prompt_format_kwargs={"repo_dir": repo_dir, "target": target},
+    )
+
+    return cast(SupersedeResult, result.output)
 
 
 def run_rebase_agent(

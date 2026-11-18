@@ -1,7 +1,11 @@
 import json
 import subprocess
 
-from robotsix_mill.agents.rebasing import RebaseResult
+from robotsix_mill.agents.rebasing import (
+    RebaseResult,
+    SupersedeResult,
+    SupersedeVerdict,
+)
 from robotsix_mill.config import Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.service import TicketService
@@ -604,6 +608,214 @@ def test_rebase_success_blocks_when_implement_files_silently_dropped(
     # default-only path would silently ignore an operator's override.
     assert seen_exempt == [ctx.settings.rebase_drop_exempt_paths]
     assert "docs/modules.yaml" in ctx.settings.rebase_drop_exempt_paths
+
+
+def _fake_rebase_done():
+    def fake_rebase(
+        *,
+        settings,
+        repo_dir,
+        branch,
+        target,
+        memory="",
+        remote_url=None,
+        token=None,
+        token_provider=None,
+        token_cache_clear=None,
+        pre_rebase_files=None,
+        previously_dropped_files=None,
+    ):
+        return RebaseResult(status="DONE", summary="ok")
+
+    return fake_rebase
+
+
+def _patch_rebase_success_harness(ctx, monkeypatch, integrity_result, supersede_return):
+    """Wire the shared seams for _handle_rebase_success tests.
+
+    Patches the rebase agent to DONE, the git fetch/post-push seams to
+    PASS, the PR to an open unmergeable state, the integrity checker to
+    *integrity_result*, and (when not None) the supersede judge to
+    *supersede_return*.
+    """
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.run_rebase_agent", _fake_rebase_done()
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.fetch", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.post_push_check",
+        lambda *a, **k: PostPushResult.PASS,
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": False,
+        },
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.changed_source_files",
+        lambda repo, target_branch="main", ref="HEAD": [
+            "src/keep.py",
+            "src/dropped.py",
+            "src/real.py",
+        ],
+    )
+
+    def fake_integrity(
+        repo,
+        target_branch,
+        pre_rebase_files,
+        pre_rebase_blobs=None,
+        exempt_paths=None,
+        target_pre_blobs=None,
+    ):
+        return integrity_result
+
+    monkeypatch.setattr(
+        "robotsix_mill.stages.merge.git_ops.check_rebase_diff_integrity",
+        fake_integrity,
+    )
+    if supersede_return is not None:
+        monkeypatch.setattr(
+            "robotsix_mill.stages.merge.run_supersede_check",
+            lambda **kw: supersede_return,
+        )
+
+
+def test_rebase_all_dropped_superseded_closes_ticket_no_change(tmp_path, monkeypatch):
+    """When every dropped implement-stage file is judged already satisfied by
+    origin/main, the ticket is auto-closed as no-change — never BLOCKED."""
+    ctx = _gh(tmp_path)
+    _patch_rebase_success_harness(
+        ctx,
+        monkeypatch,
+        (False, ["src/dropped.py"], []),
+        supersede_return=SupersedeResult(
+            verdicts=[
+                SupersedeVerdict(
+                    path="src/dropped.py",
+                    superseded=True,
+                    reason="origin/main migrated this to the shared workflow",
+                )
+            ],
+            summary="superseded",
+        ),
+    )
+    t = _in_rebasing(ctx)
+    ctx.service.workspace(t).write_description("spec: add the review job")
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.CLOSED
+    note = out.note or ""
+    assert "superseded" in note
+    assert "src/dropped.py" not in note
+
+
+def test_rebase_partially_superseded_blocks_only_remaining(tmp_path, monkeypatch):
+    """A superseded file must not trigger the block; a genuinely missing one
+    still BLOCKs with only the real drops named."""
+    ctx = _gh(tmp_path)
+    _patch_rebase_success_harness(
+        ctx,
+        monkeypatch,
+        (False, ["src/dropped.py", "src/real.py"], []),
+        supersede_return=SupersedeResult(
+            verdicts=[
+                SupersedeVerdict(
+                    path="src/dropped.py",
+                    superseded=True,
+                    reason="already on origin/main",
+                ),
+                SupersedeVerdict(
+                    path="src/real.py",
+                    superseded=False,
+                    reason="origin/main lacks the change",
+                ),
+            ],
+            summary="one superseded, one genuine",
+        ),
+    )
+    t = _in_rebasing(ctx)
+    ctx.service.workspace(t).write_description("spec: change both files")
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    note = out.note or ""
+    assert "src/real.py" in note
+    assert "src/dropped.py" not in note
+    assert "superseded" in note.lower()
+
+
+def test_rebase_supersede_judge_failure_blocks_conservatively(tmp_path, monkeypatch):
+    """If the supersede judge errors, the missing files must still BLOCK —
+    a false block is cheaper than silently discarding a real change."""
+    ctx = _gh(tmp_path)
+
+    def boom(**kw):
+        raise RuntimeError("OPENROUTER_API_KEY is not set")
+
+    monkeypatch.setattr("robotsix_mill.stages.merge.run_supersede_check", boom)
+    _patch_rebase_success_harness(
+        ctx,
+        monkeypatch,
+        (False, ["src/dropped.py"], []),
+        supersede_return=None,
+    )
+    t = _in_rebasing(ctx)
+    ctx.service.workspace(t).write_description("spec: add the review job")
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    assert "src/dropped.py" in (out.note or "")
+
+
+def test_rebase_all_dropped_superseded_with_sibling_present_blocks_sibling(
+    tmp_path, monkeypatch
+):
+    """Auto-close only when EVERYTHING absent is superseded: a sibling-
+    modified file still needs a human decision, so the ticket BLOCKs."""
+    ctx = _gh(tmp_path)
+    _patch_rebase_success_harness(
+        ctx,
+        monkeypatch,
+        (False, ["src/dropped.py"], ["src/sibling.py"]),
+        supersede_return=SupersedeResult(
+            verdicts=[
+                SupersedeVerdict(
+                    path="src/dropped.py",
+                    superseded=True,
+                    reason="already on origin/main",
+                )
+            ],
+            summary="dropped superseded; sibling remains",
+        ),
+    )
+    t = _in_rebasing(ctx)
+    ctx.service.workspace(t).write_description("spec: change both files")
+    repo_dir = ctx.service.workspace(t).dir / "repo"
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    (repo_dir / ".git").mkdir(exist_ok=True)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    note = out.note or ""
+    assert "sibling" in note.lower()
+    assert "src/dropped.py" not in note
 
 
 def test_rebase_sibling_modified_produces_targeted_blocked_message(

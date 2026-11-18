@@ -8,6 +8,7 @@ HUMAN_MR_APPROVAL -> DONE (merged) | BLOCKED (closed unmerged)
               -> WAITING_AUTO_MERGE (eligible, CI pending)
 
 REBASING -> IMPLEMENT_COMPLETE (rebase succeeded, re-verify gates)
+        -> CLOSED (every implement-stage change superseded — no-change close)
 
 FIXING_CI -> IMPLEMENT_COMPLETE (fix succeeded, re-verify gates)
 
@@ -50,7 +51,8 @@ This module is a thin façade (Pattern A) over the ``merge`` package:
 - ``review_revision`` — :class:`ReviewRevisionMixin`
 
 The patchable seams (``git_ops``, ``tracing``, ``run_rebase_agent``,
-``run_ci_fix_agent``, ``run_review_revision_agent``) are bound as
+``run_supersede_check``, ``run_ci_fix_agent``,
+``run_review_revision_agent``) are bound as
 package attributes so the existing test monkeypatches
 (``robotsix_mill.stages.merge.git_ops``, ``merge_mod.run_rebase_agent``,
 etc.) intercept the real call sites.
@@ -61,7 +63,7 @@ from __future__ import annotations
 # Sub-module references re-exported for backward-compatible monkeypatching
 # (tests use ``merge_mod.git_ops``, ``merge_mod.tracing``, etc.).
 from ...agents.ci_fixing import run_ci_fix_agent
-from ...agents.rebasing import run_rebase_agent
+from ...agents.rebasing import run_rebase_agent, run_supersede_check
 from ...agents.review_revision import run_review_revision_agent
 from ...agents.runners.pass_runner import load_memory, persist_memory
 from ...runtime import tracing
@@ -131,5 +133,6 @@ __all__ = [
     "run_ci_fix_agent",
     "run_rebase_agent",
     "run_review_revision_agent",
+    "run_supersede_check",
     "tracing",
 ]

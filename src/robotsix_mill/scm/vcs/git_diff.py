@@ -246,6 +246,21 @@ def file_blobs(repo: Path, paths: list[str], ref: str = "HEAD") -> dict[str, str
     return blobs
 
 
+def show_file(repo: Path, ref: str, path: str) -> str | None:
+    """Return the content of *path* at *ref* (e.g. ``origin/main``), or None when absent.
+
+    Used by the rebase supersede check to fetch the target branch's
+    version of an implement-stage file that vanished from the post-rebase
+    diff, so the LLM judge can compare the ticket spec against what the
+    target actually carries.
+    """
+    try:
+        out = _get_git_ops()._git(repo, "show", f"{ref}:{path}")
+    except subprocess.CalledProcessError:
+        return None
+    return str(out)
+
+
 #: Fallback for :func:`check_rebase_diff_integrity` when no caller supplies a
 #: list. Production passes ``settings.rebase_drop_exempt_paths``; this keeps
 #: direct callers and tests working without threading settings through.

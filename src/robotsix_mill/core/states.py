@@ -26,7 +26,10 @@ a strict up-to-date branch policy — and transitions to ``REBASING``, then
 on the next poll runs the rebase agent and force-pushes the ticket branch. On success it
 returns to ``IMPLEMENT_COMPLETE`` for gate re-verification; on temporary
 failure it stays in ``REBASING`` for a retry; on exhaustion it escalates
-to ``BLOCKED``. ``FIXING_CI`` is an active state between
+to ``BLOCKED``. When the rebase succeeds but every implement-stage file's
+required change is already satisfied by ``origin/main`` (all files absent
+from the post-rebase diff are superseded), it closes the ticket as
+no-change (``CLOSED``) instead of blocking for a human decision. ``FIXING_CI`` is an active state between
 ``IMPLEMENT_COMPLETE`` and ``IMPLEMENT_COMPLETE``: the merge stage detects a
 mergeable PR with failing CI and transitions to ``FIXING_CI``, then on
 the next poll runs the CI-fix agent. On success it returns to
@@ -234,7 +237,11 @@ TRANSITIONS: dict[State, set[State]] = {
     },
     # rebasing: merge stage runs rebase agent → back to implement_complete,
     # waiting_auto_merge, or human_mr_approval on success (re-verify gates),
-    # retry on failure, block on exhaustion.
+    # retry on failure, block on exhaustion. CLOSED is the automatic
+    # no-change close: the rebase succeeded but every implement-stage file's
+    # required change is already satisfied by origin/main (the delta is
+    # superseded), so the merge stage closes the ticket instead of asking a
+    # human to decide.
     State.REBASING: {
         State.IMPLEMENT_COMPLETE,
         State.READY,
@@ -243,6 +250,7 @@ TRANSITIONS: dict[State, set[State]] = {
         State.ERRORED,
         State.BLOCKED,
         State.AWAITING_USER_REPLY,
+        State.CLOSED,
     },
     # ci fix: on success → implement_complete (re-verify gates); on a merge
     # conflict → rebasing (the rebase agent resolves it and the post-rebase
