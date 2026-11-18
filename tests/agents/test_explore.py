@@ -478,6 +478,16 @@ def test_system_prompt_warns_against_re_reading_already_held_ranges():
     assert "subset" in sp
 
 
+def test_system_prompt_excludes_venv_from_repo_wide_searches():
+    """Trace review saw repo-wide find/grep walk ``.venv`` site-packages
+    (token noise, misleading hits); the prompt must prescribe pruning it."""
+    sp = explore._SYSTEM_PROMPT
+    assert "--exclude-dir=.venv" in sp
+    assert "--exclude-dir=node_modules" in sp
+    assert "-path ./.venv" in sp
+    assert "-prune" in sp
+
+
 def test_repo_scoped_explore_unknown_repo(tmp_path):
     """A repo-scoped explore call naming an unregistered repo returns a
     helpful error listing the valid ids — never raises, never explores."""

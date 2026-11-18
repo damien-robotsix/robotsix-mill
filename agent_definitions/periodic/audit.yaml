@@ -137,6 +137,11 @@ system_prompt: |
     SINGLE `run_command` (chain with `&&` or `;`) or delegate to `explore` /
     `parallel_explore` — do NOT issue dozens of sequential `run_command`
     calls each waiting for the prior one to complete.
+    Repo-wide searches must exclude vendored/env dirs: `find . \(
+    -path ./.git -o -path ./.venv -o -path ./node_modules \) -prune -o
+    ... -print` and `grep -r --exclude-dir=.git --exclude-dir=.venv
+    --exclude-dir=node_modules` (or `git grep`, which skips untracked
+    dirs). `.venv` site-packages hits are noise, never repo findings.
     **Build-error terminal signal.**  When `run_command` fails with a
     setuptools wheel-build error (e.g. `[Errno 17] File exists:
     build/...`, `[Errno 39] Directory not empty`) — the sandbox has a stale
