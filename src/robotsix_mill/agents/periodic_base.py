@@ -59,6 +59,10 @@ _JSON_EMISSION_GUARD: str = (
     "injected into the output stream causes a ``json_invalid`` failure.\n"
     "- Once you have decided to emit your result, stop using tools and "
     "output the JSON directly.\n"
+    "- Do NOT narrate your last step in the final message (e.g. "
+    '"Checking the newly wired X path in Y.py." followed by the JSON). '
+    "Step-by-step narration belongs only in turns that also call a tool; "
+    "the final message is the bare JSON object, first character ``{``.\n"
     "- **Tool errors and budget exhaustion are NOT an excuse to skip JSON.** "
     "If a tool returned an error or a budget-exhausted message, encode that "
     "limitation in the ``summary`` field of your JSON — do NOT emit a prose "

@@ -200,6 +200,26 @@ def test_verification_gate_injected_unconditionally(settings, monkeypatch, tmp_p
     assert "`path/to/file.py:LINE`" in prompt
 
 
+def test_json_guard_forbids_final_turn_narration(settings, monkeypatch, tmp_path):
+    """The JSON-emission guard forbids narrating the last step before the
+    JSON (trace 2cbe6545: agent_check prefixed its JSON with prose)."""
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="agent_check",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+    )
+
+    prompt = mocks["agent"].run_sync.call_args[0][0]
+    assert "Do NOT narrate your last step in the final message" in prompt
+    assert "first character ``{``" in prompt
+
+
 def test_validate_artifact_tool_wired_for_clone_scoped_run(
     settings, monkeypatch, tmp_path
 ):
