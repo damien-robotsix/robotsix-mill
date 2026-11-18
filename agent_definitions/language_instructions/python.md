@@ -71,6 +71,12 @@ network:
   fresh container. Lint only the `.py` files you changed — ruff rejects
   non-Python files — and skip Python tooling entirely for doc-only or
   config-only diffs.
+- **Never pipe a check through `tail`/`head`/`grep` inside an `&&`
+  chain** (`uv run pytest … | tail -5 && uv run ruff …`). Without
+  `pipefail` a pipeline's exit status is the last command's, so a
+  failing pytest still exits 0 and the chain reports a false green.
+  Use `-q` (or `--tb=short`) to keep output short instead, or prefix
+  the command with `set -o pipefail &&`.
 - Run lint/type checks **once**, fix what you introduced, move on. The
   stage-owned gate runs the test suite; CI runs the full toolchain. When
   a repo baseline-filters mypy, use `uv run mypy src/ --strict | uv run
