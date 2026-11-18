@@ -511,6 +511,118 @@ def extract_failing_run_evidence(text: str) -> str:
     return "\n".join(out).strip()
 
 
+# Advisory/CVE identifiers a security gate (Trivy container scan, uv audit,
+# CodeQL, …) prints in the failing log. Canonical forms across scanners:
+# CVE-YYYY-NNNN, GHSA-xxxx-xxxx-xxxx, PYSEC-YYYY-NNN, OSV-YYYY-NNN,
+# RUSTSEC-YYYY-NNNN, USN-NNNN-N.
+_ADVISORY_ID_RE = re.compile(
+    r"\b(?:"
+    r"CVE-\d{4}-\d{4,}"
+    r"|GHSA(?:-[0-9a-z]{4}){3}"
+    r"|PYSEC-\d{4}-\d+"
+    r"|OSV-\d{4}-\d+"
+    r"|RUSTSEC-\d{4}-\d+"
+    r"|USN-\d+-\d+"
+    r")\b",
+    re.IGNORECASE,
+)
+# GitHub Actions run URLs end in /actions/runs/<id>; the id is what the
+# fetch_ci_logs(run_id=…) tool accepts.
+_RUN_ID_RE = re.compile(r"/actions/runs/(\d+)")
+
+
+def extract_run_ids(failing_summary: str) -> list[str]:
+    """Return the unique failing-run ids referenced in *failing_summary*.
+
+    The id is the *failing_summary*'s run URL path segment — the value a
+    ``fetch_ci_logs(run_id=…)`` call (host-side or by an agent that has the
+    tool) accepts to re-read the job log.
+    """
+    return list(dict.fromkeys(_RUN_ID_RE.findall(failing_summary or "")))
+
+
+def extract_advisory_ids(failing_summary: str) -> list[str]:
+    """Return the unique advisory/CVE identifiers named in *failing_summary*.
+
+    Ids are canonicalised (GHSA prefix uppercased, hex suffix lowercased;
+    others uppercased) and sorted for determinism so the spawned spec is
+    stable across passes (spec content feeds the ticket-content dedup).
+    """
+    canon: list[str] = []
+    for adv in _ADVISORY_ID_RE.findall(failing_summary or ""):
+        adv = "GHSA" + adv[4:].lower() if adv[:4].upper() == "GHSA" else adv.upper()
+        if adv not in canon:
+            canon.append(adv)
+    return sorted(canon)
+
+
+def build_concrete_remediation(failing_summary: str) -> str:
+    """Build a deterministic ``Concrete remediation`` block for an
+    out-of-scope spawned fix ticket, extracted from the failing run log.
+
+    The ci_fix pass already fetched the failing run's log (the spawning
+    agent has ``fetch_ci_logs``).  Its implement stage does not — it runs in
+    a network-isolated sandbox and cannot re-fetch the log — so the spawned
+    spec must carry what this pass already knows instead of falling back to
+    "depends on which CVE Trivy reports" (ci-fix gap
+    ``ci-fix-out-of-scope-spec-embeds-concrete-remediation``).  The block
+    names the failing run id(s) (for ``fetch_ci_logs(run_id=…)``), the
+    advisory/CVE id(s) the log reports, and the concrete remediation target
+    for the two dominant image-scan classes (Dockerfile OS package vs
+    dependency pin).  Returns "" when there is nothing to extract (no run id
+    and no advisory id — e.g. a pure lint failure).
+    """
+    run_ids = extract_run_ids(failing_summary)
+    advisory_ids = extract_advisory_ids(failing_summary)
+    if not (run_ids or advisory_ids):
+        return ""
+    urls_by_id: dict[str, str] = {}
+    for m in _RUN_URL_RE.finditer(failing_summary or ""):
+        url_run_id = _RUN_ID_RE.search(m.group(0))
+        if url_run_id is not None:
+            urls_by_id.setdefault(url_run_id.group(1), m.group(0))
+    parts = [
+        CONCRETE_REMEDIATION_HEADING,
+        "",
+        (
+            "_Deterministically extracted from the failing run's log — this "
+            "is the concrete target to fix. Use `fetch_ci_logs(run_id=…)` "
+            "only if you need more context than the excerpt below._"
+        ),
+        "",
+    ]
+    if run_ids:
+        parts.append("**Failing run id(s) — pass to `fetch_ci_logs(run_id=…)`:**")
+        for run_id in run_ids:
+            line = f"- `{run_id}`"
+            if run_id in urls_by_id:
+                line += f" — {urls_by_id[run_id]}"
+            parts.append(line)
+    if advisory_ids:
+        parts.extend(["", "**Advisory/CVE id(s) reported in the failing log:**"])
+        parts.extend(f"- `{adv}`" for adv in advisory_ids)
+    parts.extend(
+        [
+            "",
+            (
+                "**Required change:** resolve the advisory id(s) above where "
+                "the log names them. When the failing step is a container image "
+                "scan (Trivy) on the Dockerfile base image's OS packages, add "
+                "the fixed package version to the Dockerfile's "
+                "`apt ... --only-upgrade` list; when it is a dependency pin, "
+                "run `uv lock --upgrade-package <pkg>` (or the package-manager "
+                "equivalent) to the fixed version. The `## Failing run "
+                "evidence` block below carries the exact installed-versions "
+                "lines."
+            ),
+        ]
+    )
+    return "\n".join(parts)
+
+
+CONCRETE_REMEDIATION_HEADING = "## Concrete remediation from the failing run"
+
+
 def _build_compact_failing_summary(
     failing: list[dict[str, Any]],
     log_text: str = "",
