@@ -209,6 +209,13 @@ def test_implement_complete_to_rebasing():
     assert can_transition(State.IMPLEMENT_COMPLETE, State.REBASING) is True
 
 
+def test_rebasing_to_closed_auto_supersede():
+    """REBASING → CLOSED is valid: the merge stage auto-closes a rebase
+    whose every implement-stage file was superseded by origin/main
+    (no-change) instead of blocking for a human decision."""
+    assert can_transition(State.REBASING, State.CLOSED) is True
+
+
 def test_implement_complete_to_done():
     """IMPLEMENT_COMPLETE → DONE is valid (PR merged while polling)."""
     assert can_transition(State.IMPLEMENT_COMPLETE, State.DONE) is True

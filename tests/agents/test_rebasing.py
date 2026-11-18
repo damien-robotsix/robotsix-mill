@@ -7,7 +7,13 @@ import pydantic_ai
 import pydantic_ai.providers.openrouter as orp
 import pytest
 
-from robotsix_mill.agents.rebasing import RebaseResult, run_rebase_agent
+from robotsix_mill.agents.rebasing import (
+    RebaseResult,
+    SupersedeResult,
+    SupersedeVerdict,
+    run_rebase_agent,
+    run_supersede_check,
+)
 from robotsix_mill.config import Secrets, Settings, _reset_secrets
 
 
@@ -234,3 +240,123 @@ def test_system_prompt_contains_key_instructions(tmp_path, monkeypatch):
     assert "git rebase --continue" in prompt
     assert "DONE" in prompt
     assert "FAILED" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Rebase supersede check (run_supersede_check)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("key", [None, ""])
+def test_run_supersede_check_raises_when_api_key_falsy(tmp_path, key):
+    """Must raise BEFORE any agent is built."""
+    s = _s(tmp_path, OPENROUTER_API_KEY=key)
+    with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY is not set"):
+        run_supersede_check(
+            settings=s,
+            repo_dir=tmp_path,
+            target="main",
+            spec="spec",
+            dropped_files=["src/a.py"],
+            target_contents={"src/a.py": "content"},
+        )
+
+
+def test_run_supersede_check_embeds_spec_and_target_content(tmp_path, monkeypatch):
+    """The user prompt embeds the ticket spec and the origin/<target> content
+    (captured host-side), and flags files absent from origin/<target>."""
+    captured = {}
+
+    def fake_build_agent(
+        settings, *, system_prompt, output_type, tools, web_knowledge, **kw
+    ):
+        class FakeAgent:
+            def run_sync(self, *args, **kwargs):
+                captured["user_prompt"] = args[0] if args else kwargs.get("prompt", "")
+
+                return type("R", (), {"output": SupersedeResult(verdicts=[])})()
+
+        return FakeAgent()
+
+    monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
+
+    s = _s(tmp_path)
+    run_supersede_check(
+        settings=s,
+        repo_dir=tmp_path,
+        target="main",
+        spec="add the dependency-review job",
+        dropped_files=[
+            ".github/workflows/dependency-review.yml",
+            "src/absent.py",
+        ],
+        target_contents={
+            ".github/workflows/dependency-review.yml": (
+                "uses: shared/dependency-review.yml"
+            ),
+        },
+    )
+
+    prompt = captured["user_prompt"]
+    assert "add the dependency-review job" in prompt
+    assert "origin/main:.github/workflows/dependency-review.yml" in prompt
+    assert "shared/dependency-review.yml" in prompt
+    assert "src/absent.py" in prompt
+    assert "does not exist on origin/main" in prompt
+    assert "superseded" in prompt.lower()
+
+
+def test_run_supersede_check_parses_verdicts(tmp_path, monkeypatch):
+    """Per-file verdicts come back verbatim from the agent output."""
+    captured = {}
+
+    def fake_build_agent(
+        settings, *, system_prompt, output_type, tools, web_knowledge, **kw
+    ):
+        class FakeAgent:
+            def run_sync(self, *args, **kwargs):
+                captured["output_type"] = output_type
+
+                return type(
+                    "R",
+                    (),
+                    {
+                        "output": SupersedeResult(
+                            verdicts=[
+                                SupersedeVerdict(
+                                    path="src/a.py",
+                                    superseded=True,
+                                    reason="migrated to shared workflow",
+                                ),
+                                SupersedeVerdict(
+                                    path="src/b.py",
+                                    superseded=False,
+                                    reason="origin/main lacks it",
+                                ),
+                            ]
+                        )
+                    },
+                )()
+
+        return FakeAgent()
+
+    monkeypatch.setattr("robotsix_mill.agents.base.build_agent", fake_build_agent)
+
+    s = _s(tmp_path)
+    result = run_supersede_check(
+        settings=s,
+        repo_dir=tmp_path,
+        target="main",
+        spec="spec",
+        dropped_files=["src/a.py", "src/b.py"],
+        target_contents={"src/a.py": "x", "src/b.py": "y"},
+    )
+
+    assert len(result.verdicts) == 2
+    assert result.verdicts[0].path == "src/a.py"
+    assert result.verdicts[0].superseded is True
+    assert result.verdicts[1].path == "src/b.py"
+    assert result.verdicts[1].superseded is False
+    from pydantic_ai import PromptedOutput
+
+    assert isinstance(captured["output_type"], PromptedOutput)

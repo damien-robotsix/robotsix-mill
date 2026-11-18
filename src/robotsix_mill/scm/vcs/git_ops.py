@@ -1156,6 +1156,7 @@ from .git_diff import (  # noqa: E402
     ignored_paths,
     introduced_files,
     restore_paths,
+    show_file,
     tracked_paths_at,
 )
 
@@ -1176,5 +1177,6 @@ __all__ = [
     "ignored_paths",
     "introduced_files",
     "restore_paths",
+    "show_file",
     "tracked_paths_at",
 ]

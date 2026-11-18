@@ -395,6 +395,44 @@ class RebaseMixin(_MergeStageBase):
                     )
                 )
                 if not ok:
+                    # Files the deterministic byte-check cannot excuse, but
+                    # whose required change origin/<target> may already carry
+                    # in different content. Ask the LLM judge to compare the
+                    # ticket spec against the target's actual file
+                    # (``git show origin/<target>:<path>``, captured host-side)
+                    # BEFORE blocking — the byte check reports a file as
+                    # dropped whenever the target lacks the branch's exact
+                    # blob, even when the target already implements the spec's
+                    # requirement for it (e.g. a CI job that migrated into a
+                    # shared reusable workflow). Files the target already
+                    # satisfies are SUPERSEDED and must not block the ticket;
+                    # block only for the rest.
+                    superseded: set[str] = set()
+                    if dropped:
+                        superseded = self._judge_superseded(
+                            ticket, ctx, Path(repo_dir), target, dropped
+                        )
+                        dropped = [p for p in dropped if p not in superseded]
+
+                    if not dropped and not sibling_likely:
+                        # Every implement-stage file's required change is
+                        # already satisfied by origin/<target> — the whole
+                        # delta is superseded. Close the ticket as no-change
+                        # automatically instead of blocking for a human
+                        # decision (no resume/retry loop).
+                        _write_counter(counter_path, 0)
+                        dropped_cleanup_path = counter_path.parent / _REBASE_DROPPED
+                        with contextlib.suppress(FileNotFoundError):
+                            dropped_cleanup_path.unlink()
+                        return Outcome(
+                            State.CLOSED,
+                            f"rebase succeeded; every implement-stage file is "
+                            f"absent from the post-rebase diff and its required "
+                            f"change is already satisfied by origin/{target} — "
+                            "the ticket delta is superseded. Closing as "
+                            "no-change; no human decision needed.",
+                        )
+
                     if dropped:
                         shown = ", ".join(f"`{p}`" for p in dropped[:10])
                         more = (
@@ -418,6 +456,12 @@ class RebaseMixin(_MergeStageBase):
                             "  - target lacks it: the drop is real — restore the "
                             "file on the branch and push."
                         )
+                        if superseded:
+                            msg += (
+                                f"\n(NB {len(superseded)} further implement-stage "
+                                f"file(s) were already satisfied by origin/{target} "
+                                "and were excluded as superseded.)"
+                            )
                     else:
                         shown = ", ".join(f"`{p}`" for p in sibling_likely[:10])
                         more = (
@@ -574,6 +618,72 @@ class RebaseMixin(_MergeStageBase):
             ticket.id,
         )
         return Outcome(State.IMPLEMENT_COMPLETE)
+
+    def _judge_superseded(
+        self,
+        ticket: Ticket,
+        ctx: StageContext,
+        repo_dir: Path,
+        target: str,
+        dropped: list[str],
+    ) -> set[str]:
+        """Return the subset of *dropped* whose change origin/<target> already carries.
+
+        Runs the LLM supersede judge with the ticket spec and the target's
+        actual file contents (``git show origin/<target>:<path>``, captured
+        host-side). Any failure degrades to "nothing superseded" so the
+        conservative BLOCK path still runs — a false block is cheaper than
+        silently discarding a real change.
+        """
+        if not dropped:
+            return set()
+        from robotsix_mill.stages import merge as _facade
+
+        spec = ctx.service.workspace(ticket).read_description()
+        if not spec or not spec.strip():
+            log.info(
+                "%s: no ticket description to compare — treating all %d dropped "
+                "file(s) as genuine drops",
+                ticket.id,
+                len(dropped),
+            )
+            return set()
+        contents: dict[str, str] = {}
+        for path in dropped:
+            content = _facade.git_ops.show_file(repo_dir, f"origin/{target}", path)
+            if content:
+                contents[path] = content
+        try:
+            result = _facade.run_supersede_check(
+                settings=ctx.settings,
+                repo_dir=repo_dir,
+                target=target,
+                spec=spec,
+                dropped_files=dropped,
+                target_contents=contents,
+            )
+        except Exception as e:
+            log.warning(
+                "%s: rebase supersede check failed (%s) — treating all %d "
+                "dropped file(s) as genuine drops",
+                ticket.id,
+                e,
+                len(dropped),
+            )
+            return set()
+        dropped_set = set(dropped)
+        superseded = {
+            v.path for v in result.verdicts if v.superseded and v.path in dropped_set
+        }
+        if superseded:
+            log.info(
+                "%s: supersede check — %d file(s) already satisfied by origin/%s: %s",
+                ticket.id,
+                len(superseded),
+                target,
+                ", ".join(sorted(superseded)),
+            )
+        return superseded
 
     def _handle_rebase_failure(
         self,
