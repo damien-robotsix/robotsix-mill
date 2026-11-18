@@ -16,6 +16,6 @@ jobs:
       contents: read
       pull-requests: write  # comment-summary-in-pr
     # Shared fleet dependency-review workflow (robotsix-github-workflows #252).
-    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/dependency-review.yml@47523e8aa2d34d41da060d29b57f75ab262cb840  # v1.4.0
+    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/dependency-review.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794  # v1.5.0
     with:
       fail-on-severity: moderate
