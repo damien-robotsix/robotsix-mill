@@ -23,6 +23,8 @@ from ...core.dedup import _extract_paths, _scope_paths
 from ...core.models import SourceKind, Ticket, TicketKind
 from ...core.states import State
 from ...scm.vcs import git_ops
+from ...stages.ci_fix_helpers import UPSTREAM_CI_BLOCK_MARKER
+from ...stages.ci_infra_block import REPO_SETTING_BLOCK_MARKER
 from ..base import Outcome, StageContext
 from .helpers import (
     DEDUP_ALREADY_DONE_PREFIX,
@@ -202,10 +204,19 @@ def _run_dedup_guard(
     dup_id = verdict.get("duplicate_of")
     if dup_id:
         if _is_valid_dedup_target(ctx, ticket, dup_id, repo_dir, draft=draft):
-            return Outcome(
-                State.DONE,
-                f"{DEDUP_DUPLICATE_PREFIX}{dup_id}: {verdict.get('reason', 'no reason')}",
+            outcome = _dedup_close_protocol(
+                ctx,
+                ticket,
+                dup_id,
+                verdict.get("reason") or "no reason",
+                draft,
             )
+            if outcome is not None:
+                return outcome
+            # The protocol kept the incoming ticket open as the
+            # actionable owner (candidate could not be made actionable) —
+            # proceed with refine below.
+            return None
         log.info(
             "%s: dedup verdict named duplicate_of=%s but it is not a "
             "valid dedup target (terminal/declined/circular/unmerged) — "
@@ -481,6 +492,251 @@ def _is_valid_dedup_target(
         return False
 
 
+# ---------------------------------------------------------------------------
+# Deterministic dedup-close protocol
+# ---------------------------------------------------------------------------
+#
+# A plain dedup close ("duplicate of <id>") is only valid when the
+# surviving candidate is both actionable and covers the incoming draft.
+# Closing into a candidate that is blocked / awaiting a human / parked at
+# an approval gate — or whose spec lacks requirements the draft carries —
+# is a force-close of new scope, the same lost-work shape as the operator
+# mark-done force-close but reached implicitly through the dedup path
+# (observed on robotsix-browser: 20261118T173536Z was closed as a
+# duplicate of a repo-setting-blocked candidate, orphaning the 80%
+# coverage-floor requirement with zero tickets left tracking it).  So
+# instead of a bare close, port the draft's delta into the candidate's
+# description, re-queue the candidate when it is blocked, and only then
+# close the incoming ticket pointing at the updated candidate.  When the
+# candidate still cannot be made actionable, keep the incoming ticket
+# open as the actionable owner and mark the older one superseded.
+
+# Open states with no pipeline-driven implementation path until a human
+# acts: the worker never runs them, so a dedup close onto one buries the
+# draft's scope in a ticket that will not move.
+NON_ACTIONABLE_DEDUP_STATES: frozenset[State] = frozenset(
+    {
+        State.BLOCKED,
+        State.AWAITING_USER_REPLY,
+        State.HUMAN_ISSUE_APPROVAL,
+    }
+)
+
+# ``BLOCKED``-note markers that no re-queue resolves — the block is an
+# operator/settings/external dependency ("repo setting required:" needs a
+# human to flip a GitHub setting; "Upstream CI breakage detected" is owned
+# by the upstream-CI recovery runner).  Mirrors the hard excludes in
+# ``agents/runners/blocked_auto_resume_runner.py``: a candidate the
+# pipeline itself would never auto-resume must not be silently force-merged
+# either.
+NON_RESUMABLE_BLOCK_MARKERS: tuple[str, ...] = (
+    REPO_SETTING_BLOCK_MARKER,
+    UPSTREAM_CI_BLOCK_MARKER,
+)
+
+# Author tag stamped on candidate spec updates made by this protocol.
+_DEDUP_PROTOCOL_AUTHOR = "refine-dedup"
+
+
+def _blocked_candidate_is_resumable(ctx: StageContext, cand: Ticket) -> bool:
+    """Return whether a BLOCKED candidate can be re-queued by the pipeline.
+
+    False when the latest BLOCKED history note carries a
+    :data:`NON_RESUMABLE_BLOCK_MARKERS` marker (an operator/external
+    dependency the pipeline cannot satisfy).  True otherwise — the generic
+    resumable blocks ("agent error", stage timeouts) un-block fine.
+    """
+    # Same partial-`list?[TicketEvent]` quirk as the other history
+    # iterations in this module (baselined in mypy-baseline.txt).
+    for ev in ctx.service.history(cand.id, order="desc"):  # type: ignore[attr-defined]
+        if ev.state is State.BLOCKED:
+            note = (ev.note or "")[:400].casefold()
+            return not any(
+                marker.casefold() in note for marker in NON_RESUMABLE_BLOCK_MARKERS
+            )
+    # No BLOCKED event found — let resume_blocked decide (it raises when
+    # the ticket cannot actually be resumed, and the caller falls back to
+    # the supersede branch).
+    return True
+
+
+def _draft_carries_absent_requirement(
+    ctx: StageContext, cand: Ticket, draft: str
+) -> bool:
+    """Return whether the incoming *draft* names requirements the
+    candidate's declared spec does not.
+
+    Deterministic proxy for "the draft carries requirements absent from
+    the candidate's spec": every backtick path token in the draft that is
+    not covered by the candidate's Scope / Acceptance / file_map sections
+    is a requirement the candidate would not implement.  A candidate with
+    no declared scope cannot be proven to cover anything, so any draft
+    path counts as absent.  Best-effort: empty drafts and extraction
+    failures return False.
+    """
+    try:
+        draft_paths = set(_extract_paths(draft or ""))
+        if not draft_paths:
+            return False
+        body = ctx.service.workspace(cand).read_description() or ""
+        scope = _scope_paths(body)
+        if not scope:
+            return True
+        return bool(draft_paths - scope)
+    except Exception:
+        log.debug(
+            "dedup protocol: absent-requirement check failed for %s — "
+            "assuming no delta",
+            cand.id,
+            exc_info=True,
+        )
+        return False
+
+
+def _port_delta_into_candidate(
+    ctx: StageContext, ticket: Ticket, cand: Ticket, draft: str, reason: str
+) -> None:
+    """Append the incoming draft's delta to the candidate's description
+    with a provenance note (a dedup-merge port, not a plain close).
+    """
+    try:
+        body = ctx.service.workspace(cand).read_description() or ""
+    except Exception:
+        body = ""
+    delta_block = (
+        f"\n\n## Dedup-merged delta — from {ticket.id}\n\n"
+        f"The refine dedup protocol merged this incoming draft into this "
+        f"ticket instead of closing it as a plain duplicate ({reason}).\n\n"
+        f"Provenance: incoming ticket {ticket.id} ({ticket.title}). "
+        f"Original description:\n\n"
+        f"{draft}\n"
+    )
+    ctx.service.update_description(
+        cand.id, body.rstrip() + delta_block, author=_DEDUP_PROTOCOL_AUTHOR
+    )
+
+
+def _mark_candidate_superseded(
+    ctx: StageContext, ticket: Ticket, cand: Ticket, reason: str
+) -> None:
+    """Mark the older *cand* superseded by the incoming *ticket*.
+
+    Leaves the candidate open (a human may still resolve its block) but
+    records the substitution in both the description (visible on the
+    board) and the history trail.
+    """
+    banner = (
+        f"\n\n## Superseded — kept open by {ticket.id}\n\n"
+        f"The refine dedup protocol kept the newer incoming ticket "
+        f"{ticket.id} ({ticket.title}) open as the actionable owner "
+        f"because this ticket ({cand.state.value}) could not be made "
+        f"actionable; do not implement this ticket in isolation "
+        f"({reason})."
+    )
+    try:
+        body = ctx.service.workspace(cand).read_description() or ""
+    except Exception:
+        body = ""
+    try:
+        ctx.service.update_description(
+            cand.id, body.rstrip() + banner, author=_DEDUP_PROTOCOL_AUTHOR
+        )
+    except Exception:
+        log.debug(
+            "%s: could not banner candidate %s as superseded",
+            ticket.id,
+            cand.id,
+            exc_info=True,
+        )
+    ctx.service.add_history_note(
+        cand.id,
+        f"superseded by {ticket.id} ({ticket.title}): refine dedup kept the "
+        f"newer ticket open as actionable owner — {reason}",
+    )
+
+
+def _dedup_close_protocol(
+    ctx: StageContext,
+    ticket: Ticket,
+    cand_id: str,
+    reason: str,
+    draft: str,
+) -> Outcome | None:
+    """Resolve a duplicate-of verdict through the deterministic
+    dedup-close protocol.
+
+    Returns the close :class:`Outcome` when the incoming ticket should be
+    closed as a duplicate of *cand_id* — a plain close for a healthy
+    candidate that covers the draft; a delta-port (+ re-queue when
+    blocked) close otherwise.  Returns ``None`` when the candidate cannot
+    be made actionable: the incoming ticket stays open as the actionable
+    owner and the older candidate is marked superseded.
+    """
+    cand = ctx.service.get(cand_id)
+    if cand is None:
+        # Unresolvable target (e.g. a commit hash) — cannot evaluate the
+        # protocol; keep the plain close behavior.
+        return Outcome(
+            State.DONE,
+            f"{DEDUP_DUPLICATE_PREFIX}{cand_id}: {reason}",
+        )
+
+    not_actionable = cand.state in NON_ACTIONABLE_DEDUP_STATES
+    carries_delta = _draft_carries_absent_requirement(ctx, cand, draft)
+    if not not_actionable and not carries_delta:
+        # Candidate is actionable and covers the draft — plain close.
+        return Outcome(
+            State.DONE,
+            f"{DEDUP_DUPLICATE_PREFIX}{cand_id}: {reason}",
+        )
+
+    can_become_actionable = cand.state not in NON_ACTIONABLE_DEDUP_STATES or (
+        cand.state is State.BLOCKED and _blocked_candidate_is_resumable(ctx, cand)
+    )
+
+    if can_become_actionable:
+        try:
+            _port_delta_into_candidate(ctx, ticket, cand, draft, reason)
+            if cand.state is State.BLOCKED:
+                ctx.service.resume_blocked(
+                    cand_id,
+                    note=(
+                        f"[dedup-refine] re-queued after merging delta from "
+                        f"{ticket.id}: {reason}"
+                    ),
+                )
+        except Exception:
+            log.warning(
+                "%s: dedup protocol could not make candidate %s actionable "
+                "(delta port / re-queue failed) — keeping %s open and "
+                "marking the candidate superseded",
+                ticket.id,
+                cand_id,
+                ticket.id,
+                exc_info=True,
+            )
+            _mark_candidate_superseded(ctx, ticket, cand, reason)
+            return None
+        log.info(
+            "%s: dedup duplicate of %s — delta merged into candidate's "
+            "description and candidate re-queued; closing as duplicate of "
+            "the updated candidate",
+            ticket.id,
+            cand_id,
+        )
+        return Outcome(
+            State.DONE,
+            f"{DEDUP_DUPLICATE_PREFIX}{cand_id}: {reason} — delta merged into candidate",
+        )
+
+    # The candidate cannot be made actionable (awaiting a human reply /
+    # parked at an approval gate, or hard-blocked).  Keep the incoming
+    # ticket open as the actionable owner and mark the older candidate
+    # superseded.
+    _mark_candidate_superseded(ctx, ticket, cand, reason)
+    return None
+
+
 def _run_inflight_advisory(
     ctx: StageContext,
     ticket: Ticket,
@@ -638,10 +894,18 @@ def _verify_advisory_dedup(
         if dup_id and _is_valid_dedup_target(
             ctx, ticket, dup_id, repo_dir, draft=_strip_advisory_block(draft)
         ):
-            return Outcome(
-                State.DONE,
-                f"{DEDUP_DUPLICATE_PREFIX}{dup_id}: {verdict.get('reason', 'no reason')}",
+            outcome = _dedup_close_protocol(
+                ctx,
+                ticket,
+                dup_id,
+                verdict.get("reason") or "no reason",
+                _strip_advisory_block(draft),
             )
+            if outcome is not None:
+                return outcome
+            # Protocol kept the incoming ticket open as the actionable
+            # owner (candidate could not be made actionable) — fall through
+            # to strip the advisory and proceed with refine.
 
         # Check already_done verdict.
         done_id = verdict.get("already_done")

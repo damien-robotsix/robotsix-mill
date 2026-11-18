@@ -241,6 +241,207 @@ def test_dedup_guard_check_raises_is_swallowed(ctx_factory, monkeypatch):
 
 
 # ===========================================================================
+# 1b. deterministic dedup-close protocol
+# ===========================================================================
+
+
+def _refined_candidate(ctx, title, body=None, **kw):
+    """Create a candidate that passes ``_is_valid_dedup_target``: drive it
+    out of the un-refined DRAFT state (refine progress) and leave it in
+    the state the caller then transitions it into."""
+    cand = _ticket(ctx, title=title, body=body, **kw)
+    ctx.service.transition(cand.id, State.READY, note="refined")
+    return cand
+
+
+def test_dedup_protocol_healthy_candidate_plain_close(ctx_factory):
+    from robotsix_mill.stages.refine._gates_dedup import _dedup_close_protocol
+
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    cand = _refined_candidate(ctx, "Login form fix")
+    body_before = ctx.service.workspace(cand).read_description()
+
+    out = _dedup_close_protocol(ctx, t, cand.id, "same idea", _DEDUP_DRAFT)
+
+    # Healthy actionable candidate fully covering the draft → plain close,
+    # no delta port, no state change on the candidate.
+    assert out is not None
+    assert out.next_state is State.DONE
+    assert out.note.startswith(DEDUP_DUPLICATE_PREFIX)
+    assert cand.id in out.note
+    assert ctx.service.workspace(cand).read_description() == body_before
+    assert ctx.service.get(cand.id).state is State.READY
+
+
+def test_dedup_protocol_absent_requirement_ports_delta_and_closes(ctx_factory):
+    """A healthy candidate whose spec misses a path the draft names is not
+    a plain close: the delta is ported into the candidate first."""
+    from robotsix_mill.stages.refine._gates_dedup import _dedup_close_protocol
+
+    ctx = ctx_factory()
+    t = _ticket(ctx, title="Coverage floor migration")
+    cand = _ticket(
+        ctx,
+        title="CI cleanup",
+        body=(
+            "## Scope\n"
+            "- migrate `.github/workflows/ci.yml` to the python-ci reusable\n"
+            "## Acceptance criteria\n"
+            "- cov-package / run-vulture / check-lock / audit-sarif\n"
+        ),
+    )
+    ctx.service.transition(cand.id, State.READY, note="refined")
+    draft = (
+        "Migrate the test job to the shared python-ci reusable and add the "
+        "80% coverage floor for `.github/workflows/ci.yml` plus "
+        "`pyproject.toml`."
+    )
+
+    out = _dedup_close_protocol(ctx, t, cand.id, "same work", draft)
+
+    assert out is not None
+    assert out.next_state is State.DONE
+    assert cand.id in out.note
+    # Delta ported with provenance; candidate stays actionable.
+    new_body = ctx.service.workspace(cand).read_description()
+    assert "pyproject.toml" in new_body
+    assert "Dedup-merged delta" in new_body
+    assert t.id in new_body
+    assert ctx.service.get(cand.id).state is State.READY
+
+
+def test_dedup_protocol_blocked_resumable_ports_delta_and_resumes(ctx_factory):
+    """A resumable-blocked candidate: port the delta, re-queue it, and only
+    then close the incoming ticket pointing at the updated candidate."""
+    from robotsix_mill.stages.refine._gates_dedup import _dedup_close_protocol
+
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    cand = _refined_candidate(ctx, "Login form fix")
+    ctx.service.transition(
+        cand.id, State.BLOCKED, note="agent error — resumable, retry"
+    )
+    assert ctx.service.get(cand.id).state is State.BLOCKED
+
+    out = _dedup_close_protocol(ctx, t, cand.id, "same idea", _DEDUP_DRAFT)
+
+    assert out is not None
+    assert out.next_state is State.DONE
+    assert cand.id in out.note
+    assert out.note.endswith("delta merged into candidate")
+    # Candidate re-queued back to its blocked-from state (READY).
+    assert ctx.service.get(cand.id).state is State.READY
+    # Delta ported.
+    assert "Dedup-merged delta" in ctx.service.workspace(cand).read_description()
+
+
+def test_dedup_protocol_blocked_hard_exclude_keeps_incoming_open(ctx_factory):
+    """A repo-setting-blocked candidate cannot be re-queued by the
+    pipeline: keep the incoming ticket open as the actionable owner and
+    mark the older candidate superseded (the evidence scenario)."""
+    from robotsix_mill.stages.refine._gates_dedup import _dedup_close_protocol
+
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    cand = _refined_candidate(ctx, "Login form fix")
+    ctx.service.transition(
+        cand.id,
+        State.BLOCKED,
+        note=(
+            "implementation incomplete — repo setting required: enable "
+            "branch-protection 'Tests' context"
+        ),
+        block_reason="repo-setting",
+    )
+
+    out = _dedup_close_protocol(ctx, t, cand.id, "same idea", _DEDUP_DRAFT)
+
+    assert out is None  # incoming stays open — refine proceeds
+    cand_after = ctx.service.get(cand.id)
+    assert cand_after.state is State.BLOCKED  # NOT resumed
+    body = ctx.service.workspace(cand_after).read_description()
+    assert "Superseded" in body  # marked superseded on the board
+    notes = " ".join((ev.note or "") for ev in ctx.service.history(cand_after.id))
+    assert "superseded by" in notes
+
+
+@pytest.mark.parametrize(
+    "state", [State.AWAITING_USER_REPLY, State.HUMAN_ISSUE_APPROVAL]
+)
+def test_dedup_protocol_non_actionable_state_keeps_incoming_open(ctx_factory, state):
+    """A candidate waiting on a human (reply / approval) has no
+    implementation path: keep the incoming ticket open and supersede it."""
+    from robotsix_mill.stages.refine._gates_dedup import _dedup_close_protocol
+
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    cand = _ticket(ctx, title="Login form fix")
+    ctx.service.transition(cand.id, state)
+
+    out = _dedup_close_protocol(ctx, t, cand.id, "same idea", _DEDUP_DRAFT)
+
+    assert out is None
+    cand_after = ctx.service.get(cand.id)
+    assert cand_after.state is state
+    assert "Superseded" in ctx.service.workspace(cand_after).read_description()
+
+
+def test_dedup_guard_blocked_hard_excluded_candidate_keeps_incoming_open(
+    ctx_factory, monkeypatch
+):
+    """End-to-end through _run_dedup_guard: a duplicate verdict onto a
+    repo-setting-blocked candidate must NOT close the incoming ticket."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    cand = _refined_candidate(ctx, "Login form fix")
+    ctx.service.transition(
+        cand.id,
+        State.BLOCKED,
+        note="repo setting required: update 'Tests' required-status context",
+        block_reason="repo-setting",
+    )
+
+    monkeypatch.setattr(
+        agents_dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=cand.id, already_done=None, reason="same idea"),
+    )
+
+    out = RefineStage._run_dedup_guard(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is None  # incoming ticket stays open — refine proceeds
+    cand_after = ctx.service.get(cand.id)
+    assert cand_after.state is State.BLOCKED
+    assert "Superseded" in ctx.service.workspace(cand_after).read_description()
+
+
+def test_dedup_guard_blocked_resumable_candidate_ports_and_resumes(
+    ctx_factory, monkeypatch
+):
+    """End-to-end through _run_dedup_guard: closing onto a resumable
+    blocked candidate ports the delta and re-queues the candidate."""
+    ctx = ctx_factory()
+    t = _ticket(ctx)
+    cand = _refined_candidate(ctx, "Login form fix")
+    ctx.service.transition(cand.id, State.BLOCKED, note="agent error — resumable")
+
+    monkeypatch.setattr(
+        agents_dedup,
+        "run_dedup_check",
+        _mock_dedup(duplicate_of=cand.id, already_done=None, reason="same idea"),
+    )
+
+    out = RefineStage._run_dedup_guard(ctx, t, _DEDUP_DRAFT, None, ctx.settings)
+
+    assert out is not None
+    assert out.next_state is State.DONE
+    assert cand.id in out.note
+    assert ctx.service.get(cand.id).state is State.READY  # re-queued
+    assert "Dedup-merged delta" in ctx.service.workspace(cand).read_description()
+
+
+# ===========================================================================
 # 2. _is_valid_dedup_target
 # ===========================================================================
 
