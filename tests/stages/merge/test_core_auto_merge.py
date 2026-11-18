@@ -1318,3 +1318,118 @@ def test_parked_pr_merged_by_human_detected_during_steady_state(tmp_path, monkey
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.DONE
     assert len(calls) == 1
+
+
+# ============================================================
+# F. Content-aware sensitive-path gate (workflow diffs)
+# ============================================================
+
+
+def _mock_workflow_diff(monkeypatch, diff_text):
+    """Route the merge gate's workflow-diff fetch to a canned diff."""
+    import robotsix_mill.scm.vcs.git_ops as _git_ops_mod
+    import robotsix_mill.stages.merge as _merge_mod
+
+    monkeypatch.setattr(_git_ops_mod, "_git", lambda *args, **kwargs: str(diff_text))
+    monkeypatch.setattr(
+        _merge_mod, "_workspace_repo_dir", lambda ctx, ticket: "/fake/repo"
+    )
+
+
+def test_auto_merge_additive_workflow_change_is_eligible(tmp_path, monkeypatch):
+    """A PR touching only .github/workflows/** with an additive (matrix/
+    version-bump) diff auto-merges — the content-aware gate overrides the
+    blanket workflow sensitive glob."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "author": "mill-bot",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [{"path": ".github/workflows/ci.yml"}],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
+    )
+    _mock_workflow_diff(
+        monkeypatch,
+        "+python-version: ['3.10', '3.12']\n+  matrix:\n+    include: []\n",
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert "auto-merged" in out.note
+
+
+def test_auto_merge_destructive_workflow_change_still_blocks(tmp_path, monkeypatch):
+    """A PR touching .github/workflows/** with a destructive diff
+    (permissions/token scope, deploy target) still fails closed to
+    HUMAN_MR_APPROVAL."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "author": "mill-bot",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [{"path": ".github/workflows/deploy.yml"}],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
+    )
+    _mock_workflow_diff(
+        monkeypatch,
+        "+permissions: write-all\n+  environment: production\n",
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert merge_called == []

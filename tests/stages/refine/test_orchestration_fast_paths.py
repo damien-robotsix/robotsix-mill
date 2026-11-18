@@ -269,6 +269,126 @@ def test_mechanical_draft_fast_path_short_circuits_on_needs_approval(
     assert (ws.artifacts_dir / "draft-original.md").exists()
 
 
+def test_mechanical_draft_fast_path_approves_additive_workflow_change(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A NEEDS_APPROVAL verdict that cites only a workflow path, where the
+    change itself is additive/config-only (matrix/version bump), auto-approves
+    to READY — the content-aware gate overrides the blanket workflow glob."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="periodic")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+    from robotsix_mill.agents.refining import AutoApproveResult
+
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda **kw: AutoApproveResult(
+            decision="NEEDS_APPROVAL",
+            reason="Modifies CI: .github/workflows/ci.yml",
+        ),
+    )
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft="Bump python-version 3.9 to 3.10 and add a 3.10/3.12 CI matrix.",
+    )
+
+    assert out.next_state is State.READY
+    assert out.note.startswith("mechanical draft fast-path")
+    assert "auto-approve APPROVE" in out.note
+    assert "additive workflow change" in out.note
+    assert calls == []  # full refine agent NOT invoked
+
+
+def test_mechanical_draft_fast_path_fails_closed_on_destructive_workflow_change(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A workflow-path citation describing a destructive change (token scope,
+    deploy target) still fails closed to human approval."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="periodic")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+    # The destructive class falls through to the full-refine path, which
+    # prefetches robotsix-standards over HTTP — mock that seam.
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.orchestration.fetch_standards_context",
+        lambda s: "",
+    )
+    from robotsix_mill.agents.refining import AutoApproveResult
+
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda **kw: AutoApproveResult(
+            decision="NEEDS_APPROVAL",
+            reason="Modifies CI: .github/workflows/ci.yml",
+        ),
+    )
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft=(
+            "Add permissions: write-all and introduce an environment: "
+            "production deploy step to the CI workflow file."
+        ),
+    )
+
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert out.note.startswith("mechanical draft fast-path")
+    assert "content gate: destructive workflow change" in out.note
+    assert calls == []
+
+
+def test_mechanical_draft_fast_path_fails_closed_on_non_workflow_sensitive(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A non-workflow sensitive glob (secrets / .env) always fails closed to
+    human approval even when the change itself is additive."""
+    ctx = ctx_factory()
+    t = _ticket(ctx, source="periodic")
+    calls = _spy_refine(
+        monkeypatch,
+        triage_refine=_mock_triage(decision="REFINE", reason="needs refinement"),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.refine.orchestration.fetch_standards_context",
+        lambda s: "",
+    )
+    from robotsix_mill.agents.refining import AutoApproveResult
+
+    monkeypatch.setattr(
+        refining,
+        "triage_auto_approve",
+        lambda **kw: AutoApproveResult(
+            decision="NEEDS_APPROVAL",
+            reason="touches .env and adds a matrix entry",
+        ),
+    )
+
+    out = _run_agent(
+        ctx,
+        t,
+        tmp_path,
+        draft="Bump python-version 3.9 to 3.10 and add a CI matrix.",
+    )
+
+    assert out.next_state is State.HUMAN_ISSUE_APPROVAL
+    assert out.note.startswith("mechanical draft fast-path")
+    assert "content gate: non-workflow sensitive path" in out.note
+    assert calls == []
+
+
 def test_mechanical_draft_fast_path_falls_through_on_auto_approve_error(
     ctx_factory, monkeypatch, tmp_path
 ):

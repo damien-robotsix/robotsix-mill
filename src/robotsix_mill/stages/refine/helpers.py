@@ -20,6 +20,7 @@ import subprocess
 from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 from ...agents import refining
 from ...config.settings import Settings
@@ -191,6 +192,146 @@ def cited_sensitive_paths(text: str, globs: list[str]) -> list[tuple[str, str]]:
                 hits.append((token, pattern))
                 break
     return hits
+
+
+# ---------------------------------------------------------------------------
+# content-aware workflow-change gate (sensitive-path blanket exception)
+# ---------------------------------------------------------------------------
+
+# The blanket ".github/workflows/** ⇒ human approval" rule (cited over
+# ``auto_merge_sensitive_globs``) stalls routine additive CI changes —
+# matrix/version bumps, dependabot blocks, test relocations, reusable-SHA
+# pins — that are reversible and non-pipeline-destructive.  Workflow
+# citations are therefore classified by the CHANGE's content instead of
+# the glob alone: destructive constructs still fail closed to human
+# approval; additive/config-only changes are auto-approved.  Non-workflow
+# sensitive globs (secrets, .env) always fail closed.  Small, extensible
+# regex lists — no NLP generalisation (same philosophy as
+# _OPERATOR_PREREQ_PATTERNS).
+_WORKFLOW_SENSITIVE_GLOB = ".github/workflows/**"
+
+# Destructive constructs — any hit ⇒ human approval.  Deliberately does
+# NOT include a bare "job" marker: replacing a hand-rolled job with a
+# shared reusable keeps the same check context and is additive (live
+# robotsix-ui #456f), and the word alone is too noisy on prose specs.
+_WF_DESTRUCTIVE_RE: tuple[re.Pattern[str], ...] = (
+    # permissions: / GITHUB_TOKEN / OIDC / workflow permissions scope
+    re.compile(r"permissions\s*:", re.IGNORECASE),
+    re.compile(r"\bGITHUB_TOKEN\b", re.IGNORECASE),
+    re.compile(r"\bid-token\s*:\s*write", re.IGNORECASE),
+    re.compile(r"\bworkflow\s*permissions\b", re.IGNORECASE),
+    # secrets referenced (added/removed) by the change
+    re.compile(r"\bsecrets?(\s*[:.]|\b)", re.IGNORECASE),
+    # required status checks / branch protection / merge gates
+    re.compile(
+        r"\brequired[_ -]?status[_ -]?checks?\b|\bbranch protection\b|"
+        r"\bmerge (queue|gate)\b|\brequired[_ -]?checks?\b",
+        re.IGNORECASE,
+    ),
+    # deploy / release / environment targets
+    re.compile(
+        r"\benvironment\s*:\s*\S|docker push|helm\b|kubectl\b|terraform\b|"
+        r"npm publish|\bssh\b|aws\s|gcloud\s|\baz\s",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bdeploy\b|\brelease\b", re.IGNORECASE),
+    # reusable-workflow call REMOVED (diff '-' line or prose removal)
+    re.compile(r"^\s*-\s*uses:\s*\S*\.github/workflows", re.IGNORECASE | re.MULTILINE),
+    re.compile(
+        r"\bremov\w*[^\n]*\breusable\b|\bdelet\w*[^\n]*\breusable\b|"
+        r"\bdrop\b[^\n]*\breusable\b|\bstop\b[^\n]*\breusable\b",
+        re.IGNORECASE,
+    ),
+)
+
+# Additive/config-only constructs — confirmation that a workflow change is
+# APPROVE-safe (matrix/version bumps, dependabot config, test relocations,
+# lint/ignore tables, reusable-SHA pins / reusable adoption).
+_WF_ADDITIVE_RE: tuple[re.Pattern[str], ...] = (
+    # dependabot ecosystem/group/ignore blocks
+    re.compile(r"\bdependabot\b|\becosystem\s*:|\bversion-update\b", re.IGNORECASE),
+    # version pins / matrix entry bumps
+    re.compile(r"\b[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*-version\s*:", re.IGNORECASE),
+    re.compile(r"\bmatrix\b", re.IGNORECASE),
+    re.compile(r"\b\d+\.\d+\s*(?:→|->)\s*\d+\.\d+\b", re.IGNORECASE),
+    re.compile(r"\bbump\w*[^\n]*\b(version|python|node|matrix)\b", re.IGNORECASE),
+    # test relocation
+    re.compile(
+        r"\brelocat\w*\b|\bmov\w*\b[^\n]*\btest\b|\btest\b[^\n]*\bmov\w*\b",
+        re.IGNORECASE,
+    ),
+    # lint / ignore config tables
+    re.compile(
+        r"\.prettierignore|extend-select|\[tool\.ruff\]|lint[_ -]?table",
+        re.IGNORECASE,
+    ),
+    # reusable-workflow SHA pin or adoption (adding a shared call)
+    re.compile(r"\buses:\s*\S*@[0-9a-f]{40}\b", re.IGNORECASE),
+    re.compile(
+        r"\bpin(?:ned|ning)?\b[^\n]*\bsha\b|\bsha\b[^\n]*\bpin(?:ned|ning)?\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\breplac\w*\b[^\n]*\bwith\b[^\n]*\breusable\b|\bmigrat\w*\b[^\n]*\breusable\b|"
+        r"\badopt\w*\b[^\n]*\breusable\b|\buse\b[^\n]*\bshared\b[^\n]*\breusable\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"^\s*\+\s*uses:\s*\S*\.github/workflows", re.IGNORECASE | re.MULTILINE),
+)
+
+
+def workflow_change_review_kind(
+    text: str,
+) -> Literal["destructive", "additive", "ambiguous"]:
+    """Classify a workflow *change* text (diff hunks or prose description).
+
+    Returns ``"destructive"`` when any destructive construct is present
+    (token/permission scope, secrets, required checks, deploy/release
+    targets, reusable-workflow removal) — human approval required.
+    Returns ``"additive"`` when no destructive construct is present but at
+    least one additive/config-only construct is (dependabot block,
+    version/matrix bump, test relocation, lint/ignore table, reusable-SHA
+    pin or reusable adoption) — safe to auto-approve.  Returns
+    ``"ambiguous"`` otherwise — the caller fails closed.
+    """
+    for pattern in _WF_DESTRUCTIVE_RE:
+        if pattern.search(text or ""):
+            return "destructive"
+    for pattern in _WF_ADDITIVE_RE:
+        if pattern.search(text or ""):
+            return "additive"
+    return "ambiguous"
+
+
+WorkflowDisposition = Literal["approve", "fail_closed", "none"]
+
+
+def workflow_sensitive_disposition(
+    sensitive: list[tuple[str, str]], change_text: str
+) -> tuple[WorkflowDisposition, str]:
+    """Content-aware disposition for cited sensitive paths.
+
+    *sensitive* is the ``(path, glob)`` list from ``cited_sensitive_paths``
+    and *change_text* the spec/draft/diff describing the change.
+
+    Returns ``("approve", reason)`` when EVERY cited path matches the
+    workflow glob AND the change is classified additive/config-only.
+    Returns ``("fail_closed", reason)`` when a cited path is non-workflow
+    sensitive (secrets, .env) or the workflow change is destructive or
+    ambiguous.  Returns ``("none", "")`` when *sensitive* is empty.
+    """
+    if not sensitive:
+        return "none", ""
+    non_workflow = [(p, g) for p, g in sensitive if g != _WORKFLOW_SENSITIVE_GLOB]
+    if non_workflow:
+        p, g = non_workflow[0]
+        return "fail_closed", f"non-workflow sensitive path {p!r} (glob {g!r})"
+    kind = workflow_change_review_kind(change_text)
+    if kind == "destructive":
+        return "fail_closed", "destructive workflow change"
+    if kind == "ambiguous":
+        return "fail_closed", "workflow change not proven additive/config-only"
+    return "approve", "additive/config-only workflow change"
 
 
 def _load_refine_memory(s: Settings, memory_board_id: str) -> str:
