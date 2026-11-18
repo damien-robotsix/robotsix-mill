@@ -24,18 +24,29 @@ API.
 | `robotsix-mill config-sync` | Run a config/docs drift detection pass |
 | `robotsix-mill member-sync` | Run a workspace member-sync (vcs2l manifest) pass |
 | `robotsix-mill bc-check` | Run a backward-compatibility inspection pass |
+| `robotsix-mill ci-prevention-rules` | Run a CI prevention-rules pass |
 | `robotsix-mill completeness-check` | Run a feature-completeness inspection pass |
+| `robotsix-mill state-sync` | Run a State-enum consistency check pass |
 | `robotsix-mill survey` | Run an OSS project discovery survey pass |
 | `robotsix-mill copy-paste` | Run a code-duplication detection pass |
+| `robotsix-mill credit-balance` | Check OpenRouter credit balance |
+| `robotsix-mill data-dir-gc` | Run a garbage-collection pass over data directories |
 | `robotsix-mill forge-parity` | Run a forge-parity drift detection pass |
+| `robotsix-mill frontend-sync` | Run an internal-tool frontend config sync pass |
 | `robotsix-mill run-health` | Run a health analysis over recent run outcomes |
 | `robotsix-mill diagnostic` | Run a daily diagnostic pass |
+| `robotsix-mill docstring-coverage` | Run a docstring-coverage inspection pass |
 | `robotsix-mill trace-health` | Check Langfuse for unsessioned/unnamed traces |
 | `robotsix-mill trace-review` | Run a trace-review pass over recent Langfuse traces |
+| `robotsix-mill triage-boilerplate` | Run a triage-boilerplate generation pass |
 | `robotsix-mill langfuse-cleanup` | Delete excess Langfuse traces |
 | `robotsix-mill roadmap-sync` | Run a roadmap-sync pass |
 | `robotsix-mill module-curator` | Run a module taxonomy drift detection pass |
+| `robotsix-mill module-size` | Run a module size audit pass |
+| `robotsix-mill mypy-baseline` | Run a mypy type-check baseline management pass |
+| `robotsix-mill pin-bump` | Run a pin bump pass for dependency version pins |
 | `robotsix-mill meta` | Run the meta pass (extraction + alignment across repos) |
+| `robotsix-mill repo-description-sync` | Run a repo-description-sync pass over a managed repo |
 | `robotsix-mill verify` | Verify TicketEvent hash-chain integrity |
 | `robotsix-mill --print-completion` | Print shell completion script (bash/zsh/tcsh) |
 

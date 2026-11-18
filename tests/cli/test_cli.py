@@ -14,6 +14,71 @@ def test_build_parser_returns_parser():
     assert "print_completion" in actions
 
 
+def _quick_reference_commands():
+    """Return the command strings in the ``## Quick reference`` table of
+    ``docs/cli/usage.md`` (first column, backticks stripped)."""
+    from pathlib import Path
+
+    doc = Path(__file__).resolve().parents[2] / "docs" / "cli" / "usage.md"
+    lines = doc.read_text(encoding="utf-8").splitlines()
+    commands = set()
+    in_table = False
+    for line in lines:
+        if line.startswith("## "):
+            if in_table:
+                break
+            if line.strip() == "## Quick reference":
+                in_table = True
+                continue
+        if in_table and line.startswith("|"):
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            cmd = cells[0].strip("`")
+            if cmd.startswith("robotsix-mill"):
+                commands.add(cmd)
+    return commands
+
+
+def test_usage_doc_lists_all_commands():
+    """The ``docs/cli/usage.md`` Quick reference table stays in sync with the
+    registered CLI subcommands.
+
+    The parser (via ``build_parser``) is the single source of truth: every
+    registered top-level command must appear in the table, and every
+    documented command must correspond to a real registered command. This
+    mirrors the completions drift gate (``scripts/gen_completions.py`` +
+    ``git diff --exit-code contrib/completions/``).
+    """
+    import argparse
+
+    from robotsix_mill.cli import _RUNNERS, build_parser
+
+    parser = build_parser()
+    subparsers_action = next(
+        a for a in parser._actions if isinstance(a, argparse._SubParsersAction)
+    )
+    # Top-level subcommands = registered subparsers, plus every _RUNNERS key
+    # (defensive: _RUNNERS keys must also be documented even if a future
+    # runner is not yet wired into build_parser) plus --print-completion,
+    # which the doc also documents as a top-level option.
+    registered = set(subparsers_action.choices) | set(_RUNNERS)
+    registered.add("--print-completion")
+
+    # First token after the program name for each documented command, e.g.
+    # ``robotsix-mill ticket show <id>`` -> ``ticket``.
+    documented = set()
+    for cmd in _quick_reference_commands():
+        parts = cmd.split()
+        assert parts and parts[0] == "robotsix-mill", f"bad doc row: {cmd!r}"
+        documented.add(parts[1])
+
+    assert registered == documented, (
+        "docs/cli/usage.md Quick reference is out of sync with the registered "
+        "CLI subcommands. Missing from the doc: "
+        f"{sorted(registered - documented)}. "
+        f"Documented but not registered: {sorted(documented - registered)}."
+    )
+
+
 def test_print_completion_bash_exits_zero():
     """``main([\"--print-completion\", \"bash\"])`` exits 0 and prints a script."""
     pytest.importorskip("shtab")
