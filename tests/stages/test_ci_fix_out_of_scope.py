@@ -485,6 +485,20 @@ _FIXTURE_JOB_LOG = "\n".join(
     ]
 )
 
+# A Trivy-style container image scan failure: CVE + fixed version named in
+# the log, like the robotsix-chat image-scan gap that kept spawning vague
+# out-of-scope fix tickets (ci-fix-out-of-scope-spec-embeds-concrete-remediation).
+_TRIVY_JOB_LOG_LINES = [
+    "### Job: Scan (id=2) — failing step: Trivy image scan",
+    "2026-11-06T10:00:00.0000000Z zlib1g (Debian 12.5)",
+    "2026-11-06T10:00:00.0000000Z Total: 1 (UNKNOWN: 0, LOW: 0, MEDIUM: 0, HIGH: 1, CRITICAL: 0)",
+    "2026-11-06T10:00:01.0000000Z CVE-2026-109518 (HIGH): zlib1g 1:1.2.13.dfsg-1",
+    "2026-11-06T10:00:01.0000000Z Fixed Version: 1:1.2.13.dfsg-2",
+    "2026-11-06T10:00:02.0000000Z Dockerfile: apt install --no-install-recommends zlib1g",
+    "##[error]Process completed with exit code 1.",
+]
+_TRIVY_JOB_LOG = "\n".join(_TRIVY_JOB_LOG_LINES)
+
 
 def test_out_of_scope_description_carries_failing_run_evidence(tmp_path, monkeypatch):
     """The spawned dependency ticket carries the failing run URL, the
@@ -539,6 +553,127 @@ def test_out_of_scope_description_carries_failing_run_evidence(tmp_path, monkeyp
     assert "filler line 99" in evidence
 
 
+def test_out_of_scope_spawned_spec_carries_concrete_remediation(tmp_path, monkeypatch):
+    """A Trivy-style image-scan failure spawns a fix ticket whose spec
+    deterministically embeds the failing run id and the CVEs the log names —
+    never "depends on which CVE Trivy reports"."""
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch, alert_paths=("src/untouched.py",))
+    run_url = "https://github.com/o/r/actions/runs/40624810165"
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, **k: [
+            {
+                "id": 40624810165,
+                "name": "Scan",
+                "conclusion": "failure",
+                "html_url": run_url,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "fetch_workflow_job_logs",
+        lambda self, **k: _TRIVY_JOB_LOG,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
+    )
+
+    t = _fixing_ci(ctx)
+    _setup_repo(ctx, t)
+
+    out = CIFixStage().run(t, ctx)
+    assert out.next_state is State.BLOCKED
+    fix = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)[0]
+    desc = ctx.service.workspace(fix).read_description()
+    remediation = desc.split("## Concrete remediation from the failing run", 1)[1]
+    assert "fetch_ci_logs(run_id=" in remediation
+    assert "`40624810165`" in remediation
+    assert "CVE-2026-109518" in remediation
+    assert "CVE-2026-109518" in desc  # also in the evidence excerpt
+
+
+def test_out_of_scope_reuse_enriches_existing_fix_and_redrives_blocked(
+    tmp_path, monkeypatch
+):
+    """A later out-of-scope pass that knows the concrete CVE updates the
+    EXISTING fix ticket's spec and re-drives it — no duplicate spawn, and
+    the stuck BLOCKED anchor from a vague spec is re-enqueued."""
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch, alert_paths=("src/untouched.py",))
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
+    )
+
+    # First parent: no run log wired → vague spec, no remediation block.
+    t1 = _fixing_ci(ctx)
+    _setup_repo(ctx, t1)
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    out1 = CIFixStage().run(t1, ctx)
+    assert out1.next_state is State.BLOCKED
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert len(fixes) == 1
+    fix = fixes[0]
+    first_desc = ctx.service.workspace(fix).read_description()
+    assert "## Concrete remediation from the failing run" not in first_desc
+
+    # The fix ticket's implement pass could not act on the vague spec and
+    # parked it BLOCKED — the stuck-anchor scenario.
+    ctx.service.transition(fix.id, State.BLOCKED, note="spec too vague")
+
+    # Second parent: the ci_fix pass fetched the Trivy log and knows the CVE.
+    t2 = _fixing_ci(ctx)
+    _setup_repo(ctx, t2)
+    run_url = "https://github.com/o/r/actions/runs/40624810165"
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, **k: [
+            {
+                "id": 40624810165,
+                "name": "Scan",
+                "conclusion": "failure",
+                "html_url": run_url,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "fetch_workflow_job_logs",
+        lambda self, **k: _TRIVY_JOB_LOG,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    out2 = CIFixStage().run(t2, ctx)
+    assert out2.next_state is State.BLOCKED
+
+    # No duplicate: the single existing fix ticket was reused, its spec now
+    # carries the concrete remediation, and it was re-driven to READY.
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert len(fixes) == 1
+    updated = ctx.service.get(fix.id)
+    assert updated.state is State.READY
+    desc = ctx.service.workspace(fix).read_description()
+    assert "## Concrete remediation from the failing run" in desc
+    assert "CVE-2026-109518" in desc
+    assert "40624810165" in desc
+    # Both parents auto-resume from the single fix ticket.
+    assert set(json.loads(updated.unblocks)) == {t1.id, t2.id}
+
+
 def test_build_and_extract_failing_run_evidence_roundtrip():
     from robotsix_mill.stages.ci_fix_helpers import (
         build_failing_run_evidence,
@@ -557,6 +692,34 @@ def test_build_and_extract_failing_run_evidence_roundtrip():
     assert extracted == evidence.strip()
     assert "Later section" not in extracted
     assert build_failing_run_evidence("## lint\n") == ""
+
+
+def test_extract_run_ids_and_advisory_ids():
+    """The concrete-remediation extractors pull the failing run id and the
+    advisory/CVE ids the log names, and produce nothing for a failure that
+    names neither (so a pure lint failure adds no remediation block)."""
+    from robotsix_mill.stages.ci_fix_helpers import (
+        build_concrete_remediation,
+        extract_advisory_ids,
+        extract_run_ids,
+    )
+
+    summary = (
+        "**Run:** https://github.com/o/r/actions/runs/40624810165 (scan)\n"
+        "CVE-2026-109518 (HIGH) — ghsa-2vrf-3vcr-5h65\n"
+    )
+    assert extract_run_ids(summary) == ["40624810165"]
+    ids = extract_advisory_ids(summary)
+    assert "CVE-2026-109518" in ids
+    assert "GHSA-2vrf-3vcr-5h65" in ids  # GHSA canonical form, case-insensitive
+    remediation = build_concrete_remediation(summary)
+    assert "## Concrete remediation from the failing run" in remediation
+    assert "40624810165" in remediation
+    assert "fetch_ci_logs(run_id=" in remediation
+    assert "CVE-2026-109518" in remediation
+    assert "GHSA-2vrf-3vcr-5h65" in remediation
+    assert build_concrete_remediation("## lint\nall checks pass") == ""
+    assert extract_run_ids("no run url here") == []
 
 
 def test_out_of_scope_spawns_fix_ticket_and_parks(tmp_path, monkeypatch):

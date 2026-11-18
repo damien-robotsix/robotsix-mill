@@ -90,6 +90,7 @@ from .ci_fix_helpers import (
     _workspace_repo_dir,
     _write_counter,
     _write_text,
+    build_concrete_remediation,
     build_failing_run_evidence,
     confirm_failure_on_target,
     is_environment_drift_attribution,
@@ -381,6 +382,66 @@ def _emit_ci_fix_resolved_event(
         )
     except Exception:
         log.exception("%s: failed to emit CI_FIX_RESOLVED event", ticket.id)
+
+
+def _enrich_reused_fix_spec(
+    ctx: StageContext,
+    fix_id: str,
+    remediation: str,
+    from_ticket: Ticket,
+) -> None:
+    """Append the concrete remediation extracted by this pass to an existing
+    fix ticket that a later parent is reusing, and re-drive it when it is
+    parked BLOCKED.
+
+    Scenario (ci-fix gap ``ci-fix-out-of-scope-spec-embeds-concrete-remediation``):
+    the first out-of-scope spawn carried a vague spec ("depends on which CVE
+    Trivy reports") and its implement pass BLOCKED the fix ticket.  Later
+    passes know more (the concrete CVE + failing run id), but spawning a
+    duplicate only parked on the stuck anchor.  Updating the existing
+    ticket's spec and re-enqueuing it hands the concrete target to the same
+    ticket instead.
+
+    No-op when *remediation* is empty or the fix ticket already carries a
+    concrete-remediation block (so re-parking from many parents enriches at
+    most once and is idempotent across cycles).
+    """
+    if not remediation:
+        return
+    fix = ctx.service.get(fix_id)
+    if fix is None:
+        return
+    try:
+        body = ctx.service.workspace(fix).read_description() or ""
+        if "## Concrete remediation from the failing run" in body:
+            return
+        ctx.service.workspace(fix).write_description(
+            body.rstrip() + "\n\n" + remediation
+        )
+    except Exception:
+        log.warning(
+            "%s: failed to enrich reused fix spec with concrete remediation",
+            fix_id,
+        )
+        return
+    try:
+        ctx.service.add_history_note(
+            fix_id,
+            f"spec enriched with concrete remediation extracted from a later "
+            f"out-of-scope pass routed from {from_ticket.id}",
+        )
+    except Exception:
+        log.warning("%s: failed to record remediation-enrich note", fix_id)
+    if fix.state is State.BLOCKED:
+        try:
+            ctx.service.transition(
+                fix_id,
+                State.READY,
+                note=f"spec updated with concrete remediation (from "
+                f"{from_ticket.id}); re-driven",
+            )
+        except Exception:
+            log.warning("%s: failed to re-drive parked fix after spec update", fix_id)
 
 
 class CIFixStage(Stage):
@@ -2195,6 +2256,16 @@ class CIFixStage(Stage):
         evidence = build_failing_run_evidence(failing_summary)
         if evidence:
             description += f"\n{evidence}"
+        # Deterministic concrete-remediation block: the implement stage on
+        # the spawned ticket is network-isolated and cannot re-fetch the
+        # failing run log, so the spec must carry what THIS pass already
+        # extracted from it — the failing run id (for fetch_ci_logs), the
+        # advisory/CVE ids the log names, and the concrete target — never
+        # "depends on which CVE Trivy reports"
+        # (ci-fix-out-of-scope-spec-embeds-concrete-remediation).
+        remediation = build_concrete_remediation(failing_summary)
+        if remediation:
+            description += f"\n{remediation}"
         # Record the toolchain versions the workflow pins (flutter-version,
         # python-version, …) so the fixer uses the same formatter/linter
         # version as CI instead of whatever the sandbox has.
@@ -2241,6 +2312,22 @@ class CIFixStage(Stage):
                     description += ci_fix_recurrence.format_recurrence_section(
                         signature, prior
                     )
+        # Re-drive instead of duplicate: when a fix ticket for the same
+        # failing check already exists (even one parked BLOCKED by an
+        # earlier vague spec), update ITS spec with the concrete remediation
+        # this pass extracted and re-enqueue it — never spawn a fresh ticket
+        # that parks on the stuck anchor
+        # (ci-fix-out-of-scope-spec-embeds-concrete-remediation).
+        existing_fix_id = dependency_fix.resolve_existing_fix(
+            ctx,
+            dedup_labels=dedup_labels,
+            title=title,
+            source_kind=SourceKind.CI_FIX_DEPENDENCY,
+            board_id=board_id or None,
+            exclude_id=ticket.id,
+        )
+        if existing_fix_id:
+            _enrich_reused_fix_spec(ctx, existing_fix_id, remediation, ticket)
         outcome = dependency_fix.spawn_dependency_fix(
             ticket,
             ctx,

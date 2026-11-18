@@ -382,6 +382,29 @@ def test_label_dedup_skipped_when_board_id_none() -> None:
     assert len(service.set_labels_calls) == 1
 
 
+def test_resolve_existing_fix_finds_blocked_ticket_by_label() -> None:
+    """resolve_existing_fix finds a fix ticket parked BLOCKED by an earlier
+    vague spec — the stuck-anchor a later pass must re-drive, not duplicate."""
+    from robotsix_mill.stages.dependency_fix import resolve_existing_fix
+
+    blocked = SimpleNamespace(
+        id="fix-blocked",
+        title="anything else",
+        state=State.BLOCKED,  # non-terminal: findable by label
+        labels=json.dumps(["ci_fp:zlib1g"]),
+    )
+    service = FakeService(recent_tickets_data=[blocked])
+
+    found = resolve_existing_fix(
+        _ctx(service),
+        dedup_labels=["ci_fp:zlib1g"],
+        title="arbitrary title",
+        source_kind=SourceKind.CI_FIX_DEPENDENCY,
+        board_id="test-board",
+    )
+    assert found == "fix-blocked"
+
+
 def test_label_dedup_falls_back_to_title_when_no_label_match() -> None:
     """When dedup_labels are provided but no label match is found, the
     existing title-based dedup still runs as a fallback."""

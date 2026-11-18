@@ -132,6 +132,33 @@ def _title_dedup(
     return None
 
 
+def resolve_existing_fix(
+    ctx: StageContext,
+    *,
+    dedup_labels: list[str] | None,
+    title: str,
+    source_kind: SourceKind,
+    board_id: str | None,
+    exclude_id: str | None = None,
+) -> str | None:
+    """Return the id of an existing open fix ticket matching *dedup_labels*
+    (label match) or *title* (title match), else ``None``.
+
+    Mirrors the dedup ordering used by :func:`spawn_dependency_fix` (label
+    match first, title fallback) so a caller can enrich the reused ticket's
+    spec before parking without racing the spawn's own dedup.  A reused
+    ticket may be in any non-terminal state — including ``BLOCKED`` (a
+    parked fix from an earlier vague spec) — so a later pass that knows the
+    concrete remediation can re-drive the *same* ticket instead of spawning
+    a duplicate that parks on the stuck anchor.
+    """
+    if dedup_labels and board_id:
+        found = _label_dedup(ctx, dedup_labels, board_id, exclude_id=exclude_id)
+        if found is not None:
+            return found
+    return _title_dedup(ctx, source_kind, title, exclude_id=exclude_id)
+
+
 def _reaches_via_unblocks(ctx: StageContext, start: str, target: str) -> bool:
     """Return ``True`` if *target* is reachable from *start* by following
     ``unblocks`` edges (a path of length >= 1).
@@ -281,14 +308,14 @@ def spawn_dependency_fix(
     """
     board_id = ctx.repo_config.board_id if ctx.repo_config else None
 
-    # --- label-based dedup ---
-    fix_id: str | None = None
-    if dedup_labels and board_id:
-        fix_id = _label_dedup(ctx, dedup_labels, board_id, exclude_id=ticket.id)
-
-    # --- title-based dedup (fallback) ---
-    if fix_id is None:
-        fix_id = _title_dedup(ctx, source_kind, title, exclude_id=ticket.id)
+    fix_id = resolve_existing_fix(
+        ctx,
+        dedup_labels=dedup_labels,
+        title=title,
+        source_kind=source_kind,
+        board_id=board_id,
+        exclude_id=ticket.id,
+    )
 
     # A reused (deduped) ticket already carries edges, so it is the only
     # kind that can close a cycle; a freshly created fix ticket cannot.
