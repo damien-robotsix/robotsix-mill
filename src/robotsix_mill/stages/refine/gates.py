@@ -29,7 +29,6 @@ from ._gates_dedup import (
 from ._triage import is_sendback_reentry
 from .helpers import (
     DEDUP_ALREADY_DONE_PREFIX,
-    DEDUP_DUPLICATE_PREFIX,
     FRESHNESS_STALE_PREFIX,
     OBSOLESCENCE_GAP_PREFIX,
     SCOPE_TRIAGE_REPO_AWARENESS_GATE_PREFIX,
@@ -872,18 +871,27 @@ class RefineGatesMixin:
         # --- Handle dedup ---
         dup_id = None if operator_iterating else result.duplicate_of
         if dup_id:
-            from ._gates_dedup import _is_valid_dedup_target
+            from ._gates_dedup import _dedup_close_protocol, _is_valid_dedup_target
 
             if _is_valid_dedup_target(ctx, ticket, dup_id, repo_dir, draft=draft):
-                return Outcome(
-                    State.DONE,
-                    f"{DEDUP_DUPLICATE_PREFIX}{dup_id}: {result.dedup_reason}",
+                outcome = _dedup_close_protocol(
+                    ctx, ticket, dup_id, result.dedup_reason, draft
                 )
-            log.info(
-                "%s: pre-refine classifier named duplicate_of=%s but it is not a valid target — proceeding",
-                ticket.id,
-                dup_id,
-            )
+                if outcome is not None:
+                    return outcome
+                log.info(
+                    "%s: pre-refine classifier named duplicate_of=%s but the "
+                    "candidate could not be made actionable — keeping this "
+                    "ticket open as the actionable owner",
+                    ticket.id,
+                    dup_id,
+                )
+            else:
+                log.info(
+                    "%s: pre-refine classifier named duplicate_of=%s but it is not a valid target — proceeding",
+                    ticket.id,
+                    dup_id,
+                )
         done_id = None if operator_iterating else result.already_done
         if done_id:
             from ...core.dedup import _extract_paths
