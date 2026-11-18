@@ -91,7 +91,8 @@ than working it out again. The same text is in the `ci_fix` agent prompt
 > **Triage: transitive-dependency advisory**
 >
 > - Failing check: `<ci / Tests (uv audit) | Security Audit / audit>`. Advisory `<GHSA-id>` in `<pkg> <old-version>`.
-> - Scope: `<pkg>` is pinned in `uv.lock`. If this ticket's diff does not touch `uv.lock`/`pyproject.toml` and the advisory also fails on `main`, it is **existing repo debt**: route it to a `ci_fix_dependency` ticket and do not fix it in this one.
+> - Scope: `<pkg>` is pinned in `uv.lock`. If this ticket's diff does not touch `uv.lock`/`pyproject.toml` and the advisory also fails on `main`, it is **existing repo debt**: report `OUT_OF_SCOPE` and do not fix it in this one — the OUT_OF_SCOPE verdict itself spawns the `ci_fix_dependency` ticket that OWNS the fix.
+> - Required change area: write it as the direct implement instruction naming the concrete fix — e.g. "uv.lock: bump `<pkg>` to `>=<fixed-version>` via `uv lock --upgrade-package <pkg>`". The spawned `ci_fix_dependency` ticket's spec copies this verbatim and ITS implement pass must run the bump itself. NEVER append "handled by a dedicated ci_fix_dependency ticket" (or any "do not fix it in this one" wording) to it — that ticket IS the fix; the self-delegating phrasing makes its implement pass close with an empty diff and the advisory stays red on main.
 > - Fix: `uv lock --upgrade-package <pkg>` to the first version that fixes the advisory (or a later one). Expect only `uv.lock` to change. Edit `pyproject.toml` only if `<pkg>` is a direct dependency whose lower bound blocks the fix. Do not add the advisory to the audit-ignore list and do not weaken the gate.
 > - Verify: `uv lock --check` passes locally. `uv audit` runs only in CI (OSV is unreachable from the sandbox).
 > - Docs: internal-only security bump, no user-facing change, skip the doc agent.
