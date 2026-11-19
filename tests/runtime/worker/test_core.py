@@ -1085,7 +1085,7 @@ async def test_handle_stage_error_reaps_orphans_on_timeout(ctx, service, monkeyp
         return 0
 
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.processing.reap_orphan_sandboxes",
+        "robotsix_mill.runtime.worker._stale_transitions.reap_orphan_sandboxes",
         _fake_reap,
     )
     ctx.settings.sandbox_op_timeout = 300

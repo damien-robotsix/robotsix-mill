@@ -134,7 +134,7 @@ class TestBlockTicketAndNotify:
         ctx.service.get = MagicMock(return_value=t)
         notify = MagicMock()
         monkeypatch.setattr(
-            "robotsix_mill.runtime.worker.processing.send_notification",
+            "robotsix_mill.runtime.worker._stale_transitions.send_notification",
             notify,
         )
 
@@ -158,7 +158,7 @@ class TestBlockTicketAndNotify:
         ctx.service.get = MagicMock(return_value=None)
         notify = MagicMock()
         monkeypatch.setattr(
-            "robotsix_mill.runtime.worker.processing.send_notification",
+            "robotsix_mill.runtime.worker._stale_transitions.send_notification",
             notify,
         )
 
@@ -178,7 +178,7 @@ class TestBlockTicketAndNotify:
         ctx.service.get = MagicMock(return_value=t)
         notify = MagicMock()
         monkeypatch.setattr(
-            "robotsix_mill.runtime.worker.processing.send_notification",
+            "robotsix_mill.runtime.worker._stale_transitions.send_notification",
             notify,
         )
 
@@ -218,15 +218,16 @@ class TestHandleStageError:
             "robotsix_mill.runtime.transient_errors.is_disk_full_error",
             lambda e: is_full,
         )
-        # first_full_path is imported at module level in processing.py.
+        # first_full_path is imported at module level in
+        # _stale_transitions.py (where _handle_stage_error now lives).
         if is_full:
             monkeypatch.setattr(
-                "robotsix_mill.runtime.worker.processing.first_full_path",
+                "robotsix_mill.runtime.worker._stale_transitions.first_full_path",
                 lambda paths, min_free_mb: paths[0] if paths else None,
             )
         else:
             monkeypatch.setattr(
-                "robotsix_mill.runtime.worker.processing.first_full_path",
+                "robotsix_mill.runtime.worker._stale_transitions.first_full_path",
                 lambda paths, min_free_mb: None,
             )
 
@@ -266,7 +267,7 @@ class TestHandleStageError:
     def _patch_block_and_notify(monkeypatch):
         mock = AsyncMock()
         monkeypatch.setattr(
-            "robotsix_mill.runtime.worker.processing._block_ticket_and_notify",
+            "robotsix_mill.runtime.worker._stale_transitions._block_ticket_and_notify",
             mock,
         )
         return mock
@@ -275,7 +276,7 @@ class TestHandleStageError:
     def _patch_reap(monkeypatch, return_value=0):
         mock = MagicMock(return_value=return_value)
         monkeypatch.setattr(
-            "robotsix_mill.runtime.worker.processing.reap_orphan_sandboxes",
+            "robotsix_mill.runtime.worker._stale_transitions.reap_orphan_sandboxes",
             mock,
         )
         return mock
