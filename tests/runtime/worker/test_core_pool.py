@@ -1028,6 +1028,10 @@ async def test_disk_full_parks_without_consuming_retry(ctx, service, monkeypatch
         "robotsix_mill.runtime.worker.processing.first_full_path",
         fills_during_stage,
     )
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.worker._stale_transitions.first_full_path",
+        fills_during_stage,
+    )
     t = service.create("x")
     for _ in range(ctx.settings.stage_retry_max_attempts + 2):
         await process_ticket(t.id, ctx)
@@ -1063,7 +1067,7 @@ async def test_enospc_with_space_available_uses_bounded_retries(
 
     monkeypatch.setitem(registry.STAGES, "refine", DiskBoom())
     monkeypatch.setattr(
-        "robotsix_mill.runtime.worker.processing.first_full_path",
+        "robotsix_mill.runtime.worker._stale_transitions.first_full_path",
         lambda paths, min_free_mb: None,
     )
     t = service.create("x")
