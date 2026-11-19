@@ -552,6 +552,155 @@ def test_includes_job_logs_in_draft_body(tmp_path, monkeypatch):
     assert "Step 5/10: ERROR: build failed" in desc
 
 
+_AUDIT_LOGS = (
+    "### Job: quality (id=1) — failing step: CVE scan\n"
+    "Job URL: http://job/1\n"
+    "2026-11-14T09:30:00Z found 2 known vulnerabilities in 2 packages\n"
+    "2026-11-14T09:30:00Z pypdf 6.18.2 ... GHSA-xxxx-xxxx-xxxx\n"
+    "##[error]Process completed with exit code 1.\n"
+    "\n"
+    "### Job: Python CI / Tests (id=2) — failing step: Dependency audit (CVE scan)\n"
+    "Job URL: http://job/2\n"
+    "2026-11-14T09:30:01Z Found 2 known vulnerabilities in 2 packages\n"
+    "2026-11-14T09:30:01Z pypdf 6.18.2 ... fixed in 6.21.3 GHSA-xxxx-xxxx-xxxx\n"
+    "##[error]Process completed with exit code 1.\n"
+    "\n"
+    "### Job: Python CI / Dependency audit (SARIF) (id=3) — failing step: Dependency audit (SARIF)\n"
+    "Job URL: http://job/3\n"
+    '2026-11-14T09:30:02Z {"rules":[{"id":"GHSA-xxxx-xxxx-xxxx"}]}\n'
+    "##[error]Process completed with exit code 1.\n"
+)
+
+
+def test_dependency_audit_failure_emits_remediation_scope(tmp_path, monkeypatch):
+    """A failing run whose every job carries the audit signature gets a
+    spec-scoped body naming the deterministic lock bump, not a raw log tail.
+
+    The complete spec (``## Problem`` / ``## Scope`` / ``## Acceptance
+    criteria``) trips the refine mechanical fast-path so the dependency-audit
+    failure is remediated deterministically instead of being parked at
+    human_issue_approval (auto-approve gate 6).
+    """
+    ctx = _ctx(
+        tmp_path,
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 1,
+                "name": "Python CI",
+                "workflow_id": 200,
+                "head_sha": "abc",
+                "conclusion": "failure",
+                "html_url": "http://run/1",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+        logs=_AUDIT_LOGS,
+    )
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+    import asyncio
+
+    loop = asyncio.new_event_loop()
+
+    async def _run_one_cycle():
+        async def _fast_sleep(s):
+            if s >= 1:
+                raise asyncio.CancelledError()
+
+        monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker._ci_monitor_poll_loop()
+
+    loop.run_until_complete(_run_one_cycle())
+    loop.close()
+
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 1
+    desc = ctx.service.workspace(ci_tickets[0]).read_description() or ""
+    assert "## Problem" in desc
+    assert "## Scope" in desc
+    assert "## Acceptance criteria" in desc
+    assert "uv lock --upgrade-package" in desc
+    assert "GHSA-xxxx-xxxx-xxxx" in desc
+    assert "`pypdf`" in desc
+    # The raw truncated log tail is NOT embedded — the ticket is actionable.
+    assert "##[error]" not in desc
+
+
+def test_audit_scope_not_applied_when_non_audit_step_also_fails(tmp_path, monkeypatch):
+    """When a non-audit step fails alongside the audit gate, the ticket keeps
+    the generic raw-log body — a lock bump alone would not turn CI green."""
+    ctx = _ctx(
+        tmp_path,
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 1,
+                "name": "Python CI",
+                "workflow_id": 200,
+                "head_sha": "abc",
+                "conclusion": "failure",
+                "html_url": "http://run/1",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+        logs=_AUDIT_LOGS
+        + (
+            "\n"
+            "### Job: Lint (id=4) — failing step: ruff\n"
+            "Job URL: http://job/4\n"
+            "E501 line too long\n"
+            "##[error]Process completed with exit code 1.\n"
+        ),
+    )
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+    import asyncio
+
+    loop = asyncio.new_event_loop()
+
+    async def _run_one_cycle():
+        async def _fast_sleep(s):
+            if s >= 1:
+                raise asyncio.CancelledError()
+
+        monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker._ci_monitor_poll_loop()
+
+    loop.run_until_complete(_run_one_cycle())
+    loop.close()
+
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 1
+    desc = ctx.service.workspace(ci_tickets[0]).read_description() or ""
+    assert "## Problem" not in desc
+    assert "E501 line too long" in desc
+
+
 def test_monitor_skips_when_disabled_per_repo(tmp_path, monkeypatch):
     """When no repo has ci_monitor_enabled=True, the poll task is not created."""
     ctx = _ctx(
