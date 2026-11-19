@@ -161,9 +161,13 @@ def _claude_oauth_stale() -> dict[str, str] | None:
     try:
         creds_path = _claude_config_dir() / ".credentials.json"
         data = json.loads(creds_path.read_text(encoding="utf-8"))
-    except OSError, ValueError, AttributeError:
-        # FileNotFoundError is an OSError — missing, unreadable, or
-        # non-JSON store.  Guarded so the never-raises contract holds.
+    except OSError, ValueError, AttributeError, RuntimeError:
+        # FileNotFoundError is an OSError — missing, unreadable, or non-JSON
+        # store.  RuntimeError covers ``_claude_config_dir``'s Path.home()
+        # failing when no home directory can be resolved (HOME unset in a
+        # systemd unit / minimal container with no passwd entry) — without it
+        # the probe 500s and the board banner vanishes there.  Guarded so the
+        # never-raises contract holds.
         return None
     if not isinstance(data, dict):
         # A non-object JSON root (``[]``, a bare string, ``null``) would

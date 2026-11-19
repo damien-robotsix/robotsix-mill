@@ -259,3 +259,26 @@ def test_corrupt_claude_credentials_file_is_not_reported(cfg, tmp_path):
     (tmp_path / ".credentials.json").write_text("{not json", encoding="utf-8")
     status = get_credential_status(_settings(forge_auth="app"))
     assert status["ok"] is True
+
+
+def test_unresolvable_home_dir_is_not_reported(cfg, monkeypatch):
+    """Path.home() raising RuntimeError must not escape the probe.
+
+    ``_claude_config_dir`` calls ``Path.home()``, which raises RuntimeError
+    when no home directory can be determined (HOME unset in a systemd unit /
+    minimal container with no resolvable passwd entry).  A /credential-status
+    poll must not 500 there and silently drop the board banner — the
+    never-raises contract holds even when the config dir cannot be resolved.
+    """
+    cfg(_FULL_APP_CREDS)
+
+    def _boom():
+        raise RuntimeError("could not determine home directory")
+
+    # Force the config-dir resolver to raise the exact RuntimeError
+    # Path.home() raises in that environment.
+    monkeypatch.setattr(
+        "robotsix_mill.runtime.credential_status._claude_config_dir", _boom
+    )
+    status = get_credential_status(_settings(forge_auth="app"))
+    assert status["ok"] is True
