@@ -87,6 +87,19 @@ def test_output_type_symbol_resolves(path, definition):
     )
 
 
+def test_implement_prompt_carries_comment_discipline():
+    """The implement agent's system prompt must keep the comment-
+    discipline rule that prevents the implement-comment-spam observed
+    on PR #3638/#3639: post the deliverable summary exactly once and
+    drop self-referential meta-comments. The prompt is the behaviour
+    rule the stage runs on, so removing it silently regresses the
+    comment stream back to noise."""
+    implement = load_agent_definition(Path("agent_definitions/implement.yaml"))
+    assert "Comment discipline" in implement.system_prompt
+    assert "exactly once" in implement.system_prompt
+    assert "self-referential meta-comments" in implement.system_prompt
+
+
 def test_bogus_output_type_raises_attributeerror():
     """A typo'd output_type fails with AttributeError — the exact crash this
     test suite is designed to catch before deployment."""

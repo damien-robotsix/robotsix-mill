@@ -225,3 +225,20 @@ class TestPostComment:
         _pc.make_post_comment_tool(settings, agent_name="implement")
         names = [t.name for t in ToolRegistry.list_tools()]
         assert "post_comment" in names
+
+    def test_tool_description_carries_comment_discipline(self, settings):
+        """The registered description tells the model to post the
+        deliverable at most once and forbids self-referential
+        meta-comments — the observable behaviour rule documented by
+        the implement-comment-spam retrospect gap (PR #3638/#3639
+        comment streams were majority noise: 'Done.',
+        'Delivered — see diff and summary thread X',
+        '(Stop-noise marker)', 'ignore my previous comment')."""
+        from robotsix_mill.agents.tool_registry import ToolRegistry
+
+        _pc.make_post_comment_tool(settings, agent_name="implement")
+        infos = [t for t in ToolRegistry.list_tools() if t.name == "post_comment"]
+        assert infos, "post_comment must self-register a ToolInfo"
+        desc = infos[0].description
+        assert "at most once" in desc
+        assert "self-referential meta-comments" in desc
