@@ -22,6 +22,7 @@ from ...core.dedup import _ci_draft_fingerprint, find_prior_matching_ticket
 from ...core.models import Comment, SourceKind, Ticket
 from ...core.states import State
 from ...scm.forge import rate_limit
+from ...stages.ci_fix_audit import has_audit_signature, parse_audit_failure
 from ..transient_errors import _TRANSIENT_HTTPX_EXCEPTIONS, is_network_down_error
 
 if TYPE_CHECKING:
@@ -170,6 +171,86 @@ def _failed_step_logs(log: str, headers: list[re.Match[str]]) -> tuple[str, bool
             ex = head + "\n[…]\n" + rest[len(rest) - keep :]
         excerpts.append(ex)
     return "\n\n".join(excerpts), True
+
+
+# Dependency-audit gate signature (the shared python-ci.yml ``Dependency
+# audit (CVE scan)`` step plus the ``Dependency audit (SARIF)`` job, often
+# alongside the caller's ``quality`` mirror job, or a standalone
+# ``supply-chain`` uv-audit job). Its remediation is deterministic —
+# ``uv lock --upgrade-package`` for the flagged package — so a raw
+# truncated-log body would send the ticket to refine, which correctly parks
+# an unnameable edit (auto-approve gate 6) and leaves the branch red. Emit a
+# complete spec naming that concrete change instead, which trips the refine
+# mechanical fast-path (``_draft_has_complete_spec``) and routes the failure
+# straight to the deterministic ci-fix dependency path.
+_AUDIT_GATE_NAME_RE = re.compile(
+    r"dependency audit|cve scan|audit dependencies|\buv audit|pip-audit|supply-chain",
+    re.IGNORECASE,
+)
+
+
+def _dependency_audit_scope_body(logs: str, run: dict[str, Any]) -> str | None:
+    """Complete spec-scope body when run *run* failed on the audit gate.
+
+    Returns ``None`` unless the fetched job logs show the audit gate as the
+    ONLY failing class: every ``### Job:`` section must carry the audit
+    signature — an advisory id or ``Found N known vulnerabilities`` line in
+    the section text, or a failing step/job whose name IS the audit gate
+    (``Dependency audit (CVE scan)``, ``Dependency audit (SARIF)``,
+    ``Audit dependencies``, ``supply-chain``). This mirrors the shape the
+    deterministic ci-fix audit pass relies on; when a non-audit step is also
+    failing (tests, lint), the generic raw-log body stays the right scope.
+    """
+    headers = list(_JOB_SECTION_HEADER_RE.finditer(logs))
+    if not headers:
+        return None
+    for i, h in enumerate(headers):
+        end = headers[i + 1].start() if i + 1 < len(headers) else len(logs)
+        section = logs[h.start() : end]
+        if not (has_audit_signature(section) or _AUDIT_GATE_NAME_RE.search(h.group(0))):
+            return None
+
+    flagged = ""
+    plan = parse_audit_failure(logs)
+    if plan is not None:
+        advs = ", ".join(f"`{a}`" for a in plan.advisories) or "unknown"
+        pkgs = "`, `".join(plan.packages)
+        flagged = (
+            f"\n\nAdvisories flagged in this run's log: {advs}; upgrade: `{pkgs}`."
+        )
+
+    run_id = run.get("id")
+    run_url = run.get("html_url", "")
+    return (
+        "> **Dependency-audit gate.** Every failing step of this run carries "
+        "the dependency-audit signature (a `uv audit` / `pip-audit` CVE scan "
+        "flagging a vulnerable package), so the remediation is deterministic "
+        "— no design decision is needed.\n"
+        "\n"
+        "## Problem\n"
+        "\n"
+        "The dependency-audit gate fails: a (usually transitive) package in "
+        "`uv.lock` is flagged by a still-open advisory, and the audit "
+        "artifact jobs fail together (`quality`, `<workflow> / Tests` with "
+        "failing step `Dependency audit (CVE scan)`, `<workflow> / "
+        "Dependency audit (SARIF)`, or the `supply-chain` uv-audit job).\n"
+        "\n"
+        "## Scope\n"
+        "\n"
+        "- `uv.lock`: bump the flagged package(s) with "
+        "`uv lock --upgrade-package <pkg>` (one per still-open advisory).\n"
+        "- Get each advisory id and package from the `Dependency audit "
+        "(CVE scan)` / `Dependency audit (SARIF)` step log of run "
+        f"[{run_id}]({run_url}) above — `api.osv.dev` is unreachable from "
+        "the sandbox, so `uv audit` runs only in CI."
+        f"{flagged}\n"
+        "\n"
+        "## Acceptance criteria\n"
+        "\n"
+        "- `uv.lock` is updated so the flagged advisory no longer fails the "
+        "dependency-audit step (`uv lock --check` passes).\n"
+        "- No source changes beyond the lockfile bump."
+    )
 
 
 def _ci_log_body_parts(
@@ -897,7 +978,11 @@ class PollLoopsCiMixin(_WorkerBase):
                     "the job). Diff the caller against a green sibling repo."
                 )
             elif logs:
-                body_parts.extend(_ci_log_body_parts(logs, ansi_re, wf_name))
+                audit_scope = _dependency_audit_scope_body(logs, run)
+                if audit_scope is not None:
+                    body_parts.append(audit_scope)
+                else:
+                    body_parts.extend(_ci_log_body_parts(logs, ansi_re, wf_name))
             elif fetch_error:
                 body_parts.append(
                     "⚠️ **Could not fetch the run logs** after "
