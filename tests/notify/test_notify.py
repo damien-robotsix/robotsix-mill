@@ -172,6 +172,51 @@ def test_non_2xx_is_caught(settings, service, monkeypatch, caplog, secrets_set):
 
 
 # ---------------------------------------------------------------------------
+# Bare operator alerts (send_alert)
+# ---------------------------------------------------------------------------
+
+
+def test_send_alert_pushes_over_ntfy(monkeypatch, secrets_set):
+    """A bare alert (no ticket) posts through the ntfy channel."""
+    from robotsix_mill.notify import send_alert
+
+    secrets_set(ntfy_url="https://ntfy.sh/test")
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    send_alert("mill: provider tier fallback", "default provider unavailable")
+    assert len(rec.calls) == 1
+    c = rec.calls[0]
+    assert c["url"] == "https://ntfy.sh/test"
+    assert c["headers"]["X-Title"] == "mill: provider tier fallback"
+    assert c["headers"]["Content-Type"] == "text/plain"
+    assert "default provider unavailable" in c["content"]
+
+
+def test_send_alert_is_noop_without_channel(secrets_set):
+    """No ntfy channel configured: the alert is dropped, never raises."""
+    from robotsix_mill.notify import send_alert
+
+    secrets_set(ntfy_url=None)
+    send_alert("mill: provider tier fallback", "x")  # must not raise
+
+
+def test_send_alert_ascii_title(monkeypatch, secrets_set):
+    """The alert X-Title header must stay ASCII-encodable."""
+    from robotsix_mill.notify import send_alert
+
+    secrets_set(ntfy_url="https://ntfy.sh/test")
+    rec = _RecordingPost(200)
+    monkeypatch.setattr(httpx, "post", rec)
+
+    send_alert("mill — provider fallback: default tier dead ☕", "body")
+    assert len(rec.calls) == 1
+    xt = rec.calls[0]["headers"]["X-Title"]
+    xt.encode("ascii")
+    assert "—" not in xt
+
+
+# ---------------------------------------------------------------------------
 # Fleet notification tests
 # ---------------------------------------------------------------------------
 

@@ -74,29 +74,32 @@ def _send_ntfy(
     Kept as a fallback for deployments that have ntfy configured but not
     yet the fleet notification endpoint.
     """
-    import httpx
-
-    # HTTP headers must be ASCII/latin-1; an em-dash (or any non-ASCII
-    # in the ticket title) makes httpx raise UnicodeEncodeError and the
-    # whole notification fails. Use a plain hyphen and coerce the title
-    # to ASCII (ntfy shows '?' for stripped chars — far better than no
-    # push). The UTF-8 message body is unaffected.
-    title = f"mill: {dst.value} - {ticket.title}".encode("ascii", "replace").decode(
-        "ascii"
-    )
-    headers: dict[str, str] = {
-        "X-Title": title,
-        "Content-Type": "text/plain",
-    }
-    if get_secrets().ntfy_token:
-        headers["Authorization"] = f"Bearer {get_secrets().ntfy_token}"
-
+    title = f"mill: {dst.value} - {ticket.title}"
     body = (
         f"Ticket: {ticket.id}\n"
         f"State: {dst.value}\n"
         f"Note: {note or '(none)'}\n"
         f"Board: {settings.api_url}"
     )
+    _post_ntfy_raw(title, body, ntfy_url)
+
+
+def _post_ntfy_raw(title: str, body: str, ntfy_url: str) -> None:
+    """POST a plain-text message to the ntfy channel.  Never raises."""
+    import httpx
+
+    # HTTP headers must be ASCII/latin-1; an em-dash (or any non-ASCII
+    # in the title) makes httpx raise UnicodeEncodeError and the whole
+    # notification fails. Coerce the title to ASCII (ntfy shows '?' for
+    # stripped chars — far better than no push). The UTF-8 message body
+    # is unaffected.
+    title_ascii = title.encode("ascii", "replace").decode("ascii")
+    headers: dict[str, str] = {
+        "X-Title": title_ascii,
+        "Content-Type": "text/plain",
+    }
+    if get_secrets().ntfy_token:
+        headers["Authorization"] = f"Bearer {get_secrets().ntfy_token}"
 
     from ..agents.retry import call_with_retry
 
@@ -111,8 +114,24 @@ def _send_ntfy(
 
     try:
         call_with_retry(_post, what="ntfy")
-        log.debug("ntfy notification sent for %s -> %s", ticket.id, dst.value)
+        log.debug("ntfy notification sent: %s", title_ascii)
     except Exception:
-        log.warning(
-            "ntfy notification failed for %s -> %s", ticket.id, dst.value, exc_info=True
-        )
+        log.warning("ntfy notification failed: %s", title_ascii, exc_info=True)
+
+
+def send_alert(title: str, body: str) -> None:
+    """Post a bare operator alert with no ticket context.
+
+    Used for process-level warnings that are not tied to a ticket or a
+    human-attention state transition — e.g. a provider tier fallback (the
+    default Claude slot failed and the pass is running downgraded on the
+    fallback OpenRouter slot instead of the opus tier it was built for).
+    Delivered over the legacy ntfy channel when configured; the fleet
+    endpoint is ticket-shaped, so fleet-only deployments rely on the error
+    log and trace metadata instead.  Best-effort and never raises.
+    """
+    ntfy_url = get_secrets().ntfy_url
+    if not ntfy_url:
+        log.debug("no ntfy channel configured for alert: %s", title)
+        return
+    _post_ntfy_raw(title, body, ntfy_url)
