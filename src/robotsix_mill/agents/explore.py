@@ -212,6 +212,14 @@ SCOPE DISCIPLINE — always follow these limits:
     read_file("..._http.py", offset=100, limit=40)  # lines 100-139
   merge into a single read:
     read_file("..._http.py", offset=20, limit=120)  # lines 20-139
+- READ NAMED SECTIONS WHOLE: when the question names a section of a
+  doc/config file (e.g. "the 'How this is enforced' section of
+  docs/ssrf-hardened-fetchers.md"), fetch the ENTIRE section in ONE
+  read_file call with an adequate limit — grep -n the heading, then read
+  from the heading through the next same-level heading (or the file's
+  end). Do NOT return a narrow slice and force the caller to re-ask; a
+  single whole-section read covers every criterion in it and costs one
+  call.
 - FILE BUDGET: read at most 5 files per answer. If you need more, stop
   and return the most relevant files found so far, with a note that
   more exist.
@@ -604,6 +612,17 @@ def make_explore_tool(
         gain. When you genuinely need answers to several INDEPENDENT
         questions at once, use ``parallel_explore`` instead, which
         batches them efficiently.
+
+        CONSOLIDATE BEFORE ASKING: each explore call spawns a fresh
+        scout that re-navigates from scratch and re-reads files — so do
+        NOT issue repeated explore calls that re-request the same doc
+        section (e.g. several criteria from the same "How this is
+        enforced" section). When multiple criteria/sub-questions live in
+        the same file or section, ask ONE question requesting the whole
+        section (name the section and file; the scout will read it in a
+        single call) instead of one explore call per subsection. Reuse
+        answers a previous explore (or your own read_file) already
+        returned: if you already hold the content, do not re-ask for it.
 
         For simple, single-step lookups (one file path, one symbol name),
         use ``read_file`` or ``list_dir`` directly — this tool is for

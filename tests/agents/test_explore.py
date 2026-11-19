@@ -478,6 +478,34 @@ def test_system_prompt_warns_against_re_reading_already_held_ranges():
     assert "subset" in sp
 
 
+def test_system_prompt_reads_named_sections_whole():
+    """Trace review (component-security-audit) saw the scout re-fetch the
+    same doc's 'How this is enforced' section across calls; the prompt
+    must direct the scout to read a named section in one whole-section
+    read_file instead of narrow slices that force follow-up calls."""
+    sp = " ".join(explore._SYSTEM_PROMPT.split())
+    assert "READ NAMED SECTIONS WHOLE" in sp
+    assert "ENTIRE section in ONE read_file" in sp
+    assert "How this is enforced" in sp
+    assert "single whole-section read" in sp
+
+
+def test_explore_tool_description_consolidates_same_doc_questions():
+    """The caller-facing explore tool description must tell the driver
+    (the agent issuing explore calls) to consolidate criteria living in
+    the same doc section into ONE question — the trace gap was ~8
+    separate explore invocations re-requesting overlapping subsections."""
+    from pathlib import Path
+
+    s = _settings(tmp_path := __import__("tempfile").mkdtemp())
+    tool = make_explore_tool(s, Path(tmp_path))
+    doc = " ".join(tool.__doc__.split())
+    assert "CONSOLIDATE BEFORE ASKING" in doc
+    assert "one explore call per subsection" in doc
+    assert "NOT issue repeated explore calls" in doc
+    assert "already hold the content, do not re-ask" in doc
+
+
 def test_system_prompt_excludes_venv_from_repo_wide_searches():
     """Trace review saw repo-wide find/grep walk ``.venv`` site-packages
     (token noise, misleading hits); the prompt must prescribe pruning it."""
