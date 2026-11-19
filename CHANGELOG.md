@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.25.1](https://github.com/damien-robotsix/robotsix-mill/compare/v0.25.0...v0.25.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* Docs CI on main: unpin Python 3.14.5 (no Ubuntu 26.04 build) and upgrade griffelib docs toolchain (20261104T191844Z-ci-failure-docs-on-main-ffe9) ([#3591](https://github.com/damien-robotsix/robotsix-mill/issues/3591)) ([fb16733](https://github.com/damien-robotsix/robotsix-mill/commit/fb1673375f9f1a26908ba0f9b096fbdfcf1dc549))
+* refine/auto-approve: make the `.github/workflows/**` sensitive-path gate content-aware instead of fail-closing on any workflow diff (20261118T142454Z-refine-auto-approve-make-the-github-work-c440) ([#3631](https://github.com/damien-robotsix/robotsix-mill/issues/3631)) ([9a6a611](https://github.com/damien-robotsix/robotsix-mill/commit/9a6a6112138c11958e47e4240ede1d859e08911d))
+* trace-review: 1 finding(s) for trace `368a89d2` (session: robotsix-invest · audit-20261118T082542Z-9934f87e) (20261118T094311Z-trace-review-1-finding-s-for-trace-368a8-3188) ([#3628](https://github.com/damien-robotsix/robotsix-mill/issues/3628)) ([ef53afd](https://github.com/damien-robotsix/robotsix-mill/commit/ef53afd063915a0a67ceafce75bb89fc45357e23))
+
+
+### Documentation
+
+* trace-review: 1 finding(s) for trace `790d3e9f` (session: robotsix-invest · 20261117T112718Z-scrutiny-pass-on-alpaca-tools-per-tool-h-cbb2) (20261118T094205Z-trace-review-1-finding-s-for-trace-790d3-726a) ([#3627](https://github.com/damien-robotsix/robotsix-mill/issues/3627)) ([efe11ef](https://github.com/damien-robotsix/robotsix-mill/commit/efe11eff5d343596abd23fb0a4221afd2d2b9d38))
+
 ## [0.25.0](https://github.com/damien-robotsix/robotsix-mill/compare/v0.24.2...v0.25.0) (2026-11-15)
 
 
