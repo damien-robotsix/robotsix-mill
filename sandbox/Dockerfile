@@ -4,7 +4,7 @@
 # Same pinned tag/commit CI runs; only the toolchain differs.
 # GOTOOLCHAIN=local stops go.mod's `toolchain go1.27.1` line from
 # downloading the vulnerable toolchain.
-FROM golang:1.27.3-bookworm@sha256:fea12ba16096adec0f699ce1c4da2154d320450e56c1f63671f95d2a3551c77b AS actionlint-build
+FROM golang:1.27.4-bookworm@sha256:fb7cceb528b47141eccd9b60bf3cbd27d5ef5f8cf5b7d338bec866da495b50dc AS actionlint-build
 ARG ACTIONLINT_VERSION=1.17.0
 ARG ACTIONLINT_COMMIT=08bb2c4f0d039744455b87aef1c647fb8b66d37b
 ENV GOTOOLCHAIN=local CGO_ENABLED=0
