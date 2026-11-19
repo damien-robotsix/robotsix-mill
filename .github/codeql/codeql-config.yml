@@ -15,3 +15,17 @@ paths-ignore:
   - tests/
   - docs/
   - scripts/
+
+# Accepted per-rule exclusion: py/clear-text-logging-sensitive-data (CWE-532).
+# The startup credential self-check (runtime/lifespan.py) logs the *identifiers*
+# of missing required credentials — the config path the operator must fill in,
+# the credential name, and the impact of leaving it unset — never the secret
+# value (by definition the credential is absent, so there is no value to leak).
+# CodeQL taints these from get_secrets() and flags them as secret data
+# regardless of logging format (positional args only lower, not clear, this
+# rule). The message is the operator-facing diagnostic that makes the
+# "missing credential" banner actionable; redacting it would hide the exact
+# path to fix. Exclude this single rule (query-filters cannot be path-scoped).
+query-filters:
+  - exclude:
+      id: py/clear-text-logging-sensitive-data
