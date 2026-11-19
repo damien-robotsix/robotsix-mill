@@ -349,6 +349,89 @@ def test_agent_name_prefixes_bespoke(settings, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+#  Provider tier fallback (ClaudeSDKAuthError → OpenRouter slot)
+# ---------------------------------------------------------------------------
+
+
+def test_failover_rebuild_hook_attached_when_enabled(settings, monkeypatch):
+    """With ``provider_failover_enabled=true``, the bespoke agent carries the
+    ``_failover_rebuild`` hook: calling it rebuilds the SAME capability level
+    on the fallback slot, so a dead Claude CLI credential triggers
+    ``_run_at_fallback_slot`` exactly as definition-driven agents do."""
+    from unittest import mock
+
+    from robotsix_mill.agents import base, retry
+
+    captured: list[dict] = []
+    handles: list[mock.MagicMock] = []
+
+    def fake_build_agent(settings, **kwargs):
+        captured.append(kwargs)
+        handle = mock.MagicMock()
+        handles.append(handle)
+        return handle
+
+    monkeypatch.setattr(base, "build_agent", fake_build_agent)
+    monkeypatch.setattr(base, "_safe_close", lambda agent: None)
+    monkeypatch.setattr(
+        retry,
+        "run_agent",
+        lambda agent, fn, **k: SimpleNamespace(output=BespokeResult()),
+    )
+
+    definition = BespokeAgentDefinition(
+        name="failover-checker",
+        interval_seconds=3600,
+        system_prompt="You are a checker.",
+        level=2,
+    )
+    failover_settings = settings.model_copy(update={"provider_failover_enabled": True})
+
+    run_bespoke_agent(settings=failover_settings, definition=definition)
+
+    assert len(handles) == 1
+    primary = handles[0]
+    assert callable(primary._failover_rebuild)
+    # The hook rebuilds at the same level / name on the fallback slot (the
+    # active-slot resolution happens inside build_agent via the tracker).
+    primary._failover_rebuild()
+    assert [k["level"] for k in captured] == [2, 2]
+    assert [k["name"] for k in captured] == ["bespoke:failover-checker"] * 2
+
+
+def test_no_failover_rebuild_hook_by_default(settings, monkeypatch):
+    """``provider_failover_enabled`` defaults to false, so bespoke agents
+    carry NO ``_failover_rebuild`` hook and a Claude auth failure propagates
+    (the pass errors out instead of silently spending on the paid OpenRouter
+    slot)."""
+    from robotsix_mill.agents import base, retry
+
+    class _Plain:
+        pass
+
+    sentinel = _Plain()
+    monkeypatch.setattr(base, "build_agent", lambda *a, **k: sentinel)
+    monkeypatch.setattr(base, "_safe_close", lambda agent: None)
+    monkeypatch.setattr(
+        retry,
+        "run_agent",
+        lambda agent, fn, **k: SimpleNamespace(output=BespokeResult()),
+    )
+
+    definition = BespokeAgentDefinition(
+        name="default-checker",
+        interval_seconds=3600,
+        system_prompt="You are a checker.",
+    )
+
+    run_bespoke_agent(settings=settings, definition=definition)
+
+    # A plain instance would accept the attribute if the wiring ran — it does
+    # not unless the operator opts into provider_failover_enabled.
+    assert not hasattr(sentinel, "_failover_rebuild")
+
+
+# ---------------------------------------------------------------------------
 #  output_type is PromptedOutput(BespokeResult)
 # ---------------------------------------------------------------------------
 
