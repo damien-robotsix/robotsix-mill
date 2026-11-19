@@ -40,7 +40,11 @@ from .helpers import (
     workflow_sensitive_disposition,
 )
 from .scanner_disposition import ScannerDisposition, resolve_scanner_disposition
-from .spec_validation import _draft_has_complete_spec, _fast_path_scope_checks
+from .spec_validation import (
+    _draft_has_complete_spec,
+    _fast_path_scope_checks,
+    _sync_check_gate_blocks,
+)
 
 # ---------------------------------------------------------------------------
 # module-level triage helpers
@@ -998,9 +1002,33 @@ def handle_triage_decision(
     # Deterministic sources (CI) always fast-path.  For other
     # sources, the auto-approve pre-check only runs when
     # require_approval is True (there must be a gate to skip).
-    if draft.strip() and (
-        ticket.source != "ci"
-        or (ticket.source == "ci" and _draft_has_complete_spec(draft))
+    # --- consolidated-docs / sync-check discovery gate ---
+    # A draft proposing "consolidate duplicated <X>" / "add a check
+    # keeping <X> in sync across files" is auto-approvable only when
+    # its verified set equals the grep-discovered set of sibling
+    # copies of the duplicated content.  A hardcoded file list with no
+    # discovery evidence is exactly the incomplete-enumeration failure
+    # mode (robotsix-linkedin config-docs chain: a finding enumerated
+    # 'five places', the sync check hardcoded those five, and a sixth
+    # copy in chat-skill.md drifted undetected).  Fall through to the
+    # full refine agent, whose prompt rule performs the content-marker
+    # discovery step instead of fast-path approving.
+    sync_check_block = _sync_check_gate_blocks(f"{ticket.title}\n\n{draft}")
+    if sync_check_block:
+        log.info(
+            "%s: consolidated-docs/sync-check gate — matched %r without "
+            "content-marker discovery evidence; falling through to the "
+            "full refine agent",
+            ticket.id,
+            sync_check_block,
+        )
+    if (
+        draft.strip()
+        and (
+            ticket.source != "ci"
+            or (ticket.source == "ci" and _draft_has_complete_spec(draft))
+        )
+        and not sync_check_block
     ):
         # --- fast-path pre-checks: emptiness + scope ---
         scope_checks = _fast_path_scope_checks(draft)

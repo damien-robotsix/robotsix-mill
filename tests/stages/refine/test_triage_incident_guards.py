@@ -436,3 +436,130 @@ def test_decision_refine_falls_through(ctx_factory):
         )
         is None
     )
+
+
+# ===========================================================================
+# handle_triage_decision — consolidated-docs / sync-check discovery gate
+# ===========================================================================
+
+
+def _spec_validation():
+    from robotsix_mill.stages.refine import spec_validation
+
+    return spec_validation
+
+
+def test_sync_check_class_marker_matches_consolidate_and_sync_drafts():
+    """The class detector recognises the two named remediation phrasings:
+    'consolidate duplicated <X>' and 'add a check keeping <X> in sync'."""
+    sv = _spec_validation()
+    assert (
+        sv._sync_check_class_marker("consolidate the duplicated config reference")
+        is not None
+    )
+    assert (
+        sv._sync_check_class_marker("chat-skill.md duplicates the config fields table")
+        is not None
+    )
+    assert (
+        sv._sync_check_class_marker(
+            "add a check keeping the API Endpoints table in sync across files"
+        )
+        is not None
+    )
+    # A plain single-file change is not this class.
+    assert (
+        sv._sync_check_class_marker(
+            "Add the foo_enabled flag to src/robotsix_mill/config/settings.py"
+        )
+        is None
+    )
+
+
+def test_sync_check_gate_blocks_hardcoded_enumeration_only():
+    """A consolidated-docs draft with a hardcoded verified set but no
+    discovery evidence blocks the fast-path; one that carries a tree-grep
+    evidence block does not."""
+    sv = _spec_validation()
+    hardcoded = (
+        "consolidate the duplicated config reference across Settings, "
+        "_ConfigUpdate, config/config.json, README.md and DEPLOY.md — "
+        "the sync check verified set is exactly those five files"
+    )
+    assert sv._sync_check_gate_blocks(hardcoded) is not None
+    discovered = (
+        "consolidate the duplicated config reference; content-marker "
+        "discovery: git grep -l '| `key` |' found README.md, DEPLOY.md, "
+        "config/config.json and src/linkedin_service/chat-skill.md — "
+        "every file containing the anchor is in the verified set"
+    )
+    assert sv._sync_check_gate_blocks(discovered) is None
+
+
+def test_decision_sync_check_without_discovery_falls_through_to_refine(
+    ctx_factory,
+):
+    """A consolidated-docs / sync-check draft whose verified set is a
+    hardcoded file list with no content-marker discovery evidence is NOT
+    auto-approved by the mechanical fast-path — it falls through to the
+    full refine agent (None), even for a deterministic source."""
+    ctx = ctx_factory()
+    draft = (
+        "consolidate the duplicated config reference across Settings, "
+        "_ConfigUpdate, config/config.json, README.md and DEPLOY.md — "
+        "add a sync check whose verified set is exactly those five files"
+    )
+    t = _ticket(
+        ctx,
+        "consolidate the duplicated config reference",
+        draft,
+        source=SourceKind.AUDIT,
+    )
+    ws = ctx.service.workspace(t)
+
+    assert (
+        _triage.handle_triage_decision(
+            ctx,
+            t,
+            draft,
+            None,
+            ws,
+            ctx.settings,
+            _triage_result("REFINE", "consolidated docs"),
+        )
+        is None
+    )
+
+
+def test_decision_sync_check_with_discovery_evidence_fast_paths(ctx_factory):
+    """A consolidated-docs / sync-check draft that already carries the
+    content-marker discovery evidence (a tree grep over the anchor) IS
+    still fast-path auto-approved on a deterministic source — the gate
+    only blocks the incomplete hardcoded enumeration."""
+    ctx = ctx_factory()
+    draft = (
+        "consolidate the duplicated config reference; content-marker "
+        "discovery: git grep -l '| `key` |' found README.md, DEPLOY.md, "
+        "config/config.json and src/linkedin_service/chat-skill.md — "
+        "every file containing the anchor is in the verified set"
+    )
+    t = _ticket(
+        ctx,
+        "consolidate the duplicated config reference",
+        draft,
+        source=SourceKind.AUDIT,
+    )
+    ws = ctx.service.workspace(t)
+
+    outcome = _triage.handle_triage_decision(
+        ctx,
+        t,
+        draft,
+        None,
+        ws,
+        ctx.settings,
+        _triage_result("REFINE", "consolidated docs"),
+    )
+
+    assert outcome is not None
+    assert "mechanical draft fast-path" in (outcome.note or "")
