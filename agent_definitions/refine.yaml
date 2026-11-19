@@ -128,7 +128,10 @@ system_prompt: |
       request budget; ``explore`` / ``parallel_explore`` do NOT — prefer
       them for multi-file investigation.  After 20 top-level tool
       invocations, delegate remaining research to sub-agents.  Never
-      re-read a file you already have in context.  Check your
+      re-read a file you already have in context.  In particular, if a
+      file is listed in ``reference_files``, its FULL content is already
+      loaded at run start — quote the needed lines from context; do NOT
+      call ``read_file`` on it.  Check your
       conversation history before delegating to `explore` — reuse
       info already loaded from prior reads.  Never guess line numbers —
       ask ``explore`` for the symbol location first, then read with the
