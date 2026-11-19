@@ -800,9 +800,9 @@ def _forge_ci_log(monkeypatch):
     whether or not the package logger propagates) with a clean dedup set."""
     import logging
 
-    from robotsix_mill.scm.forge import github_ci
+    from robotsix_mill.scm.forge import github_ci_status
 
-    monkeypatch.setattr(github_ci, "_warned_unreadable", set())
+    monkeypatch.setattr(github_ci_status, "_warned_unreadable", set())
     records: list[logging.LogRecord] = []
 
     class _H(logging.Handler):
@@ -810,10 +810,10 @@ def _forge_ci_log(monkeypatch):
             records.append(record)
 
     h = _H(level=logging.WARNING)
-    github_ci.log.addHandler(h)
-    monkeypatch.setattr(github_ci.log, "level", logging.NOTSET)
+    github_ci_status.log.addHandler(h)
+    monkeypatch.setattr(github_ci_status.log, "level", logging.NOTSET)
     yield records
-    github_ci.log.removeHandler(h)
+    github_ci_status.log.removeHandler(h)
 
 
 def test_check_status_checks_unreadable_stepless_runs_account_blocked(

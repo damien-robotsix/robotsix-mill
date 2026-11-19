@@ -15,7 +15,7 @@ import httpx
 import yaml
 
 from .._log_utils import _capture_failure_window, _strip_runner_noise
-from ..github_ci import _ANSI_RE, _MAX_FAILED_JOBS
+from ..github_ci_status import _ANSI_RE, _MAX_FAILED_JOBS
 
 # Earliest-failure markers in a GitLab CI job log.  GitLab jobs don't
 # emit GitHub Actions–style ``##[error]`` lines; instead we match the

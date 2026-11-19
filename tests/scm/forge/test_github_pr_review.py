@@ -13,7 +13,7 @@ import pytest
 from robotsix_mill.config import Secrets, Settings, _reset_secrets
 from robotsix_mill.scm.forge.base import _parse_iso_utc
 from robotsix_mill.scm.forge.github import GitHubForge
-from robotsix_mill.scm.forge.github_ci import (
+from robotsix_mill.scm.forge.github_ci_status import (
     _extract_annotations,
     _latest_definitive_runs,
     _statuses_to_check_runs,
@@ -632,7 +632,7 @@ def test_conclusion_for_check_cancelled_is_pending():
     """A concurrency-cancelled (superseded) check has no verdict → pending,
     so the merge gate waits for the authoritative run instead of reporting
     a false failure that spawns ci_fix churn."""
-    from robotsix_mill.scm.forge.github_ci import _conclusion_for_check
+    from robotsix_mill.scm.forge.github_ci_status import _conclusion_for_check
 
     assert (
         _conclusion_for_check({"status": "completed", "conclusion": "cancelled"})
@@ -660,7 +660,7 @@ def test_conclusion_for_check_cancelled_is_pending():
 def test_derive_conclusion_cancelled_among_passing_is_pending():
     """All real checks pass but one was cancelled → overall pending (wait),
     NOT failure."""
-    from robotsix_mill.scm.forge.github_ci import _derive_check_conclusion
+    from robotsix_mill.scm.forge.github_ci_status import _derive_check_conclusion
 
     runs = [
         {"id": 1, "name": "tests", "status": "completed", "conclusion": "success"},
@@ -674,7 +674,7 @@ def test_derive_conclusion_cancelled_among_passing_is_pending():
 
 def test_derive_conclusion_real_failure_still_fails_despite_cancelled():
     """A genuine failure is reported even when another check is cancelled."""
-    from robotsix_mill.scm.forge.github_ci import _derive_check_conclusion
+    from robotsix_mill.scm.forge.github_ci_status import _derive_check_conclusion
 
     runs = [
         {"id": 1, "name": "tests", "status": "completed", "conclusion": "failure"},
@@ -692,7 +692,7 @@ def test_derive_conclusion_superseded_cancelled_same_name_uses_success():
     for green PRs stuck in IMPLEMENT_COMPLETE (llmio c273/55f1/d932/fcf4):
     concurrency cancels the old run, so each name carries cancelled+success;
     feeding both made the aggregate read pending. Order-independent."""
-    from robotsix_mill.scm.forge.github_ci import _derive_check_conclusion
+    from robotsix_mill.scm.forge.github_ci_status import _derive_check_conclusion
 
     runs = [
         {
@@ -737,7 +737,7 @@ def test_derive_conclusion_zombie_in_progress_with_conclusion_is_finished():
     robotsix-chat job 119955826312 ("Auto-format with ruff") on PR #2188 —
     read as pending it parked ticket 1529 at IMPLEMENT_COMPLETE for four
     days (2026-10-22 → 10-26)."""
-    from robotsix_mill.scm.forge.github_ci import _derive_check_conclusion
+    from robotsix_mill.scm.forge.github_ci_status import _derive_check_conclusion
 
     runs = [
         {
@@ -765,7 +765,7 @@ def test_derive_conclusion_zombie_in_progress_with_conclusion_is_finished():
 
 def test_derive_conclusion_in_progress_without_completion_stays_pending():
     """A genuinely running check (no conclusion, no completed_at) is pending."""
-    from robotsix_mill.scm.forge.github_ci import _derive_check_conclusion
+    from robotsix_mill.scm.forge.github_ci_status import _derive_check_conclusion
 
     runs = [
         {
@@ -1730,7 +1730,7 @@ def test_statuses_to_check_runs_error_state_gates_merge():
     combined roll-up, which GitHub reports as ``"failure"`` whenever any
     context errored).  Normalize ``"error"`` -> ``"failure"``.
     """
-    from robotsix_mill.scm.forge.github_ci import _conclusion_for_check
+    from robotsix_mill.scm.forge.github_ci_status import _conclusion_for_check
 
     data = {
         "state": "error",

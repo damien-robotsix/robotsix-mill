@@ -167,6 +167,7 @@ modules:
       - src/robotsix_mill/scm/forge/github_branch.py
       - src/robotsix_mill/scm/forge/github_pr_reviews.py
       - src/robotsix_mill/scm/forge/github_ci.py
+      - src/robotsix_mill/scm/forge/github_ci_status.py
       - src/robotsix_mill/scm/forge/github_code_scanning.py
       - src/robotsix_mill/scm/forge/github_dependabot.py
       - src/robotsix_mill/scm/forge/github_security.py
