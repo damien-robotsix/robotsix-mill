@@ -26,13 +26,13 @@ from .ci_tooling_policy import (
     classify_ci_tooling_proposal,
     resolve_ci_tooling_route,
 )
+from .external_fix import _verify_branch_merged
 from .helpers import (
     _AUTO_APPROVE_SOURCES,
     _NOT_DOC_ONLY_TERMS_RE,
     OPERATOR_SENDBACK_PREFIX,
     _summarize_spec_for_auto_approve,
     _triage_note_signals_wrong_repo,
-    _verify_branch_merged,
     cited_sensitive_paths,
     log,
     operator_prerequisite_lines,

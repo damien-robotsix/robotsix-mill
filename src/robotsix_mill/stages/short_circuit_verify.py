@@ -591,7 +591,7 @@ def cited_fix_unverified(repo_dir: Path | str | None, text: str | None) -> str |
     """
     # Lazy import: keeps the heavy refine module out of the implement-stage
     # import path and avoids any theoretical cross-stage import cycle.
-    from .refine.helpers import _rationale_claims_external_fix
+    from .refine.external_fix import _rationale_claims_external_fix
 
     if repo_dir is None:
         return None

@@ -39,6 +39,11 @@ from ...agents import dedup, freshness, obsolescence, refining
 from ...agents.runners.pass_runner import load_memory, persist_memory
 from ...scm.forge.auth import _resolve_remote_url
 from .core import RefineStage
+from .external_fix import (
+    _rationale_claims_external_fix,
+    _verify_branch_merged,
+    _verify_cited_fix_at_head,
+)
 from .helpers import (
     _AUTO_APPROVE_SOURCES,
     _TRIAGE_REJECTION_PATTERNS,
@@ -54,11 +59,8 @@ from .helpers import (
     _build_deployed_log_summary,
     _human_size,
     _is_doc_only_change,
-    _rationale_claims_external_fix,
     _resolve_next_state,
     _tail_file,
-    _verify_branch_merged,
-    _verify_cited_fix_at_head,
     log,
     verify_claim,
 )
