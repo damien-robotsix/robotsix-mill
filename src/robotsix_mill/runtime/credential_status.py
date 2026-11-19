@@ -162,8 +162,14 @@ def _claude_oauth_stale() -> dict[str, str] | None:
         creds_path = _claude_config_dir() / ".credentials.json"
         data = json.loads(creds_path.read_text(encoding="utf-8"))
     except OSError, ValueError, AttributeError:
-        # FileNotFoundError is an OSError — missing or unreadable store;
-        # a non-dict JSON root (e.g. ``[]``) raises AttributeError on .get.
+        # FileNotFoundError is an OSError — missing, unreadable, or
+        # non-JSON store.  Guarded so the never-raises contract holds.
+        return None
+    if not isinstance(data, dict):
+        # A non-object JSON root (``[]``, a bare string, ``null``) would
+        # raise AttributeError on ``.get`` — bail out here instead so the
+        # documented never-raises contract holds.  Such a store is not the
+        # expired-session case this finding is about anyway.
         return None
 
     oauth = data.get("claudeAiOauth") or {}

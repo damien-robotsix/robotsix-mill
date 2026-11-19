@@ -646,6 +646,10 @@ def _stamp_fallback_capability(result: Any, original: Exception, what: str) -> N
             "downgraded]"
         )
         if marker not in summary:
+            # Deliberate, idempotent in-place mutation: appending the marker
+            # once is enough (the ``marker not in summary`` guard makes a
+            # second stamp a no-op), so mutating the shared result object is
+            # safe even if it is compared or de-duplicated downstream.
             out.summary = f"{summary} {marker}"
     except Exception:
         log.debug("%s: fallback-capability stamp failed", what, exc_info=True)
