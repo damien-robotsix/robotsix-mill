@@ -637,6 +637,8 @@ def _stamp_fallback_capability(result: Any, original: Exception, what: str) -> N
     """
     try:
         out = getattr(result, "output", None)
+        if out is None:
+            return
         summary = getattr(out, "summary", None)
         if not isinstance(summary, str):
             return
