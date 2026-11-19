@@ -15,8 +15,10 @@ inspectable from outside.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -102,24 +104,41 @@ def run_bespoke_agent(
 
     tools = _build_repo_tools(repo_dir, settings, tool_names=("read_file", "list_dir"))
 
-    agent = build_agent(
-        settings,
-        name=f"bespoke:{definition.name}",
-        system_prompt=definition.system_prompt,
-        level=definition.level,
-        tools=tools,
-        web_knowledge=definition.web_knowledge,
-        report_issue=False,
-        read_ticket=False,
-        reply_to_thread=False,
-        close_thread=False,
-        list_threads=False,
-        ask_user=False,
-        output_type=PromptedOutput(BespokeResult),
-        retries=2,
-        skills=[],
-        repo_dir=repo_dir,  # confine SDK built-in edits to the workspace clone
-    )
+    def _build() -> Any:
+        return build_agent(
+            settings,
+            name=f"bespoke:{definition.name}",
+            system_prompt=definition.system_prompt,
+            level=definition.level,
+            tools=tools,
+            web_knowledge=definition.web_knowledge,
+            report_issue=False,
+            read_ticket=False,
+            reply_to_thread=False,
+            close_thread=False,
+            list_threads=False,
+            ask_user=False,
+            output_type=PromptedOutput(BespokeResult),
+            retries=2,
+            skills=[],
+            repo_dir=repo_dir,  # confine SDK built-in edits to the workspace clone
+        )
+
+    agent = _build()
+
+    # Remember how to rebuild this agent on the FALLBACK provider slot (same
+    # capability level) so :func:`~robotsix_mill.agents.retry.run_agent` can
+    # switch providers when the default one is unavailable — a dead Claude CLI
+    # credential (ClaudeSDKAuthError) or an exhausted subscription. This
+    # mirrors ``build_agent_from_definition``: the rebuild re-invokes
+    # ``build_agent`` with ``slot=None``, which resolves the slot the failover
+    # tracker designates as active (the caller arms ``fallback`` before
+    # invoking the hook). Opt-in: the fallback slot is keyed OpenRouter (paid
+    # per token), so by default the auth/exhaustion propagates and the pass
+    # errors out — operators flip ``provider_failover_enabled`` to opt in.
+    if settings.provider_failover_enabled:
+        with contextlib.suppress(AttributeError, TypeError):
+            agent._failover_rebuild = _build
 
     forge_url = settings.forge_remote_url or "(not configured)"
     verified_block = ("\n\n" + verified_proposals) if verified_proposals else ""
