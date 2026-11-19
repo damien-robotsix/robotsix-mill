@@ -446,6 +446,10 @@ class HumanApprovalMixin(_MergeStageBase):
         2. The current PR diff matches a previously human-approved diff
            (stored hash matches), OR the PR currently has a human
            approval — in which case we store the hash for future rebases.
+           When the diff cannot currently be fetched (a transient
+           "failed to fetch PR file list") but a prior approval is stored,
+           the prior approval is honored — a transient fetch failure must
+           not discard it or push the ticket back through the approval loop.
 
         This prevents the approval storm: each rebase produces a new
         commit SHA which re-triggers the sensitive-path check, but the
@@ -464,29 +468,47 @@ class HumanApprovalMixin(_MergeStageBase):
             return False  # Something else is blocking too.
 
         current_hash = self._compute_pr_diff_hash(forge, ticket)
-        if current_hash is None:
-            return False  # Fail-safe: can't compute hash.
-
         artifacts = ctx.service.workspace(ticket).artifacts_dir
         hash_path = artifacts / _APPROVED_DIFF_HASH
 
-        # Already-approved identical diff?
+        # Read any stored approval sentinel — a human approval of an
+        # earlier diff of this same PR.
+        stored = None
         try:
             if hash_path.exists():
                 stored = hash_path.read_text(encoding="utf-8").strip()
-                if stored == current_hash:
-                    log.info(
-                        "%s: sensitive-path diff unchanged since last "
-                        "human approval — skipping gate",
-                        ticket.id,
-                    )
-                    return True
         except Exception:
             log.debug(
                 "%s: could not read approved diff hash sentinel",
                 ticket.id,
                 exc_info=True,
             )
+
+        if stored:
+            if current_hash is None:
+                # Transient forge failure fetching the PR file list.  A
+                # prior human approval exists and this is the same PR being
+                # re-enqueued — do NOT discard the prior approval or push
+                # the ticket back through the approval loop.
+                log.info(
+                    "%s: prior human approval on file but PR file list "
+                    "unavailable — honoring prior approval, skipping gate",
+                    ticket.id,
+                )
+                return True
+            if current_hash == stored:
+                log.info(
+                    "%s: sensitive-path diff unchanged since last "
+                    "human approval — skipping gate",
+                    ticket.id,
+                )
+                return True
+            # Diff changed since the last approval — a fresh human approval
+            # is required; fall through to the current-review check below.
+        elif current_hash is None:
+            # No prior approval to honor and the diff cannot be fetched —
+            # fail safe (keep the gate closed).
+            return False
 
         # Not yet stored.  Check if the PR has a current human approval.
         try:

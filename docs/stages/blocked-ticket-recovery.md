@@ -272,6 +272,21 @@ approval. On the merge side, a PR whose workflow diff cannot be proven
 additive also remains ineligible for auto-merge. Drafts with neither
 signal keep the normal fast-path behaviour.
 
+When the merge-side gate does fail closed and a human approves the PR,
+that approval is persisted as a per-PR diff-fingerprint sentinel
+(`approved_diff_hash.txt` in the ticket's `artifacts_dir`). On every
+subsequent merge retry (e.g. re-enqueue for auto-merge after a CI
+fix/rebate), the gate is **not** re-tripped while the current PR diff
+fingerprint matches the stored sentinel — a human has already reviewed
+that exact diff, so it must not loop `waiting_auto_merge →
+human_mr_approval` forever with the same gate reason. Only when the
+diff fingerprint *changes* (new workflow content) does the gate demand a
+fresh human approval. A transient `failed to fetch PR file list` from
+the forge never discards a prior approval: if a sentinel is on file and
+the file list can't be fetched, the prior approval is honored rather
+than re-pushing the ticket through the approval loop. A PR with no prior
+sentinel that cannot be fetched fails safe (stays blocked).
+
 ### Work already present at base is reported as "already satisfied"
 
 When a ticket's goal is already met on the target branch, it closes
