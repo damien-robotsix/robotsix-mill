@@ -21,14 +21,14 @@ CVE-2026-40355  # expires: 2026-11-24
 # ships (the unpinned apt install picks it up on rebuild).
 CVE-2026-78661  # expires: 2026-11-23
 
-# CVE-2026-97054 — Go stdlib net/http (HTTP/1 MaxBytesReader limit path) in
-# /usr/local/bin/docker, the Docker CLI static binary that Dockerfile's
-# builder stage downloads (docker-29.9.2.tgz, built with go1.26.10; the
-# Go fix ships in 1.26.11/1.27.4). Only the client binary is installed
-# (not dockerd): it never acts as an HTTP/1 server, so the vulnerable
-# MaxBytesReader server path is unreachable and the CLI only talks to the
-# daemon/registry as a client. Same compiled-in-Go-CLI class as the gh
-# entry above. Drop this entry once a docker static release built with a
-# patched Go toolchain ships (bump DOCKER_CLI_VERSION + the two pinned
-# SHA256 ARGs in Dockerfile, which need network access to compute).
+# CVE-2026-97054 — Go stdlib (net/http MaxBytesReader HTTP/1 server-side DoS),
+# in the Docker CLI static binary (usr/local/bin/docker) that Dockerfile's
+# builder stage downloads as docker-29.9.2.tgz, whose release binary is
+# compiled with Go 1.26.10. The CLI is a client-only binary (this image runs
+# no dockerd), so the vulnerable HTTP/1 server path is unreachable. The fix
+# is a docker static release compiled with Go >= 1.26.11 — none exists yet,
+# and bumping DOCKER_CLI_VERSION requires recomputing the two pinned SHA256
+# build-args from downloaded tarballs, which needs network access unavailable
+# in the sandbox. Drop this entry once a patched docker CLI release ships
+# (update DOCKER_CLI_VERSION and its SHA256 pins on the same change).
 CVE-2026-97054  # expires: 2026-12-19
