@@ -585,12 +585,22 @@
       return;
     }
     banner.style.display = "block";
+    // Findings may be *expired* credentials (e.g. the Claude OAuth session
+    // died) rather than *missing* ones — tickets then run degraded on the
+    // fallback slot instead of blocking. Word the banner per state so a
+    // dead OAuth session is not presented as an unset config key.
+    var expired = s.missing.some(function(m) { return m.state === "expired"; });
     banner.innerHTML =
-      '<strong>⛔ Mill is missing credentials — tickets cannot advance.</strong> ' +
+      '<strong>⛔ ' + (expired
+        ? 'Mill credential problem — tickets may run degraded.'
+        : 'Mill is missing credentials — tickets cannot advance.') + '</strong> ' +
       s.missing.map(function(m) {
-        return '<code>' + esc(m.config_path) + '</code> unset (' + esc(m.impact) + ')';
+        var verb = m.state === "expired" ? "expired" : "unset";
+        return '<code>' + esc(m.config_path) + '</code> ' + verb + ' (' + esc(m.impact) + ')';
       }).join(' · ') +
-      ' — set them in config.json and restart mill.';
+      (expired
+        ? ' — renew the credential and restart mill.'
+        : ' — set them in config.json and restart mill.');
   }
 
   // =========================================================================

@@ -16,6 +16,10 @@ banner clear on the next poll.
 
 from __future__ import annotations
 
+import json
+import os
+import time
+from pathlib import Path
 from typing import Any
 
 from ..config import Settings, get_secrets
@@ -126,6 +130,65 @@ def _validate_app_private_key() -> dict[str, str] | None:
     return None
 
 
+def _claude_config_dir() -> Path:
+    """Resolve the Claude CLI config dir — ``$CLAUDE_CONFIG_DIR`` or ``~/.claude``.
+
+    Same resolution the bundled ``claude`` CLI uses when the SDK spawns it,
+    so the probe reads the very file the failing auth path reads.
+    """
+    env = os.environ.get("CLAUDE_CONFIG_DIR")
+    if env:
+        return Path(env)
+    return Path.home() / ".claude"
+
+
+def _claude_oauth_stale() -> dict[str, str] | None:
+    """Return a finding when the Claude CLI OAuth session is present but expired.
+
+    The default provider slot (baked: Anthropic via the Claude SDK) authenticates
+    with the ``claude`` CLI's locally-stored OAuth credential (``claude login``).
+    When that session's ``expiresAt`` has passed and the CLI cannot refresh it,
+    every default-slot call raises ``ClaudeSDKAuthError`` at call time and the
+    pass is silently downgraded onto the fallback (OpenRouter) slot — a dead
+    credential the presence check below never caught.  The CLI stores the
+    session in ``<CLAUDE_CONFIG_DIR>/.credentials.json`` under a ``claudeAiOauth``
+    object; this probe reads that file and flags only *stale* (present but
+    expired) sessions: a missing session is deliberately not a finding because
+    OAuth may live in the macOS Keychain (no file) and machines that never use
+    the Claude slot should not trip the banner.  Best-effort and never raises —
+    an unreadable store is treated as no finding.
+    """
+    try:
+        creds_path = _claude_config_dir() / ".credentials.json"
+        data = json.loads(creds_path.read_text(encoding="utf-8"))
+    except OSError, ValueError, AttributeError:
+        # FileNotFoundError is an OSError — missing or unreadable store;
+        # a non-dict JSON root (e.g. ``[]``) raises AttributeError on .get.
+        return None
+
+    oauth = data.get("claudeAiOauth") or {}
+    if not isinstance(oauth, dict) or not oauth.get("accessToken"):
+        # No OAuth session recorded (API-key config or unknown structure) —
+        # not the expired-session case this finding is about.
+        return None
+    expires_at_ms = oauth.get("expiresAt")
+    if not isinstance(expires_at_ms, (int, float)):
+        return None
+    if time.time() * 1000.0 <= expires_at_ms:
+        return None  # still valid — the CLI refreshes before this point
+    return {
+        "name": "claude_oauth_expired",
+        "config_path": f"{creds_path} (claudeAiOauth)",
+        "state": "expired",
+        "impact": (
+            "Claude CLI / claude-sdk OAuth session has expired — every "
+            "default-slot Claude tier call fails at call time and passes run "
+            "silently downgraded on the fallback slot; renew with "
+            "`claude login`"
+        ),
+    }
+
+
 def get_credential_status(settings: Settings) -> dict[str, Any]:
     """Return the missing-required-credential snapshot for the board.
 
@@ -140,7 +203,11 @@ def get_credential_status(settings: Settings) -> dict[str, Any]:
     """
     missing = [
         finding
-        for finding in (_openrouter_missing(), _forge_missing(settings))
+        for finding in (
+            _openrouter_missing(),
+            _forge_missing(settings),
+            _claude_oauth_stale(),
+        )
         if finding is not None
     ]
     return {"ok": not missing, "missing": missing}

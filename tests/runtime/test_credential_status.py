@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import time
+
 import pytest
 
 from robotsix_mill.config import Settings
@@ -14,8 +17,6 @@ def cfg(monkeypatch, tmp_path):
     """Point the config file at a per-test JSON and return a writer for it."""
 
     def _write(secrets: dict[str, str]) -> None:
-        import json
-
         # The OpenRouter key lives in the canonical openrouter.keys
         # block, never as a flat secrets entry.
         secrets = dict(secrets)
@@ -27,6 +28,9 @@ def cfg(monkeypatch, tmp_path):
         path = tmp_path / "config.json"
         path.write_text(json.dumps(data))
         monkeypatch.setenv("ROBOTSIX_CONFIG_FILE", str(path))
+        # Pin the Claude CLI config dir to the test sandbox so the
+        # stale-OAuth probe never reads a real ~/.claude on the host.
+        monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
         _reset_secrets()
 
     return _write
@@ -181,3 +185,77 @@ def test_valid_key_path_with_pem_is_ok(cfg, tmp_path):
         }
     )
     assert get_credential_status(_settings(forge_auth="app"))["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# Stale Claude CLI OAuth detection
+# ---------------------------------------------------------------------------
+
+
+def _write_claude_credentials(tmp_path, payload: dict) -> None:
+    (tmp_path / ".credentials.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_expired_claude_oauth_is_reported(cfg, tmp_path):
+    """A present-but-expired OAuth session is flagged as a stale credential.
+
+    Without this the dead Claude session is only discovered at call time,
+    when every default-slot tier attempt raises ClaudeSDKAuthError and the
+    pass silently completes downgraded on the fallback slot.
+    """
+    cfg(_FULL_APP_CREDS)
+    _write_claude_credentials(
+        tmp_path,
+        {
+            "claudeAiOauth": {
+                "accessToken": "sk-ant-test",
+                "expiresAt": 1_000_000_000_000,
+            }
+        },
+    )
+    status = get_credential_status(_settings(forge_auth="app"))
+    assert status["ok"] is False
+    finding = next(m for m in status["missing"] if m["name"] == "claude_oauth_expired")
+    assert finding["state"] == "expired"
+    assert ".credentials.json" in finding["config_path"]
+    assert "claude login" in finding["impact"]
+
+
+def test_valid_claude_oauth_is_not_reported(cfg, tmp_path):
+    """A session whose token has not expired yet is left alone."""
+    cfg(_FULL_APP_CREDS)
+    _write_claude_credentials(
+        tmp_path,
+        {
+            "claudeAiOauth": {
+                "accessToken": "sk-ant-test",
+                "expiresAt": int(time.time() * 1000) + 3_600_000,
+            }
+        },
+    )
+    assert get_credential_status(_settings(forge_auth="app"))["ok"] is True
+
+
+def test_missing_claude_oauth_file_is_not_reported(cfg):
+    """No local session is not a finding — OAuth may live in the macOS
+    Keychain, and machines that never use the Claude slot must not trip
+    the banner."""
+    cfg(_FULL_APP_CREDS)
+    assert get_credential_status(_settings(forge_auth="app"))["ok"] is True
+
+
+def test_unrecognized_claude_credentials_are_not_reported(cfg, tmp_path):
+    """Unknown file structure (no accessToken / no expiresAt) is not
+    treated as a stale session."""
+    for payload in ({"weird": True}, {"claudeAiOauth": {"accessToken": "sk-ant-x"}}):
+        cfg(_FULL_APP_CREDS)
+        _write_claude_credentials(tmp_path, payload)
+        assert get_credential_status(_settings(forge_auth="app"))["ok"] is True
+
+
+def test_corrupt_claude_credentials_file_is_not_reported(cfg, tmp_path):
+    """An unreadable / non-JSON store is treated as no finding."""
+    cfg(_FULL_APP_CREDS)
+    (tmp_path / ".credentials.json").write_text("{not json", encoding="utf-8")
+    status = get_credential_status(_settings(forge_auth="app"))
+    assert status["ok"] is True

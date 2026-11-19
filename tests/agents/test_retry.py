@@ -836,6 +836,58 @@ def test_run_agent_auth_failure_also_switches_provider():
     assert rebuilt == [True]
 
 
+def test_run_agent_auth_failure_alerts_operator(monkeypatch):
+    """A tier fallback fires an operator alert so a downgraded pass is
+    flagged rather than silently completing (trace-review de906ed1)."""
+    from robotsix_llmio.claude_sdk._errors import ClaudeSDKAuthError
+
+    from robotsix_mill import notify as notify_mod
+    from robotsix_mill.agents.retry import run_agent
+
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        notify_mod, "send_alert", lambda title, body: calls.append((title, body))
+    )
+
+    rebuilt: list[bool] = []
+    primary = _hooked(rebuilt, _FakeHandle("fallback"))
+
+    def make_run(h):
+        if h is primary:
+            raise ClaudeSDKAuthError("Failed to authenticate. API Error: 401")
+        return "ok"
+
+    assert run_agent(primary, make_run, sleep=lambda _s: None) == "ok"
+    assert calls, "operator should be alerted when a pass runs downgraded"
+    assert "provider tier fallback" in calls[0][0]
+    assert "Claude" in calls[0][1]
+
+
+def test_run_agent_stamps_fallback_capability_on_structured_output():
+    """A periodic-style result (model with a ``summary``) gets a marker so
+    the downgrade is visible in the result artifact, not only in traces."""
+    from types import SimpleNamespace
+
+    from robotsix_llmio.claude_sdk._errors import ClaudeSDKAuthError
+
+    from robotsix_mill.agents.retry import run_agent
+
+    rebuilt: list[bool] = []
+    primary = _hooked(rebuilt, _FakeHandle("fallback"))
+    out = SimpleNamespace(summary="Scanned 12 repos; filed 0 drafts.")
+    final = SimpleNamespace(output=out)
+
+    def make_run(h):
+        if h is primary:
+            raise ClaudeSDKAuthError("Failed to authenticate. API Error: 401")
+        return final
+
+    result = run_agent(primary, make_run, sleep=lambda _s: None)
+    assert result.output.summary.startswith("Scanned 12 repos")
+    assert "provider-failover slot" in result.output.summary
+    assert "ClaudeSDKAuthError" in result.output.summary
+
+
 def test_run_agent_without_rebuild_hook_reraises_unchanged():
     from robotsix_llmio.claude_sdk._errors import ClaudeSDKUsageExhaustedError
 

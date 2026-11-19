@@ -587,6 +587,21 @@ def _run_at_fallback_slot[T](
         type(original).__name__,
         str(original)[:160],
     )
+    # Alert the operator that a pass is running downgraded — without this the
+    # failure is silently absorbed and the pass completes on a weaker model
+    # (the trace that motivated this).  Best-effort, never raises.
+    try:
+        from ..notify import send_alert
+
+        send_alert(
+            "mill: provider tier fallback",
+            f"{what}: default provider unavailable ({type(original).__name__}) — "
+            "this pass is running downgraded on the fallback slot. Renew the "
+            "Claude OAuth credential (`claude login`) or check the Claude "
+            "subscription.",
+        )
+    except Exception:
+        log.debug("%s: tier-fallback alert failed", what, exc_info=True)
     try:
         fallback_agent = rebuild()
     except Exception as build_exc:
@@ -602,6 +617,35 @@ def _run_at_fallback_slot[T](
             )
 
     try:
-        return run_isolated(_fallback_call)
+        result = run_isolated(_fallback_call)
+        _stamp_fallback_capability(result, original, what)
+        return result
     finally:
         _safe_close(fallback_agent)
+
+
+def _stamp_fallback_capability(result: Any, original: Exception, what: str) -> None:
+    """Mark a downgraded pass on its structured result (best-effort).
+
+    When the fallback run produced a periodic-agent-style output (a model
+    with a ``summary`` str — e.g. ``AuditResult``), append a marker so the
+    result artifact itself says the pass ran on the fallback provider slot
+    instead of the default Claude tier.  Without it the downgrade lives only
+    in trace metadata and the pass looks like a normal high-tier completion.
+    Skipped when the output has no such field (plain text, implement
+    passes); any failure is ignored — the run result is already valid.
+    """
+    try:
+        out = getattr(result, "output", None)
+        summary = getattr(out, "summary", None)
+        if not isinstance(summary, str):
+            return
+        marker = (
+            "[ran on the provider-failover slot: the default Claude tier was "
+            f"unavailable ({type(original).__name__}) - pass completed "
+            "downgraded]"
+        )
+        if marker not in summary:
+            out.summary = f"{summary} {marker}"
+    except Exception:
+        log.debug("%s: fallback-capability stamp failed", what, exc_info=True)
