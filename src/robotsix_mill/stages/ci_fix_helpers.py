@@ -556,6 +556,30 @@ def extract_advisory_ids(failing_summary: str) -> list[str]:
     return sorted(canon)
 
 
+def advisory_dedup_label(advisory_ids: list[str]) -> str:
+    """Return the ``ci_cve:`` ticket label for a set of advisory/CVE ids.
+
+    The ids are canonicalised exactly like :func:`extract_advisory_ids`
+    (GHSA prefix uppercased + hex suffix lowercased, others uppercased) and
+    sorted, so any failing run naming the same advisory yields the same
+    label regardless of the order/case it appears in and regardless of the
+    check names that surfaced it.  The check-name-keyed ``ci_fp:`` label
+    cannot match two runs that hit the same CVE under different check sets,
+    so out-of-scope spawns would each get a sibling fix ticket that
+    rewrites the same ``.trivyignore`` entry; this label gives
+    ``resolve_existing_fix`` the stable same-CVE match to reuse instead
+    (three PRs churning the one CVE-2026-97054 ignore within 3h, 2026-11-19).
+    """
+    canon: list[str] = []
+    for adv in advisory_ids:
+        adv = "GHSA" + adv[4:].lower() if adv[:4].upper() == "GHSA" else adv.upper()
+        if adv not in canon:
+            canon.append(adv)
+    key = "|".join(sorted(canon))
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+    return f"ci_cve:{digest}"
+
+
 def build_concrete_remediation(failing_summary: str) -> str:
     """Build a deterministic ``Concrete remediation`` block for an
     out-of-scope spawned fix ticket, extracted from the failing run log.

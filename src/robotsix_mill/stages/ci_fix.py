@@ -90,9 +90,11 @@ from .ci_fix_helpers import (
     _workspace_repo_dir,
     _write_counter,
     _write_text,
+    advisory_dedup_label,
     build_concrete_remediation,
     build_failing_run_evidence,
     confirm_failure_on_target,
+    extract_advisory_ids,
     is_environment_drift_attribution,
 )
 from .ci_infra_block import (
@@ -2312,6 +2314,18 @@ class CIFixStage(Stage):
                     description += ci_fix_recurrence.format_recurrence_section(
                         signature, prior
                     )
+        # Same-CVE dedup: the ci_fp label is keyed on check names, so two
+        # runs hitting the same advisory under different check-name
+        # spellings never collide on it and each spawns its own fix that
+        # rewrites the same .trivyignore entry (three PRs churning the one
+        # CVE-2026-97054 ignore within 3h, 2026-11-19).  Key an extra label
+        # on the concrete advisory/CVE ids parsed from the failing log —
+        # that id IS the ignore-key/remediation target, identical whichever
+        # check surfaced it — so resolve_existing_fix below reuses the open
+        # fix ticket instead of spawning a sibling.
+        advisory_ids = extract_advisory_ids(failing_summary)
+        if advisory_ids:
+            dedup_labels.append(advisory_dedup_label(advisory_ids))
         # Re-drive instead of duplicate: when a fix ticket for the same
         # failing check already exists (even one parked BLOCKED by an
         # earlier vague spec), update ITS spec with the concrete remediation
@@ -2526,8 +2540,10 @@ class CIFixStage(Stage):
     ) -> Outcome | None:
         """Re-run CI instead of re-spawning when the fix already merged.
 
-        When the most recent dependency ticket with this failure's
-        ``ci_fp:`` fingerprint has merged, check whether its merge commit
+        When the most recent dependency ticket carrying this failure's
+        ``ci_fp:`` fingerprint (or, for advisory-keyed runs, the matching
+        ``ci_cve:`` same-advisory label) has merged, check whether its
+        merge commit
         is an ancestor of *head_sha*: if NOT, the failure is stale by
         construction (whatever the run timestamps) and the branch is
         refreshed; if it IS, the failure genuinely recurred and the caller
@@ -2547,9 +2563,17 @@ class CIFixStage(Stage):
         fingerprint = _ci_failure_fingerprint(
             _extract_check_names(failing_summary), board_id
         )
+        # Match merged fixes on the CVE-keyed label too: a same-advisory fix
+        # that merged under different check-name spellings must still stop a
+        # fresh spawn (three PRs rewriting one CVE-2026-97054 .trivyignore
+        # entry, 2026-11-19).
+        merged_labels = [f"ci_fp:{fingerprint}"]
+        advisory_ids = extract_advisory_ids(failing_summary)
+        if advisory_ids:
+            merged_labels.append(advisory_dedup_label(advisory_ids))
         try:
             merged = dependency_fix.find_merged_fix(
-                ctx, [f"ci_fp:{fingerprint}"], board_id or ticket.board_id
+                ctx, merged_labels, board_id or ticket.board_id
             )
         except Exception as exc:
             log.warning("%s: merged-fix lookup failed: %s", ticket.id, exc)
