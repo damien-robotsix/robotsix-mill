@@ -16,6 +16,14 @@ agent has already posted on the ticket (surviving tool-closure rebuilds
 within a run), not just the most recent one. The author is stamped with
 the agent name (e.g. ``"implement"``) so the comment is traceable to the
 originating agent's run.
+
+The tool is for *substance only* — never for progress/completion
+announcements. Post the deliverable summary exactly once; never post
+self-referential meta-comments ("Done.", "Delivered — see diff/summary
+thread X", "Ignore my previous comment", "(Stop-noise marker)"), and
+never append a "correction" of a comment already posted (there is no
+edit-in-place API — corrected content belongs in the agent's final
+structured summary, not a follow-up comment).
 """
 
 from __future__ import annotations
@@ -61,6 +69,13 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
         the investigation". The comment is filed as a fresh top-level
         thread (no parent). For replying inside an existing PR review
         thread, use ``reply_to_thread`` instead.
+
+        Post the deliverable at most once. Never use this tool for
+        self-referential meta-comments ("Done.", "Delivered — see diff
+        / summary thread X", "ignore my previous comment", "(stop-noise
+        marker)") or to append a "correction" of a comment you already
+        posted — there is no edit-in-place API; put the corrected
+        content in your final structured summary instead.
 
         Args:
             body: The comment body (Markdown is fine). ``comment`` is an
@@ -142,7 +157,11 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
                 "code — e.g. a spec that asks you to 'post a comment with "
                 "findings'. The comment is a fresh top-level thread; for "
                 "replies inside an existing PR review thread, use "
-                "``reply_to_thread`` instead."
+                "``reply_to_thread`` instead. Post the deliverable at most "
+                "once — never post self-referential meta-comments "
+                "('Done.', 'see diff/summary thread X', 'ignore the "
+                "previous comment') or a 'correction' of an earlier "
+                "comment; corrected content goes in your final summary."
             ),
             category="reporting",
             parameters={"body": "str (Markdown comment body)"},
