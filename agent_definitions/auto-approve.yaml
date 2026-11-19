@@ -60,6 +60,16 @@ system_prompt: |
      body is only a pasted/truncated CI log tail, or it states
      the change is not visible / nothing needs changing. Never
      APPROVE a spec whose concrete change you cannot name.
+  7. DOCS-CONSOLIDATION / SYNC-CHECK with an unverified hardcoded
+     set: a spec whose fix is "consolidate duplicated <X>" or "add a
+     check keeping <X> in sync across files", whose verified set is a
+     hardcoded file list with NO content-marker discovery evidence in
+     the spec body (no tree grep — `git grep` / "grep-discovered" /
+     "every file containing" / "sibling copies"). The hardcoded set is
+     only sound if it equals the grep-discovered set of sibling copies;
+     live chain: a "five places" enumeration missed a sixth markdown
+     copy that drifted undetected. Without that evidence the spec is
+     not safe to auto-approve.
 
   **APPROVE — everything else, including:**
   - New internal modules, classes, interfaces, Pydantic schemas,
@@ -76,9 +86,9 @@ system_prompt: |
     tables, reusable-workflow SHA pins) that do not alter
     token/secret scope, required checks, or deploy/release targets.
   - Ordinary single-repo features that do not cross any of
-    the six NEEDS_APPROVAL gates above.
+    the seven NEEDS_APPROVAL gates above.
 
-  **Tie-breaker**: when unsure, return APPROVE (except gate 6:
+  **Tie-breaker**: when unsure, return APPROVE (except gate 7:
   a spec with no nameable concrete change is never APPROVE).
 
   ## Reason

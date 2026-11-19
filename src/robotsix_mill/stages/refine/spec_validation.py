@@ -119,3 +119,93 @@ def _draft_has_complete_spec(text: str) -> bool:
     if not _has_heading("Problem"):
         return False
     return any(_has_heading(h) for h in ("Scope", "Acceptance criteria", "Acceptance"))
+
+
+# ---------------------------------------------------------------------------
+# consolidated-docs / sync-check class detection
+# ---------------------------------------------------------------------------
+#
+# A draft proposing "consolidate duplicated <X>" or "add a check keeping
+# <X> in sync across files" (docs-sync remediations) is only as sound as
+# its enumeration of the duplicated copies.  Live chain
+# (robotsix-linkedin, 2026-11-19): a finding enumerated 'five places'
+# for a duplicated config table, the sync check it spawned hardcoded
+# exactly those five, and a sixth copy (chat-skill.md) drifted
+# undetected.  These detectors gate the refine mechanical fast-path so a
+# hardcoded enumeration cannot auto-approve without a content-marker
+# discovery sweep, and the refine agent's prompt rule
+# (agent_definitions/refine.yaml) performs that sweep.
+
+# Class markers: a draft that consolidates duplicated content or keeps
+# content in sync across files.  Small, extensible list — no NLP
+# generalisation (same convention as ``_OPS_SHAPE_PATTERNS`` in
+# stages/refine/helpers.py).
+_SYNC_CHECK_CLASS_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bconsolidat\w*\s+(?:the\s+)?duplicat\w*", re.IGNORECASE),
+    re.compile(
+        r"\bduplicat\w*\s+(?:the\s+)?"
+        r"(?:cop(?:y|ies)|config|doc|content|table|settings)",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bcop(?:y|ies)\s+of\s+(?:the\s+)?(?:same|this|that)", re.IGNORECASE),
+    re.compile(r"\bkeep\w*\s+[^\n]{0,80}\bin sync\b", re.IGNORECASE),
+    re.compile(r"\bin sync\s+across\b", re.IGNORECASE),
+    re.compile(r"\bsync[- ]check\b", re.IGNORECASE),
+    re.compile(r"\bout\s+of\s+sync\b", re.IGNORECASE),
+    re.compile(r"\b(?:doc|content|config|settings?)\s+drift\b", re.IGNORECASE),
+)
+
+# Evidence that the content-marker discovery step actually ran: a tree
+# grep over a stable anchor, or explicit discovery narration.  A bare
+# enumerated "verified set" / hardcoded file list is deliberately NOT
+# evidence — that is precisely the incomplete-enumeration failure mode
+# this gate exists to route around.
+_DISCOVERY_EVIDENCE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bgit grep\b", re.IGNORECASE),
+    re.compile(r"\bcontent-marker discovery\b", re.IGNORECASE),
+    re.compile(r"\bgrep-discovered\b", re.IGNORECASE),
+    re.compile(r"\bevery file containing\b", re.IGNORECASE),
+    re.compile(r"\bsibling cop(?:y|ies)\b", re.IGNORECASE),
+)
+
+
+def _sync_check_class_marker(text: str) -> str | None:
+    """Return the matched substring of the first consolidated-docs /
+    sync-check class pattern in *text*, or ``None``.
+
+    Pure function — used by the refine fast-path gate to decide whether
+    a draft proposes consolidating duplicated content or keeping content
+    in sync across files.
+    """
+    for pattern in _SYNC_CHECK_CLASS_PATTERNS:
+        m = pattern.search(text or "")
+        if m is not None:
+            return m.group(0)
+    return None
+
+
+def _spec_evidences_discovery(text: str) -> bool:
+    """True when *text* carries evidence that a content-marker discovery
+    sweep ran (a tree grep over an anchor, or explicit discovery
+    narration).  A hardcoded "verified set" list with no discovery
+    evidence returns False.
+    """
+    return any(p.search(text or "") for p in _DISCOVERY_EVIDENCE_PATTERNS)
+
+
+def _sync_check_gate_blocks(text: str) -> str | None:
+    """Return the matched class marker when the refine fast-path must
+    NOT auto-approve *text*, else ``None``.
+
+    A consolidated-docs / sync-check draft is auto-approvable only when
+    its verified set equals the grep-discovered set of sibling copies.
+    A hardcoded enumeration with no discovery evidence is exactly the
+    incomplete-set failure mode (the live robotsix-linkedin chain) — so
+    it must fall through to the full refine agent, whose prompt rule
+    performs the content-marker discovery step, instead of fast-path
+    approving.
+    """
+    marker = _sync_check_class_marker(text)
+    if marker is None:
+        return None
+    return None if _spec_evidences_discovery(text) else marker
