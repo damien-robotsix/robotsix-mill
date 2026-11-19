@@ -674,6 +674,86 @@ def test_out_of_scope_reuse_enriches_existing_fix_and_redrives_blocked(
     assert set(json.loads(updated.unblocks)) == {t1.id, t2.id}
 
 
+def test_out_of_scope_same_cve_different_checks_reuses_one_fix(tmp_path, monkeypatch):
+    """Two runs that fail DIFFERENT checks (so the check-name ci_fp
+    fingerprint and the deterministic title never collide) but name the
+    SAME CVE converge on one fix ticket via the new ci_cve: label instead
+    of each spawning a sibling that rewrites the same .trivyignore entry
+    (three PRs churning the one CVE-2026-97054 ignore, 2026-11-19)."""
+    ctx = _gh(tmp_path)
+    _oos_forge(monkeypatch, alert_paths=("src/untouched.py",))
+    run_url = "https://github.com/o/r/actions/runs/40624810165"
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "list_workflow_runs",
+        lambda self, **k: [
+            {
+                "id": 40624810165,
+                "name": "Scan",
+                "conclusion": "failure",
+                "html_url": run_url,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "fetch_workflow_job_logs",
+        lambda self, **k: _TRIVY_JOB_LOG,
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.run_ci_fix_agent",
+        lambda **k: _oos_result(),
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.stages.ci_fix.git_ops.push_with_lease",
+        lambda *a, **k: None,
+    )
+
+    def fail_as(check_name):
+        monkeypatch.setattr(
+            github.GitHubForge,
+            "check_status",
+            lambda self, *, source_branch, require_checks=False: {
+                "conclusion": "failure",
+                "failing": [
+                    {
+                        "name": check_name,
+                        "summary": "alert",
+                        "text": None,
+                        "annotations": [],
+                    }
+                ],
+            },
+        )
+
+    # Parent 1 fails "docker-pr-scan", parent 2 fails "trivy / sandbox" —
+    # different check names => different ci_fp fingerprint AND different
+    # deterministic title, so only the shared CVE ci_cve: label (extracted
+    # from the same _TRIVY_JOB_LOG) can dedup them.
+    fail_as("docker-pr-scan")
+    t1 = _fixing_ci(ctx)
+    _setup_repo(ctx, t1)
+    out1 = CIFixStage().run(t1, ctx)
+    assert out1.next_state is State.BLOCKED
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert len(fixes) == 1
+
+    fail_as("trivy / sandbox")
+    t2 = _fixing_ci(ctx)
+    _setup_repo(ctx, t2)
+    out2 = CIFixStage().run(t2, ctx)
+    assert out2.next_state is State.BLOCKED
+
+    # No duplicate: the existing fix ticket was reused for the same CVE.
+    fixes = ctx.service.recent_proposals_for(SourceKind.CI_FIX_DEPENDENCY)
+    assert len(fixes) == 1
+    fix = fixes[0]
+    labels = json.loads(ctx.service.get(fix.id).labels)
+    assert any(label.startswith("ci_cve:") for label in labels)
+    # Both parents auto-resume from the single fix ticket.
+    assert set(json.loads(ctx.service.get(fix.id).unblocks)) == {t1.id, t2.id}
+
+
 def test_build_and_extract_failing_run_evidence_roundtrip():
     from robotsix_mill.stages.ci_fix_helpers import (
         build_failing_run_evidence,
@@ -720,6 +800,29 @@ def test_extract_run_ids_and_advisory_ids():
     assert "GHSA-2vrf-3vcr-5h65" in remediation
     assert build_concrete_remediation("## lint\nall checks pass") == ""
     assert extract_run_ids("no run url here") == []
+
+
+def test_advisory_dedup_label_stable_and_order_independent():
+    """The ci_cve: dedup label is stable across id order/case, distinct
+    across different advisories, and 16-hex like the other ci labels — the
+    same-CVE match key for out-of-scope spawns whose check names differ."""
+    from robotsix_mill.stages.ci_fix_helpers import advisory_dedup_label
+
+    label = advisory_dedup_label(["CVE-2026-97054"])
+    assert label.startswith("ci_cve:")
+    assert len(label) == len("ci_cve:") + 16
+    assert all(c in "0123456789abcdef" for c in label[len("ci_cve:") :])
+    # Case-insensitive and order-independent (mirrors extract_advisory_ids).
+    assert advisory_dedup_label(["CVE-2026-97054"]) == advisory_dedup_label(
+        ["cve-2026-97054"]
+    )
+    assert advisory_dedup_label(["GHSA-2vrf-3vcr-5h65", "CVE-2026-109518"]) == (
+        advisory_dedup_label(["CVE-2026-109518", "ghsa-2vrf-3vcr-5h65"])
+    )
+    # Different advisory => different label.
+    assert advisory_dedup_label(["CVE-2026-97054"]) != advisory_dedup_label(
+        ["CVE-2026-97055"]
+    )
 
 
 def test_out_of_scope_spawns_fix_ticket_and_parks(tmp_path, monkeypatch):
