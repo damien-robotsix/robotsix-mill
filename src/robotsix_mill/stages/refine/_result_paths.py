@@ -19,13 +19,15 @@ from ...core.states import State
 from ...core.text_noop import degenerate_body_reason, spec_demands_code_change
 from ...core.workspace import Workspace
 from ..base import Outcome, StageContext
-from .helpers import (
+from .external_fix import (
     _COMMIT_SHA_RE,
     _TICKET_ID_RE,
-    UNMERGED_BRANCH_PREFIX,
     _rationale_claims_external_fix,
-    _resolve_next_state,
     _verify_cited_fix_at_head,
+)
+from .helpers import (
+    UNMERGED_BRANCH_PREFIX,
+    _resolve_next_state,
     log,
 )
 from .spec_validation import _spec_is_degenerate

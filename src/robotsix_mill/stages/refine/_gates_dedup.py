@@ -26,6 +26,7 @@ from ...scm.vcs import git_ops
 from ...stages.ci_fix_helpers import UPSTREAM_CI_BLOCK_MARKER
 from ...stages.ci_infra_block import REPO_SETTING_BLOCK_MARKER
 from ..base import Outcome, StageContext
+from .external_fix import _rationale_claims_external_fix
 from .helpers import (
     DEDUP_ALREADY_DONE_PREFIX,
     DEDUP_DUPLICATE_PREFIX,
@@ -35,7 +36,6 @@ from .helpers import (
     REFINE_PROGRESS_STATES,
     _advisory_candidate_id,
     _build_candidates_block,
-    _rationale_claims_external_fix,
     _strip_advisory_block,
     log,
     verify_claim,

@@ -303,6 +303,7 @@ modules:
       - src/robotsix_mill/stages/refine/_drift.py
       - src/robotsix_mill/stages/refine/_result_paths.py
       - src/robotsix_mill/stages/refine/_triage.py
+      - src/robotsix_mill/stages/refine/external_fix.py
       - src/robotsix_mill/stages/refine/helpers.py
       - src/robotsix_mill/stages/refine/spec_validation.py
       - src/robotsix_mill/stages/refine/_impl_ready.py
