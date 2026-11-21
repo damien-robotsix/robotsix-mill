@@ -24,28 +24,295 @@ thread X", "Ignore my previous comment", "(Stop-noise marker)"), and
 never append a "correction" of a comment already posted (there is no
 edit-in-place API — corrected content belongs in the agent's final
 structured summary, not a follow-up comment).
+
+Prompt/docstring guidance proved unenforceable (ticket
+20261121T042200Z: the implement agent still posted a deliverable
+summary plus 5-6 noise comments despite the written rules), so the tool
+enforces both constraints deterministically:
+
+- **Per-(ticket, author) comment cap** — the tool refuses to post once
+  this agent has already posted *max_comments* comments on the ticket
+  in the run (default 1; multi-finding info tickets pass 2-3). The
+  count is taken from the *persisted* comments (``author ==
+  agent_name``), so the cap survives tool-closure rebuilds and retried
+  passes, not just the in-memory seen-set.
+- **Content guard** — bodies that are pure self-referential meta-noise
+  (bare "Done.", "Stand down — no further action.", "(no further
+  replies)", "Delivered — see diff and summary thread X",
+  "Ignore my previous comment", ...) are refused regardless of how the
+  wording is varied, because the dedupe's byte-identical check cannot
+  catch semantically-similar but textually-distinct noise.
+
+A refusal is logged as a warning and recorded as a step event (history,
+never a comment) so the recurring violation stays observable; the
+refused content belongs in the agent's final structured summary — there
+is no edit-in-place API.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from ..config import Settings
 
 if TYPE_CHECKING:
     from ..core.models import Comment
+    from ..core.service import TicketService
 
 log = logging.getLogger(__name__)
 
+# Vocabulary of process/meta words. A body whose EVERY content token is
+# drawn from this set only talks about the act of commenting / stopping /
+# delivering — it carries no deliverable substance, so it is refused.
+# The vocabulary (not an exact-string match) is deliberate: the noise the
+# implement agent posts is semantically-similar but textually-distinct
+# each time ("Stand down — no further action.", "Stopping here
+# deliberately: this is the last comment.", "(no further replies)"), so
+# a byte-identical dedupe can never catch it.
+_META_NOISE_WORDS: frozenset[str] = frozenset(
+    {
+        # completion / delivery markers
+        "done",
+        "finish",
+        "finished",
+        "deliver",
+        "delivered",
+        "delivery",
+        "complete",
+        "completed",
+        "completion",
+        "see",
+        "view",
+        # references to the ticket's own comments / threads / diff
+        "diff",
+        "diffs",
+        "summary",
+        "thread",
+        "threads",
+        "comment",
+        "comments",
+        "ignore",
+        "my",
+        "previous",
+        "prior",
+        "above",
+        "below",
+        "earlier",
+        "aforementioned",
+        "noted",
+        "already",
+        "posted",
+        "posting",
+        "said",
+        "correction",
+        "corrected",
+        "corrections",
+        # stop / stand-down markers
+        "stand",
+        "down",
+        "stopping",
+        "stop",
+        "stopped",
+        "here",
+        "deliberately",
+        "last",
+        "final",
+        "record",
+        "noise",
+        "marker",
+        "note",
+        "reply",
+        "replies",
+        "responding",
+        "further",
+        "action",
+        "actions",
+        "nothing",
+        "left",
+        "remaining",
+        # generic connectives / filler that carry no substance
+        "the",
+        "this",
+        "these",
+        "those",
+        "that",
+        "it",
+        "its",
+        "and",
+        "or",
+        "of",
+        "to",
+        "for",
+        "with",
+        "by",
+        "on",
+        "in",
+        "at",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "an",
+        "no",
+        "but",
+        "so",
+        "then",
+        "now",
+        "just",
+        "simply",
+    }
+)
 
-def make_post_comment_tool(settings: Settings, agent_name: str):
+# Single letters / bare digits (e.g. the "X" in "thread X", a numbered
+# list marker) never make a body substantive.
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+
+def _is_meta_noise(body: str) -> bool:
+    """True when *body* is self-referential meta-noise with no substance.
+
+    Normalises to lowercase tokens and refuses when EVERY token is drawn
+    from the process vocabulary — i.e. the comment only references the
+    act of commenting, the ticket's own threads/diff, or a stop marker.
+    A single substantive token (a finding, a reason, a package name)
+    makes the body deliverable content and lets it through.
+    """
+    tokens = {
+        t for t in _TOKEN_RE.findall(body.lower()) if len(t) >= 2 and not t.isdigit()
+    }
+    return bool(tokens) and tokens <= _META_NOISE_WORDS
+
+
+def _sanitize_log(value: str) -> str:
+    """Flatten whitespace so an agent-controlled body can't forge log lines."""
+    return " ".join(value.split())
+
+
+def _record_refusal(svc: TicketService, ticket_id: str, note: str) -> None:
+    """Record a refusal as a step event so it is observable in history.
+
+    Step events are history entries, never comments — they must not
+    pollute the comment stream the guards are protecting. Failures here
+    must not crash the agent loop, so they are logged and swallowed.
+    """
+    try:
+        svc.add_step_event(ticket_id, note)
+    except Exception:
+        log.debug(
+            "post_comment: could not record refusal step event for %s",
+            ticket_id,
+            exc_info=True,
+        )
+
+
+def _check_post_guard(
+    svc: TicketService,
+    ticket_id: str,
+    body: str,
+    agent_name: str,
+    max_comments: int,
+) -> str | None:
+    """Return a status string when *body* must NOT be posted, else None.
+
+    The three deterministic guards of the tool:
+
+    - **Content guard** — pure self-referential meta-noise is never
+      posted; there is no edit-in-place API, so a refused body belongs
+      in the agent's final structured summary, not the comment stream.
+    - **Persisted dedupe** — an identical comment this agent already
+      posted on the ticket is a duplicate even if a fresh tool closure
+      (rebuilt agent / retried pass) lost the in-memory seen-set.
+    - **Per-(ticket, author) comment cap** — counted against the
+      PERSISTED comments (author == agent_name) so it survives closure
+      rebuilds, not just the in-memory seen-set.
+
+    Guard refusals log a warning and a step event so the recurring
+    violation stays observable and the prompt can be tightened further.
+    If listing comments fails, fall through (return None) — the
+    in-memory set still guards same-closure retries and ``add_comment``
+    reports its own error if posting is impossible.
+    """
+    if _is_meta_noise(body):
+        log.warning(
+            "post_comment: refusing self-referential meta-noise "
+            "body from agent %r on %s: %r",
+            agent_name,
+            ticket_id,
+            _sanitize_log(body),
+        )
+        _record_refusal(
+            svc,
+            ticket_id,
+            f"post_comment: refused a self-referential meta-noise "
+            f"body from the {agent_name} agent",
+        )
+        return (
+            "post_comment: refused — the body is self-referential "
+            "meta-noise, not deliverable content. Put it in your final "
+            "structured summary instead (there is no edit-in-place API)."
+        )
+
+    try:
+        existing_comments: list[Comment] = svc.list_comments(ticket_id)
+    except Exception as exc:
+        log.debug(
+            "post_comment: dedup check failed for %s (%r); proceeding",
+            ticket_id,
+            exc,
+        )
+        return None
+
+    for existing in existing_comments:
+        if existing.author == agent_name and existing.body == body:
+            return "post_comment: duplicate body in this run — skipped"
+
+    mine = [c for c in existing_comments if c.author == agent_name]
+    if len(mine) >= max_comments:
+        log.warning(
+            "post_comment: refusing comment %d from agent %r on "
+            "%s (cap %d per (ticket, agent))",
+            len(mine) + 1,
+            agent_name,
+            ticket_id,
+            max_comments,
+        )
+        _record_refusal(
+            svc,
+            ticket_id,
+            f"post_comment: the {agent_name} agent already posted "
+            f"{len(mine)} comment(s); cap is {max_comments} per "
+            f"(ticket, agent) — further comments refused",
+        )
+        return (
+            f"post_comment: refused — the {agent_name} agent has "
+            f"already posted {len(mine)} comment(s) on this ticket "
+            f"(cap {max_comments}). Put further content in your final "
+            "structured summary instead."
+        )
+    return None
+
+
+def make_post_comment_tool(
+    settings: Settings,
+    agent_name: str,
+    max_comments: int = 1,
+):
     """Return the ``post_comment`` closure bound to *settings*.
 
     Args:
         settings: The application settings instance.
         agent_name: Stamped as the comment author so the originating
             agent is identifiable (e.g. ``"implement"``).
+        max_comments: Per-(ticket, author) comment cap — the tool
+            refuses to post once this agent has already posted this
+            many comments on the ticket in the current run. Counted
+            against the PERSISTED comments so the cap survives
+            tool-closure rebuilds and retried passes. Default 1;
+            multi-finding info tickets pass 2-3.
     """
     # Track posted (body) hashes within this tool's lifetime as a cheap
     # fast-path so a retried tool call short-circuits without a DB query.
@@ -70,12 +337,14 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
         thread (no parent). For replying inside an existing PR review
         thread, use ``reply_to_thread`` instead.
 
-        Post the deliverable at most once. Never use this tool for
-        self-referential meta-comments ("Done.", "Delivered — see diff
-        / summary thread X", "ignore my previous comment", "(stop-noise
-        marker)") or to append a "correction" of a comment you already
-        posted — there is no edit-in-place API; put the corrected
-        content in your final structured summary instead.
+        Post the deliverable at most once — both limits are enforced,
+        not just advised: the tool refuses once you have already posted
+        *max_comments* comment(s) on this ticket in this run, and it
+        refuses bodies that are pure self-referential meta-noise
+        ("Done.", "Delivered — see diff / summary thread X", "ignore my
+        previous comment", "(stop-noise marker)") or a "correction" of a
+        comment you already posted — there is no edit-in-place API; put
+        the corrected content in your final structured summary instead.
 
         Args:
             body: The comment body (Markdown is fine). ``comment`` is an
@@ -110,25 +379,12 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
             )
         svc, ticket_id = result
 
-        # Idempotency beyond the in-memory set: an identical comment this
-        # agent already posted on this ticket is a duplicate even if a
-        # fresh tool closure (rebuilt agent / retried pass) lost the
-        # seen-set. Checking the persisted comments makes the guard
-        # survive closure rebuilds, so a double-post can't slip through.
-        try:
-            existing_comments: list[Comment] = svc.list_comments(ticket_id)
-            for existing in existing_comments:
-                if existing.author == agent_name and existing.body == body:
-                    return "post_comment: duplicate body in this run — skipped"
-        except Exception as exc:
-            # If listing comments fails, fall through — the in-memory set
-            # still guards same-closure retries and add_comment reports
-            # its own error if posting is impossible.
-            log.debug(
-                "post_comment: dedup check failed for %s (%r); proceeding",
-                ticket_id,
-                exc,
-            )
+        # Deterministic guards (content, persisted dedupe, per-(ticket,
+        # author) comment cap) — see ``_check_post_guard``. A non-None
+        # return is the refusal/duplicate status to surface to the agent.
+        refused = _check_post_guard(svc, ticket_id, body, agent_name, max_comments)
+        if refused is not None:
+            return refused
 
         try:
             created = svc.add_comment(
@@ -157,11 +413,13 @@ def make_post_comment_tool(settings: Settings, agent_name: str):
                 "code — e.g. a spec that asks you to 'post a comment with "
                 "findings'. The comment is a fresh top-level thread; for "
                 "replies inside an existing PR review thread, use "
-                "``reply_to_thread`` instead. Post the deliverable at most "
-                "once — never post self-referential meta-comments "
-                "('Done.', 'see diff/summary thread X', 'ignore the "
-                "previous comment') or a 'correction' of an earlier "
-                "comment; corrected content goes in your final summary."
+                "``reply_to_thread`` instead. Post the deliverable at "
+                "most once — the tool refuses further comments once you "
+                "have already posted one on this ticket, and it refuses "
+                "self-referential meta-comments ('Done.', 'see "
+                "diff/summary thread X', 'ignore the previous comment', "
+                "'stand down') or a 'correction' of an earlier comment; "
+                "corrected content goes in your final summary."
             ),
             category="reporting",
             parameters={"body": "str (Markdown comment body)"},
