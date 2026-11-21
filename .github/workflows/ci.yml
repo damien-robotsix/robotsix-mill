@@ -89,7 +89,7 @@ jobs:
   mill-specific:
     name: Mill-specific checks
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 20  # full uv sync + strict mypy, vulture, deptry and config/module checks exceed 15 min
     env:
       UV_MALWARE_CHECK: "1"
     steps:
