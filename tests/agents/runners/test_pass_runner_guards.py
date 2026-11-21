@@ -1012,6 +1012,162 @@ def test_module_curator_guard_not_fired_without_repo_dir(tmp_path):
     db.reset_engine()
 
 
+# --- advisory: reorg move destinations are never stale --------------------
+
+
+def test_module_curator_premise_check_reorg_git_mv_destination_not_stale(tmp_path):
+    """A reorg draft framing the layout as `git mv <src> <dest>` does not
+    flag the (absent) destination as stale — only claimed sources are
+    checked."""
+    src = tmp_path / "docs" / "robotsix_config" / "benchmarking.md"
+    src.parent.mkdir(parents=True, exist_ok=True)
+    src.write_text("# benchmark\n", encoding="utf-8")
+
+    verdict = _module_curator_premise_check(
+        tmp_path,
+        "Reorganize module tests: align to per-module layout (src/docs/tests)",
+        (
+            "docs/robotsix_config/benchmarking.md EXISTS; "
+            "git mv docs/robotsix_config/benchmarking.md "
+            "docs/tests/benchmarking.md is expected to be absent."
+        ),
+    )
+    assert verdict is None
+
+
+def test_module_curator_premise_check_reorg_arrow_destination_not_stale(tmp_path):
+    """A reorg draft listing moves as `old -> new` does not flag the new
+    path."""
+    src = tmp_path / "docs" / "robotsix_config" / "config" / "index.md"
+    src.parent.mkdir(parents=True, exist_ok=True)
+    src.write_text("# index\n", encoding="utf-8")
+
+    verdict = _module_curator_premise_check(
+        tmp_path,
+        "Reorganize module config: align to per-module layout (src/docs/tests)",
+        "Proposed moves (git mv):\n"
+        "docs/robotsix_config/config/index.md -> docs/config/index.md",
+    )
+    assert verdict is None
+
+
+def test_module_curator_premise_check_reorg_destination_matching_glob_ok(tmp_path):
+    """A destination that would match an existing module glob is not
+    reported as already-classified — destinations are expected to be new."""
+    src = tmp_path / "docs" / "robotsix_config" / "benchmarking.md"
+    src.parent.mkdir(parents=True, exist_ok=True)
+    src.write_text("# benchmark\n", encoding="utf-8")
+    _write_modules_yaml(tmp_path, [{"id": "tests", "paths": ["docs/tests/*.md"]}])
+
+    verdict = _module_curator_premise_check(
+        tmp_path,
+        "Reorganize module tests: align to per-module layout (src/docs/tests)",
+        "git mv docs/robotsix_config/benchmarking.md docs/tests/benchmarking.md",
+    )
+    assert verdict is None
+
+
+def test_module_curator_premise_check_bare_filename_resolved_by_basename(tmp_path):
+    """A bare filename cited as context resolves against the whole tree —
+    no advisory when the basename exists under a real path."""
+    real = tmp_path / "tests" / "config" / "scripts" / "test_check_schema_freshness.py"
+    real.parent.mkdir(parents=True, exist_ok=True)
+    real.write_text("# test\n", encoding="utf-8")
+
+    verdict = _module_curator_premise_check(
+        tmp_path,
+        "Reorganize module robotsix_config: align to per-module layout "
+        "(src/docs/tests)",
+        "test_check_schema_freshness.py currently lives at "
+        "tests/config/scripts/test_check_schema_freshness.py.\n"
+        "Proposed:\n"
+        "tests/config/scripts/test_check_schema_freshness.py -> "
+        "tests/robotsix_config/test_check_schema_freshness.py",
+    )
+    assert verdict is None
+
+
+def test_module_curator_premise_check_bare_filename_missing_flags(tmp_path):
+    """A bare filename that resolves to no file in the tree still fires the
+    stale-path advisory."""
+    verdict = _module_curator_premise_check(
+        tmp_path,
+        "Reorganize module robotsix_config: align to per-module layout "
+        "(src/docs/tests)",
+        "Move test_check_schema_freshness.py to tests/robotsix_config/.",
+    )
+    assert verdict is not None
+    disposition, note = verdict
+    assert disposition == "advisory"
+    assert "test_check_schema_freshness.py no longer exists on HEAD" in note
+
+
+def test_module_curator_premise_check_stale_source_still_flags(tmp_path):
+    """A genuinely missing claimed-SOURCE path still fires the advisory —
+    destination suppression must not hide stale sources."""
+    verdict = _module_curator_premise_check(
+        tmp_path,
+        "Reorganize module tests: align to per-module layout (src/docs/tests)",
+        "git mv docs/robotsix_config/gone.md docs/tests/gone.md "
+        "(docs/tests/gone.md is expected to be absent).",
+    )
+    assert verdict is not None
+    disposition, note = verdict
+    assert disposition == "advisory"
+    assert "docs/robotsix_config/gone.md no longer exists on HEAD" in note
+
+
+def test_module_curator_reorg_draft_carries_no_advisory(tmp_path):
+    """A reorg draft proposing a mechanical git mv into a new directory is
+    filed with no advisory (end-to-end through the pass runner)."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    src = tmp_path / "docs" / "robotsix_config" / "benchmarking.md"
+    src.parent.mkdir(parents=True, exist_ok=True)
+    src.write_text("# benchmark\n", encoding="utf-8")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=[
+            "Reorganize module tests: align to per-module layout (src/docs/tests)"
+        ],
+        draft_bodies=[
+            (
+                "docs/robotsix_config/benchmarking.md EXISTS; git mv "
+                "docs/robotsix_config/benchmarking.md docs/tests/benchmarking.md "
+                "(docs/tests/benchmarking.md is expected to be absent)."
+            )
+        ],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.MODULE_CURATOR,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    assert len(result.drafts_created) == 1
+    tickets = service.list()
+    assert len(tickets) == 2  # 1 draft + 1 rollup EPIC
+    draft_tickets = [t for t in tickets if t.kind == TicketKind.TASK]
+    assert len(draft_tickets) == 1
+    desc = Workspace(
+        settings.workspaces_dir_for("test-board"), draft_tickets[0].id
+    ).read_description()
+    assert "[!warning]" not in desc
+
+    db.reset_engine()
+
+
 # --- _SCANNER_SOURCES vs _ROLLUP_SOURCES -----------------------------------
 #
 # Two features landed as concurrent PRs and both named their set
