@@ -1900,11 +1900,19 @@ def _triage_raising(monkeypatch, exc):
         validation_mod.git_ops, "introduced_files", lambda *a: ["a.py", "b.py"]
     )
     monkeypatch.setattr(validation_cleanup_mod, "_is_binary_artifact", lambda *a: False)
-    monkeypatch.setattr(
-        validation_mod.subprocess,
-        "run",
-        lambda *a, **kw: SimpleNamespace(stdout="+x"),
-    )
+
+    # The deterministic stray-file gate probes ``git ls-files --others``
+    # for untracked new files; keep that empty so the out-of-scope file is
+    # treated as a MODIFIED tracked file and reaches the scope-triage LLM
+    # (an added file would be intercepted by the gate before the
+    # transient-error handling under test ever ran).  All other git calls
+    # keep returning "+x" as before.
+    def _fake_run(args, **kw):
+        if "ls-files" in args and "--others" in args:
+            return SimpleNamespace(stdout="")
+        return SimpleNamespace(stdout="+x")
+
+    monkeypatch.setattr(validation_mod.subprocess, "run", _fake_run)
     finalized = {}
     monkeypatch.setattr(
         ValidationMixin,

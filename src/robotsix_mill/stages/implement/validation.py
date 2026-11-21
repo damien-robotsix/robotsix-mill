@@ -24,9 +24,11 @@ from ._base import _ImplementStageBase
 from ._shared import (
     _BACKTICK_RE,
     _FLOOD_SAMPLE_SIZE,
+    BINARY_ARTIFACT_EXTENSIONS,
     MODULES_YAML,
     _modules_yaml_added_paths,
     _ScopeGuardrailResult,
+    _vendored_dep_roots,
     log,
 )
 from .validation_baseline import (  # noqa: F401 - re-exported
@@ -34,6 +36,7 @@ from .validation_baseline import (  # noqa: F401 - re-exported
     classify_baseline_verdict,
 )
 from .validation_cleanup import (
+    _STANDARD_CONFIG_FILES,
     ValidationCleanupMixin,
     _full_file_diff,
     _is_missing_context_reason,
@@ -49,6 +52,81 @@ from .validation_cleanup import (
 # auto-revert path.  The write-path guard below validates it and detects
 # clobbered keys against the whole changed set instead.
 _REPO_SETTINGS_FILE = ".robotsix-mill/config.yaml"
+
+
+# --- stray-file gate ------------------------------------------------------
+# The implementer's own runtime state (the structured summary/memory JSON
+# envelope) occasionally leaks into the cloned working tree and from there
+# into the PR diff.  Live: robotsix-website PR #232 (2026-11-19) shipped a
+# root-level file literally named ``none`` carrying the implementer's
+# summary/memory JSON; code review had to block on it.  The existing scope
+# guardrail cannot catch this: it judges changed files against the
+# ticket's file_map and can bless an out-of-scope file via LLM
+# scope-triage EXPAND — it never checks that the diff contains NOTHING
+# extra.  The deterministic gate below compares every file the branch
+# ADDS against the union of (a) the ticket scope and (b) the
+# generated-artifact allowlist; anything else is a hard failure.  These
+# constants are the (b) allowlist and the backstop signatures that hold
+# even when the allowlist changes.
+
+# Basenames of generated artifacts an implement pass is expected to add
+# without the spec naming them (lockfiles, changelog / release manifests).
+# Matched on basename so sub-project lockfiles (``web/package-lock.json``)
+# count too.  Kept deliberately narrow: an over-broad allowlist would
+# defeat the gate's whole purpose.
+_STRAY_FILE_GENERATED_ARTIFACTS: frozenset[str] = frozenset(
+    {
+        # lockfiles
+        "uv.lock",
+        "poetry.lock",
+        "pdm.lock",
+        "Cargo.lock",
+        "Gemfile.lock",
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "bun.lock",
+        "bun.lockb",
+        "npm-shrinkwrap.json",
+        "composer.lock",
+        "go.sum",
+        "flake.lock",
+        "Pipfile.lock",
+        "requirements.lock",
+        # changelog / release manifests
+        "CHANGELOG.md",
+        ".release-please-manifest.json",
+    }
+)
+
+# Keys of the implement agent's structured-output envelope.  A new file
+# whose content carries several of these together is mill workflow state,
+# not repo work: a legit file containing ONE of them is common, but
+# several distinct ones together is the state blob (the ``none`` leak
+# above) — and it stays a state blob even if a path-based allowlist entry
+# would have covered it.
+_IMPLEMENT_STATE_ENVELOPE_KEYS: frozenset[str] = frozenset(
+    {
+        "summary",
+        "updated_memory",
+        "reference_files",
+        "conversation_state",
+        "new_messages",
+        "no_change_needed",
+        "no_change_rationale",
+        "deferred_spec_items",
+        "deferred_verification_items",
+    }
+)
+_MIN_ENVELOPE_KEY_MATCHES = 3
+
+# Root-level file names that are known mill-state leak shapes (the
+# observed ``none``), flagged on name alone.
+_STRAY_ROOT_ODD_NAMES: frozenset[str] = frozenset({"none"})
+
+# Upper bound for reading an added file to screen it for the envelope:
+# state blobs are a few KB; nothing larger needs the scan.
+_STRAY_CONTENT_SCAN_MAX_BYTES = 64 * 1024
 
 
 # --- operator resolution of a prior scope-triage ESCALATE ---
@@ -289,6 +367,26 @@ class ValidationMixin(BaselineGateMixin, ValidationCleanupMixin, _ImplementStage
             return repo_settings_block
 
         if not file_map:
+            # Even with no file_map to enforce, the deterministic stray
+            # gate still runs: an empty file_map is exactly the state in
+            # which the implementer's leaked state file sails through with
+            # zero scope checks.  Strays here are judged against the spec
+            # body and the generated-artifact allowlist only.
+            stray_skip = cls._run_stray_file_gate(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                summary,
+                ref_files,
+                file_map,
+                spec,
+                target,
+                [],
+                current_feedback,
+            )
+            if stray_skip is not None:
+                return stray_skip
             return _ScopeGuardrailResult(
                 action="skip_iteration",
                 file_map=file_map,
@@ -514,6 +612,42 @@ class ValidationMixin(BaselineGateMixin, ValidationCleanupMixin, _ImplementStage
                 outcome=Outcome(State.BLOCKED, message),
             )
 
+        # --- stray-file gate (deterministic, after the cleanup layers) ---
+        # Runs after the binary/vendored/standard-config cleanup so those
+        # layers keep owning their categories (and after the flood guard,
+        # which owns prompt-sized floods), and BEFORE any LLM so a
+        # scope-triage EXPAND can never bless a leaked state file back
+        # into the ticket.  ``out_of_scope`` is filtered in place: a
+        # deleted state file is no longer out-of-scope (or anything) —
+        # telling the flow about it would send the scope-triage LLM a
+        # path that no longer exists.
+        stray_skip = cls._run_stray_file_gate(
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            summary,
+            ref_files,
+            file_map,
+            spec,
+            target,
+            out_of_scope,
+            current_feedback,
+        )
+        if stray_skip is not None:
+            return stray_skip
+        if not out_of_scope:
+            log.info(
+                "%s: stray-file gate cleaned every out-of-scope file — "
+                "proceeding without scope-triage",
+                ticket.id,
+            )
+            return _ScopeGuardrailResult(
+                action="skip_iteration",
+                file_map=file_map,
+                feedback=current_feedback,
+            )
+
         if not settings.scope_triage_enabled:
             cls._finalize(
                 ctx,
@@ -550,6 +684,366 @@ class ValidationMixin(BaselineGateMixin, ValidationCleanupMixin, _ImplementStage
             file_map,
             changed,
         )
+
+    @classmethod
+    def _run_stray_file_gate(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        summary: str,
+        ref_files: list[str] | None,
+        file_map: set[str] | None,
+        spec: str,
+        target: str,
+        out_of_scope: list[str],
+        current_feedback: str | None,
+    ) -> _ScopeGuardrailResult | None:
+        """Deterministically reject added files nothing in the ticket asked for.
+
+        The scope guardrail judges changed files against the ticket's
+        file_map and can bless an out-of-scope file via LLM scope-triage
+        EXPAND, and skips entirely when the file_map is empty — neither
+        catches the implementer's own runtime state leaking into the tree
+        and then into the PR diff (robotsix-website PR #232 shipped an
+        accidental root-level file named ``none`` with the implementer's
+        summary/memory JSON).  This gate runs before any LLM and is fully
+        deterministic: every file the branch ADDS must be covered by the
+        ticket scope (the caller's already-folded ``file_map`` — directory
+        prefixes included — plus spec citations) or the
+        generated-artifact allowlist.
+
+        Handling of a stray:
+
+        - a file matching the mill-state signature (a root-level odd name
+          such as ``none``, or content carrying the implement JSON
+          envelope — the envelope check runs across the added set OUTSIDE
+          the ticket scope, so a path-based allowlist entry cannot shield
+          it, while a file the scope covers is never deleted: its
+          envelope-like content is legitimate work quoting those generic
+          keys) is deleted from the working tree/index and re-verified: it
+          is mill state, never the ticket's work, and the deletion lands
+          in this pass's finalize commit;
+        - any other stray blocks the ticket for human review (resumable
+          BLOCKED) — never delivered, never silently reverted.
+
+        ``out_of_scope`` is filtered in place: paths the gate deleted are
+        removed from it so the downstream flood guard / scope-triage never
+        see a file that no longer exists.  Returns ``None`` to continue,
+        or a guardrail result that must be returned immediately.
+        """
+        added = cls._collect_added_files(repo_dir, target)
+        if not added:
+            return None
+
+        allowed = set(file_map or ())
+        dir_prefixes = tuple(e for e in allowed if e.endswith("/"))
+
+        def _is_scope_covered(path: str) -> bool:
+            # The ticket scope: the caller's already-folded file_map
+            # (directory prefixes included) plus spec citations.  These
+            # files are the ticket's actual deliverable — the envelope
+            # backstop below must never delete them (see its comment).
+            if path in allowed or path.startswith(dir_prefixes or ("\0",)):
+                return True
+            return _spec_names_path(spec, path) or _spec_command_implies_path(
+                spec, path
+            )
+
+        def _is_allowed(path: str) -> bool:
+            if _is_scope_covered(path):
+                return True
+            # Only the generated-artifact allowlist remains: an allowlisted
+            # file (e.g. a lockfile) created by a pass that the spec never
+            # cited is fine on NAME alone — but see the envelope backstop.
+            return path.rsplit("/", 1)[-1] in _STRAY_FILE_GENERATED_ARTIFACTS
+
+        # Vendored-dependency install dirs are auto-excluded by the scope
+        # guardrail before this gate runs; they stay on disk (untracked)
+        # and must not count as strays here either.
+        vendored = set(_vendored_dep_roots(repo_dir, added, target))
+
+        strays = [
+            f
+            for f in added
+            if f not in vendored
+            and not _is_allowed(f)
+            and not cls._is_cleanup_owned_file(repo_dir, f)
+        ]
+
+        # Backstop sweep over the added set: a file whose content carries
+        # the implement envelope is deleted even when a generated-artifact
+        # allowlist entry (or nothing at all) covered it.  Scope-covered
+        # files (file_map + spec citations) are EXCLUDED from this sweep:
+        # the gate runs before any scope-triage LLM, so a scope-covered
+        # file can never have been leak-blessed — its envelope-like content
+        # is genuine work merely quoting those generic keys (a conversation
+        # schema, a doc describing the mill's own envelope), and deleting
+        # it would silently drop a real deliverable.  An allowlisted file
+        # named like a generated artifact is a different matter: the pass
+        # never cited it, so envelope-carrying content there IS the leak.
+        envelope_hits = [
+            f
+            for f in added
+            if not _is_scope_covered(f)
+            and cls._file_matches_mill_state_envelope(repo_dir, f)
+        ]
+        to_delete = sorted(
+            set(envelope_hits)
+            | {f for f in strays if cls._is_root_odd_named(repo_dir, f)}
+        )
+        blocked = [f for f in strays if f not in to_delete]
+        if not to_delete and not blocked:
+            return None
+
+        removed: list[str] = []
+        for p in to_delete:
+            if cls._delete_stray(repo_dir, p):
+                removed.append(p)
+            else:
+                log.error("%s: stray-file gate could not delete %s", ticket.id, p)
+        if removed:
+            ctx.service.add_step_event(
+                ticket.id,
+                f"stray-file gate: deleted {len(removed)} mill workflow-state "
+                "file(s) leaked into the working tree: "
+                + ", ".join(f"`{p}`" for p in removed),
+            )
+            log.warning(
+                "%s: stray-file gate deleted %d mill workflow-state file(s): %s",
+                ticket.id,
+                len(removed),
+                ", ".join(sorted(removed)),
+            )
+        # Re-verify: a state file that survived deletion blocks for review.
+        leftovers = [p for p in to_delete if p not in removed]
+        if leftovers:
+            return cls._stray_block(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                summary,
+                ref_files,
+                "stray-file gate: could not remove mill workflow-state "
+                "file(s) from the working tree: "
+                + ", ".join(f"`{p}`" for p in leftovers)
+                + " — blocking for human review",
+            )
+
+        # The deleted paths are no longer part of the diff: drop them from
+        # out_of_scope so the downstream flood guard / scope-triage only
+        # see files that still exist.
+        deleted_set = set(to_delete)
+        out_of_scope[:] = [f for f in out_of_scope if f not in deleted_set]
+
+        if blocked:
+            sample = sorted(blocked)[:_FLOOD_SAMPLE_SIZE]
+            sample_str = ", ".join(f"`{p}`" for p in sample)
+            if len(blocked) > len(sample):
+                sample_str += f", … (+{len(blocked) - len(sample)} more)"
+            return cls._stray_block(
+                ctx,
+                ticket,
+                repo_dir,
+                branch,
+                summary,
+                ref_files,
+                f"stray-file gate: {len(blocked)} file(s) added by this branch "
+                "are in neither the ticket scope nor the generated-artifact "
+                f"allowlist: {sample_str}.  Blocking for human review — fold "
+                "them into the ticket scope or delete them.",
+            )
+        return None
+
+    @classmethod
+    def _stray_block(
+        cls,
+        ctx: StageContext,
+        ticket: Ticket,
+        repo_dir: Path,
+        branch: str,
+        summary: str,
+        ref_files: list[str] | None,
+        message: str,
+    ) -> _ScopeGuardrailResult:
+        """Finalize (ok=False, WIP commit) and return the gate's BLOCK."""
+        cls._finalize(
+            ctx,
+            ticket,
+            repo_dir,
+            branch,
+            message,
+            ok=False,
+            reference_files=ref_files,
+            extra_roots=None,
+        )
+        return _ScopeGuardrailResult(
+            action="return",
+            outcome=Outcome(State.BLOCKED, message),
+        )
+
+    @classmethod
+    def _collect_added_files(cls, repo_dir: Path, target: str) -> list[str]:
+        """Every path the branch ADDS relative to its merge base, on disk.
+
+        Union of (order-preserving, deduplicated):
+
+        - ``git diff --name-status --diff-filter=A origin/<target>...HEAD``
+          (THREE-dot, vs the merge base) — the ticket's canonical
+          base-vs-HEAD added set.  Only paths still present on disk count:
+          the deterministic cleanup layers unlink artifacts before this
+          gate runs, and a path already gone from the working tree is
+          being cleaned, not leaked;
+        - ``git diff --name-status --diff-filter=A HEAD`` — staged /
+          unstaged additions not yet committed by a prior finalize;
+        - ``git ls-files --others --exclude-standard`` — untracked new
+          files honouring .gitignore.
+        """
+        added: list[str] = []
+        seen: set[str] = set()
+
+        def _collect(name_status: str) -> None:
+            for line in name_status.split("\n"):
+                parts = line.split("\t")
+                if len(parts) >= 2 and parts[0].startswith("A") and parts[-1]:
+                    p = parts[-1]
+                    if p not in seen and (repo_dir / p).is_file():
+                        seen.add(p)
+                        added.append(p)
+
+        for args in (
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "diff",
+                "--name-status",
+                "--diff-filter=A",
+                f"origin/{target}...HEAD",
+            ],
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "diff",
+                "--name-status",
+                "--diff-filter=A",
+                "HEAD",
+            ],
+        ):
+            try:
+                out = subprocess.run(
+                    args, capture_output=True, text=True, check=False
+                ).stdout
+            except OSError:
+                out = ""
+            _collect(out)
+        try:
+            untracked = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "ls-files",
+                    "--others",
+                    "--exclude-standard",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            ).stdout
+        except OSError:
+            untracked = ""
+        for line in untracked.split("\n"):
+            if line and line not in seen:
+                seen.add(line)
+                added.append(line)
+        return added
+
+    @classmethod
+    def _file_matches_mill_state_envelope(cls, repo_dir: Path, path: str) -> bool:
+        """True when *path*'s content carries the implement state envelope.
+
+        Reads at most :data:`_STRAY_CONTENT_SCAN_MAX_BYTES` of a file and
+        counts how many of the implement envelope's JSON keys appear as
+        quoted strings; :data:`_MIN_ENVELOPE_KEY_MATCHES` or more is the
+        state-blob signature.  Binary / oversized / missing files cannot
+        match.
+        """
+        file_path = repo_dir / path
+        try:
+            if not file_path.is_file():
+                return False
+            if file_path.stat().st_size > _STRAY_CONTENT_SCAN_MAX_BYTES:
+                return False
+            head = file_path.read_text(encoding="utf-8", errors="replace")[
+                :_STRAY_CONTENT_SCAN_MAX_BYTES
+            ]
+        except OSError:
+            return False
+        matches = sum(1 for key in _IMPLEMENT_STATE_ENVELOPE_KEYS if f'"{key}"' in head)
+        return matches >= _MIN_ENVELOPE_KEY_MATCHES
+
+    @classmethod
+    def _is_root_odd_named(cls, repo_dir: Path, path: str) -> bool:
+        """True when *path* is a root-level file with a known state-blob name
+        (``none``) and is small enough to BE a state blob.
+        """
+        if "/" in path or path.rsplit("/", 1)[-1] not in _STRAY_ROOT_ODD_NAMES:
+            return False
+        try:
+            return (repo_dir / path).stat().st_size <= _STRAY_CONTENT_SCAN_MAX_BYTES
+        except OSError:
+            return False
+
+    @classmethod
+    def _is_cleanup_owned_file(cls, repo_dir: Path, path: str) -> bool:
+        """True when *path* belongs to a deterministic cleanup category.
+
+        These are handled (removed / reverted / excluded) by the scope
+        guardrail's cleanup layers, so the stray gate must not re-flag
+        them: binary artifacts, repo scaffolding configs, and vendored-dep
+        install dirs.  Cheap signals only (extension + null-byte sniff) —
+        this runs before the flood guard, so a per-file ``git diff
+        --numstat`` for a build-artifact flood would be prohibitively slow.
+        """
+        name = path.rsplit("/", 1)[-1]
+        if name in _STANDARD_CONFIG_FILES:
+            return True
+        if Path(path).suffix.lower() in BINARY_ARTIFACT_EXTENSIONS:
+            return True
+        try:
+            with (repo_dir / path).open("rb") as fh:
+                return b"\x00" in fh.read(8192)
+        except OSError:
+            return False
+
+    @classmethod
+    def _delete_stray(cls, repo_dir: Path, path: str) -> bool:
+        """Remove *path* from the working tree and index; True on success.
+
+        A tracked/indexed file is removed with ``git rm -f`` (also stages
+        the deletion so this pass's finalize commit drops it from the
+        branch); a purely untracked file is simply unlinked.
+        """
+        tracked = subprocess.run(
+            ["git", "-C", str(repo_dir), "ls-files", "--error-unmatch", "--", path],
+            capture_output=True,
+        )
+        if tracked.returncode == 0:
+            proc = subprocess.run(
+                ["git", "-C", str(repo_dir), "rm", "-f", "--", path],
+                capture_output=True,
+                text=True,
+            )
+            return proc.returncode == 0
+        try:
+            (repo_dir / path).unlink(missing_ok=True)
+            return True
+        except OSError:
+            return False
 
     @classmethod
     def _guard_repo_settings_file(
