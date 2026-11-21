@@ -155,6 +155,52 @@ def test_stray_file_gate_deletes_mill_state_none_and_proceeds(ctx_factory, tmp_p
     assert any("stray-file gate" in n and "`none`" in n for n in notes)
 
 
+def test_stray_file_gate_envelope_hit_spares_scope_covered_file(ctx_factory, tmp_path):
+    """The envelope backstop must NOT delete a file the ticket scope
+    covers: such a file is legitimate work whose content merely quotes the
+    envelope's generic keys (a chat/conversation schema, a doc describing
+    the mill's own envelope).  Since the gate runs BEFORE any scope-triage
+    LLM, a scope-covered file can never have been leak-blessed — deleting
+    it would silently drop a real deliverable.  The gate proceeds and the
+    file survives."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "chat/schema.py")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    (repo / "chat").mkdir()
+    (repo / "chat" / "schema.py").write_text(
+        "# Conversation payload schema — field names collide with the\n"
+        "# mill's implement envelope keys but this is real repo work.\n"
+        "SCHEMA = {\n"
+        '    "summary": "the chat summary",\n'
+        '    "new_messages": ["a"],\n'
+        '    "conversation_state": "open",\n'
+        '    "reference_files": ["chat/threads/1.json"],\n'
+        "}\n"
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "wip in-scope schema")
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"chat/schema.py"},
+        settings=ctx.settings,
+        spec="add a chat/schema.py conversation payload schema",
+        current_feedback=None,
+    )
+
+    assert result.action == "skip_iteration"
+    assert (repo / "chat" / "schema.py").exists()
+
+
 def test_stray_file_gate_envelope_hit_ignores_allowlist(ctx_factory, tmp_path):
     """The envelope backstop fires even when a path-based allowlist entry
     would have covered the file: an added ``uv.lock`` whose content carries

@@ -718,11 +718,13 @@ class ValidationMixin(BaselineGateMixin, ValidationCleanupMixin, _ImplementStage
 
         - a file matching the mill-state signature (a root-level odd name
           such as ``none``, or content carrying the implement JSON
-          envelope — the envelope check runs on the WHOLE added set so a
-          path-based allowlist entry cannot shield it) is deleted from the
-          working tree/index and re-verified: it is mill state, never the
-          ticket's work, and the deletion lands in this pass's finalize
-          commit;
+          envelope — the envelope check runs across the added set OUTSIDE
+          the ticket scope, so a path-based allowlist entry cannot shield
+          it, while a file the scope covers is never deleted: its
+          envelope-like content is legitimate work quoting those generic
+          keys) is deleted from the working tree/index and re-verified: it
+          is mill state, never the ticket's work, and the deletion lands
+          in this pass's finalize commit;
         - any other stray blocks the ticket for human review (resumable
           BLOCKED) — never delivered, never silently reverted.
 
@@ -738,11 +740,23 @@ class ValidationMixin(BaselineGateMixin, ValidationCleanupMixin, _ImplementStage
         allowed = set(file_map or ())
         dir_prefixes = tuple(e for e in allowed if e.endswith("/"))
 
-        def _is_allowed(path: str) -> bool:
+        def _is_scope_covered(path: str) -> bool:
+            # The ticket scope: the caller's already-folded file_map
+            # (directory prefixes included) plus spec citations.  These
+            # files are the ticket's actual deliverable — the envelope
+            # backstop below must never delete them (see its comment).
             if path in allowed or path.startswith(dir_prefixes or ("\0",)):
                 return True
-            if _spec_names_path(spec, path) or _spec_command_implies_path(spec, path):
+            return _spec_names_path(spec, path) or _spec_command_implies_path(
+                spec, path
+            )
+
+        def _is_allowed(path: str) -> bool:
+            if _is_scope_covered(path):
                 return True
+            # Only the generated-artifact allowlist remains: an allowlisted
+            # file (e.g. a lockfile) created by a pass that the spec never
+            # cited is fine on NAME alone — but see the envelope backstop.
             return path.rsplit("/", 1)[-1] in _STRAY_FILE_GENERATED_ARTIFACTS
 
         # Vendored-dependency install dirs are auto-excluded by the scope
@@ -758,11 +772,22 @@ class ValidationMixin(BaselineGateMixin, ValidationCleanupMixin, _ImplementStage
             and not cls._is_cleanup_owned_file(repo_dir, f)
         ]
 
-        # Backstop sweep over the WHOLE added set: a file whose content
-        # carries the implement envelope is deleted even when the
-        # scope/allowlist union would have covered it.
+        # Backstop sweep over the added set: a file whose content carries
+        # the implement envelope is deleted even when a generated-artifact
+        # allowlist entry (or nothing at all) covered it.  Scope-covered
+        # files (file_map + spec citations) are EXCLUDED from this sweep:
+        # the gate runs before any scope-triage LLM, so a scope-covered
+        # file can never have been leak-blessed — its envelope-like content
+        # is genuine work merely quoting those generic keys (a conversation
+        # schema, a doc describing the mill's own envelope), and deleting
+        # it would silently drop a real deliverable.  An allowlisted file
+        # named like a generated artifact is a different matter: the pass
+        # never cited it, so envelope-carrying content there IS the leak.
         envelope_hits = [
-            f for f in added if cls._file_matches_mill_state_envelope(repo_dir, f)
+            f
+            for f in added
+            if not _is_scope_covered(f)
+            and cls._file_matches_mill_state_envelope(repo_dir, f)
         ]
         to_delete = sorted(
             set(envelope_hits)
