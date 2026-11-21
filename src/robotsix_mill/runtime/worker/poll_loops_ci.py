@@ -296,6 +296,63 @@ def _ci_log_body_parts(
     return parts
 
 
+# Upstream Dependabot-internal failure signature. A scheduled Dependabot
+# update run (``dynamic/dependabot/*`` workflow, e.g. ``docker in /. -
+# Update #…``) can crash inside Dependabot's own Ruby code: the
+# ``dependabot-updater`` operation frames plus ``sorbet-runtime``
+# type-validation frames (robotsix-auto-mail 2026-09-29, 2026-11-17 — stack
+# entirely in ``dependabot-updater/lib/dependabot/updater/operations/
+# update_all_versions.rb`` + ``sorbet-runtime/…/call_validation_2_7.rb``).
+# That is upstream Dependabot infrastructure, not a defect in this repo's
+# code or CI: no repo change can fix it, and refine short-circuits the
+# resulting ticket to ``human_issue_approval``. The monitor classifies such
+# runs as non-actionable and does NOT file a ticket.
+_DEPENDABOT_WF_PATH_RE = re.compile(r"^dynamic/dependabot/")
+_DEPENDABOT_STEP_NAME = "Run Dependabot"
+# Upstream gem directory markers. The ``sorbet-runtime`` frames resolve into a
+# versioned gem path (``.../sorbet-runtime-0.5.11903/lib/types/...``), so the
+# marker tolerates an optional ``-<version>/`` segment before the slash.
+_DEPENDABOT_UPDATER_RE = re.compile(r"dependabot-updater(?:-[0-9][^/]*)?/")
+_SORBET_RUNTIME_RE = re.compile(r"sorbet-runtime(?:-[0-9][^/]*)?/")
+# Ruby backtrace frames: ``/abs/path/to/file.rb:123:in `method'`` (a
+# ``from `` / ``N: `` prefix is tolerated for sorbet's ``bind_call`` trampolines).
+_RUBY_FRAME_RE = re.compile(
+    r"^\s*(?:from\s+)?(?:[0-9]+:\s*)?(/\S+\.rb):\d+(?::in\s+`[^']+')?",
+    re.MULTILINE,
+)
+
+
+def _is_dependabot_internal_failure(wf_path: str, logs: str) -> bool:
+    """True when run *logs* match the upstream-Dependabot crash signature.
+
+    Classified non-actionable only when ALL of:
+      * the workflow path is ``dynamic/dependabot/*`` (Dependabot's own
+        scheduled update workflow, not a PR-gate workflow);
+      * every failed job's failing step is ``Run Dependabot``;
+      * every Ruby backtrace frame in the log resolves to an upstream path
+        (``dependabot-updater/…`` or ``sorbet-runtime/…``), with at least
+        one frame inside ``dependabot-updater`` code.
+
+    Any deviation (a different workflow path, a different failing step, a
+    frame outside the upstream path families, or no recognizable backtrace)
+    keeps the run actionable — a repo defect surfacing through the
+    Dependabot step must still file a ticket.
+    """
+    if not _DEPENDABOT_WF_PATH_RE.match(wf_path):
+        return False
+    headers = list(_JOB_SECTION_HEADER_RE.finditer(logs))
+    if not headers:
+        return False
+    if any((h.group(2) or "").strip() != _DEPENDABOT_STEP_NAME for h in headers):
+        return False
+    frames = [m.group(1) for m in _RUBY_FRAME_RE.finditer(logs)]
+    if not any(_DEPENDABOT_UPDATER_RE.search(f) for f in frames):
+        return False
+    return all(
+        _DEPENDABOT_UPDATER_RE.search(f) or _SORBET_RUNTIME_RE.search(f) for f in frames
+    )
+
+
 class PollLoopsCiMixin(_WorkerBase):
     """CI-monitor poll loop and its helpers, mixed into ``PollLoopsMixin``."""
 
@@ -951,6 +1008,25 @@ class PollLoopsCiMixin(_WorkerBase):
                 continue
             if deferred_flag:
                 # Do NOT mark seen: the next poll retries this commit.
+                continue
+
+            # Upstream-Dependabot crash guard: a scheduled Dependabot update
+            # run (``dynamic/dependabot/*``) whose ``Run Dependabot`` step
+            # crashed entirely inside upstream Ruby frames
+            # (dependabot-updater + sorbet-runtime) is Dependabot
+            # infrastructure, not a repo/CI defect. Nothing here can fix it,
+            # and refine short-circuits the resulting ticket to
+            # human_issue_approval — so do not file it.
+            if logs and _is_dependabot_internal_failure(wf_path, logs):
+                log.info(
+                    "CI monitor (%s): skip %s (run %s) — upstream "
+                    "Dependabot-internal failure (path %s)",
+                    repo_label,
+                    wf_name,
+                    run_id_val,
+                    wf_path,
+                )
+                seen[key] = now
                 continue
 
             # 5. Build draft body.

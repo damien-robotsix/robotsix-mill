@@ -21,6 +21,7 @@ from robotsix_mill.core.models import Comment, SourceKind, Ticket
 from robotsix_mill.core.service import TicketService
 from robotsix_mill.core.states import State
 from robotsix_mill.runtime.worker import Worker
+from robotsix_mill.runtime.worker.poll_loops_ci import _is_dependabot_internal_failure
 from robotsix_mill.scm.vcs.git_ops import PostPushResult
 from robotsix_mill.stages import StageContext
 
@@ -550,6 +551,192 @@ def test_includes_job_logs_in_draft_body(tmp_path, monkeypatch):
     assert len(ci_tickets) == 1
     desc = ctx.service.workspace(ci_tickets[0]).read_description() or ""
     assert "Step 5/10: ERROR: build failed" in desc
+
+
+def _run_monitor_cycle(ctx, monkeypatch):
+    """Run ONE CI-monitor poll cycle against *ctx* (see the other tests)."""
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    monkeypatch.setattr(worker, "_initial_delay", lambda kind, interval: 0.0)
+    loop = asyncio.new_event_loop()
+
+    async def _run_one_cycle():
+        async def _fast_sleep(s):
+            if s >= 1:
+                raise asyncio.CancelledError()  # stop after first cycle
+
+        monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker._ci_monitor_poll_loop()
+
+    loop.run_until_complete(_run_one_cycle())
+    loop.close()
+
+
+# A scheduled Dependabot update run crashed inside Dependabot's own Ruby
+# code: ``dependabot-updater`` operation frames + ``sorbet-runtime``
+# validation trampolines, all in the ``Run Dependabot`` step of the
+# ``dynamic/dependabot/*`` workflow.
+_DEPENDABOT_UPSTREAM_LOGS = (
+    "### Job: Dependabot (id=123) — failing step: Run Dependabot\n"
+    "Job URL: http://job/123\n"
+    "2026-11-17T00:13:00Z  INFO Update job 43984824142 started\n"
+    "2026-11-17T00:13:42Z ERROR update_all_versions.rb:232:in `block in run'\n"
+    "/opt/dependabot-updater/lib/dependabot/updater/operations/"
+    "update_all_versions.rb:232:in `block in run'\n"
+    "/opt/dependabot-updater/lib/dependabot/updater/operations/"
+    "update_all_versions.rb:205:in `each'\n"
+    "/opt/dependabot-updater/lib/dependabot/updater/operations/"
+    "update_all_versions.rb:205:in `run'\n"
+    "/usr/local/bundle/gems/sorbet-runtime-0.5.11903/lib/types/private/methods/"
+    "call_validation_2_7.rb:75:in `bind_call'\n"
+    "##[error]Process completed with exit code 1.\n"
+)
+
+
+def test_dependabot_internal_failure_not_filed(tmp_path, monkeypatch):
+    """A ``dynamic/dependabot/*`` run whose ``Run Dependabot`` step crashed
+    entirely inside upstream frames (dependabot-updater + sorbet-runtime) is
+    Dependabot infrastructure — no ticket is filed (refine would otherwise
+    short-circuit it to human_issue_approval)."""
+    ctx = _ctx(
+        tmp_path,
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 1,
+                "name": "docker in /. - Update #17",
+                "path": "dynamic/dependabot/dependabot-updates",
+                "workflow_id": 200,
+                "head_sha": "abc",
+                "conclusion": "failure",
+                "html_url": "http://run/1",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+        logs=_DEPENDABOT_UPSTREAM_LOGS,
+    )
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+    _run_monitor_cycle(ctx, monkeypatch)
+
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert ci_tickets == []
+    # The commit is marked seen so a later poll does not re-fetch/re-file it.
+    state = json.loads(state_path.read_text("utf-8"))
+    assert "200:abc" in state["seen"]
+
+
+def test_dependabot_workflow_foreign_frame_still_filed(tmp_path, monkeypatch):
+    """A ``dynamic/dependabot/*`` run whose backtrace escapes the upstream
+    path families (e.g. a bundler frame — a manifest-level defect Dependabot
+    cannot work around) keeps the run actionable: the ticket is filed."""
+    ctx = _ctx(
+        tmp_path,
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    logs = _DEPENDABOT_UPSTREAM_LOGS.replace(
+        "##[error]Process completed with exit code 1.\n",
+        "/usr/local/bundle/gems/bundler-2.3.7/lib/bundler/spec_set.rb:40:in "
+        "`materialize'\n##[error]Process completed with exit code 1.\n",
+    )
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 1,
+                "name": "docker in /. - Update #17",
+                "path": "dynamic/dependabot/dependabot-updates",
+                "workflow_id": 200,
+                "head_sha": "abc",
+                "conclusion": "failure",
+                "html_url": "http://run/1",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+        logs=logs,
+    )
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+    _run_monitor_cycle(ctx, monkeypatch)
+
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 1
+
+
+def test_dependabot_workflow_other_step_still_filed(tmp_path, monkeypatch):
+    """A ``dynamic/dependabot/*`` run whose failing step is not
+    ``Run Dependabot`` is not the upstream-crash signature — filed."""
+    ctx = _ctx(
+        tmp_path,
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+    )
+    logs = _DEPENDABOT_UPSTREAM_LOGS.replace(
+        "— failing step: Run Dependabot", "— failing step: Checkout code"
+    )
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            {
+                "id": 1,
+                "name": "docker in /. - Update #17",
+                "path": "dynamic/dependabot/dependabot-updates",
+                "workflow_id": 200,
+                "head_sha": "abc",
+                "conclusion": "failure",
+                "html_url": "http://run/1",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ],
+        logs=logs,
+    )
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    if state_path.exists():
+        state_path.unlink()
+    _run_monitor_cycle(ctx, monkeypatch)
+
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 1
+
+
+def test_is_dependabot_internal_failure_signature():
+    assert _is_dependabot_internal_failure(
+        "dynamic/dependabot/dependabot-updates", _DEPENDABOT_UPSTREAM_LOGS
+    )
+
+
+def test_is_dependabot_internal_failure_not_dependabot_path():
+    assert not _is_dependabot_internal_failure(
+        ".github/workflows/ci.yml", _DEPENDABOT_UPSTREAM_LOGS
+    )
+
+
+def test_is_dependabot_internal_failure_requires_job_headers():
+    # No ``### Job:`` headers (no failing-step names) → cannot confirm.
+    body = _DEPENDABOT_UPSTREAM_LOGS.split("\n", 2)[2]
+    assert not _is_dependabot_internal_failure("dynamic/dependabot/x", body)
+
+
+def test_is_dependabot_internal_failure_requires_updater_frame():
+    # Only sorbet-runtime frames, no dependabot-updater frame → not the crash.
+    logs = _DEPENDABOT_UPSTREAM_LOGS.replace(
+        "/opt/dependabot-updater/lib/dependabot/updater/operations/", "/opt/gems/x/"
+    )
+    assert not _is_dependabot_internal_failure("dynamic/dependabot/x", logs)
 
 
 _AUDIT_LOGS = (

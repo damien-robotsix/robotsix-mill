@@ -100,13 +100,16 @@ def _ci_ticket(
     state=State.DRAFT,
     has_branch=False,
     pr_url=None,
+    path=".github/workflows/ci.yml",
 ):
     """Create a ci ticket; *has_branch* writes ``row.branch`` the way implement
     does.  *pr_url* registers an OPEN PR for that branch on the fake forge
     (the runner learns about PRs via ``forge.pr_status``, never a row field).
+    *path* is the failing workflow file/path written into the ``**Path:**``
+    body marker.
     """
     body = (
-        f"**Workflow:** {wf}\n**Path:** .github/workflows/ci.yml\n"
+        f"**Workflow:** {wf}\n**Path:** {path}\n"
         f"**Branch:** {branch}\n**Run:** [{run_id}](https://x/run/{run_id})\n"
         f"**Commit:** `{f_sha}`\n**Created:** 2026-09-01T00:00:00Z\n\nlogs..."
     )
@@ -269,6 +272,82 @@ def test_single_green_same_commit_not_closed(tmp_path, monkeypatch):
         ],
     )
     t = _ci_ticket(service, settings, f_sha="abc123")
+
+    result = _run(settings)
+
+    assert result["closed"] == 0
+    assert service.get(t.id).state is State.DRAFT
+
+
+def test_dependabot_workflow_single_green_same_head_closes(tmp_path, monkeypatch):
+    """An upstream ``dynamic/dependabot/*`` ticket closes on the NEXT green
+    run of that workflow — one first-attempt green on the same head suffices.
+    (The generic rule needs two greens; a repeating upstream Dependabot crash
+    would otherwise park the ticket at human_issue_approval.)"""
+    settings, service = _prepare(
+        tmp_path,
+        monkeypatch,
+        runs=[
+            {
+                "name": "docker in /. - Update #17",
+                "head_sha": "abc123",
+                "conclusion": "success",
+                "id": 200,
+                "html_url": "https://x/run/200",
+                "created_at": "2026-09-02T02:00:00Z",
+            },
+            {
+                "name": "docker in /. - Update #17",
+                "head_sha": "abc123",
+                "conclusion": "failure",
+                "id": 100,
+                "html_url": "https://x/run/100",
+                "created_at": "2026-09-01T00:00:00Z",
+            },
+        ],
+    )
+    t = _ci_ticket(
+        service,
+        settings,
+        wf="docker in /. - Update #17",
+        f_sha="abc123",
+        path="dynamic/dependabot/dependabot-updates",
+        state=State.HUMAN_ISSUE_APPROVAL,
+    )
+
+    result = _run(settings)
+
+    assert result["closed"] == 1
+    fresh = service.get(t.id)
+    assert fresh.state is State.DONE
+    assert any("green" in (e.note or "") for e in service.history(t.id))
+
+
+def test_dependabot_workflow_still_red_not_closed(tmp_path, monkeypatch):
+    """A ``dynamic/dependabot/*`` ticket whose workflow stays red (no green
+    run at-or-after the failing commit) is NOT closed — the resolution signal
+    is a green run of the same workflow."""
+    settings, service = _prepare(
+        tmp_path,
+        monkeypatch,
+        runs=[
+            {
+                "name": "docker in /. - Update #17",
+                "head_sha": "abc123",
+                "conclusion": "failure",
+                "id": 100,
+                "html_url": "https://x/run/100",
+                "created_at": "2026-09-01T00:00:00Z",
+            },
+        ],
+    )
+    t = _ci_ticket(
+        service,
+        settings,
+        wf="docker in /. - Update #17",
+        f_sha="abc123",
+        path="dynamic/dependabot/dependabot-updates",
+    )
 
     result = _run(settings)
 
