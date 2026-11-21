@@ -16,6 +16,7 @@ import argparse
 import datetime
 import fcntl
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -289,13 +290,28 @@ def run(args: argparse.Namespace) -> int:
                         )
                         return 0
                     forced = True
-                    _log(
-                        log_path,
-                        f"mill still busy after {args.pre_build_wait}s, but "
-                        f"{deferrals} consecutive deferrals >= {args.max_deferrals} "
-                        f"— FORCING graceful deploy (stop_grace_period 30m drains "
-                        f"in-flight stages; draft refines re-run)",
-                    )
+                    grace_value, grace_secs = _compose_stop_grace_seconds(repo)
+                    if grace_secs is not None and grace_secs >= 1800:
+                        _log(
+                            log_path,
+                            f"mill still busy after {args.pre_build_wait}s, but "
+                            f"{deferrals} consecutive deferrals >= {args.max_deferrals} "
+                            f"— FORCING graceful deploy (compose stop_grace_period "
+                            f"{grace_value} >= 30m, so in-flight stages drain; "
+                            f"draft refines re-run)",
+                        )
+                    else:
+                        _log(
+                            log_path,
+                            f"mill still busy after {args.pre_build_wait}s, but "
+                            f"{deferrals} consecutive deferrals >= {args.max_deferrals} "
+                            f"— FORCING deploy — NOT graceful: compose "
+                            f"stop_grace_period={grace_value or '<missing>'} "
+                            f"(needs >= 30m, Settings.shutdown_grace_seconds "
+                            f"default 1800) — rotation will SIGKILL in-flight "
+                            f"stages before they drain (requeue_unfinished "
+                            f"re-runs them; draft refines re-run)",
+                        )
                 else:
                     _log(
                         log_path,
@@ -563,6 +579,71 @@ def _read_deferral_count(path: Path) -> int:
 
 def _write_deferral_count(path: Path, count: int) -> None:
     path.write_text(str(count), encoding="utf-8")
+
+
+# A forced redeploy only keeps in-flight stages alive while the container
+# manager honors an adequate termination grace.  ``docker compose up`` reads
+# ``stop_grace_period`` from the project's compose file; a manager default
+# (docker 10s, K8s 30s) SIGKILLs a busy mill mid-drain — the recurring
+# 'interrupted by process restart' noise.  These helpers let the force-deploy
+# branch verify the compose file it is about to ``up`` declares the grace the
+# worker drain depends on (Settings.shutdown_grace_seconds default 1800).
+# Stdlib-only: a line scan suffices because ``stop_grace_period`` is a
+# service-level scalar key.
+_COMPOSE_FILES: tuple[str, ...] = ("docker-compose.yml", "compose.yaml")
+
+
+def _parse_compose_duration(value: str) -> int | None:
+    """Parse a compose duration token (``30m``, ``1800s``, ``1h30m``) to
+    whole seconds; compose also accepts bare numbers as seconds and ``0``
+    (no grace).  Returns ``None`` when *value* is not a valid duration.
+    """
+    value = value.strip()
+    if not value:
+        return None
+    if value == "0":
+        return 0
+    total = 0.0
+    pos = 0
+    for m in re.finditer(r"(\d+(?:\.\d+)?)(us|ms|s|m|h)?", value):
+        if m.start() != pos:
+            return None
+        total += (
+            float(m.group(1))
+            * {
+                "us": 1e-6,
+                "ms": 1e-3,
+                "s": 1,
+                "m": 60,
+                "h": 3600,
+            }[m.group(2) or "s"]
+        )
+        pos = m.end()
+    if pos != len(value):
+        return None
+    return int(total)
+
+
+def _compose_stop_grace_seconds(repo: Path) -> tuple[str | None, int | None]:
+    """Return ``(raw_value, seconds)`` of ``stop_grace_period`` in the
+    compose file ``docker compose up`` will read from *repo* (its cwd),
+    i.e. ``<repo>/docker-compose.yml`` (or ``compose.yaml``).
+
+    ``(None, None)`` when the key or file is missing; ``(raw, None)`` when
+    the value is present but unparseable.
+    """
+    for name in _COMPOSE_FILES:
+        candidate = repo / name
+        if candidate.exists():
+            break
+    else:
+        return None, None
+    for line in candidate.read_text(encoding="utf-8").splitlines():
+        m = re.match(r"^\s*stop_grace_period:\s*(\S+)", line)
+        if m:
+            raw = m.group(1)
+            return raw, _parse_compose_duration(raw)
+    return None, None
 
 
 def _idle_check(cmd: str, timeout: int = 15) -> bool:
