@@ -9,6 +9,7 @@ Agent modules are NOT imported here — the caller provides a callable.
 from __future__ import annotations
 
 import logging
+import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -791,6 +792,74 @@ def _source_module_exists_for_gap(repo_dir: Path, title: str) -> bool:
     return False
 
 
+# --- module_curator premise check: move-destination classification -------
+#
+# Reorg / consolidate drafts frame the proposed layout as a mechanical
+# move (`git mv <src> <dest>`, or an `old -> new` arrow), so the
+# DESTINATION paths are expected to be absent on HEAD — flagging them as
+# "no longer exists on HEAD" is a deterministic false positive. The path
+# token shapes mirror `_PATH_TOKEN_RE` in dedup.py; over-matching here is
+# harmless because a destination only matters when it is also one of the
+# paths the draft's source check inspects.
+_GIT_MV_RE = re.compile(
+    r"\bgit mv\s+"
+    r"([\w.+-]+(?:/[\w.+-]+)*\.[A-Za-z][A-Za-z0-9]{0,6})"
+    r"\s+"
+    r"([\w.+-]+(?:/[\w.+-]+)*\.[A-Za-z][A-Za-z0-9]{0,6})\b",
+    re.IGNORECASE,
+)
+_ARROW_MOVE_RE = re.compile(
+    r"([\w.+-]+(?:/[\w.+-]+)*\.[A-Za-z][A-Za-z0-9]{0,6})"
+    r"\s*(?:->|=>|→)\s*"
+    r"([\w.+-]+(?:/[\w.+-]+)*\.[A-Za-z][A-Za-z0-9]{0,6})\b"
+)
+# Prose markers that frame the adjacent paths as "expected to be absent".
+_DESTINATION_MARKER_RE = re.compile(
+    r"(?:proposed|destination|expected to be absent|to be created|will be created|new directory)",
+    re.IGNORECASE,
+)
+
+
+def _extract_move_destinations(text: str) -> set[str]:
+    """Return path tokens the draft itself frames as move destinations.
+
+    These paths are expected to be absent on HEAD (the target of a
+    ``git mv``), so the stale-path advisory must never flag them.
+    """
+    destinations: set[str] = set()
+    # Lines whose moves are captured precisely by the git mv / arrow
+    # regexes. Their marker-based fallback is skipped so the SOURCE token
+    # on the same line is never mis-classified as a destination.
+    precise_lines: set[int] = set()
+
+    for m in _GIT_MV_RE.finditer(text):
+        destinations.add(m.group(2))
+        precise_lines.add(text.count("\n", 0, m.start()))
+    for m in _ARROW_MOVE_RE.finditer(text):
+        destinations.add(m.group(2))
+        precise_lines.add(text.count("\n", 0, m.start()))
+    for lineno, line in enumerate(text.splitlines()):
+        if lineno in precise_lines:
+            continue
+        if _DESTINATION_MARKER_RE.search(line):
+            destinations.update(_extract_paths(line))
+    return destinations
+
+
+def _any_file_with_basename(repo_dir: Path, basename: str) -> bool:
+    """True when any file under *repo_dir* (excluding VCS dirs) carries
+    this basename. Resolves bare-filename citations in a draft — e.g.
+    ``test_check_schema_freshness.py`` for the real
+    ``tests/.../test_check_schema_freshness.py`` — before the premise
+    check flags them as stale.
+    """
+    for _dirpath, dirnames, filenames in os.walk(repo_dir):
+        dirnames[:] = [d for d in dirnames if d not in (".git", "__pycache__")]
+        if basename in filenames:
+            return True
+    return False
+
+
 def _module_curator_premise_check(
     repo_dir: Path, title: str, body: str
 ) -> tuple[str, str] | None:
@@ -802,6 +871,12 @@ def _module_curator_premise_check(
 
     ``(repo_dir / rel_path).exists()`` IS the HEAD check: ``repo_dir`` is a
     fresh checkout of ``settings.forge_target_branch``.
+
+    The stale-path advisory only inspects claimed-SOURCE paths: paths the
+    draft itself frames as move destinations (``git mv`` / ``old -> new``
+    / "Proposed" / "expected to be absent") are expected to be absent and
+    are never flagged, and bare filenames are resolved against the whole
+    tree before flagging.
     """
     paths = _extract_paths(f"{title}\n{body}")
     title_lower = title.lower()
@@ -829,8 +904,20 @@ def _module_curator_premise_check(
         or re.match(r"^\s*cleanup module\s+", title_lower) is not None
     )
     if classify_shape:
+        destinations = _extract_move_destinations(f"{title}\n{body}")
         for path in paths:
-            if not (repo_dir / path).exists():
+            # Move destinations are expected to be absent on HEAD — never
+            # flag them as stale. The existence check runs only against
+            # the draft's claimed-SOURCE paths.
+            if path in destinations:
+                continue
+            if "/" not in path:
+                # Bare filename: resolve against the repo tree before
+                # flagging — the draft may cite only the basename (e.g.
+                # `test_x.py` for tests/.../test_x.py).
+                if not _any_file_with_basename(repo_dir, path):
+                    return ("advisory", f"path {path} no longer exists on HEAD")
+            elif not (repo_dir / path).exists():
                 return ("advisory", f"path {path} no longer exists on HEAD")
         # Already classified under an existing module's paths glob?
         try:
@@ -839,6 +926,8 @@ def _module_curator_premise_check(
                 data = yaml.safe_load(modules_file.read_text(encoding="utf-8"))
                 modules = data.get("modules", []) if isinstance(data, dict) else []
                 for path in paths:
+                    if path in destinations:
+                        continue
                     for mod in modules:
                         mod_id = mod.get("id", "")
                         for glob in mod.get("paths", []) or []:
