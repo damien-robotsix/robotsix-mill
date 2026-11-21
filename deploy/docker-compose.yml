@@ -24,7 +24,20 @@
 # NOT reproducible here): `init: true`, `stop_grace_period: 30m`,
 # `ulimits.nofile`, `cpus: 2`.  entrypoint.sh already raises the soft
 # nofile limit at start; the rest must be baked into the image or added to
-# a future contract version.  They are not required for a healthy deploy.
+# a future contract version.
+#
+# `stop_grace_period: 30m` is NOT optional for a graceful rotation: on
+# SIGTERM the worker drains in-flight passes for up to
+# Settings.shutdown_grace_seconds (default 1800, see
+# src/robotsix_mill/config/_settings_core.py) before marking a clean
+# shutdown, and requeues anything unfinished at next start.  A
+# container-manager default grace (docker 10s, K8s 30s) SIGKILLs the pass
+# mid-drain and the next start stamps it 'interrupted by process restart'
+# (RunRegistry._load) — the recurring restart-interruption noise.  Until a
+# future contract version models it, central-deploy MUST apply a matching
+# >=30m termination grace out-of-band (keep it in sync with
+# `shutdown_grace_seconds`).  `init: true`, `ulimits.nofile` and `cpus: 2`
+# are not required for a healthy deploy.
 # Memory limits ARE modelled since central-deploy 0.12.0 via the
 # `robotsix.deploy.mem-limit` / `memswap-limit` labels below.
 #

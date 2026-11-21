@@ -585,6 +585,83 @@ def test_deferral_counting(tmp_path: Path, monkeypatch) -> None:
     # Deferral file should be removed after success
     assert not deferral_file.exists()
     assert "FORCING" in log.read_text()
+    # The force-deploy log now reports whether the compose target actually
+    # declares a >=30m termination grace; this repo has no compose file.
+    assert "NOT graceful" in log.read_text()
+
+
+def test_force_deploy_graceful_when_compose_declares_30m(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Force-deploy logs 'graceful' only when the compose file `up` will read
+    declares stop_grace_period >= 30m (the worker drain's grace)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".env").write_text("SECRET=xyz")
+    (repo / "docker-compose.yml").write_text(
+        "services:\n  mill:\n    stop_grace_period: 30m\n"
+    )
+    state = tmp_path / "state"
+    state.mkdir()
+    log = state / "mill-autoupdate.log"
+    deferral_file = state / ".mill-autoupdate-deferrals"
+    deferral_file.write_text("3\n")
+    deployed = state / ".mill-autoupdate-deployed-sha"
+    deployed.write_text("old1111\n")
+
+    def fake_run(cmd, **kwargs):
+        if isinstance(cmd, list) and cmd[0] == "git":
+            cmd_str = " ".join(cmd)
+            if "status" in cmd_str:
+                return _cp(0, "")
+            if "rev-parse" in cmd_str and "origin/main" in cmd_str:
+                return _cp(0, "new4444\n")
+            if "rev-parse" in cmd_str and "--short" in cmd_str:
+                return _cp(0, "new4444\n")
+            if "fetch" in cmd_str:
+                return _cp(0)
+            if "diff" in cmd_str and ".env" in cmd_str:
+                return _cp(0, "")
+            if "merge" in cmd_str:
+                return _cp(0)
+            if "log" in cmd_str:
+                return _cp(0, "")
+        if isinstance(cmd, list) and cmd[0] == "docker" and "build" in " ".join(cmd):
+            return _cp(0)
+        if isinstance(cmd, list) and cmd[0] == "docker" and "up" in " ".join(cmd):
+            return _cp(0)
+        if isinstance(cmd, list) and cmd[0] == "getent":
+            return _cp(0, "docker:x:999:\n")
+        return _cp(0, "")
+
+    monkeypatch.setattr(au, "_idle_check", lambda cmd, timeout=15: False)
+    monkeypatch.setattr(au.time, "sleep", lambda s: None)
+    monkeypatch.setattr(au.subprocess, "run", fake_run)
+    _fake_flock(monkeypatch)
+    monkeypatch.setattr(au.os, "open", lambda *a, **kw: 3)
+    monkeypatch.setattr(au.os, "close", lambda fd: None)
+
+    rc = au.main(
+        [
+            "--repo",
+            str(repo),
+            "--state-dir",
+            str(state),
+            "--state-prefix",
+            "mill-autoupdate",
+            "--idle-check-cmd",
+            "false",
+            "--pre-build-wait",
+            "5",
+            "--poll-interval",
+            "1",
+            "--max-deferrals",
+            "4",
+        ]
+    )
+    assert rc == 0
+    assert "FORCING graceful deploy" in log.read_text()
+    assert "NOT graceful" not in log.read_text()
 
 
 def test_deferral_reset_on_success(tmp_path: Path, monkeypatch) -> None:
@@ -1245,3 +1322,54 @@ def test_diverged_branch_without_ensure_branch_skips(
     assert rc == 1
     assert not any(c[0] == "git" and "reset" in c for c in calls)
     assert not any(c[0] == "docker" and "build" in c for c in calls)
+
+
+# ---------------------------------------------------------------------------
+# Compose termination-grace verification (force-deploy)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_compose_duration() -> None:
+    """Compose duration tokens parse to whole seconds; junk is rejected."""
+    assert au._parse_compose_duration("30m") == 1800
+    assert au._parse_compose_duration("1800") == 1800
+    assert au._parse_compose_duration("1800s") == 1800
+    assert au._parse_compose_duration("0.5h") == 1800
+    assert au._parse_compose_duration("1h30m") == 5400
+    assert au._parse_compose_duration("1h30") == 3630
+    assert au._parse_compose_duration("  30m  ") == 1800
+    assert au._parse_compose_duration("0") == 0
+    assert au._parse_compose_duration("30x") is None
+    assert au._parse_compose_duration("abc") is None
+    assert au._parse_compose_duration("") is None
+
+
+def test_compose_stop_grace_seconds(tmp_path: Path) -> None:
+    """Extracts stop_grace_period from the compose file `up` would read."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    # No compose file at all
+    assert au._compose_stop_grace_seconds(repo) == (None, None)
+
+    # docker-compose.yml with the grace key
+    (repo / "docker-compose.yml").write_text(
+        "services:\n  mill:\n    stop_grace_period: 30m\n"
+    )
+    assert au._compose_stop_grace_seconds(repo) == ("30m", 1800)
+
+    # Key present but not a valid duration
+    (repo / "docker-compose.yml").write_text(
+        "services:\n  mill:\n    stop_grace_period: whenever\n"
+    )
+    assert au._compose_stop_grace_seconds(repo) == ("whenever", None)
+
+    # Key absent
+    (repo / "docker-compose.yml").write_text("services:\n  mill:\n    image: x\n")
+    assert au._compose_stop_grace_seconds(repo) == (None, None)
+
+    # compose.yaml fallback when docker-compose.yml is absent
+    (repo / "docker-compose.yml").unlink()
+    (repo / "compose.yaml").write_text(
+        "services:\n  mill:\n    stop_grace_period: 1h\n"
+    )
+    assert au._compose_stop_grace_seconds(repo) == ("1h", 3600)
