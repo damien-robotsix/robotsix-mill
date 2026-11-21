@@ -14,6 +14,12 @@ The tool contract this module guards:
   "succeed" without actually posting anything.
 - Same-body retries within one tool lifetime are deduped — the
   retry-as-no-op contract every other agent tool has.
+- Self-referential meta-noise bodies are refused — the comment stream
+  is for deliverable substance, not process noise.
+- An agent is capped at a configurable number of comments per
+  (ticket, author) — default 1 — counted against *persisted* comments
+  so it survives tool-closure rebuilds.
+- A refusal is logged as a warning and recorded as a step event.
 - No active ticket session → error string, never crash.
 - DB exceptions → error string, never crash the agent loop.
 """
@@ -136,18 +142,167 @@ class TestPostComment:
         monkeypatch,
     ):
         """The dedupe is by exact body — different bodies post
-        independently. Guards against an over-aggressive cache that
-        would swallow genuinely-different follow-up findings."""
+        independently (up to the per-agent comment cap). Guards against
+        an over-aggressive cache that would swallow genuinely-different
+        follow-up findings on a multi-finding info ticket (raised cap)."""
         monkeypatch.setattr(
             "robotsix_mill.runtime.tracing.current_session",
             lambda: ticket.id,
         )
 
-        tool = _pc.make_post_comment_tool(settings, agent_name="implement")
+        tool = _pc.make_post_comment_tool(
+            settings, agent_name="implement", max_comments=2
+        )
         tool("First finding.")
         tool("Second finding.")
         svc = TicketService(settings, board_id="test-board")
         assert len(svc.list_comments(ticket.id)) == 2
+
+    def test_refuses_self_referential_meta_noise(
+        self,
+        settings,
+        ticket,
+        monkeypatch,
+    ):
+        """Pure self-referential meta-comments are refused even when the
+        wording varies — the byte-identical dedupe cannot catch
+        semantically-similar noise ('Done.', 'Stand down — no further
+        action.', 'Delivered — see diff and summary thread X', ...).
+        The refused body must go to the final structured summary
+        instead, never the comment stream."""
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.tracing.current_session",
+            lambda: ticket.id,
+        )
+        tool = _pc.make_post_comment_tool(settings, agent_name="implement")
+        noise = [
+            "Done.",
+            "Stand down — no further action.",
+            "(no further replies)",
+            "Stopping here deliberately: this is the last comment.",
+            "Ignore my previous comment",
+            "Delivered — see diff and summary thread X",
+            "final note for the record",
+            "(stop-noise marker)",
+            "No further replies.",
+        ]
+        for body in noise:
+            assert tool(body).startswith("post_comment: refused"), (
+                f"{body!r} should be refused as meta-noise"
+            )
+        svc = TicketService(settings, board_id="test-board")
+        assert svc.list_comments(ticket.id) == []
+
+    def test_substantive_body_with_meta_words_is_allowed(
+        self,
+        settings,
+        ticket,
+        monkeypatch,
+    ):
+        """A body that contains a meta word but also substantive content
+        is deliverable material, not noise — it must post."""
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.tracing.current_session",
+            lambda: ticket.id,
+        )
+        tool = _pc.make_post_comment_tool(settings, agent_name="implement")
+        out = tool("No further action: the YAML chain is wired and tests pass.")
+        assert out.startswith("posted comment ")
+        svc = TicketService(settings, board_id="test-board")
+        assert len(svc.list_comments(ticket.id)) == 1
+
+    def test_caps_comments_at_default_one(
+        self,
+        settings,
+        ticket,
+        monkeypatch,
+    ):
+        """Default cap is 1 comment per (ticket, agent). A second,
+        different body is refused with an explicit status, not posted."""
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.tracing.current_session",
+            lambda: ticket.id,
+        )
+        tool = _pc.make_post_comment_tool(settings, agent_name="implement")
+        assert tool("First finding.").startswith("posted comment ")
+        out = tool("Second finding.")
+        assert out.startswith("post_comment: refused")
+        assert "already posted 1 comment" in out
+        svc = TicketService(settings, board_id="test-board")
+        assert len(svc.list_comments(ticket.id)) == 1
+
+    def test_cap_survives_tool_closure_rebuilds(
+        self,
+        settings,
+        ticket,
+        monkeypatch,
+    ):
+        """The cap counts PERSISTED comments (author == agent_name), so a
+        fresh tool closure — a rebuilt agent / retried pass that loses
+        the in-memory seen-set — still refuses once the cap is reached."""
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.tracing.current_session",
+            lambda: ticket.id,
+        )
+        first = _pc.make_post_comment_tool(settings, agent_name="implement")
+        second = _pc.make_post_comment_tool(settings, agent_name="implement")
+        assert first("First finding.").startswith("posted comment ")
+        assert "refused" in second("Second finding.")
+        svc = TicketService(settings, board_id="test-board")
+        assert len(svc.list_comments(ticket.id)) == 1
+
+    def test_cap_raised_for_multi_finding_info_tickets(
+        self,
+        settings,
+        ticket,
+        monkeypatch,
+    ):
+        """Multi-finding info tickets may raise the cap (e.g. 2-3) so a
+        genuine set of findings can all be posted — the cap is a
+        parameter, not hardcoded."""
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.tracing.current_session",
+            lambda: ticket.id,
+        )
+        tool = _pc.make_post_comment_tool(
+            settings, agent_name="implement", max_comments=3
+        )
+        for body in ("Finding one.", "Finding two.", "Finding three."):
+            assert tool(body).startswith("posted comment ")
+        out = tool("Finding four.")
+        assert out.startswith("post_comment: refused")
+        svc = TicketService(settings, board_id="test-board")
+        assert len(svc.list_comments(ticket.id)) == 3
+
+    def test_refusal_is_recorded_as_step_event(
+        self,
+        settings,
+        ticket,
+        monkeypatch,
+    ):
+        """A refused body is recorded as a step event in the ticket
+        history (never a comment), so the recurring violation stays
+        observable and the prompt can be tightened further."""
+        from sqlmodel import select
+
+        from robotsix_mill.core.models import TicketEvent
+
+        monkeypatch.setattr(
+            "robotsix_mill.runtime.tracing.current_session",
+            lambda: ticket.id,
+        )
+        tool = _pc.make_post_comment_tool(settings, agent_name="implement")
+        assert "refused" in tool("Stand down.")
+        with db.session(settings, "test-board") as sess:
+            notes = [
+                ev.note
+                for ev in sess.exec(
+                    select(TicketEvent).where(TicketEvent.ticket_id == ticket.id)
+                ).all()
+            ]
+        assert any("meta-noise" in n for n in notes)
+        svc = TicketService(settings, board_id="test-board")
+        assert svc.list_comments(ticket.id) == []
 
     def test_dedupes_against_previously_posted_comment_across_closure(
         self,
