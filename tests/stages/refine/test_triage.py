@@ -654,3 +654,196 @@ def test_is_doc_only_draft_only_code_files():
     """All paths are code files → not doc-only."""
     draft = "Edit `src/foo.py` and `tests/test_bar.py`."
     assert _triage._is_doc_only_draft(draft) is False
+
+
+# ===========================================================================
+# agent-report cross-repo routing (deterministic triage pre-check)
+# ===========================================================================
+
+
+def _repos_registry(*pairs):
+    """Build a :class:`ReposRegistry` from ``(repo_id, board_id)`` pairs."""
+    from robotsix_mill.config import RepoConfig, ReposRegistry
+
+    return ReposRegistry(
+        repos={
+            rid: RepoConfig(
+                repo_id=rid,
+                board_id=bid,
+                langfuse_project_name="test",
+                langfuse_public_key="pk-test",
+                langfuse_secret_key="sk-test",
+            )
+            for rid, bid in pairs
+        }
+    )
+
+
+def test_agent_report_cross_repo_target_foreign_prefix(monkeypatch):
+    """A draft citing ``<foreign-repo>/…`` routes to the owner board."""
+    draft = (
+        "The shared workflow `robotsix-github-workflows/.github/workflows/"
+        "python-ci.yml` help text contradicts docs/python.md."
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.config.get_repos_config",
+        lambda: _repos_registry(
+            ("test-repo", "test-board"),
+            ("robotsix-github-workflows", "gh-wf-board"),
+            ("robotsix-website", "website-board"),
+        ),
+    )
+    assert _triage._agent_report_cross_repo_target(draft, "test-board") == "gh-wf-board"
+
+
+def test_agent_report_cross_repo_target_own_repo_ignored(monkeypatch):
+    """A draft citing only the current board's own repo routes nowhere."""
+    draft = "Fix `test-repo/src/foo.py` and `test-repo/docs/README.md`."
+    monkeypatch.setattr(
+        "robotsix_mill.config.get_repos_config",
+        lambda: _repos_registry(("test-repo", "test-board")),
+    )
+    assert _triage._agent_report_cross_repo_target(draft, "test-board") is None
+
+
+def test_agent_report_cross_repo_target_earliest_citation_wins(monkeypatch):
+    """When several foreign repos are cited, the earliest mention wins."""
+    draft = (
+        "First `robotsix-website/pages/index.md` is stale, and the mill "
+        "`robotsix-mill/src/robotsix_mill/cli/__init__.py` then needs it."
+    )
+    monkeypatch.setattr(
+        "robotsix_mill.config.get_repos_config",
+        lambda: _repos_registry(
+            ("test-repo", "test-board"),
+            ("robotsix-mill", "mill-board"),
+            ("robotsix-website", "website-board"),
+        ),
+    )
+    assert (
+        _triage._agent_report_cross_repo_target(draft, "test-board") == "website-board"
+    )
+
+
+def test_agent_report_cross_repo_target_no_citation(monkeypatch):
+    """A draft without any ``<repo_id>/`` path routes nowhere."""
+    draft = "The coverage help text contradicts the docs page."
+    monkeypatch.setattr(
+        "robotsix_mill.config.get_repos_config",
+        lambda: _repos_registry(
+            ("test-repo", "test-board"),
+            ("robotsix-github-workflows", "gh-wf-board"),
+        ),
+    )
+    assert _triage._agent_report_cross_repo_target(draft, "test-board") is None
+
+
+def test_agent_report_cross_repo_target_registry_failure(monkeypatch):
+    """When the repo registry cannot be loaded, fall back to no route."""
+
+    def _boom():
+        raise RuntimeError("registry unavailable")
+
+    monkeypatch.setattr("robotsix_mill.config.get_repos_config", _boom)
+    assert (
+        _triage._agent_report_cross_repo_target(
+            "cit `robotsix-github-workflows/x.yml`", "test-board"
+        )
+        is None
+    )
+
+
+def test_deterministic_cross_repo_routing_migrates_agent_report(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """An agent-source draft citing a foreign repo path is migrated to the
+    owner board, short-circuiting before any other triage pre-check."""
+    from robotsix_mill.core.models import SourceKind
+
+    ctx = ctx_factory()
+    body = (
+        "The shared workflow `robotsix-github-workflows/.github/workflows/"
+        "python-ci.yml` coverage help text contradicts docs/python.md."
+    )
+    t = ctx.service.create(
+        "coverage-threshold help text contradiction", body, source=SourceKind.AGENT
+    )
+    ws = ctx.service.workspace(t)
+    monkeypatch.setattr(
+        "robotsix_mill.config.get_repos_config",
+        lambda: _repos_registry(
+            ("test-repo", "test-board"),
+            ("robotsix-github-workflows", "gh-wf-board"),
+        ),
+    )
+    migrate_calls: list[tuple] = []
+
+    def _spy(ticket_id, target_board, note=None):
+        migrate_calls.append((ticket_id, target_board, note))
+
+    monkeypatch.setattr(ctx.service, "migrate", _spy)
+
+    out = _triage.deterministic_triage_pre_checks(ctx, t, body, ws, ctx.settings)
+
+    assert out is not None
+    assert out.next_state == State.DRAFT
+    assert "migrated to board 'gh-wf-board'" in out.note
+    assert migrate_calls == [(t.id, "gh-wf-board", migrate_calls[0][2])]
+    assert "different repo" in migrate_calls[0][2]
+    assert (ws.artifacts_dir / "draft-original.md").exists()
+
+
+def test_deterministic_cross_repo_routing_not_applied_to_non_agent_source(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """Only reports filed by an agent (source: agent) get cross-repo
+    routing; other sources fall through to normal triage."""
+    from robotsix_mill.core.models import SourceKind
+
+    ctx = ctx_factory()
+    body = "Fix `robotsix-github-workflows/.github/workflows/ci.yml` and add a feature."
+    t = ctx.service.create("survey finding", body, source=SourceKind.SURVEY)
+    ws = ctx.service.workspace(t)
+    with patch.object(
+        _triage, "_agent_report_cross_repo_target", return_value="gh-wf-board"
+    ) as mock_target:
+        out = _triage.deterministic_triage_pre_checks(ctx, t, body, ws, ctx.settings)
+
+    mock_target.assert_not_called()
+    assert out is None
+
+
+def test_deterministic_cross_repo_routing_anti_bounce_escalates(
+    ctx_factory, monkeypatch, tmp_path
+):
+    """A ticket that was already migrated must not bounce again — escalate
+    to human instead, with no second migrate call."""
+    from robotsix_mill.core.models import SourceKind
+
+    ctx = ctx_factory()
+    body = "Fix `robotsix-github-workflows/.github/workflows/ci.yml`."
+    t = ctx.service.create("already bounced", body, source=SourceKind.AGENT)
+    ws = ctx.service.workspace(t)
+    monkeypatch.setattr(
+        "robotsix_mill.config.get_repos_config",
+        lambda: _repos_registry(
+            ("test-repo", "test-board"),
+            ("robotsix-github-workflows", "gh-wf-board"),
+        ),
+    )
+    migrate_calls: list[tuple] = []
+
+    def _spy(ticket_id, target_board, note=None):
+        migrate_calls.append((ticket_id, target_board, note))
+
+    monkeypatch.setattr(ctx.service, "migrate", _spy)
+
+    with patch.object(
+        _triage, "_parse_prior_boards", return_value=({"gh-wf-board"}, 1)
+    ) as mock_parse:
+        out = _triage.deterministic_triage_pre_checks(ctx, t, body, ws, ctx.settings)
+
+    mock_parse.assert_called_once_with(ctx.service, t.id)
+    assert out is not None
+    assert "anti-bounce blocked" in out.note
+    assert migrate_calls == []
