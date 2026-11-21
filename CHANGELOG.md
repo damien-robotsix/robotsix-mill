@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.25.3](https://github.com/damien-robotsix/robotsix-mill/compare/v0.25.2...v0.25.3) (2026-11-21)
+
+
+### Bug Fixes
+
+* refine/triage routing: file agent-sourced cross-repo code-quality reports on the board owning the fix-target path (robotsix-github-workflows), not the reporting workspace's board (20261121T000158Z-refine-triage-routing-file-agent-sourced-5f00) ([#3659](https://github.com/damien-robotsix/robotsix-mill/issues/3659)) ([45f4660](https://github.com/damien-robotsix/robotsix-mill/commit/45f466062b4b694e2e4da80e94a17b60a19a821d))
+* survey source: dedup Standardize proposals by their stable survey-gap-id marker before filing (Conventional Commits PR-title filed 6×, coverage fail-under 3×) (20261121T000158Z-survey-source-dedup-standardize-proposal-7585) ([#3658](https://github.com/damien-robotsix/robotsix-mill/issues/3658)) ([704764e](https://github.com/damien-robotsix/robotsix-mill/commit/704764e8d74779a9ab0e3b39d6468294e3d41daa))
+
 ## [0.25.2](https://github.com/damien-robotsix/robotsix-mill/compare/v0.25.1...v0.25.2) (2026-11-19)
 
 
