@@ -471,7 +471,7 @@ def test_persistence_without_file_map_still_writes(ctx_factory, tmp_path, monkey
             epic_workspace_path,
         )
         agent_called.append(1)
-        (Path(repo_dir) / "out.txt").write_text("done")
+        (Path(repo_dir) / "feature.txt").write_text("done")
         return ("summary", [], "", None, None, False, "")
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)

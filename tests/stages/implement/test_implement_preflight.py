@@ -320,7 +320,7 @@ def test_scope_check_skipped_when_no_file_map(
             epic_workspace_path,
         )
         agent_called.append(1)
-        (Path(repo_dir) / "out.txt").write_text("done")
+        (Path(repo_dir) / "feature.txt").write_text("done")
         return ("done", [], "", None, None, False, "")
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)
@@ -380,7 +380,7 @@ def test_scope_check_skipped_when_file_map_empty(
             epic_workspace_path,
         )
         agent_called.append(1)
-        (Path(repo_dir) / "out.txt").write_text("done")
+        (Path(repo_dir) / "feature.txt").write_text("done")
         return ("done", [], "", None, None, False, "")
 
     monkeypatch.setattr(coding, "run_implement_agent", _run)

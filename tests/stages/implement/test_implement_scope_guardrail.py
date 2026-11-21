@@ -21,7 +21,9 @@ from tests.stages.implement.conftest import (
 
 
 def test_run_scope_guardrail_triage_disabled_blocks(ctx_factory, tmp_path, monkeypatch):
-    """scope_triage_enabled=False: any out-of-scope file → BLOCKED outcome."""
+    """scope_triage_enabled=False: any out-of-scope ADDED file → BLOCKED
+    via the deterministic stray-file gate (before triage is even
+    consulted)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         forge_remote_url=remote,
@@ -65,8 +67,258 @@ def test_run_scope_guardrail_triage_disabled_blocks(ctx_factory, tmp_path, monke
     assert result.action == "return"
     assert result.outcome is not None
     assert result.outcome.next_state is State.BLOCKED
-    assert "scope violation" in result.outcome.note
+    assert "stray-file gate" in result.outcome.note
     assert "b.txt" in result.outcome.note
+
+
+# --- stray-file gate (deterministic added-file check) ---------------------
+
+
+def test_stray_file_gate_blocks_unknown_added_file(ctx_factory, tmp_path):
+    """An added (committed) file in neither the ticket scope nor the
+    generated-artifact allowlist is a stray → the gate BLOCKs for human
+    review (never delivered, never silently reverted)."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    (repo / "stray.txt").write_text("nobody asked for this")
+    _git(repo, "add", "stray.txt")
+    _git(repo, "commit", "-q", "-m", "wip stray")
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=ctx.settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    assert result.action == "return"
+    assert result.outcome is not None
+    assert result.outcome.next_state is State.BLOCKED
+    assert "stray-file gate" in result.outcome.note
+    assert "stray.txt" in result.outcome.note
+
+
+def test_stray_file_gate_deletes_mill_state_none_and_proceeds(ctx_factory, tmp_path):
+    """The observed leak shape — a root-level file literally named ``none``
+    carrying the implementer's summary/memory JSON envelope — is deleted
+    and re-verified: the gate returns a proceed (skip_iteration) result and
+    the file is gone from the working tree/index.  Never delivered."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    (repo / "none").write_text(
+        json.dumps(
+            {
+                "summary": "did the thing",
+                "updated_memory": "…",
+                "reference_files": ["README.md"],
+                "no_change_needed": False,
+                "deferred_spec_items": [],
+            },
+            indent=2,
+        )
+    )
+    _git(repo, "add", "none")
+    _git(repo, "commit", "-q", "-m", "leak")
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=ctx.settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    assert result.action == "skip_iteration"
+    assert not (repo / "none").exists()
+    notes = [ev.note for ev in ctx.service.history(t.id) if ev.note]
+    assert any("stray-file gate" in n and "`none`" in n for n in notes)
+
+
+def test_stray_file_gate_envelope_hit_ignores_allowlist(ctx_factory, tmp_path):
+    """The envelope backstop fires even when a path-based allowlist entry
+    would have covered the file: an added ``uv.lock`` whose content carries
+    the implement envelope is still deleted, never shipped."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    (repo / "uv.lock").write_text(
+        json.dumps(
+            {
+                "summary": "leak",
+                "updated_memory": "leak",
+                "reference_files": ["leak"],
+                "no_change_needed": True,
+            }
+        )
+    )
+    _git(repo, "add", "uv.lock")
+    _git(repo, "commit", "-q", "-m", "leak in allowlisted name")
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=ctx.settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    assert result.action == "skip_iteration"
+    assert not (repo / "uv.lock").exists()
+
+
+def test_stray_file_gate_allows_spec_cited_and_lockfile(
+    ctx_factory, tmp_path, monkeypatch
+):
+    """Added files ARE allowed when the spec cites them (by path or by the
+    mechanical command that writes them) — the gate only rejects files
+    nothing in the ticket asked for."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    (repo / "a.txt").write_text("in scope")
+    (repo / "b.txt").write_text("cited verbatim in the spec")
+    (repo / "uv.lock").write_text('version = 1\n[[package]]\nname = "x"\n')
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "wip in-scope")
+
+    import robotsix_mill.agents.scope_triage as scope_triage_mod
+
+    monkeypatch_calls = []
+
+    def _fake_triage(*_args, **_kwargs):
+        monkeypatch_calls.append(1)
+        # The spec-cited file is folded into scope; the lockfile is
+        # command-implied.  Nothing should remain for the LLM.
+        raise AssertionError("no files should reach scope-triage here")
+
+    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=ctx.settings,
+        spec="Update `a.txt`, `b.txt`, then run `uv lock`.",
+        current_feedback=None,
+    )
+
+    assert result.action == "skip_iteration"
+    assert monkeypatch_calls == []
+
+
+def test_stray_file_gate_fires_with_empty_file_map(ctx_factory, tmp_path):
+    """An empty file_map must not re-open the leak hole: the gate still
+    runs, judging added files against the spec body + allowlist only."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    (repo / "none").write_text(
+        json.dumps(
+            {
+                "summary": "s",
+                "updated_memory": "m",
+                "reference_files": ["r"],
+                "no_change_needed": False,
+            }
+        )
+    )
+    _git(repo, "add", "none")
+    _git(repo, "commit", "-q", "-m", "leak with no file_map")
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        f"mill/{t.id}",
+        summary="agent summary",
+        ref_files=None,
+        file_map=None,
+        settings=ctx.settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    assert result.action == "skip_iteration"
+    assert not (repo / "none").exists()
+
+
+def test_stray_file_gate_blocks_resumed_committed_stray(ctx_factory, tmp_path):
+    """A stray committed by a PRIOR pass (only in HEAD vs the merge base)
+    is caught and removed on the resumed pass; the staged deletion lands
+    in this pass's finalize commit."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "a.txt")
+
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    branch = f"mill/{t.id}"
+    git_ops.create_branch(repo, branch)
+    # Prior pass committed an accidental root-level state file.
+    (repo / "none").write_text(
+        json.dumps({"summary": "s", "updated_memory": "m", "new_messages": "x"})
+    )
+    git_ops.commit_all(repo, "prior wip [WIP]")
+    git_ops.checkout(repo, branch)
+
+    result = ImplementStage._run_scope_guardrail(
+        ctx,
+        t,
+        repo,
+        branch,
+        summary="agent summary",
+        ref_files=None,
+        file_map={"a.txt"},
+        settings=ctx.settings,
+        spec="add a.txt",
+        current_feedback=None,
+    )
+
+    assert result.action == "skip_iteration"
+    # Removed from the working tree; the deletion is staged for finalize.
+    assert not (repo / "none").exists()
 
 
 def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
@@ -76,7 +328,10 @@ def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
 ):
     """When all out-of-scope files were already REJECTed in prior history
     events, the dedup guard fires → skip_iteration WITHOUT shipping: the
-    re-created files are cleaned from the tree and NOT added to file_map.
+    re-created MODIFIED file is cleaned from the tree and NOT added to
+    file_map. (An ADDED out-of-scope file is instead caught earlier by the
+    deterministic stray-file gate, so this feature is exercised with a
+    tracked-modified file.)
     v1: the source of truth for the REJECT seed is a step event, not
     a comment (scope-triage no longer comments)."""
     remote = make_bare_repo(tmp_path)
@@ -95,7 +350,13 @@ def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
 
     repo = ctx.service.workspace(t).dir / "repo"
     _clone_repo_to(ctx, remote, repo)
-    (repo / "b.txt").write_text("out of scope again")
+    # Seed b.txt on origin/main so the re-created copy is a MODIFICATION
+    # (added copies are owned by the stray-file gate, not this dedup path).
+    (repo / "b.txt").write_text("original\n")
+    _git(repo, "add", "b.txt")
+    _git(repo, "commit", "-q", "-m", "seed b.txt")
+    _git(repo, "push", "origin", "main")
+    (repo / "b.txt").write_text("out of scope again\n")
     _git(repo, "add", "b.txt")
     _git(repo, "commit", "-q", "-m", "wip")
     ws = ctx.service.workspace(t)
@@ -136,12 +397,13 @@ def test_run_scope_guardrail_dedup_guard_suppresses_duplicate_reject(
 
     assert result.action == "skip_iteration"
     # The dedup guard must NOT ship the re-created file: b.txt stays out
-    # of file_map and is cleaned back out of the working tree.
+    # of file_map and is cleaned back out of the working tree (restored
+    # to its origin/main content — a tracked file is reverted, not deleted).
     assert result.file_map is not None
     assert "b.txt" not in result.file_map
     assert result.feedback is None
     assert "b.txt" not in git_ops.changed_files(repo, "main")
-    assert not (repo / "b.txt").exists()
+    assert (repo / "b.txt").read_text() == "original\n"
 
 
 def _reject_triage(
@@ -156,13 +418,14 @@ def _reject_triage(
     )
 
 
-def test_run_scope_guardrail_reject_cleans_tracked_and_untracked(
+def test_run_scope_guardrail_reject_cleans_modified_tracked(
     ctx_factory, tmp_path, monkeypatch
 ):
-    """A first-time REJECT removes the out-of-scope changes from the tree
-    before finalize commits: a tracked modification (restored to origin),
-    a newly-added tracked file, and an untracked file are all absent from
-    the diff vs origin afterwards, while the in-scope change survives."""
+    """A first-time REJECT removes the out-of-scope MODIFIED tracked files
+    from the tree before finalize commits (an added file would instead be
+    caught earlier by the deterministic stray-file gate): a tracked
+    modification (restored to origin) is absent from the diff vs origin
+    afterwards, while the in-scope change survives."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(forge_remote_url=remote, test_command="true")
     t = _ticket(ctx)
@@ -170,14 +433,20 @@ def test_run_scope_guardrail_reject_cleans_tracked_and_untracked(
 
     repo = ctx.service.workspace(t).dir / "repo"
     _clone_repo_to(ctx, remote, repo)
-    # In-scope change + out-of-scope (tracked-mod README.md, new vendored.py),
-    # both WIP-committed; plus an untracked stray.txt.
+    # Seed a second tracked file on origin/main so it can be MODIFIED
+    # (out-of-scope) rather than added — added files are now owned by the
+    # stray-file gate, not scope-triage REJECT.
+    (repo / "vendored.py").write_text("original vendored tree\n")
+    _git(repo, "add", "vendored.py")
+    _git(repo, "commit", "-q", "-m", "seed vendored.py")
+    _git(repo, "push", "origin", "main")
+    # In-scope change + out-of-scope (tracked-modified README.md,
+    # tracked-modified vendored.py), WIP-committed.
     (repo / "a.txt").write_text("in scope")
     (repo / "README.md").write_text("out of scope edit")
-    (repo / "vendored.py").write_text("vendored tree")
+    (repo / "vendored.py").write_text("modified out of scope\n")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "wip")
-    (repo / "stray.txt").write_text("untracked stray")
 
     ws = ctx.service.workspace(t)
     (ws.artifacts_dir / "file_map.json").write_text(
@@ -204,12 +473,9 @@ def test_run_scope_guardrail_reject_cleans_tracked_and_untracked(
     assert result.action == "return"
     assert result.outcome.next_state is State.READY
     changed = git_ops.changed_files(repo, "main")
-    # Out-of-scope paths gone from the diff (unstaged + WIP-committed).
+    # Out-of-scope paths gone from the diff (restored to origin).
     assert "README.md" not in changed
     assert "vendored.py" not in changed
-    assert "stray.txt" not in changed
-    assert not (repo / "vendored.py").exists()
-    assert not (repo / "stray.txt").exists()
     # In-scope work preserved.
     assert "a.txt" in changed
     # A REJECT is a send-back with new feedback, not a spec-determined dead
@@ -225,7 +491,9 @@ def test_run_scope_guardrail_reject_cleans_resumed_wip_history(
 ):
     """Resumed-branch case: the rejected file is already in the branch's
     committed history (no unstaged edit). REJECT must scrub it from the
-    committed diff vs origin/main, not just the working tree."""
+    committed diff vs origin/main, not just the working tree. The rejected
+    file is a MODIFIED tracked file — an added file is caught earlier by
+    the deterministic stray-file gate instead."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(forge_remote_url=remote, test_command="true")
     t = _ticket(ctx)
@@ -233,11 +501,18 @@ def test_run_scope_guardrail_reject_cleans_resumed_wip_history(
 
     repo = ctx.service.workspace(t).dir / "repo"
     _clone_repo_to(ctx, remote, repo)
+    # Seed the to-be-rejected file on origin/main so the branch MODIFIES
+    # it (an added copy would be owned by the stray-file gate, which does
+    # not consult scope-triage).
+    (repo / "vendored.py").write_text("original vendored tree\n")
+    _git(repo, "add", "vendored.py")
+    _git(repo, "commit", "-q", "-m", "seed vendored.py")
+    _git(repo, "push", "origin", "main")
     branch = f"mill/{t.id}"
     git_ops.create_branch(repo, branch)
     # Simulate a prior polluted WIP commit (in-scope + vendored tree).
     (repo / "a.txt").write_text("in scope")
-    (repo / "vendored.py").write_text("vendored tree")
+    (repo / "vendored.py").write_text("vendored tree\n")
     git_ops.commit_all(repo, "prior wip [WIP]")
     # Re-checkout to mimic a fresh resume off the committed branch.
     git_ops.checkout(repo, branch)
@@ -930,8 +1205,10 @@ def test_scope_triage_flood_guard_truncates_sample(ctx_factory, tmp_path, monkey
 def test_scope_triage_flood_guard_below_cap_calls_llm(
     ctx_factory, tmp_path, monkeypatch
 ):
-    """Out-of-scope count <= cap: the guard does NOT trip — the
-    scope-triage LLM is still invoked normally."""
+    """Out-of-scope count <= cap: the flood guard does NOT trip — but the
+    deterministic stray-file gate now owns ADDED out-of-scope files, so
+    the two brand-new files block for human review BEFORE any scope-triage
+    LLM call (the gate is what a below-cap set of new files hits)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         forge_remote_url=remote,
@@ -953,7 +1230,6 @@ def test_scope_triage_flood_guard_below_cap_calls_llm(
     settings = ctx.settings
 
     import robotsix_mill.agents.scope_triage as scope_triage_mod
-    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
 
     triage_called = []
 
@@ -961,11 +1237,7 @@ def test_scope_triage_flood_guard_below_cap_calls_llm(
         *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
     ):
         triage_called.append(out_of_scope_files)
-        return ScopeTriageVerdict(
-            action="ESCALATE",
-            justification="ambiguous",
-            expand_files=[],
-        )
+        raise AssertionError("scope-triage must not see added strays")
 
     monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
 
@@ -982,11 +1254,11 @@ def test_scope_triage_flood_guard_below_cap_calls_llm(
         current_feedback=None,
     )
 
-    assert len(triage_called) == 1, "LLM must be called below the cap"
-    # ESCALATE → BLOCKED via the normal scope-triage path, NOT the flood guard.
+    assert triage_called == [], "added strays must be caught by the gate, not the LLM"
     assert result.action == "return"
     assert result.outcome is not None
     assert result.outcome.next_state is State.BLOCKED
+    assert "stray-file gate" in result.outcome.note
     assert "flood guard" not in (result.outcome.note or "")
 
 
@@ -2067,10 +2339,12 @@ def test_claimed_gitignored_edits_fail_open(tmp_path):
 def test_scope_triage_new_file_summary_shows_content(
     ctx_factory, tmp_path, monkeypatch
 ):
-    """NEW (untracked) out-of-scope files have an empty ``git diff`` vs the
-    base; the triage agent then sees no content and ESCALATEs blindly (live
-    case: the worker.py package refactor cb63 — every new submodule
-    summarized empty). The summary must fall back to the file head."""
+    """A brand-new file the ticket scope never cited is a stray: the
+    deterministic stray-file gate BLOCKS it for human review BEFORE any
+    scope-triage LLM sees it — the old "show the new file's head to the
+    triage agent" path is unreachable for ADDED files (this is the leak
+    vector the gate closes: an accidentally-written state file would have
+    sailed through triage)."""
     remote = make_bare_repo(tmp_path)
     ctx = ctx_factory(
         forge_remote_url=remote,
@@ -2089,7 +2363,8 @@ def test_scope_triage_new_file_summary_shows_content(
     def _run(*, settings, repo_dir, spec, **_kwargs):
         del settings, spec
         (Path(repo_dir) / "wip.txt").write_text("in scope")
-        # Brand-new file, never tracked → empty `git diff origin/main -- f`.
+        # Brand-new file, never tracked → would show an empty diff to the
+        # triage agent; the gate must intercept it first.
         (Path(repo_dir) / "brand_new_module.py").write_text(
             "def shiny_new_helper():\n    return 42\n"
         )
@@ -2098,27 +2373,21 @@ def test_scope_triage_new_file_summary_shows_content(
     monkeypatch.setattr(coding, "run_implement_agent", _run)
 
     import robotsix_mill.agents.scope_triage as scope_triage_mod
-    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
 
-    captured: dict = {}
+    called = []
 
-    def _fake_triage(
-        *, settings, ticket_spec, file_map, out_of_scope_files, diff_summaries
-    ):
-        captured["summaries"] = dict(diff_summaries)
-        return ScopeTriageVerdict(
-            action="ESCALATE",
-            justification="capture only",
-            expand_files=[],
-        )
+    def _fake_triage(*_args, **_kwargs):
+        called.append(1)
+        raise AssertionError("scope-triage must not be called for a stray")
 
     monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
 
-    ImplementStage().run(t, ctx)
+    outcome = ImplementStage().run(t, ctx)
 
-    summary = captured["summaries"]["brand_new_module.py"]
-    assert "NEW FILE" in summary
-    assert "shiny_new_helper" in summary
+    assert called == [], "stray-file gate must block before any scope-triage LLM call"
+    assert outcome.next_state is State.BLOCKED
+    assert "stray-file gate" in (outcome.note or "")
+    assert "brand_new_module.py" in (outcome.note or "")
 
 
 # ------------------------------------------------------------------
@@ -2237,8 +2506,15 @@ def _setup_escalated_ticket(ctx_factory, tmp_path, resume_note):
     ctx.service.resume_blocked(t.id, note=resume_note)
     repo = ctx.service.workspace(t).dir / "repo"
     _clone_repo_to(ctx, remote, repo)
+    # Seed the escalated file on origin/main so the branch MODIFIES it —
+    # an added copy would be intercepted by the deterministic stray-file
+    # gate before the operator-resolution logic ever ran.
     (repo / ".github").mkdir(exist_ok=True)
     (repo / _ZIZMOR).write_text("rules: {}\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "seed zizmor")
+    _git(repo, "push", "origin", "main")
+    (repo / _ZIZMOR).write_text("rules: { harden: true }\n")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "wip")
     return ctx, ctx.service.get(t.id), repo
@@ -2413,6 +2689,35 @@ def _setup_91f7(ctx_factory, tmp_path):
     return ctx, t, repo
 
 
+def _setup_91f7_modified(ctx_factory, tmp_path):
+    """Like :func:`_setup_91f7` but the out-of-scope probe test file is
+    track-MODIFIED (seeded on origin/main), so it STILL reaches the
+    scope-triage LLM — a NEW test file would be intercepted by the
+    stray-file gate before triage ever ran."""
+    remote = make_bare_repo(tmp_path)
+    ctx = ctx_factory(forge_remote_url=remote, test_command="true")
+    t = _ticket(ctx)
+    _write_file_map(ctx, t, "src/robotsix_browser/api.py")
+    repo = ctx.service.workspace(t).dir / "repo"
+    _clone_repo_to(ctx, remote, repo)
+    (repo / "src" / "robotsix_browser").mkdir(parents=True)
+    (repo / "src" / "robotsix_browser" / "api.py").write_text("import httpx\n")
+    (repo / "uv.lock").write_text('version = 1\n[[package]]\nname = "httpx"\n')
+    (repo / "tests").mkdir()
+    body = ["import httpx", ""] + [f"# filler {i}" for i in range(117)]
+    body += ["def test_probe():", "    assert httpx.get('http://x').status_code"]
+    (repo / "tests" / "test_api.py").write_text("\n".join(body) + "\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "seed probe test on main")
+    _git(repo, "push", "origin", "main")
+    # Modify the probe test on the branch — the long filler keeps the
+    # interesting hunk (the httpx use) far past the 40-line summary window.
+    (repo / "tests" / "test_api.py").write_text("\n".join(body) + "\n# probe tweak\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "wip: modify probe test")
+    return ctx, t, repo
+
+
 def _call_guardrail(ctx, t, repo):
     return ImplementStage._run_scope_guardrail(
         ctx,
@@ -2431,51 +2736,33 @@ def _call_guardrail(ctx, t, repo):
 def test_scope_guardrail_91f7_replay_expands_both_files(
     ctx_factory, tmp_path, monkeypatch
 ):
-    """uv.lock is auto-EXPANDed (spec says `uv lock`); the truncated-summary
-    ESCALATE on tests/test_api.py is re-asked with the full diff → EXPAND."""
+    """uv.lock is spec-implied (the spec says ``run `uv lock```) so it is
+    NOT a stray; the brand-new ``tests/test_api.py`` is cited nowhere in
+    the ticket scope and is not an allowed generated artifact, so the
+    deterministic stray-file gate BLOCKS it for human review instead of
+    shipping it.  Added files no longer reach scope-triage EXPAND — the
+    gate owns them."""
     ctx, t, repo = _setup_91f7(ctx_factory, tmp_path)
-    import robotsix_mill.agents.scope_triage as scope_triage_mod
-    from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
-
-    calls: list[dict] = []
-
-    def _fake_triage(
-        *,
-        settings,
-        ticket_spec,
-        file_map,
-        out_of_scope_files,
-        diff_summaries,
-        full_diffs=False,
-    ):
-        calls.append({"oos": out_of_scope_files, "diffs": diff_summaries})
-        diff = diff_summaries["tests/test_api.py"]
-        if full_diffs and "httpx.get(" in diff:
-            return ScopeTriageVerdict(
-                action="EXPAND",
-                justification="import is used by the probe test",
-                expand_files=["tests/test_api.py"],
-            )
-        assert "httpx.get(" not in diff  # summary is truncated
-        return ScopeTriageVerdict(action="ESCALATE", justification=_TRUNCATED)
-
-    monkeypatch.setattr(scope_triage_mod, "run_scope_triage_agent", _fake_triage)
 
     result = _call_guardrail(ctx, t, repo)
 
-    assert len(calls) == 2
-    assert calls[0]["oos"] == ["tests/test_api.py"]  # uv.lock never reaches LLM
-    assert result.action == "skip_iteration"
-    assert result.outcome is None
-    assert {"uv.lock", "tests/test_api.py"} <= result.file_map
+    assert result.action == "return"
+    assert result.outcome is not None
+    assert result.outcome.next_state is State.BLOCKED
+    assert "stray-file gate" in result.outcome.note
+    assert "tests/test_api.py" in result.outcome.note
+    # The spec-implied lockfile is not a stray and must not be reported.
+    assert "uv.lock" not in result.outcome.note
 
 
 def test_scope_guardrail_escalate_note_never_cites_truncated_summary(
     ctx_factory, tmp_path, monkeypatch
 ):
     """When the full-diff re-ask still blames missing context, the BLOCKED
-    note does not repeat the misleading "truncated summary" reason."""
-    ctx, t, repo = _setup_91f7(ctx_factory, tmp_path)
+    note does not repeat the misleading "truncated summary" reason.  Uses a
+    track-MODIFIED probe file so it still reaches scope-triage (a NEW file
+    would be caught earlier by the stray-file gate)."""
+    ctx, t, repo = _setup_91f7_modified(ctx_factory, tmp_path)
     import robotsix_mill.agents.scope_triage as scope_triage_mod
     from robotsix_mill.agents.scope_triage import ScopeTriageVerdict
 
