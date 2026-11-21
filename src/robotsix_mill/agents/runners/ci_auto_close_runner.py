@@ -76,6 +76,16 @@ _AUTHOR = "ci-auto-close"
 # the ticket's history means "already dispatched — never dispatch twice".
 _DISPATCH_NOTE = "ci_auto_close: dispatched workflow"
 
+# Upstream Dependabot update workflows (see the CI monitor's
+# ``_is_dependabot_internal_failure`` in ``runtime/worker/poll_loops_ci.py`` —
+# same path family). A ticket on such a workflow is about a scheduled
+# Dependabot run, so a single green re-run of that workflow is resolution:
+# no repo change is needed, and requiring two greens on the same head would
+# leave a human_issue_approval ticket parked for no reason (the monitor no
+# longer files these; this closes tickets filed before the classifier
+# landed).
+_DEPENDABOT_WF_PATH_RE = re.compile(r"^dynamic/dependabot/")
+
 
 def _parse_workflow_branch(
     ticket: Any, body: str
@@ -365,6 +375,22 @@ def _maybe_close(  # noqa: C901 — sequential anchor/MR/deleted/green checks, e
     tag_scoped = _is_tag_target(settings, repo_config, target)
     runs = _with_tag_runs(forge, settings, ticket, runs) if tag_scoped else runs
 
+    # Upstream Dependabot update workflow (``dynamic/dependabot/*``): the
+    # next green run of the same workflow is resolution — see
+    # ``_DEPENDABOT_WF_PATH_RE``. The path comes from the body marker or the
+    # failing run (mirrors ``_workflow_path`` used by the deleted-file check).
+    dependabot_wf = False
+    try:
+        dependabot_wf = bool(
+            (path := _workflow_path(forge, body)) and _DEPENDABOT_WF_PATH_RE.match(path)
+        )
+    except Exception:
+        log.warning(
+            "ci_auto_close: workflow-path resolution failed for %s",
+            ticket.id,
+            exc_info=True,
+        )
+
     green_runs, skip_reason = _green_since_failure(
         runs,
         wf,
@@ -376,6 +402,9 @@ def _maybe_close(  # noqa: C901 — sequential anchor/MR/deleted/green checks, e
         # requiring a second green parked it until an unrelated push
         # (robotsix-linkedin 93c8, 2026-10-29).
         dispatch_is_fix=True,
+        # One green resolves an upstream Dependabot run — two greens on the
+        # same head would park a human_issue_approval ticket indefinitely.
+        single_green=dependabot_wf,
     )
     if not green_runs:
         try:
@@ -469,6 +498,7 @@ def _green_since_failure(
     *,
     failing_created_at: str | None = None,
     dispatch_is_fix: bool = False,
+    single_green: bool = False,
 ) -> tuple[list[dict[str, Any]] | None, str | None]:
     """Return ``(green_runs, None)`` when the workflow *wf* is fixed at-or-after
     *f_sha*, else ``(None, reason)`` naming why the ticket is skipped.
@@ -492,7 +522,10 @@ def _green_since_failure(
     failing commit are required.  With *dispatch_is_fix* (passed for every
     target: a tag never gets a new head, and neither does a main fixed by a
     repo setting) a green ``workflow_dispatch`` run on the failing commit is
-    a deliberate re-run and also suffices.
+    a deliberate re-run and also suffices.  With *single_green*, one green
+    run at-or-after the failing commit always suffices — used for upstream
+    Dependabot update workflows (``dynamic/dependabot/*``), where the next
+    green scheduled run is resolution regardless of head/attempt.
 
     ``reason`` is one of ``cannot anchor`` (no completed runs for the
     workflow), ``failing head outside run window`` (the failing commit is no
@@ -539,7 +572,7 @@ def _green_since_failure(
         or (dispatch_is_fix and r.get("event") == "workflow_dispatch")
         for r in green_runs
     )
-    if streak < 2 and not fix_identifiable:
+    if streak < 2 and not fix_identifiable and not single_green:
         return None, "lone green on failing head, attempt 1"
     return green_runs, None
 
