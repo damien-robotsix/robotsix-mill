@@ -682,6 +682,7 @@ def _gap_id_duplicate_target(
             return label, gap_id, str(cand.id)
     return None
 
+
 def _agent_report_cross_repo_target(draft: str, current_board_id: str) -> str | None:
     """Return the board that owns the earliest cross-repo fix-target path
     cited in an agent report, or ``None``.
@@ -773,6 +774,7 @@ def _deterministic_migrate(
         source=ticket.source,
         state=State.DRAFT,
     )
+
 
 def deterministic_triage_pre_checks(
     ctx: StageContext,
