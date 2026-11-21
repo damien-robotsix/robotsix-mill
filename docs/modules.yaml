@@ -388,6 +388,7 @@ modules:
       - tests/stages/refine/test_gates.py
       - tests/stages/refine/test_reconcile.py
       - tests/stages/refine/test_drift.py
+      - tests/stages/refine/test_gap_id_duplicate_gate.py
       - tests/stages/refine/test_result_paths.py
       - tests/stages/refine/test_triage.py
       - tests/stages/refine/test_triage_incident_guards.py

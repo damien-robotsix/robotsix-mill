@@ -30,6 +30,7 @@ from .external_fix import _verify_branch_merged
 from .helpers import (
     _AUTO_APPROVE_SOURCES,
     _NOT_DOC_ONLY_TERMS_RE,
+    DEDUP_DUPLICATE_PREFIX,
     OPERATOR_SENDBACK_PREFIX,
     _summarize_spec_for_auto_approve,
     _triage_note_signals_wrong_repo,
@@ -127,6 +128,15 @@ _SKIP_NOOP_MARKERS: tuple[str, ...] = (
     "no work to do",
     "no-op",
 )
+
+
+# Marker written into periodic draft bodies at creation time
+# (pass_runner appends ``<!-- {source_label}-gap-id: {gap_id} -->`` for
+# every draft that carries a gap id).  The marker is a stable dedup
+# contract: the same periodic finding re-filed across passes carries the
+# IDENTICAL marker, so an open ticket whose description contains the same
+# ``{label}-gap-id`` is the same proposal by construction.
+_GAP_ID_MARKER_RE = re.compile(r"<!--\s*(\S+)-gap-id:\s*(\S+)\s*-->")
 
 
 def _count_code_block_lines(text: str) -> int:
@@ -622,6 +632,56 @@ def _scanner_auto_disposition(
     )
 
 
+def _gap_id_duplicate_target(
+    ctx: StageContext,
+    ticket: Ticket,
+    draft: str,
+) -> tuple[str, str, str] | None:
+    """Return ``(label, gap_id, candidate_id)`` for an open ticket on this
+    board that carries the same ``<!-- {label}-gap-id: ... -->`` marker as
+    *draft*, or ``None``.
+
+    The creation-time gap-id dedup (``pass_runner._verify_prior_on_board``)
+    is unreachable when a draft takes a fast-path that never reaches a
+    dedup engine, so a survey 'Standardize:' proposal re-filed under a
+    stable gap-id sails straight to approval while the original is still
+    open (live: conventional-commits PR-title check filed 6 times).  The
+    marker is a stable contract — an open (non-terminal) ticket whose
+    description contains an identical ``{label}-gap-id`` is the same
+    proposal by construction.
+    """
+    markers = set(_GAP_ID_MARKER_RE.findall(draft))
+    if not markers:
+        return None
+    try:
+        all_tickets = ctx.service.list()
+    except Exception:
+        log.debug("%s: gap-id duplicate scan failed", ticket.id, exc_info=True)
+        return None
+    terminal = (State.CLOSED, State.ERRORED)
+    for cand in all_tickets:
+        if cand.id == ticket.id or cand.state in terminal:
+            continue
+        try:
+            desc = Workspace(
+                ctx.settings.workspaces_dir_for(cand.board_id), cand.id
+            ).read_description()
+        except Exception as exc:
+            log.debug(
+                "%s: could not read description of candidate %s "
+                "(%s) — skipping gap-id scan",
+                ticket.id,
+                cand.id,
+                exc,
+            )
+            continue
+        overlap = markers & set(_GAP_ID_MARKER_RE.findall(desc))
+        if overlap:
+            label, gap_id = next(iter(overlap))
+            return label, gap_id, str(cand.id)
+    return None
+
+
 def deterministic_triage_pre_checks(
     ctx: StageContext,
     ticket: Ticket,
@@ -637,6 +697,39 @@ def deterministic_triage_pre_checks(
 
     Returns an :class:`Outcome` to short-circuit, or ``None``.
     """
+    # --- gap-id duplicate gate (survey/periodic re-files) ---
+    # The creation-time gap-id dedup (pass_runner._verify_prior_on_board)
+    # is bypassed when a draft takes a fast-path that never reaches a
+    # dedup engine, so a survey 'Standardize:' proposal re-filed under a
+    # stable gap-id sails straight to approval/close while the original is
+    # still open (live: conventional-commits PR-title check filed 6 times;
+    # coverage fail-under gate filed 3+ times).  The marker is a stable
+    # contract, so an open ticket carrying the identical marker is the
+    # same proposal: close the new draft as a duplicate BEFORE any
+    # fast-path disposition (CI-tooling auto-ready/auto-decline, scanner
+    # disposition, doc-only/prescriptive shortcuts, the mechanical draft
+    # fast-path) can approve or decline it.
+    dup = _gap_id_duplicate_target(ctx, ticket, draft)
+    if dup is not None:
+        label, gap_id, dup_id = dup
+        log.info(
+            "%s: gap-id duplicate gate — %s-gap-id %r already open on this "
+            "board as %s; closing as duplicate",
+            ticket.id,
+            label,
+            gap_id,
+            dup_id,
+        )
+        return _triage_outcome(
+            ctx,
+            ws,
+            draft,
+            ticket.id,
+            f"{DEDUP_DUPLICATE_PREFIX}{dup_id}: same {label}-gap-id marker "
+            f"({gap_id}) — re-filed proposal, original still open",
+            state=State.DONE,
+        )
+
     # CI/dev-tooling proposal routing runs first: a survey/audit draft
     # proposing a standing CI gate / dev-tooling standard is routed by
     # its tool-class (allowlist → ready, denylist → close) per the
