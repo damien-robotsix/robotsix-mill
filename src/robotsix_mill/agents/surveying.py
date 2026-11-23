@@ -99,6 +99,9 @@ def _survey_dynamic_kwargs(settings: Settings) -> dict[str, Any]:
     standards_root = _ensure_standards_repo(settings)
     if standards_root is not None:
         kwargs["extra_roots"] = [standards_root]
+        # run_periodic_agent appends the concrete path to the system
+        # prompt so the STANDARDS AWARENESS block has a real location.
+        kwargs["standards_root"] = standards_root
 
     return kwargs
 

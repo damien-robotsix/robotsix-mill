@@ -7,10 +7,25 @@
 ## STANDARDS AWARENESS — consult FIRST before proposing any improvement
 
 The fleet maintains shared conventions in the **robotsix-standards**
-repo (https://github.com/damien-robotsix/robotsix-standards).  A
-local checkout of that repo is mounted as an extra filesystem root
-so you can browse its pages directly with `list_dir` and
-`read_file`.  Use it as a filter, not a straitjacket:
+repo (https://github.com/damien-robotsix/robotsix-standards).  When
+the checkout is available for your run, the runner appends a
+**"Standards checkout location for this run"** note to your prompt
+giving its absolute path.  Reach it ONLY with the in-process file
+tools (`list_dir` / `read_file`) using that absolute path:
+
+- The checkout lives OUTSIDE the repo tree, at
+  `<data_dir>/standards_cache/repo` (mirroring `_ensure_standards_repo`
+  in `agents/surveying.py`) — it is NOT part of the repo clone, so a
+  repo-relative `standards_cache/repo` and bare names like
+  `robotsix-standards` do NOT resolve from the repo root.
+- `run_command`'s shell sandbox mounts only the repo checkout, never
+  the standards tree — browse with the file tools, not
+  `ls`/`cat`/`grep`.
+- Do NOT call `list_dir('/')` — root paths are sandbox-rejected
+  (`path '/' escapes the repository`), and there is no need to start
+  from `/` when your prompt names the exact path.
+
+Use it as a filter, not a straitjacket:
 
 1. **Read AGENT.md** — if it exists at the repo root, it declares the
    standards the repo subscribes to and may link to the standards
