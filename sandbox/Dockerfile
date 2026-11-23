@@ -33,12 +33,49 @@ ENV UV_INSTALL_DIR=/usr/local/bin
 # hadolint ignore=DL3008,DL4006
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates \
-        nodejs=20.19.2+dfsg-1+deb13u3 \
-        npm=9.2.0~ds1-3 \
     && curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh \
     && chmod a+rx /usr/local/bin/uv /usr/local/bin/uvx \
     && /usr/local/bin/uvx --version \
     && rm -rf /var/lib/apt/lists/*
+
+# Node.js runtime for every board whose test_command is `npm test` /
+# `npx vitest …` (and the repo-internal board.js vm harness). The
+# Debian-bookworm apt `nodejs`/`npm` pins only ship node 20, which vitest
+# 5 (engines: node ^22.12.0) cannot run — its fork-worker pool dies on
+# node 20 inside undici's decompress interceptor ("Cannot read properties
+# of undefined (reading 'bind')"), so JS boards had to hand-roll smoke
+# scripts and defer real verification to CI. Install the official node LTS
+# tarball instead, off-PATH under /usr/local/lib/node with symlinks in
+# /usr/local/bin — the same non-root runtime user trick (`--user
+# $UID:$GID`, HOME=/tmp) used for uv and Dart below. The tarball bundles
+# npm/npx, so the Debian npm package is no longer needed.
+#
+# Like Dart/Chromium/gh, the tarball is fetched at build time because the
+# runtime egress proxy (sandbox/proxy/filter) blocks nodejs.org; `docker
+# build` has full host network. Multi-arch handled like the Dart layer.
+#
+# Image-size impact: the Node.js runtime adds ~130 MB (with bundled npm)
+# on top of Chromium (~300 MB) and Dart (~250 MB).
+ARG NODE_VERSION=22.23.5
+RUN ARCH="$(dpkg --print-architecture)" \
+    && case "$ARCH" in \
+         amd64) NARCH=x64 ;; \
+         arm64) NARCH=arm64 ;; \
+         *) echo "unsupported architecture for Node.js: $ARCH" >&2; exit 1 ;; \
+       esac \
+    && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NARCH}.tar.gz" \
+        -o /tmp/node.tar.gz \
+    && python3 -c 'import tarfile,sys; tarfile.open(sys.argv[1]).extractall(sys.argv[2])' /tmp/node.tar.gz /usr/local/lib/node \
+    # tarfile preserves the tarball's unix exec bits (unlike zipfile in
+    # the Dart layer above), but keep the explicit `a+rx` fix so the
+    # non-root runtime user can always exec the node/npm/npx binaries.
+    && chmod -R a+rx /usr/local/lib/node \
+    && ln -sf /usr/local/lib/node/node-v${NODE_VERSION}-linux-${NARCH}/bin/node /usr/local/bin/node \
+    && ln -sf /usr/local/lib/node/node-v${NODE_VERSION}-linux-${NARCH}/bin/npm /usr/local/bin/npm \
+    && ln -sf /usr/local/lib/node/node-v${NODE_VERSION}-linux-${NARCH}/bin/npx /usr/local/bin/npx \
+    && /usr/local/bin/node --version \
+    && /usr/local/bin/npm --version \
+    && rm /tmp/node.tar.gz
 
 # GitHub CLI (`gh`) for driving contribution workflows (push -> PR -> merge)
 # from inside the sandbox. `gh` is not in Debian's default apt repos, so add
