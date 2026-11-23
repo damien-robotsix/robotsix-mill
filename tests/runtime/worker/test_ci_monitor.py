@@ -40,6 +40,10 @@ def _ctx(tmp_path, repo_config=None, **env):
     db.reset_engine()
     env.setdefault("data_dir", str(tmp_path / "data"))
     env.setdefault("require_approval", "false")
+    # Most fixtures pin fixed (months-old) ``created_at`` values; keep them
+    # out of the backfill-cap path by default. The dedicated backfill tests
+    # pass a small ``ci_stale_failure_days`` explicitly.
+    env.setdefault("ci_stale_failure_days", 100_000)
     # Mirror forge_token into Secrets so get_secrets() works
     ft = env.pop("FORGE_TOKEN", None)
     if ft is not None:
@@ -2250,3 +2254,123 @@ def test_present_workflow_file_failure_is_filed(tmp_path, monkeypatch):
     ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
     assert len(ci_tickets) == 1
     assert "Auto Release" in ci_tickets[0].title
+
+
+# === backfill-cap guard (run age vs detection time) ========================
+
+
+def _old_failing_run(when, run_id=20, head_sha="oldbad", name="Docs", wf_id=300):
+    return {
+        "id": run_id,
+        "name": name,
+        "workflow_id": wf_id,
+        "head_sha": head_sha,
+        "conclusion": "failure",
+        "html_url": f"http://run/{run_id}",
+        "created_at": when,
+    }
+
+
+def _iso(days_ago):
+    return (datetime.now(UTC) - timedelta(days=days_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def test_backfill_run_already_green_skips_ticket(tmp_path, monkeypatch):
+    """A failing run older than the backfill cap whose workflow is already
+    green at/after the failing commit is NOT filed at all — a backfill
+    sweep (repo rename/onboarding wiping the dedup state, or a poll gap)
+    must not resurrect superseded failures as new tickets.
+    """
+    ctx = _ctx(
+        tmp_path,
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+        ci_stale_failure_days=14,
+    )
+    # The old failing run is the latest run of its workflow_id, while a
+    # newer run with the same workflow NAME ran green — the workflow is
+    # already fixed (the b751/5624 pattern: old failing run, newer green
+    # run under a post-rename workflow id).
+    _make_fake_forge(
+        monkeypatch,
+        runs=[
+            _old_failing_run(_iso(75)),
+            {
+                "id": 30,
+                "name": "Docs",
+                "workflow_id": 301,
+                "head_sha": "newgood",
+                "conclusion": "success",
+                "html_url": "http://run/30",
+                "created_at": _iso(1),
+            },
+        ],
+        logs="",
+    )
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    _run_ci_poll_cycle(worker, ctx, monkeypatch)
+
+    assert [t for t in ctx.service.list() if t.source == "ci"] == []
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    seen = json.loads(state_path.read_text("utf-8"))["seen"]
+    assert "300:oldbad" in seen
+    assert "run:20" in seen
+
+
+def test_backfill_run_still_red_routes_straight_to_auto_close(tmp_path, monkeypatch):
+    """A backfill-detected run that is STILL red is filed, but pinned
+    BLOCKED (stale-gate/auto-close evaluation) instead of proceeding into
+    LLM triage or a ci_fix cycle.
+    """
+    old_created = _iso(75)
+    ctx = _ctx(
+        tmp_path,
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+        ci_stale_failure_days=14,
+    )
+    _make_fake_forge(monkeypatch, runs=[_old_failing_run(old_created)], logs="")
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    _run_ci_poll_cycle(worker, ctx, monkeypatch)
+
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 1
+    t = ci_tickets[0]
+    assert "Docs" in t.title
+    assert t.state == State.BLOCKED
+    body = ctx.service.workspace(t).read_description() or ""
+    assert f"**Created:** {old_created}" in body
+
+    state_path = ctx.settings.data_dir / "test-repo" / "ci_monitor_state.json"
+    seen = json.loads(state_path.read_text("utf-8"))["seen"]
+    assert "300:oldbad" in seen
+    assert "run:20" in seen
+
+
+def test_backfill_run_not_reticketed_on_repeated_sweep(tmp_path, monkeypatch):
+    """A second backfill sweep over the same old failing run does not file
+    a second ticket (commit-key and run-id dedupe both mark the run seen).
+    """
+    ctx = _ctx(
+        tmp_path,
+        forge_kind="github",
+        forge_remote_url="https://github.com/o/r.git",
+        FORGE_TOKEN="tok",
+        ci_stale_failure_days=14,
+    )
+    _make_fake_forge(monkeypatch, runs=[_old_failing_run(_iso(75))], logs="")
+
+    worker = Worker(ctx)
+    worker._ci_monitor_task = None
+    _run_ci_poll_cycle(worker, ctx, monkeypatch)
+    _run_ci_poll_cycle(worker, ctx, monkeypatch)
+
+    ci_tickets = [t for t in ctx.service.list() if t.source == "ci"]
+    assert len(ci_tickets) == 1
+    assert ci_tickets[0].state == State.BLOCKED
