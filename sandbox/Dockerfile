@@ -39,9 +39,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js runtime for every board whose test_command is `npm test` /
-# `npx vitest …` (and the repo-internal board.js vm harness). The
-# Debian-bookworm apt `nodejs`/`npm` pins only ship node 20, which vitest
-# 5 (engines: node ^22.12.0) cannot run — its fork-worker pool dies on
+# `npx vitest …` (and the repo-internal board.js vm harness). The Debian
+# Trixie apt `nodejs`/`npm` pins (python:3.14-slim is Trixie-based) only
+# ship node 20, which vitest 5 (engines: node ^22.12.0) cannot run — its fork-worker pool dies on
 # node 20 inside undici's decompress interceptor ("Cannot read properties
 # of undefined (reading 'bind')"), so JS boards had to hand-roll smoke
 # scripts and defer real verification to CI. Install the official node LTS

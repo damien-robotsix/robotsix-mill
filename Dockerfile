@@ -192,8 +192,11 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
 # `sandbox.image`); the image sandbox/Dockerfile builds is never what a live
 # sandbox runs (#3499). Node must therefore live HERE, in the base stage that
 # dev/production derive from — not only in sandbox/Dockerfile. This layer
-# mirrors sandbox/Dockerfile's node install; keep the two in sync
-# (tests/sandbox/test_inventory.py asserts cross-file pin parity).
+# mirrors sandbox/Dockerfile's node install; keep the two in sync —
+# tests/sandbox/test_inventory.py
+# (test_main_dockerfile_bakes_in_lint_tools_matching_sandbox_pins) asserts
+# the NODE_VERSION ARG matches across both files, and that the curl pin
+# restored below stays in lock-step with the builder stage's curl pin.
 #
 # Why not apt? Debian Trixie's `nodejs`/`npm` only ship node 20, which
 # vitest 5 (engines: node ^22.12.0) cannot run — its fork-worker pool dies
