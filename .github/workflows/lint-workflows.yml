@@ -16,3 +16,4 @@ jobs:
     with:
       run-actionlint: true
       run-zizmor: true
+      dockerfiles: "Dockerfile sandbox/Dockerfile sandbox/proxy/Dockerfile"
