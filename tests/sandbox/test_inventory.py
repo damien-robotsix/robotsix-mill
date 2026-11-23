@@ -102,7 +102,17 @@ def test_log_inventory_no_drift_for_sandbox_image(monkeypatch, caplog):
 
 def test_main_dockerfile_bakes_in_lint_tools_matching_sandbox_pins():
     """The mill image IS the production sandbox_image, so it must carry the
-    same pinned actionlint/zizmor as sandbox/Dockerfile, plus uvx."""
+    same pinned tools as sandbox/Dockerfile: actionlint/zizmor, the node
+    runtime (NODE_VERSION ARG lock-step), plus uvx.
+
+    The node layers are duplicated across both Dockerfiles on purpose (the
+    live sandbox runs the mill image, not the sandbox image — #3499), so the
+    NODE_VERSION ARG is the drift guard: it must match in both files. curl
+    has no sandbox-side pin (sandbox/Dockerfile installs it unpinned), so
+    instead guard that the root Dockerfile's two apt layers (builder + base)
+    agree on a single curl pin — a drift there would silently re-create the
+    #3499 trap for the node tarball download path.
+    """
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2]
@@ -110,7 +120,12 @@ def test_main_dockerfile_bakes_in_lint_tools_matching_sandbox_pins():
     sbx = (root / "sandbox" / "Dockerfile").read_text(encoding="utf-8")
     for line in sbx.splitlines():
         if line.startswith(
-            ("ARG ACTIONLINT_VERSION=", "ARG ACTIONLINT_COMMIT=", "ARG ZIZMOR_VERSION=")
+            (
+                "ARG ACTIONLINT_VERSION=",
+                "ARG ACTIONLINT_COMMIT=",
+                "ARG ZIZMOR_VERSION=",
+                "ARG NODE_VERSION=",
+            )
         ) or (line.startswith("FROM golang:") and "AS actionlint-build" in line):
             assert line in main, line
     assert (
@@ -121,3 +136,15 @@ def test_main_dockerfile_bakes_in_lint_tools_matching_sandbox_pins():
     )
     assert "COPY --from=builder /usr/local/bin/uvx /usr/local/bin/uvx" in main
     assert "uvx --version && actionlint -version && zizmor --version" in main
+    # curl pin parity within the root Dockerfile: the base stage needs a
+    # pinned curl for the node tarball layer, and it must not drift from the
+    # builder stage's curl pin.
+    main_curl_pins = [
+        ln.strip() for ln in main.splitlines() if ln.strip().startswith("curl=")
+    ]
+    assert len(main_curl_pins) == 2, main_curl_pins
+    assert len(set(main_curl_pins)) == 1, main_curl_pins
+    # sandbox/Dockerfile installs curl unpinned (uv installer + node tarball
+    # layer); guard that it is still provisioned there so the node download
+    # has a working curl.
+    assert "curl ca-certificates" in sbx
