@@ -13,7 +13,7 @@ import logging
 import random
 import re
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -775,8 +775,13 @@ class PollLoopsCiMixin(_WorkerBase):
         ticket: Ticket,
         body: str,
         rc: RepoConfig | None = None,
-    ) -> None:
-        """Run the stale-CI gate on a freshly filed draft (best-effort)."""
+    ) -> str | None:
+        """Run the stale-CI gate on a freshly filed draft (best-effort).
+
+        Returns the verdict action (``"close"`` or ``"block"``) when the
+        gate acted, else ``None`` when it declined or errored — the caller
+        then decides whether the ticket may proceed.
+        """
         from ...stages.ci_stale_gate import (
             escalate_verdict,
             evaluate_stale_ci,
@@ -784,6 +789,7 @@ class PollLoopsCiMixin(_WorkerBase):
             sibling_forges,
         )
 
+        verdict = None
         try:
             verdict = evaluate_stale_ci(
                 forge,
@@ -795,7 +801,7 @@ class PollLoopsCiMixin(_WorkerBase):
                 ),
             )
             if verdict is None:
-                return
+                return None
             escalate_verdict(self.ctx.settings, verdict, ticket.id)
             if verdict.upstream_ref:
                 file_upstream_companion(self.ctx.settings, verdict)
@@ -813,6 +819,7 @@ class PollLoopsCiMixin(_WorkerBase):
             log.warning(
                 "CI monitor: stale-CI gate failed for %s", ticket.id, exc_info=True
             )
+        return verdict.action if verdict is not None else None
 
     async def _poll_one_repo_ci(
         self,
@@ -823,9 +830,13 @@ class PollLoopsCiMixin(_WorkerBase):
         ansi_re: re.Pattern[str],
     ) -> None:
         """Execute one CI monitor poll cycle for a single repo."""
-        from ...agents.runners.ci_auto_close_runner import workflow_path_deleted
+        from ...agents.runners.ci_auto_close_runner import (
+            _green_since_failure,
+            workflow_path_deleted,
+        )
         from ...core.service import TicketService
         from ...scm.forge import get_forge
+        from ...stages.ci_stale_gate import _parse_ts
 
         settings = self.ctx.settings
         repo_label = rc.repo_id
@@ -907,8 +918,10 @@ class PollLoopsCiMixin(_WorkerBase):
             title = f"CI failure: {wf_name} on {run_target}"
 
             # Cheap first guard: avoid re-filing or re-commenting
-            # for the exact same failing commit.
-            if key in seen:
+            # for the exact same failing commit, or for a run-id entry
+            # written by the backfill path below (so a repeated backfill
+            # sweep cannot re-ticket the same run).
+            if key in seen or (run_id_val is not None and f"run:{run_id_val}" in seen):
                 continue
 
             # Deleted-workflow guard: never file for a workflow file that is
@@ -940,6 +953,65 @@ class PollLoopsCiMixin(_WorkerBase):
             ):
                 seen[key] = now
                 continue
+
+            # Backfill-cap guard: a failing run that predates detection by
+            # more than ``ci_stale_failure_days`` was re-detected by a
+            # backfill sweep (a repo rename/onboarding wiping the dedup
+            # state, or a poll gap), not by the live sweep — robotsix-calendar
+            # 2026-10/11 ticketed two-month-old Aug runs as new failures
+            # (74/73-day lag) that ci-stale-gate then force-closed within
+            # seconds. For such a legacy run:
+            #   * workflow already green on main at/after the failing commit
+            #     → do not file at all (log one line, mark seen, move on);
+            #   * still red → file below, but route it straight to the
+            #     stale-gate/auto-close evaluation instead of LLM triage /
+            #     ci_fix, so a legacy red run cannot trigger an unwanted
+            #     fix cycle or a fresh retrospect pass.
+            backfill_detected = False
+            raw_created = run.get("created_at")
+            if run_target == target and raw_created:
+                created_ts = _parse_ts(raw_created)
+                if created_ts is not None and (
+                    datetime.fromtimestamp(now, tz=UTC) - created_ts
+                ) > timedelta(days=settings.ci_stale_failure_days):
+                    backfill_detected = True
+                    try:
+                        runs_now = await asyncio.to_thread(
+                            forge.list_workflow_runs, branch=run_target
+                        )
+                    except Exception as exc:
+                        log.warning(
+                            "CI monitor (%s): backfill green check failed "
+                            "for run %s — treating as still red: %s",
+                            repo_label,
+                            run_id_val,
+                            exc,
+                        )
+                        runs_now = []
+                    if not isinstance(runs_now, list):
+                        runs_now = []
+                    green, _ = _green_since_failure(
+                        runs_now,
+                        wf_name,
+                        run.get("head_sha") or "",
+                        failing_created_at=raw_created,
+                    )
+                    if green:
+                        log.info(
+                            "CI monitor (%s): skip run %s (%s) — "
+                            "backfill-detected (created %s, older than %s "
+                            "days) and workflow already green at/after the "
+                            "failing commit",
+                            repo_label,
+                            run_id_val,
+                            wf_name,
+                            raw_created,
+                            settings.ci_stale_failure_days,
+                        )
+                        seen[key] = now
+                        if run_id_val is not None:
+                            seen[f"run:{run_id_val}"] = now
+                        continue
 
             # 3. Canonical-ticket consolidation.
             canonical, _ = self._find_canonical_ci_ticket(
@@ -1143,13 +1215,43 @@ class PollLoopsCiMixin(_WorkerBase):
                 continue
 
             # 7b. Stale-CI gate: close an already-fixed failure / block an
-            # upstream-only one before it can reach ``ready``.
-            await asyncio.to_thread(
+            # upstream-only one before it can reach ``ready``. A
+            # backfill-detected run the gate cannot deterministically
+            # close/block is pinned BLOCKED here instead — never sent into
+            # LLM triage or a ci_fix cycle; ci-auto-close closes it once the
+            # workflow goes green on the target branch.
+            gate_action = await asyncio.to_thread(
                 self._apply_stale_ci_gate, service, forge, ticket, body, rc
             )
+            if backfill_detected and gate_action is None:
+                service.transition(
+                    ticket.id,
+                    State.BLOCKED,
+                    note=(
+                        "Backfill-detected legacy failure: run "
+                        f"{run_id_val} created {raw_created} predates "
+                        f"detection by more than "
+                        f"{settings.ci_stale_failure_days} days and the "
+                        f"workflow is still red. Routed to ci-auto-close "
+                        f"evaluation — will be closed automatically once "
+                        f"'{wf_name}' goes green on {run_target}."
+                    ),
+                )
+                log.info(
+                    "CI monitor (%s): backfill-detected run %s (%s) — "
+                    "ticket %s routed to ci-auto-close (BLOCKED)",
+                    repo_label,
+                    run_id_val,
+                    wf_name,
+                    ticket.id,
+                )
 
             # Mark as seen and clear any deferral bookkeeping.
             seen[key] = now
+            if backfill_detected and run_id_val is not None:
+                # Run-id dedupe: a repeated backfill sweep must not be able
+                # to re-ticket the same run.
+                seen[f"run:{run_id_val}"] = now
             deferred.pop(key, None)
 
         # 8. Persist state.
