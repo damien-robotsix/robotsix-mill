@@ -86,7 +86,8 @@ def test_survey_prompt_includes_standards_awareness():
     for kw in (
         "robotsix-standards",
         "AGENT.md",
-        "extra filesystem root",
+        "standards_cache/repo",
+        "list_dir('/')",
         "Selectively fetch",
         "filter, not a straitjacket",
     ):
@@ -710,12 +711,14 @@ class TestSurveyDynamicKwargsExtraRoots:
         kwargs = _survey_dynamic_kwargs(settings)
         assert "extra_roots" in kwargs
         assert kwargs["extra_roots"] == [expected_dir]
+        assert kwargs["standards_root"] == expected_dir
         assert "usage_limits" in kwargs
 
     def test_survey_dynamic_kwargs_no_extra_roots_on_clone_failure(
         self, tmp_path, monkeypatch
     ):
-        """When the standards clone fails, extra_roots is absent."""
+        """When the standards clone fails, both extra_roots and
+        standards_root are absent."""
         from robotsix_mill.agents.surveying import _survey_dynamic_kwargs
 
         settings = _make_settings(tmp_path)
@@ -727,6 +730,7 @@ class TestSurveyDynamicKwargsExtraRoots:
 
         kwargs = _survey_dynamic_kwargs(settings)
         assert "extra_roots" not in kwargs
+        assert "standards_root" not in kwargs
         assert "usage_limits" in kwargs
 
 

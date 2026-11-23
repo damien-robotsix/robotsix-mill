@@ -37,9 +37,12 @@ from robotsix_mill.agents import web_knowledge
 from robotsix_mill.agents.tool_registry import ToolRegistry
 from robotsix_mill.agents.web_knowledge import (
     _build_index,
+    _is_bookkeeping_only,
     _is_stale,
     _KnowledgeMeta,
+    _make_tools,
     _parse_frontmatter,
+    _recover_answer,
     _slug,
     _stamp_frontmatter,
     make_ask_web_knowledge_tool,
@@ -487,6 +490,80 @@ class TestHelpers:
 
 
 # ---------------------------------------------------------------------------
+# Bookkeeping-confirmation fallback (trace-review Finding: the final
+# message may be only "Done — written the reference file X"; the caller
+# receives only that message, never the file).
+# ---------------------------------------------------------------------------
+
+
+class TestBookkeepingFallback:
+    """``_is_bookkeeping_only`` / ``_recover_answer``: when the agent's
+    final reply is a short file-write acknowledgement with no answer
+    text and the consult persisted a knowledge file, the runner returns
+    the persisted body so the caller never receives an empty
+    confirmation."""
+
+    def test_acknowledgement_detected(self):
+        out = "Done — written the reference file `abortsignal-timeout-fetch.md`"
+        assert _is_bookkeeping_only(out) is True
+
+    def test_updated_file_acknowledgement_detected(self):
+        assert _is_bookkeeping_only("Updated `imaplib.md`.") is True
+
+    def test_real_answer_not_detected(self):
+        # A real answer is long enough to plausibly carry the content.
+        out = (
+            "imaplib.login raises builtins.Exception on Gmail auth failure; "
+            "wrap it in try/except and retry with a fresh token. See "
+            "https://example.com/gmail-auth for details."
+        )
+        assert _is_bookkeeping_only(out) is False
+
+    def test_short_answer_without_file_ref_not_detected(self):
+        assert _is_bookkeeping_only("No, Python defaults to UTC.") is False
+
+    def test_long_acknowledgement_not_detected(self):
+        # Verbose confirmation beyond the cap is left alone (may contain
+        # a summary).
+        out = "Done — written the reference file `x.md`. " + ("y" * 400)
+        assert _is_bookkeeping_only(out) is False
+
+    def test_recover_passthrough_when_no_persistence(self):
+        out = "the answer"
+        assert _recover_answer(out, []) == out
+
+    def test_recover_passthrough_for_real_answer(self):
+        persisted = [("imaplib.md", "imaplib.login: builtins.Exception")]
+        out = "imaplib.login raises builtins.Exception."
+        assert _recover_answer(out, persisted) == out
+
+    def test_recover_returns_last_persisted_body(self):
+        persisted = [("a.md", "first body"), ("b.md", "second body")]
+        out = "Done — written the reference file `b.md`"
+        recovered = _recover_answer(out, persisted)
+        assert "second body" in recovered
+        assert "b.md" in recovered
+        assert "first body" not in recovered
+
+    def test_recover_uses_real_update_library_capture(self, tmp_path):
+        """End-to-end capture: the real ``update_library`` closure
+        records the persisted body into the runner's list, and
+        ``_recover_answer`` hands it back for an ack-only final
+        message."""
+        settings = _settings(tmp_path)
+        persisted: list[tuple[str, str]] = []
+        tools = _make_tools(settings, persisted=persisted)
+        update_library = next(t for t in tools if t.__name__ == "update_library")
+        update_library("imaplib", "imaplib.login: builtins.Exception on Gmail")
+
+        assert persisted == [
+            ("imaplib.md", "imaplib.login: builtins.Exception on Gmail")
+        ]
+        recovered = _recover_answer("Done — written `imaplib.md`", persisted)
+        assert "imaplib.login: builtins.Exception on Gmail" in recovered
+
+
+# ---------------------------------------------------------------------------
 # TestRunWebKnowledge — the single mockable seam
 # ---------------------------------------------------------------------------
 
@@ -659,6 +736,47 @@ class TestRunWebKnowledge:
         assert "~45 days" in instances[0].system_prompt
         assert "~30 days" not in instances[0].system_prompt
         assert "~99 hours" in instances[0].system_prompt
+
+    def test_system_prompt_forbids_bookkeeping_only_final_reply(
+        self, tmp_path, secrets_set, monkeypatch
+    ):
+        """Rule 4 must require the final reply to re-state the answer,
+        not merely acknowledge a file write (the caller receives only
+        that message, never the file)."""
+        secrets_set(openrouter_api_key="k")
+        instances = _patch_agent_chain(monkeypatch)
+        s = _settings(tmp_path)
+        asyncio.run(run_web_knowledge(settings=s, question="q"))
+        assert len(instances) == 1
+        prompt = instances[0].system_prompt
+        assert "final reply to the caller IS the answer" in prompt
+        assert "bookkeeping-only message" in prompt
+        assert "force" in prompt and "re-ask" in prompt
+
+    def test_runner_passes_persist_capture_to_tools(
+        self, tmp_path, secrets_set, monkeypatch
+    ):
+        """run_web_knowledge gives _make_tools a per-consult capture
+        list so the bookkeeping fallback has the persisted body."""
+        secrets_set(openrouter_api_key="k")
+        captured: dict[str, object] = {}
+
+        def fake_make_tools(settings, persisted=None):
+            captured["persisted"] = persisted
+            return []
+
+        monkeypatch.setattr(web_knowledge, "_make_tools", fake_make_tools)
+        _patch_agent_chain(monkeypatch)
+        s = _settings(tmp_path)
+        out = asyncio.run(
+            run_web_knowledge(
+                settings=s,
+                question="what does imaplib raise?",
+            )
+        )
+        assert out == "the answer"
+        # The runner created the capture list and handed it to _make_tools.
+        assert captured.get("persisted") == []
 
     def test_agent_failure_degrades_to_error_string(
         self, tmp_path, secrets_set, monkeypatch

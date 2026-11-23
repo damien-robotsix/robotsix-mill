@@ -557,6 +557,56 @@ def test_extra_roots_none_when_not_provided(settings, monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# standards_root prompt injection
+# ---------------------------------------------------------------------------
+
+
+def test_standards_root_appends_checkout_location(settings, monkeypatch, tmp_path):
+    """When standards_root is provided, the system prompt gains a
+    concrete 'Standards checkout location for this run' note so the
+    agent does not have to guess where the standards checkout lives."""
+    mocks = _setup_patches(monkeypatch)
+    root = tmp_path / "standards" / "repo"
+    root.mkdir(parents=True)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        standards_root=root,
+    )
+
+    sys_prompt = mocks["build_agent_from_definition"].call_args[1]["system_prompt"]
+    assert "Standards checkout location for this run" in sys_prompt
+    assert str(root) in sys_prompt
+    assert "Do NOT call `list_dir('/')`" in sys_prompt
+
+
+def test_standards_root_none_omits_checkout_note(settings, monkeypatch, tmp_path):
+    """When standards_root is None (clone unavailable), no checkout
+    note is appended — the prompt must not promise a path."""
+    mocks = _setup_patches(monkeypatch)
+
+    run_periodic_agent(
+        settings=settings,
+        definition_name="test",
+        max_gaps=5,
+        repo_dir=tmp_path,
+        memory="mem",
+        recent_proposals="props",
+        prompt_tail="Tail.",
+        standards_root=None,
+    )
+
+    sys_prompt = mocks["build_agent_from_definition"].call_args[1]["system_prompt"]
+    assert "Standards checkout location for this run" not in sys_prompt
+
+
+# ---------------------------------------------------------------------------
 # overlay key
 # ---------------------------------------------------------------------------
 

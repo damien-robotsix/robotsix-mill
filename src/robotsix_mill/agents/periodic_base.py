@@ -236,6 +236,7 @@ def run_periodic_agent(
     include_parallel_commands: bool = False,
     include_write_file: bool = False,
     extra_roots: list[Path] | None = None,
+    standards_root: Path | None = None,
     usage_limits: Any = None,
     definition_override: Any = None,
     max_errors: int = 0,
@@ -288,6 +289,15 @@ def run_periodic_agent(
         filter (default filter is ``{"read_file", "list_dir"}``).
     extra_roots:
         Forwarded to ``build_fs_tools(…, extra_roots=extra_roots)``.
+    standards_root:
+        Absolute path of the robotsix-standards checkout when it is
+        available for this run (also passed via *extra_roots* by the
+        survey/audit runners).  When set, appends a "Standards
+        checkout location for this run" note with this exact path to
+        the system prompt so the agent can browse the standards tree
+        without guessing (the checkout lives outside the repo tree at
+        ``<data_dir>/standards_cache/repo`` — see
+        ``agents/surveying._ensure_standards_repo``).
     usage_limits:
         When not ``None``, passed as ``usage_limits=…`` to
         ``agent.run_sync(prompt, …)``.
@@ -363,6 +373,25 @@ def run_periodic_agent(
         system_prompt = apply_overlay(
             definition.system_prompt,
             load_overlay(repo_dir, definition_name),
+        )
+
+    # When the standards checkout is mounted (survey / audit runners),
+    # give the agent its concrete absolute path instead of making it
+    # guess.  The checkout lives OUTSIDE the repo tree at
+    # ``<data_dir>/standards_cache/repo`` and is browsable ONLY via the
+    # in-process file tools — ``run_command``'s sandbox never mounts it
+    # (see the STANDARDS AWARENESS block in standards-awareness.yaml).
+    if standards_root is not None:
+        system_prompt += (
+            "\n\n## Standards checkout location for this run\n\n"
+            "The robotsix-standards checkout is registered as an extra "
+            "filesystem root for your file tools at:\n\n"
+            f"    {standards_root}\n\n"
+            "Browse it with `list_dir` / `read_file` using that absolute "
+            "path. Do NOT call `list_dir('/')` and do NOT try repo-relative "
+            "names like `standards_cache/repo` from the repo root — the "
+            "checkout is not part of the repo tree, and `run_command`'s "
+            "shell sandbox does not mount it (file tools only)."
         )
 
     # ------------------------------------------------------------------

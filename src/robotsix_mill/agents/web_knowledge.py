@@ -418,8 +418,16 @@ see at a glance which files need re-checking.
    - For cross-cutting / general facts, call ``append_general(note)``.
      One short paragraph per call.
 
-4. Stop. Your final reply to the caller is your answer, not a
-   transcript of how you found it.
+4. Stop. Your final reply to the caller IS the answer. The caller
+   receives ONLY this final message — it never sees the file you
+   wrote; the cache is read by FUTURE consults, not the current
+   caller. So the final message MUST re-state the actual answer text;
+   a bookkeeping-only message ("Done — written the reference file
+   X", "Updated <lib>.md") is INVALID: it carries none of the
+   requested content and forces the caller to re-ask or fall back to
+   its own unverifiable memory. If you updated the cache
+   (``update_library`` / ``append_general``), still include the full
+   answer in this final message.
 
 ## Budget — you have {request_limit} model requests
 
@@ -459,8 +467,20 @@ Plan your turns accordingly:
 # ---------------------------------------------------------------------------
 
 
-def _make_tools(settings: Settings) -> list[Any]:
-    """Build the closures the agent calls during a consult."""
+def _make_tools(
+    settings: Settings,
+    persisted: list[tuple[str, str]] | None = None,
+) -> list[Any]:
+    """Build the closures the agent calls during a consult.
+
+    *persisted*, when supplied, receives ``(filename, body)`` for
+    every knowledge file the agent writes during this consult, in
+    write order.  The runner passes its own list so that
+    ``run_web_knowledge`` can fall back to the persisted body when the
+    agent's final message is only a bookkeeping confirmation (see
+    ``_recover_answer``) — the caller receives only the final message,
+    never the file, so a bare acknowledgement would be a silent void.
+    """
     from .web_research import run_web_research
 
     def list_knowledge_files() -> str:
@@ -561,6 +581,8 @@ def _make_tools(settings: Settings) -> list[Any]:
             tmp = path.with_suffix(".md.tmp")
             tmp.write_text(stamped, encoding="utf-8")
             tmp.replace(path)
+            if persisted is not None:
+                persisted.append((path.name, content))
             return f"updated: {path.name}"
         except OSError as e:
             log.warning("web_knowledge update_library failed: %s", e)
@@ -579,6 +601,8 @@ def _make_tools(settings: Settings) -> list[Any]:
             entry = f"\n## {now}\n\n{note.strip()}\n"
             with path.open("a", encoding="utf-8") as f:
                 f.write(entry)
+            if persisted is not None:
+                persisted.append((path.name, path.read_text(encoding="utf-8")))
             return "appended"
         except OSError as e:
             log.warning("web_knowledge append_general failed: %s", e)
@@ -612,6 +636,57 @@ def _make_tools(settings: Settings) -> list[Any]:
         append_general_memory,
         web_search,
     ]
+
+
+_BOOKKEEPING_MAX_CHARS = 320
+_BOOKKEEPING_RE = re.compile(
+    r"(done|wrote|written|writing|updated|saved|appended|created)",
+    re.IGNORECASE,
+)
+_FILE_REF_RE = re.compile(r"`[a-z0-9_-]+\.md`")
+
+
+def _is_bookkeeping_only(output: str) -> bool:
+    """Heuristic for the degenerate consult the trace-review pass
+    caught: the model's FINAL message is a short file-write
+    acknowledgement (naming a ``.md`` file it just persisted) with no
+    answer text.
+
+    ``run_web_knowledge`` returns only this final message to the
+    caller, so a bare acknowledgement is a silent void — see
+    ``_recover_answer`` for the fallback that then applies.
+    """
+    text = output.strip()
+    if len(text) > _BOOKKEEPING_MAX_CHARS:
+        # Long enough to plausibly contain the answer — do not clobber it.
+        return False
+    if not _FILE_REF_RE.search(text):
+        # Does not even name a knowledge file the agent wrote.
+        return False
+    return bool(_BOOKKEEPING_RE.search(text))
+
+
+def _recover_answer(output: str, persisted: list[tuple[str, str]]) -> str:
+    """Return *output*, unless it is only a file-write acknowledgement
+    with no answer text AND the consult persisted a knowledge file —
+    then return the last persisted body so the caller never receives
+    an empty confirmation (see ``_is_bookkeeping_only``).
+    """
+    if not persisted or not _is_bookkeeping_only(output):
+        return output
+    name, body = persisted[-1]
+    log.warning(
+        "web_knowledge final reply was only a bookkeeping confirmation "
+        "(%r); returning content persisted to %s instead",
+        output.strip()[:80],
+        name,
+    )
+    return (
+        "[web_knowledge] the sub-agent's final reply was only a "
+        f"file-write confirmation (the caller sees only that message, never "
+        f"the file). Returning the content it persisted to `{name}` instead:\n\n"
+        f"{body}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -654,6 +729,11 @@ async def run_web_knowledge(
 
     reset_web_fetch_budget()
 
+    # Per-consult record of knowledge files the agent persists, so the
+    # runner can fall back to the file body if the final message is only
+    # a bookkeeping confirmation (see _recover_answer).
+    persisted: list[tuple[str, str]] = []
+
     # Lazy: keep the test suite hermetic, the core import-light.
     from pydantic_ai import Agent
     from pydantic_ai.exceptions import UsageLimitExceeded
@@ -675,7 +755,7 @@ async def run_web_knowledge(
         request_limit=request_limit,
         request_limit_minus_2=max(1, request_limit - 2),
     )
-    tools = _make_tools(settings)
+    tools = _make_tools(settings, persisted=persisted)
 
     if on_claude:
         _log_claude_route_once(level)
@@ -715,7 +795,7 @@ async def run_web_knowledge(
                 lambda: agent.run(question, **run_kwargs),
                 what="web_knowledge",
             )
-        return str(result.output)
+        return _recover_answer(str(result.output), persisted)
     except UsageLimitExceeded as e:
         log.warning("web_knowledge budget exhausted: %s", e)
         return (

@@ -494,3 +494,44 @@ def test_run_audit_pass_no_forge_is_repo_dir_none(tmp_path, monkeypatch):
     )
     run_audit_pass(session_id="test-sid", repo_config=_test_repo_config())
     assert got["repo_dir"] is None
+
+
+# --- Standards awareness wiring ---
+
+
+def test_audit_dynamic_kwargs_mounts_standards_root(tmp_path, monkeypatch):
+    """The audit agent mounts the same standards checkout as survey so
+    the shared STANDARDS AWARENESS prompt block has a real path."""
+    from robotsix_mill.agents.auditing import _audit_dynamic_kwargs
+    from robotsix_mill.agents.surveying import _STANDARDS_CACHE_SUBDIR
+
+    settings = _make_settings(tmp_path)
+    expected_dir = settings.data_dir.joinpath(*_STANDARDS_CACHE_SUBDIR)
+    expected_dir.mkdir(parents=True, exist_ok=True)
+    (expected_dir / ".git").mkdir(parents=True, exist_ok=True)
+
+    # No-op pull.
+    monkeypatch.setattr("subprocess.run", lambda *a, **kw: None)
+
+    kwargs = _audit_dynamic_kwargs(settings)
+    assert kwargs["extra_roots"] == [expected_dir]
+    assert kwargs["standards_root"] == expected_dir
+    assert "usage_limits" in kwargs
+
+
+def test_audit_dynamic_kwargs_no_standards_on_clone_failure(tmp_path, monkeypatch):
+    """When the standards clone fails, neither extra_roots nor
+    standards_root is set — the audit still runs without standards."""
+    from robotsix_mill.agents.auditing import _audit_dynamic_kwargs
+
+    settings = _make_settings(tmp_path)
+
+    def fake_run(cmd, **kwargs):
+        raise OSError("network unreachable")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    kwargs = _audit_dynamic_kwargs(settings)
+    assert "extra_roots" not in kwargs
+    assert "standards_root" not in kwargs
+    assert "usage_limits" in kwargs

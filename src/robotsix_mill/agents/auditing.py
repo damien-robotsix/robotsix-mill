@@ -27,7 +27,22 @@ AuditResult = PeriodicAgentResult
 def _audit_dynamic_kwargs(settings: Settings) -> dict[str, Any]:
     from pydantic_ai.usage import UsageLimits
 
-    return {"usage_limits": UsageLimits(request_limit=settings.audit_request_limit)}
+    kwargs: dict[str, Any] = {
+        "usage_limits": UsageLimits(request_limit=settings.audit_request_limit),
+    }
+
+    # Mount the same standards checkout as the survey agent: audit.yaml
+    # includes the shared STANDARDS AWARENESS prompt block, so the
+    # checkout must actually be reachable for that block's instructions
+    # to hold (see ``agents/surveying._ensure_standards_repo``).
+    from .surveying import _ensure_standards_repo
+
+    standards_root = _ensure_standards_repo(settings)
+    if standards_root is not None:
+        kwargs["extra_roots"] = [standards_root]
+        kwargs["standards_root"] = standards_root
+
+    return kwargs
 
 
 run_audit_agent = make_agent_runner(
