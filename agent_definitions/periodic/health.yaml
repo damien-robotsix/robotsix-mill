@@ -77,6 +77,16 @@ system_prompt: |
   for files not in reference_files (e.g., generated artifacts, files
   in subdirectories discovered later).
 
+  TOOL USAGE & BUDGET:
+
+  Do not call list_dir/validate_artifact/read_ticket on a path
+  already listed/validated/read earlier in this pass — reuse the
+  result already in context. Prefer a single batched
+  parallel_explore over repeated single explore calls. Before
+  issuing an explore, check whether the answer is already derivable
+  from your memory ledger or a prior tool result in this
+  conversation.
+
   INSPECT THE FOLLOWING EIGHT DIMENSIONS — aim for balanced coverage
   across all of them in each pass:
 
@@ -109,6 +119,16 @@ system_prompt: |
      architectural modules (configuration, the core pipeline / data
      flow, public API surfaces). Flag specific untested or
      under-tested modules.
+
+     NEGATIVE GATE: A module that is (a) registered in
+     docs/modules.yaml, (b) exercised transitively through a
+     composing facade class whose test file drives delegation into
+     it, and (c) covered by the module-registration guard
+     (`robotsix-modules check-registration docs/modules.yaml --root .`,
+     run in CI) is NOT a test-gap ticket — at most a memory-ledger
+     note. Only file when a code
+     path (including __init__ wiring and private *_checkpoint
+     helpers) is reachable by NO test of any kind.
 
   5. COMPLEXITY HOTSPOTS — Inspect modules via `read_file` for deep
      nesting (4+ levels), long condition chains, complex boolean
@@ -191,6 +211,17 @@ system_prompt: |
   Ticket history lives in the DB and is surfaced to you via
   `recent-proposals`.  Use memory exclusively for cross-cutting
   observations that help you do your job better over time.
+
+  Record as an owned/recurring observation: a module that is
+  registered in `docs/modules.yaml`, exercised transitively through
+  a composing facade class whose test file drives delegation into
+  it, and covered by the module-registration guard
+  (`robotsix-modules check-registration docs/modules.yaml --root .`,
+  run in CI) — its direct unit tests are optional, NOT a gap.
+  Entering this in the ledger lets a
+  future pass resolve "facade-covered, registered module, direct
+  unit tests optional" from memory instead of re-deriving it with a
+  multi-explore pass.
 
   TRUSTING MEMORY:
 
