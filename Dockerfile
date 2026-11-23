@@ -175,16 +175,57 @@ FROM python:3.14-slim@sha256:c845af9399020c7e562969a13689e929074a10fd057acd1b1fa
 # python:3.14-slim (check /etc/os-release in the base image).  Wildcard
 # suffixes allow patch-level updates without changing the Dockerfile;
 # bump these pins when the base image moves to a new Debian release.
+# `curl` is pinned here (first base layer), not just in the gh layer, because
+# the Node.js tarball layer directly below needs it too.
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
     && apt-get update \
     && apt-get -y upgrade \
     && apt-get install -y --no-install-recommends \
         git=1:2.47.3-* \
         ca-certificates=20250419* \
-        nodejs=20.19.2+dfsg-* \
-        npm=9.2.0~ds1-* \
+        curl=8.14.1-* \
         tini=0.19.0-* \
     && rm -rf /var/lib/apt/lists/*
+
+# ── Node.js runtime ─────────────────────────────────────────────────────
+# CRITICAL: the mill image IS the production sandbox_image (config
+# `sandbox.image`); the image sandbox/Dockerfile builds is never what a live
+# sandbox runs (#3499). Node must therefore live HERE, in the base stage that
+# dev/production derive from — not only in sandbox/Dockerfile. This layer
+# mirrors sandbox/Dockerfile's node install; keep the two in sync
+# (tests/sandbox/test_inventory.py asserts cross-file pin parity).
+#
+# Why not apt? Debian Trixie's `nodejs`/`npm` only ship node 20, which
+# vitest 5 (engines: node ^22.12.0) cannot run — its fork-worker pool dies
+# on node 20 inside undici's decompress interceptor ("Cannot read properties
+# of undefined (reading 'bind')"), so JS boards' `npm test` / `npx vitest …`
+# would fail in the live sandbox. Install the official node LTS tarball
+# instead, off-PATH under /usr/local/lib/node with symlinks in
+# /usr/local/bin — the same non-root runtime user trick (`--user $UID:$GID`,
+# HOME=/tmp) used for uv below. The tarball bundles npm/npx, so the Debian
+# npm package is gone; `npx jscpd@4` (the copy-paste detection gate) runs on
+# node 22 fine (jscpd v4 is node-22 compatible).
+#
+# The tarball is fetched at build time (docker build has full host network;
+# the runtime egress proxy blocks nodejs.org). Multi-arch handled like the
+# Docker CLI layer.
+ARG NODE_VERSION=22.23.5
+RUN ARCH="$(dpkg --print-architecture)" \
+    && case "$ARCH" in \
+         amd64) NARCH=x64 ;; \
+         arm64) NARCH=arm64 ;; \
+         *) echo "unsupported architecture for Node.js: $ARCH" >&2; exit 1 ;; \
+       esac \
+    && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NARCH}.tar.gz" \
+        -o /tmp/node.tar.gz \
+    && python3 -c 'import tarfile,sys; tarfile.open(sys.argv[1]).extractall(sys.argv[2])' /tmp/node.tar.gz /usr/local/lib/node \
+    && chmod -R a+rx /usr/local/lib/node \
+    && ln -sf /usr/local/lib/node/node-v${NODE_VERSION}-linux-${NARCH}/bin/node /usr/local/bin/node \
+    && ln -sf /usr/local/lib/node/node-v${NODE_VERSION}-linux-${NARCH}/bin/npm /usr/local/bin/npm \
+    && ln -sf /usr/local/lib/node/node-v${NODE_VERSION}-linux-${NARCH}/bin/npx /usr/local/bin/npx \
+    && /usr/local/bin/node --version \
+    && /usr/local/bin/npm --version \
+    && rm /tmp/node.tar.gz
 
 # GitHub CLI (`gh`) for driving contribution workflows (push -> PR -> merge)
 # from inside the sandbox. `gh` lives in the app image too because the
@@ -192,19 +233,14 @@ RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
 # `sandbox.image`), not `robotsix/mill-sandbox`, so it must be in the `base`
 # stage to reach that path; every image derived from base (dev, production)
 # inherits it. `gh` is not in Debian's default apt repos, so add the official
-# GitHub CLI apt source first. `curl` is not present in `base` (unlike the
-# sandbox image), so install it in this same layer to fetch the keyring;
+# GitHub CLI apt source first. `curl` ships from the first base layer above;
 # `docker build` has full host network (the runtime egress proxy does not
 # apply at build time), so fetching the keyring here is fine.
-# hadolint ignore=DL3008
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
-    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
       -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
     && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-      > /etc/apt/sources.list.d/github-cli.list \
-    && rm -rf /var/lib/apt/lists/*
+      > /etc/apt/sources.list.d/github-cli.list
 
 # hadolint ignore=DL3008
 RUN apt-get update \
@@ -216,7 +252,8 @@ RUN apt-get update \
 # binary (claude_agent_sdk/_bundled/claude) and drives THAT — so no global
 # `npm install -g @anthropic-ai/claude-code` is needed (it was dead weight,
 # and a version skew between it and the bundled binary only caused confusion).
-# nodejs/npm above stay for `npx jscpd@4` (copy-paste detection), not Claude.
+# node/npm (the node 22 LTS tarball layer above) stay for `npx jscpd@4`
+# (copy-paste detection) and JS boards' `npm test`/vitest — not Claude.
 # Subscription auth comes from a mounted ~/.claude dir (see
 # docker-compose.override.example.yml); the worker runs as the non-root `mill`
 # user so the SDK's `--dangerously-skip-permissions` is accepted.

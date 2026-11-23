@@ -37,10 +37,11 @@ jobs:
       security-events: write  # upload the Trivy scan SARIF to code scanning
     with:
       image-name: ghcr.io/damien-robotsix/robotsix-mill
-      # Smoke the published digest: sandbox-contract `gh` and workflow-lint
-      # tools (this image is the production sandbox_image), bundled
+      # Smoke the published digest: node ≥22 (this image IS the production
+      # sandbox_image, and JS boards' `npm test`/vitest 5 needs node >= 22),
+      # sandbox-contract `gh` and workflow-lint tools, bundled
       # agent_definitions, and readable importlib.metadata version.
-      smoke_command: "gh --version && actionlint -version && zizmor --version && uvx --version && python -c 'from robotsix_mill._resources import agent_definitions_dir; assert agent_definitions_dir().is_dir()' && python -c \"from importlib.metadata import metadata; assert metadata('robotsix-mill')['Version']\""
+      smoke_command: "node -p process.version && node -e 'process.exit(/^v2[2-9]/.test(process.version)?0:1)' && npm --version && gh --version && actionlint -version && zizmor --version && uvx --version && python -c 'from robotsix_mill._resources import agent_definitions_dir; assert agent_definitions_dir().is_dir()' && python -c \"from importlib.metadata import metadata; assert metadata('robotsix-mill')['Version']\""
 
   publish-sandbox:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -55,7 +56,7 @@ jobs:
     with:
       image-name: ghcr.io/damien-robotsix/robotsix-mill-sandbox
       dockerfile: sandbox/Dockerfile
-      smoke_command: "gh --version && uv --version"
+      smoke_command: "node -p process.version && node -e 'process.exit(/^v2[2-9]/.test(process.version)?0:1)' && npm --version && gh --version && uv --version"
 
   publish-proxy:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'

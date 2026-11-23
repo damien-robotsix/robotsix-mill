@@ -100,9 +100,10 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 # network. `--with-deps` also pulls the apt libraries Chromium needs.
 #
 # Image-size impact: Chromium + its shared libraries add roughly ~300 MB
-# to the sandbox image. That is under the ~500 MB threshold, so the
-# browser is baked into this single dedicated image — no opt-in variant
-# is needed (see docs/config/configuration.md, sandbox.image entry).
+# to the sandbox image; together with Dart (~250 MB) and the Node.js
+# runtime (~130 MB) the combined image is ~680 MB. The browser is still
+# baked into this single dedicated image — no opt-in variant (see
+# docs/config/configuration.md, sandbox.image entry).
 #
 # PLAYWRIGHT_BROWSERS_PATH pins the browser cache to a fixed, world-
 # readable system path OUTSIDE any user $HOME. `playwright install` runs
