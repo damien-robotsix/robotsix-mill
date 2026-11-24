@@ -660,6 +660,27 @@ class TestRunWebKnowledge:
         assert "~30 days" not in instances[0].system_prompt
         assert "~99 hours" in instances[0].system_prompt
 
+    def test_system_prompt_guards_persistence_budget(
+        self, tmp_path, secrets_set, monkeypatch
+    ):
+        """Persistence writes are explicitly optional and gated behind
+        the final-answer reserve — a sub-agent on a tight budget must
+        skip ``update_library`` rather than lose its answer (the
+        request_limit-8 audit trace that lost lens B's consult)."""
+        secrets_set(openrouter_api_key="k")
+        instances = _patch_agent_chain(monkeypatch)
+        s = _settings(tmp_path)
+        s.web_knowledge_request_limit = 8
+        asyncio.run(run_web_knowledge(settings=s, question="q"))
+        assert len(instances) == 1
+        prompt = instances[0].system_prompt
+        # The budget-guard threshold is interpolated (8 - 2 = 6).
+        assert "spent 6 requests" in prompt
+        assert "SKIP all persistence" in prompt
+        assert "never persist when doing so would leave fewer than the 2" in prompt
+        # The persistence step itself carries the same budget gate.
+        assert "lost answer is worse than an unpersisted fact" in prompt
+
     def test_agent_failure_degrades_to_error_string(
         self, tmp_path, secrets_set, monkeypatch
     ):
