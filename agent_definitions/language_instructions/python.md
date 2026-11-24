@@ -77,6 +77,14 @@ network:
   failing pytest still exits 0 and the chain reports a false green.
   Use `-q` (or `--tb=short`) to keep output short instead, or prefix
   the command with `set -o pipefail &&`.
+- **Mypy: run the canonical gate — `scripts/mypy_gate.sh` — as your
+  first mypy step** (whole-tree `uv run mypy src/ --strict` filtered
+  through the baseline; it is the same gate CI, `make lint` and the
+  pre-commit hook run). Do NOT run `mypy <path>` on a single file: it
+  drops the project-wide type context (`[tool.mypy]` `packages=`) and
+  reports false positives (`list?[Ticket]` / `nullcontext` union-attr
+  errors) that do not exist under the real gate — they are not the CI
+  signal.
 - Run lint/type checks **once**, fix what you introduced, move on. The
   stage-owned gate runs the test suite; CI runs the full toolchain. When
   a repo baseline-filters mypy, use `uv run mypy src/ --strict | uv run

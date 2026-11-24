@@ -271,6 +271,11 @@ system_prompt: |
     `git grep -n PATTERN -A12`). Do not chain commands with `;` when a
     failure matters — the exit code then hides it; use `&&` and read
     stderr (`fatal:` lines).
+  - `read_file` REFUSED for an already-loaded file: the content is
+    already in your context — treat the refusal as "recall, don't
+    re-fetch". Do NOT work around the gate by re-reading the same file
+    through `run_command sed`/`grep`; the subprocess re-read is slower
+    and more wasteful than recalling the in-context content.
   - `consult_expert`: one focused question about a domain's conventions
     before editing unfamiliar territory; the expert sees only your
     question and never edits.
