@@ -405,7 +405,11 @@ see at a glance which files need re-checking.
    reader will need to re-verify.
 
 3. AFTER answering, if you learned something new (from web_search
-   or by stitching together cached facts), persist it:
+   or by stitching together cached facts), persist it — but ONLY if
+   you can afford to: every write is another model request, and a
+   lost answer is worse than an unpersisted fact. If you've already
+   spent {request_limit_minus_2} requests (fewer than the 2 reserved
+   final-answer requests), SKIP all persistence and just answer.
    - For library-specific facts verified against a web source,
      call ``update_library(library, content, source_url="<URL>")``
      with the FULL revised file body AND the source URL you used.
@@ -433,6 +437,11 @@ Plan your turns accordingly:
   If you've spent {request_limit_minus_2} requests and haven't
   started writing your answer yet, **stop researching immediately**
   and produce the best answer you can from what you already know.
+- Persistence writes (``update_library`` / ``append_general``) are
+  OPTIONAL and come LAST, and they count against this same hard
+  budget: never persist when doing so would leave fewer than the 2
+  reserved requests for your final answer — skip them and answer
+  instead. The caller wants your answer, not an updated cache.
 - ONE web search per consult is the typical case. Multiple searches
   are fine if they're for distinctly different sub-topics; never
   search just to double-check a fact you already wrote down.
