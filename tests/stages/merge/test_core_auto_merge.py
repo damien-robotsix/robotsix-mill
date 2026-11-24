@@ -1458,6 +1458,13 @@ def _write_approved_diff_sentinel(ctx, ticket, files):
     )
 
 
+def _zero_pr_files_backoff(monkeypatch):
+    """Zero the merge gate's pr-files retry backoff for failure-path tests."""
+    import robotsix_mill.stages.merge.pr_baseline as _pr_baseline
+
+    monkeypatch.setattr(_pr_baseline, "_PR_FILES_FETCH_RETRY_DELAY_S", 0.0)
+
+
 def test_waiting_auto_merge_reenqueue_with_approved_diff_skips_gate(
     tmp_path, monkeypatch
 ):
@@ -1573,6 +1580,7 @@ def test_human_mr_approval_prior_approval_survives_pr_files_fetch_failure(
     """A transient 'failed to fetch PR file list' must NOT discard a prior
     approval: with a stored approved-diff sentinel the destructive-workflow
     gate is skipped instead of looping the ticket back through approval."""
+    _zero_pr_files_backoff(monkeypatch)
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     files = [{"path": ".github/workflows/deploy.yml", "sha": "aaaa1111"}]
 
@@ -1625,6 +1633,7 @@ def test_waiting_auto_merge_prior_approval_survives_pr_files_fetch_failure(
     """The WAITING_AUTO_MERGE re-enqueue path must also honor a prior
     approval when the PR file list fetch is transiently failing — it must
     not push the ticket back into the approval loop."""
+    _zero_pr_files_backoff(monkeypatch)
     ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
     files = [{"path": ".github/workflows/deploy.yml", "sha": "aaaa1111"}]
 
@@ -1671,3 +1680,121 @@ def test_waiting_auto_merge_prior_approval_survives_pr_files_fetch_failure(
     out = MergeStage().run(t, ctx)
     assert out.next_state is State.DONE
     assert merge_called
+
+
+def test_auto_merge_pr_files_transient_failure_retries_then_recovers(
+    tmp_path, monkeypatch
+):
+    """A transient 'failed to fetch PR file list' is retried with bounded
+    backoff before the content gate runs: once the fetch recovers, the gate
+    evaluates the diff normally and the change auto-merges instead of being
+    parked behind human review for one transient error."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "abc1234",
+            "author": "mill-bot",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+    attempts: list[str] = []
+
+    def _flaky_pr_files(self, *, source_branch):
+        attempts.append(source_branch)
+        if len(attempts) < 3:
+            raise RuntimeError("transient forge failure")
+        return [{"path": ".github/workflows/ci.yml"}]
+
+    monkeypatch.setattr(github.GitHubForge, "pr_files", _flaky_pr_files)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
+    )
+    _mock_workflow_diff(
+        monkeypatch,
+        "+python-version: ['3.10', '3.12']\n+  matrix:\n+    include: []\n",
+    )
+    _zero_pr_files_backoff(monkeypatch)
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert merge_called
+    # Two failed attempts then one successful — the bounded retry loop
+    # (not the conservative verdict) absorbed the transient failure.
+    assert len(attempts) == 3
+
+
+def test_auto_merge_pr_files_persistent_failure_still_fails_closed(
+    tmp_path, monkeypatch
+):
+    """When every bounded retry fails, the gate still fails closed: the PR
+    is escalated to HUMAN_MR_APPROVAL with the conservative 'failed to
+    fetch PR file list' verdict — retries are a transient-resilience
+    measure, not a way to auto-merge without knowing the PR's file set."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "sha": "abc1234",
+            "author": "mill-bot",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    merge_called = []
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: merge_called.append(1) or {"merged": True},
+    )
+    attempts: list[str] = []
+
+    def _always_boom(self, *, source_branch):
+        attempts.append(source_branch)
+        raise RuntimeError("transient forge failure")
+
+    monkeypatch.setattr(github.GitHubForge, "pr_files", _always_boom)
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
+    )
+    _zero_pr_files_backoff(monkeypatch)
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.HUMAN_MR_APPROVAL
+    assert merge_called == []
+    # 3 bounded retries from the merge gate's fetch, 1 extra probe from the
+    # approved-diff fingerprint check — no unbounded retry loop.
+    assert len(attempts) == 4

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,47 @@ def _extract_tracked_pr_url(description: str) -> str | None:
     """
     m = re.search(r"- URL: (https://[^\s]+)", description)
     return m.group(1) if m else None
+
+
+# Bounded-retry budget for the PR file-list fetch.  GitHub API failures
+# (rate limit, network, 5xx) are usually transient; a single failed fetch
+# must not park a mechanical additive change behind human review.  The
+# sensitive-path gate still fails closed once every attempt has failed.
+_PR_FILES_FETCH_MAX_ATTEMPTS = 3
+_PR_FILES_FETCH_RETRY_DELAY_S = 10.0
+
+
+def _fetch_pr_files_with_retry(
+    forge: Forge, source_branch: str
+) -> list[dict[str, Any]] | None:
+    """Fetch the PR file list, retrying transient forge failures.
+
+    The forge's own HTTP layer already retries individual requests, but a
+    sustained rate-limit / connection outage can still surface here as an
+    exception.  Retry with bounded backoff (3 attempts, ~20s of sleeps)
+    *before* the content gate runs, so the conservative 'cannot prove
+    additive/config-only' verdict is only reached once the retries are
+    exhausted.  Returns ``None`` when every attempt failed.
+    """
+    for attempt in range(1, _PR_FILES_FETCH_MAX_ATTEMPTS + 1):
+        try:
+            return forge.pr_files(source_branch=source_branch)
+        except Exception as e:  # forge failures are broad
+            if attempt >= _PR_FILES_FETCH_MAX_ATTEMPTS:
+                log.warning(
+                    "merge: failed to fetch PR file list after %d attempts: %s",
+                    attempt,
+                    e,
+                )
+                return None
+            log.info(
+                "merge: PR file list fetch attempt %d/%d failed (%s); retrying",
+                attempt,
+                _PR_FILES_FETCH_MAX_ATTEMPTS,
+                e,
+            )
+            time.sleep(_PR_FILES_FETCH_RETRY_DELAY_S)
+    return None
 
 
 class PrBaselineMixin(_MergeStageBase):
@@ -315,10 +357,12 @@ class PrBaselineMixin(_MergeStageBase):
             # targets, reusable-workflow removal) and any non-workflow
             # sensitive glob (secrets, .env) always block.
             if not skip_sensitive_path_check:
-                try:
-                    files = forge.pr_files(source_branch=ticket.branch or "")
-                except Exception:
-                    # Fail-closed: any error fetching files → not eligible.
+                files = _fetch_pr_files_with_retry(
+                    forge, source_branch=ticket.branch or ""
+                )
+                if files is None:
+                    # Fail-closed: only after bounded retries are exhausted
+                    # does a failed fetch trigger the conservative verdict.
                     return False, "failed to fetch PR file list"
                 sensitive = s.auto_merge_sensitive_globs or []
                 workflow_hits: list[str] = []
