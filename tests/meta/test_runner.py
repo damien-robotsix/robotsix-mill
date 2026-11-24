@@ -5,10 +5,13 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import pytest
+
 from robotsix_mill.config import RepoConfig, ReposRegistry, Settings
 from robotsix_mill.core import db
 from robotsix_mill.core.models import SourceKind, TicketKind
 from robotsix_mill.core.service import TicketService
+from robotsix_mill.core.states import State
 from robotsix_mill.core.workspace import Workspace
 from robotsix_mill.meta.agent import DraftProposal, MetaAgentResult
 from robotsix_mill.meta.runner import MetaPassResult, run_meta_pass
@@ -846,5 +849,250 @@ class TestFileExtractionDrafts:
             t.title for t in TicketService(settings, board_id="meta").list()
         )
         assert meta_titles == ["Document fleet pattern", "Extract to unknown"]
+
+        db.reset_engine()
+
+
+class TestMetaGapReFireGate:
+    """Deterministic re-fire gate: a pre-merge ticket carrying the same
+    ``<!-- meta-gap-id: ... -->`` marker on the target board suppresses a
+    fresh filing and gets a short 'still not merged in clone' delta comment
+    instead of letting refine dedup collapse a duplicate later."""
+
+    @pytest.mark.parametrize(
+        "state",
+        [
+            State.DRAFT,
+            State.READY,
+            State.IMPLEMENT_COMPLETE,
+            State.HUMAN_MR_APPROVAL,
+        ],
+    )
+    def test_pre_merge_state_suppresses_filing(self, tmp_path, monkeypatch, state):
+        """Each of the four pre-merge states blocks a fresh filing and
+        appends the delta comment to the covering ticket."""
+        from robotsix_mill.meta.runner import _file_repo_drafts
+
+        settings = _make_settings(tmp_path)
+        db.reset_engine()
+        db.init_db(settings, board_id="repo-b")
+
+        reg = ReposRegistry(repos={"repo-b": _repo_cfg("repo-b", board_id="repo-b")})
+        monkeypatch.setattr("robotsix_mill.meta.runner.get_repos_config", lambda: reg)
+
+        svc = TicketService(settings, board_id="repo-b")
+        existing = svc.create(
+            title="Adopt pattern from repo-a",
+            description="Covering PR open.\n\n"
+            "<!-- meta-gap-id: adopt-pattern-from-repo-a -->",
+            source=SourceKind.META,
+            initial_state=state,
+        )
+
+        created = _file_repo_drafts(
+            [
+                DraftProposal(
+                    title="Adopt pattern from repo-a",
+                    body="Repo-b should adopt pattern X.",
+                    target_repo_id="repo-b",
+                ),
+            ],
+            settings,
+            "sess",
+            label="alignment",
+        )
+
+        assert created == []
+        tickets = svc.list()
+        assert [t.id for t in tickets] == [existing.id]
+        assert tickets[0].state == state
+        comments = svc.list_comments(existing.id)
+        assert len(comments) == 1
+        assert "still not merged in clone" in comments[0].body.lower()
+
+        db.reset_engine()
+
+    def test_merged_ticket_with_same_gap_id_does_not_suppress(
+        self, tmp_path, monkeypatch
+    ):
+        """A CLOSED (merged) ticket with the same gap-id does NOT suppress
+        the fresh filing — only pre-merge states do."""
+        from robotsix_mill.meta.runner import _file_repo_drafts
+
+        settings = _make_settings(tmp_path)
+        db.reset_engine()
+        db.init_db(settings, board_id="repo-b")
+
+        reg = ReposRegistry(repos={"repo-b": _repo_cfg("repo-b", board_id="repo-b")})
+        monkeypatch.setattr("robotsix_mill.meta.runner.get_repos_config", lambda: reg)
+
+        svc = TicketService(settings, board_id="repo-b")
+        existing = svc.create(
+            title="Adopt pattern from repo-a",
+            description="Covering PR merged.\n\n"
+            "<!-- meta-gap-id: adopt-pattern-from-repo-a -->",
+            source=SourceKind.META,
+            initial_state=State.CLOSED,
+        )
+
+        created = _file_repo_drafts(
+            [
+                DraftProposal(
+                    title="Adopt pattern from repo-a",
+                    body="Repo-b should adopt pattern X.",
+                    target_repo_id="repo-b",
+                ),
+            ],
+            settings,
+            "sess",
+            label="alignment",
+        )
+
+        assert len(created) == 1
+        assert len(svc.list()) == 2
+        # No delta note: the merged ticket is not a re-fire match.
+        assert svc.list_comments(existing.id) == []
+
+        db.reset_engine()
+
+    def test_existing_ticket_with_different_gap_id_does_not_suppress(
+        self, tmp_path, monkeypatch
+    ):
+        """An open ticket carrying a DIFFERENT gap-id is not a match —
+        the draft is filed fresh."""
+        from robotsix_mill.meta.runner import _file_repo_drafts
+
+        settings = _make_settings(tmp_path)
+        db.reset_engine()
+        db.init_db(settings, board_id="repo-b")
+
+        reg = ReposRegistry(repos={"repo-b": _repo_cfg("repo-b", board_id="repo-b")})
+        monkeypatch.setattr("robotsix_mill.meta.runner.get_repos_config", lambda: reg)
+
+        svc = TicketService(settings, board_id="repo-b")
+        existing = svc.create(
+            title="Something else",
+            description="Unrelated.\n\n<!-- meta-gap-id: something-else -->",
+            source=SourceKind.META,
+            initial_state=State.HUMAN_MR_APPROVAL,
+        )
+
+        created = _file_repo_drafts(
+            [
+                DraftProposal(
+                    title="Adopt pattern from repo-a",
+                    body="Repo-b should adopt pattern X.",
+                    target_repo_id="repo-b",
+                ),
+            ],
+            settings,
+            "sess",
+            label="alignment",
+        )
+
+        assert len(created) == 1
+        assert len(svc.list()) == 2
+        assert svc.list_comments(existing.id) == []
+
+        db.reset_engine()
+
+    def test_extraction_duplicate_on_receiving_board_suppresses(
+        self, tmp_path, monkeypatch
+    ):
+        """Targeted extraction draft: a pre-merge ticket with the same
+        gap-id on the receiving repo's board suppresses the filing there."""
+        from robotsix_mill.meta.runner import _file_extraction_drafts
+
+        settings = _make_settings(tmp_path)
+        db.reset_engine()
+        db.init_db(settings, board_id="meta")
+        db.init_db(settings, board_id="gh-wf")
+
+        reg = ReposRegistry(
+            repos={
+                "robotsix-github-workflows": _repo_cfg(
+                    "robotsix-github-workflows", board_id="gh-wf"
+                ),
+            }
+        )
+        monkeypatch.setattr("robotsix_mill.meta.runner.get_repos_config", lambda: reg)
+
+        svc = TicketService(settings, board_id="gh-wf")
+        existing = svc.create(
+            title="Add reusable dependency-review.yml",
+            description="PR open.\n\n"
+            "<!-- meta-gap-id: add-reusable-dependency-review-yml -->",
+            source=SourceKind.META,
+            initial_state=State.IMPLEMENT_COMPLETE,
+        )
+
+        created = _file_extraction_drafts(
+            [
+                DraftProposal(
+                    title="Add reusable dependency-review.yml",
+                    body="Ship a reusable workflow.",
+                    target_repo_id="robotsix-github-workflows",
+                ),
+            ],
+            settings,
+            "sess",
+        )
+
+        assert created == []
+        assert len(svc.list()) == 1
+        comments = svc.list_comments(existing.id)
+        assert len(comments) == 1
+        assert "still not merged in clone" in comments[0].body.lower()
+
+        db.reset_engine()
+
+    def test_duplicate_drafts_in_one_pass_filed_once(self, tmp_path, monkeypatch):
+        """Pass-level integration: two identical drafts in one pass file
+        one ticket; the second is delta-noted instead of re-filing."""
+        settings = _make_settings(tmp_path)
+        db.reset_engine()
+        db.init_db(settings, board_id="meta")
+        db.init_db(settings, board_id="repo-b")
+
+        monkeypatch.setattr("robotsix_mill.meta.runner.Settings", lambda: settings)
+        monkeypatch.setattr("robotsix_mill.meta.runner.clone_all_repos", lambda _s: {})
+
+        agent_result = MetaAgentResult(
+            updated_memory="ledger",
+            alignment_drafts=[
+                DraftProposal(
+                    title="Adopt pattern from repo-a",
+                    body="Repo-b should adopt pattern X.",
+                    target_repo_id="repo-b",
+                ),
+                DraftProposal(
+                    title="Adopt pattern from repo-a",
+                    body="Repo-b should adopt pattern X (re-fired).",
+                    target_repo_id="repo-b",
+                ),
+            ],
+        )
+        monkeypatch.setattr(
+            "robotsix_mill.meta.runner.run_meta_agent", lambda **kw: agent_result
+        )
+        reg = ReposRegistry(repos={"repo-b": _repo_cfg("repo-b", board_id="repo-b")})
+        monkeypatch.setattr("robotsix_mill.meta.runner.get_repos_config", lambda: reg)
+        monkeypatch.setattr(
+            "robotsix_mill.meta.runner.persist_memory", lambda p, t: None
+        )
+        monkeypatch.setattr("robotsix_mill.meta.runner.load_memory", lambda _p: "")
+        monkeypatch.setattr(
+            "robotsix_mill.meta.runner._gather_meta_proposals", lambda _s: ""
+        )
+
+        result = run_meta_pass("test-session")
+
+        assert len(result.alignment_drafts_created) == 1
+        repo_b_svc = TicketService(settings, board_id="repo-b")
+        tickets = repo_b_svc.list()
+        assert len(tickets) == 1
+        comments = repo_b_svc.list_comments(tickets[0].id)
+        assert len(comments) == 1
+        assert "still not merged in clone" in comments[0].body.lower()
 
         db.reset_engine()
