@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from ..agents.runners.pass_runner import (
@@ -19,8 +20,10 @@ from ..agents.runners.pass_runner import (
     persist_memory,
 )
 from ..config import Settings, get_repos_config
-from ..core.models import SourceKind
+from ..core.models import SourceKind, Ticket
 from ..core.service import TicketService
+from ..core.states import State
+from ..core.workspace import Workspace
 from ..runtime.tracing import force_traces_to_mill
 from ..scm.vcs import clone_all_repos
 from .agent import MetaAgentResult, run_meta_agent
@@ -98,6 +101,62 @@ _CALLER_MIGRATION_NOTE = (
     "drafts on each consuming repo's board."
 )
 
+#: Pre-merge states in which a ticket already carrying a given meta-gap-id
+#: suppresses a fresh filing.  The survey predicts conformance from the
+#: checked-out clone, which never contains unmerged PR files — as long as
+#: the covering PR sits in one of these states, every periodic scan
+#: re-fires the same gap.  Deterministic gate (not LLM guidance): catch the
+#: duplicate here before a refine + dedup cycle ever sees it.
+_META_GAP_OPEN_STATES: frozenset[State] = frozenset(
+    {
+        State.DRAFT,
+        State.READY,
+        State.IMPLEMENT_COMPLETE,
+        State.HUMAN_MR_APPROVAL,
+    }
+)
+
+
+def _find_open_meta_gap_ticket(
+    settings: Settings, board_id: str, gap_id: str
+) -> Ticket | None:
+    """Return the ticket on *board_id* whose description already carries the
+    same ``<!-- meta-gap-id: ... -->`` marker and is still in a pre-merge
+    state, else ``None``.
+
+    Queries exactly the board the draft would land on.  The marker lives in
+    the workspace ``description.md`` (DB rows carry only a content hash), so
+    each candidate ticket's description is read and matched verbatim.
+    """
+    marker = f"<!-- {SourceKind.META}-gap-id: {gap_id} -->"
+    workspaces_dir = settings.workspaces_dir_for(board_id)
+    service = TicketService(settings, board_id=board_id)
+    for state in _META_GAP_OPEN_STATES:
+        for ticket in service.list(state=state):
+            if marker in Workspace(workspaces_dir, ticket.id).read_description():
+                return ticket
+    return None
+
+
+def _append_still_not_merged_delta(
+    service: TicketService, ticket: Ticket, draft_title: str
+) -> None:
+    """Append a short 'still not merged in clone' delta note to *ticket*.
+
+    Called instead of filing a fresh duplicate: the survey predicts
+    conformance from the checked-out clone, which never contains the
+    covering PR's files until it merges, so the gap re-fires every scan
+    while the ticket sits in a pre-merge state.
+    """
+    note = (
+        f"<!-- meta-gap-delta for {draft_title!r} -->\n"
+        "Still not merged in clone: the periodic survey re-detected this gap "
+        "because the checked-out clone never contains the covering PR's "
+        "unmerged files. No new ticket filed; tracking continues here. "
+        f"({datetime.now(UTC):%Y-%m-%d %H:%M UTC})"
+    )
+    service.add_comment(ticket.id, note, author="meta")
+
 
 def _file_extraction_drafts(
     drafts: list[Any],
@@ -143,9 +202,26 @@ def _file_extraction_drafts(
                         else _CALLER_MIGRATION_NOTE
                     )
         gap_id = _slugify_title(draft.title)
-        body = _build_body_with_gap_id(draft_body, gap_id)
         try:
             service = TicketService(settings, board_id=board_id)
+            # Deterministic re-fire gate: if a pre-merge ticket on this
+            # board already carries the same meta-gap-id, the covering PR
+            # is simply not merged into the clone yet — append a delta
+            # note instead of filing a duplicate that refine dedup would
+            # only collapse after a full refine + dedup cycle.
+            existing = _find_open_meta_gap_ticket(settings, board_id, gap_id)
+            if existing is not None:
+                _append_still_not_merged_delta(service, existing, draft.title)
+                log.info(
+                    "meta pass: extraction draft %r already tracked by %s "
+                    "(state=%s) with the same meta-gap-id — appended "
+                    "'still not merged in clone' delta, skipped filing",
+                    draft.title,
+                    existing.id,
+                    existing.state,
+                )
+                continue
+            body = _build_body_with_gap_id(draft_body, gap_id)
             ticket = service.create(
                 title=draft.title,
                 description=body,
@@ -232,9 +308,25 @@ def _file_repo_drafts(
             continue
 
         gap_id = _slugify_title(draft.title)
-        body = _build_body_with_gap_id(draft.body, gap_id)
         try:
             target_service = TicketService(settings, board_id=target_rc.board_id)
+            # Deterministic re-fire gate (see _find_open_meta_gap_ticket):
+            # suppress a fresh duplicate while the covering PR is still
+            # pre-merge; delta-note the existing ticket instead.
+            existing = _find_open_meta_gap_ticket(settings, target_rc.board_id, gap_id)
+            if existing is not None:
+                _append_still_not_merged_delta(target_service, existing, draft.title)
+                log.info(
+                    "meta pass: %s draft %r already tracked by %s (state=%s) "
+                    "with the same meta-gap-id — appended 'still not merged "
+                    "in clone' delta, skipped filing",
+                    label,
+                    draft.title,
+                    existing.id,
+                    existing.state,
+                )
+                continue
+            body = _build_body_with_gap_id(draft.body, gap_id)
             ticket = target_service.create(
                 title=draft.title,
                 description=body,
