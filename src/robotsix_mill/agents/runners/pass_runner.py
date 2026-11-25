@@ -860,6 +860,55 @@ def _any_file_with_basename(repo_dir: Path, basename: str) -> bool:
     return False
 
 
+def _path_is_referenced_on_head(repo_dir: Path, rel_path: str) -> bool:
+    """True when any tracked reference scope in the checkout mentions
+    *rel_path*.
+
+    Searches the same scope as a docs-stale-reference sweep: every file
+    under ``docs/**`` (which includes ``docs/modules.yaml``), the
+    ``mkdocs.yml`` / ``mkdocs.yaml`` nav, and ``README*`` / ``CHANGELOG*``
+    at the repo root. *repo_dir* is a fresh checkout, so the files on disk
+    are exactly the files tracked on HEAD — walking these scopes is
+    equivalent to ``git grep`` against the filed tree at premise-check
+    time.
+
+    The existence check (``(repo_dir / path).exists()``) decides *whether*
+    a cited path is gone; this decides *whether anything still notices* it
+    is gone. A stale-path advisory is only attached when both hold: a path
+    that is absent AND unreferenced cannot have its "missing" premise
+    independently confirmed at filing time, and flagging it only misleads
+    the implement agent.
+    """
+    needle = rel_path
+
+    def _mentions(path: Path) -> bool:
+        try:
+            return needle in path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return False
+
+    docs_dir = repo_dir / "docs"
+    if docs_dir.is_dir():
+        for dirpath, dirnames, filenames in os.walk(docs_dir):
+            dirnames[:] = [d for d in dirnames if d not in (".git", "__pycache__")]
+            if any(_mentions(Path(dirpath) / f) for f in filenames):
+                return True
+    try:
+        for entry in repo_dir.iterdir():
+            if not entry.is_file():
+                continue
+            if (
+                entry.name.startswith("README")
+                or entry.name.startswith("CHANGELOG")
+                or entry.name in ("mkdocs.yml", "mkdocs.yaml")
+            ):
+                if _mentions(entry):
+                    return True
+    except OSError:
+        return False
+    return False
+
+
 def _module_curator_premise_check(
     repo_dir: Path, title: str, body: str
 ) -> tuple[str, str] | None:
@@ -876,7 +925,12 @@ def _module_curator_premise_check(
     draft itself frames as move destinations (``git mv`` / ``old -> new``
     / "Proposed" / "expected to be absent") are expected to be absent and
     are never flagged, and bare filenames are resolved against the whole
-    tree before flagging.
+    tree before flagging. A missing path is flagged ONLY when a tracked
+    reference scope (docs/**, mkdocs.yml nav, docs/modules.yaml, README*,
+    CHANGELOG) still mentions it — an absent AND unreferenced path cannot
+    have its "missing" premise independently confirmed at filing time, so
+    the advisory is downgraded to an internal note and the draft files
+    as-is.
     """
     paths = _extract_paths(f"{title}\n{body}")
     title_lower = title.lower()
@@ -915,10 +969,22 @@ def _module_curator_premise_check(
                 # Bare filename: resolve against the repo tree before
                 # flagging — the draft may cite only the basename (e.g.
                 # `test_x.py` for tests/.../test_x.py).
-                if not _any_file_with_basename(repo_dir, path):
+                missing = not _any_file_with_basename(repo_dir, path)
+            else:
+                missing = not (repo_dir / path).exists()
+            if missing:
+                # Advisory only when the path's disappearance is REAL and
+                # something still references it — an absent AND
+                # unreferenced path is a premise the implement agent
+                # would otherwise have to disprove by hand.
+                if _path_is_referenced_on_head(repo_dir, path):
                     return ("advisory", f"path {path} no longer exists on HEAD")
-            elif not (repo_dir / path).exists():
-                return ("advisory", f"path {path} no longer exists on HEAD")
+                log.info(
+                    "module_curator: '%s' no longer exists on HEAD and is "
+                    "unreferenced — downgrading stale-path advisory to an "
+                    "internal note (draft files as-is)",
+                    path,
+                )
         # Already classified under an existing module's paths glob?
         try:
             modules_file = repo_dir / "docs" / "modules.yaml"
