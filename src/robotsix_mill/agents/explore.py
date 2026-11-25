@@ -826,6 +826,18 @@ def make_parallel_explore_tool(
     At most ``_PARALLEL_EXPLORE_BATCH_CAP`` questions are accepted per
     call (default 5) to bound the worst-case input context.
     """
+    # Per-run memo — an identical question re-asked later in the same
+    # agent run reuses the earlier answer instead of burning another
+    # scout call (the repo is read-only during a run, so a cached
+    # exploration answer stays valid).  Keyed on whitespace/case-
+    # normalized question text so cosmetic rewording doesn't defeat it.
+    # Batch-scout responses are not memoized (their answers are
+    # interleaved, not attributable per question); the grep and
+    # single-question paths — the repeat pattern seen in traces — are.
+    _parallel_explore_memo: dict[str, str] = {}
+
+    def _parallel_explore_memo_key(q: str) -> str:
+        return re.sub(r"\s+", " ", q).strip().lower()
 
     async def parallel_explore(questions: list[str]) -> str:
         f"""Batch SEVERAL independent questions into a single scout call.
@@ -850,23 +862,40 @@ def make_parallel_explore_tool(
                 "Split into smaller batches."
             )
 
-        # -- grep pre-filter: try to answer each question via git grep --
-        #   before spending tokens on the full scout.  Each question that
-        #   grep resolves is answered immediately; the rest are batched
-        #   and sent to run_explore() as before.
+        # -- per-run memo: questions already answered earlier in this run
+        #   are served from cache (no duplicate scout calls or repeat
+        #   context).
+        memo_hits: dict[int, str] = {}  # original-index → cached answer
+        fresh_questions: list[tuple[int, str]] = []  # (index, question)
+
+        for i, q in enumerate(questions):
+            key = _parallel_explore_memo_key(q)
+            if key in _parallel_explore_memo:
+                memo_hits[i] = _parallel_explore_memo[key]
+            else:
+                fresh_questions.append((i, q))
+
+        # -- grep pre-filter: try to answer each fresh question via git
+        #   grep before spending tokens on the full scout.
         prefiltered: dict[int, str] = {}  # original-index → answer
         scout_questions: list[tuple[int, str]] = []  # (original-index, question)
 
-        for i, q in enumerate(questions):
+        for i, q in fresh_questions:
             grep_answer = _try_grep_prefilter(q, repo_dir)
             if grep_answer is not None:
                 prefiltered[i] = grep_answer
+                _parallel_explore_memo[_parallel_explore_memo_key(q)] = grep_answer
             else:
                 scout_questions.append((i, q))
 
         # Build the output in original order — prefiltered answers plus
         # the scout batch (if any).
         parts: list[str] = []
+
+        if memo_hits:
+            for i in sorted(memo_hits):
+                q = questions[i]
+                parts.append(f"### [{i + 1}] {q}\n{memo_hits[i]}")
 
         if prefiltered:
             for i in sorted(prefiltered):
@@ -884,6 +913,7 @@ def make_parallel_explore_tool(
                         question=q,
                         extra_roots=extra_roots,
                     )
+                _parallel_explore_memo[_parallel_explore_memo_key(q)] = ans
                 parts.append(f"### [{idx + 1}] {q}\n{ans}")
             else:
                 # Compose a batched prompt so the system prompt is sent
