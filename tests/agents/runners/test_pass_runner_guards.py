@@ -789,12 +789,21 @@ def test_module_curator_files_when_missing_premise_is_true(tmp_path):
 
 
 def test_module_curator_annotates_stale_classify(tmp_path):
-    """A `Classify <file>:` draft whose file does not exist on HEAD is
-    filed, but its body carries a [!warning] advisory block."""
+    """A `Classify <file>:` draft whose file does not exist on HEAD but is
+    still referenced is filed, and its body carries a [!warning] advisory
+    block."""
     settings = _make_settings(tmp_path)
     db.reset_engine()
     db.init_db(settings, board_id="test-board")
     service = TicketService(settings, board_id="test-board")
+
+    # The missing file is still referenced from a doc, so the advisory
+    # premise (missing AND referenced) is confirmable at filing time.
+    docs = tmp_path / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "index.md").write_text(
+        "see src/robotsix_mill/gone.py for the loader\n", encoding="utf-8"
+    )
 
     memory_file = tmp_path / "memory.md"
     memory_file.write_text("mem", encoding="utf-8")
@@ -1088,8 +1097,14 @@ def test_module_curator_premise_check_bare_filename_resolved_by_basename(tmp_pat
 
 
 def test_module_curator_premise_check_bare_filename_missing_flags(tmp_path):
-    """A bare filename that resolves to no file in the tree still fires the
-    stale-path advisory."""
+    """A bare filename that resolves to no file in the tree but is still
+    referenced fires the stale-path advisory."""
+    # The bare filename is cited from a doc — the advisory premise holds.
+    docs = tmp_path / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "index.md").write_text(
+        "sweep test_check_schema_freshness.py before release\n", encoding="utf-8"
+    )
     verdict = _module_curator_premise_check(
         tmp_path,
         "Reorganize module robotsix_config: align to per-module layout "
@@ -1103,8 +1118,14 @@ def test_module_curator_premise_check_bare_filename_missing_flags(tmp_path):
 
 
 def test_module_curator_premise_check_stale_source_still_flags(tmp_path):
-    """A genuinely missing claimed-SOURCE path still fires the advisory —
-    destination suppression must not hide stale sources."""
+    """A genuinely missing claimed-SOURCE path with a live reference still
+    fires the advisory — destination suppression must not hide stale
+    sources."""
+    # The stale source is still linked from the README — a genuine
+    # dangling reference, so the advisory premise holds at filing time.
+    (tmp_path / "README.md").write_text(
+        "setup: see docs/robotsix_config/gone.md\n", encoding="utf-8"
+    )
     verdict = _module_curator_premise_check(
         tmp_path,
         "Reorganize module tests: align to per-module layout (src/docs/tests)",
@@ -1115,6 +1136,75 @@ def test_module_curator_premise_check_stale_source_still_flags(tmp_path):
     disposition, note = verdict
     assert disposition == "advisory"
     assert "docs/robotsix_config/gone.md no longer exists on HEAD" in note
+
+
+def test_module_curator_premise_check_missing_referenced_in_mkdocs_nav_flags(tmp_path):
+    """A missing path still listed in the mkdocs nav is referenced — the
+    stale-path advisory fires (mkdocs.yml is a tracked reference scope)."""
+    mkdocs = tmp_path / "mkdocs.yml"
+    mkdocs.write_text("nav:\n  - Logging: docs/core/logging.md\n", encoding="utf-8")
+
+    verdict = _module_curator_premise_check(
+        tmp_path,
+        "Reorganize module core: align to per-module layout (src/docs/tests)",
+        "docs/core/logging.md is stale and should move.",
+    )
+    assert verdict is not None
+    disposition, note = verdict
+    assert disposition == "advisory"
+    assert "docs/core/logging.md no longer exists on HEAD" in note
+
+
+def test_module_curator_premise_check_missing_unreferenced_downgrades(tmp_path):
+    """A missing path that nothing in the tracked reference scopes mentions
+    is downgraded to an internal note — no stale-path advisory. This is
+    the docs/clients/index.md false-alarm shape from the 2026-11-13
+    scrutiny pass."""
+    verdict = _module_curator_premise_check(
+        tmp_path,
+        "Classify docs/clients/index.md: assign to a module",
+        "docs/clients/index.md is unclassified.",
+    )
+    assert verdict is None
+
+
+def test_module_curator_missing_unreferenced_filed_without_advisory(tmp_path):
+    """End-to-end: a classify draft for a path that is missing AND
+    unreferenced files as-is with no [!warning] advisory attached."""
+    settings = _make_settings(tmp_path)
+    db.reset_engine()
+    db.init_db(settings, board_id="test-board")
+    service = TicketService(settings, board_id="test-board")
+
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("mem", encoding="utf-8")
+
+    agent_fn = _make_agent(
+        updated_memory="mem",
+        draft_titles=["Classify docs/clients/index.md: assign to a module"],
+        draft_bodies=["docs/clients/index.md is unclassified."],
+    )
+
+    result = run_agent_pass(
+        agent_fn,
+        memory_file=memory_file,
+        source_label=SourceKind.MODULE_CURATOR,
+        service=service,
+        settings=settings,
+        repo_dir=tmp_path,
+    )
+
+    assert len(result.drafts_created) == 1
+    tickets = service.list()
+    assert len(tickets) == 2  # 1 draft + 1 rollup EPIC
+    draft_tickets = [t for t in tickets if t.kind == TicketKind.TASK]
+    assert len(draft_tickets) == 1
+    desc = Workspace(
+        settings.workspaces_dir_for("test-board"), draft_tickets[0].id
+    ).read_description()
+    assert "[!warning]" not in desc
+
+    db.reset_engine()
 
 
 def test_module_curator_reorg_draft_carries_no_advisory(tmp_path):
