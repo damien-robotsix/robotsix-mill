@@ -275,6 +275,49 @@ def test_parallel_explore_single_question_no_batching(tmp_path, monkeypatch):
     assert seen["question"] == "just-one"
 
 
+def test_parallel_explore_memoizes_repeated_single_question(tmp_path, monkeypatch):
+    """A question answered earlier in the run is served from the per-run
+    memo on a later call — no duplicate scout call (trace-review finding:
+    the completeness_check run re-ran identical explore questions)."""
+    s = _settings(tmp_path)
+    seen = {"calls": 0}
+
+    async def fake(*, settings, repo_dir, question, extra_roots=None):
+        seen["calls"] += 1
+        return "the pool lives in sandbox/_slots.py"
+
+    monkeypatch.setattr(explore, "run_explore", fake)
+    tool = explore.make_parallel_explore_tool(s, tmp_path)
+
+    first = asyncio.run(tool(["where is the slot pool?"]))
+    second = asyncio.run(tool(["where is the slot pool?"]))
+    assert "the pool lives in sandbox/_slots.py" in first
+    assert "the pool lives in sandbox/_slots.py" in second
+    assert seen["calls"] == 1, "the repeated question must reuse the memo"
+
+    # A fresh question in the same run still hits the scout.
+    third = asyncio.run(tool(["where is the lane pool?"]))
+    assert seen["calls"] == 2
+    assert "the pool lives in sandbox/_slots.py" in third
+
+
+def test_parallel_explore_memo_normalizes_question_text(tmp_path, monkeypatch):
+    """Whitespace/case differences across calls do not defeat the memo."""
+    s = _settings(tmp_path)
+    seen = {"calls": 0}
+
+    async def fake(*, settings, repo_dir, question, extra_roots=None):
+        seen["calls"] += 1
+        return "answer"
+
+    monkeypatch.setattr(explore, "run_explore", fake)
+    tool = explore.make_parallel_explore_tool(s, tmp_path)
+
+    asyncio.run(tool(["list every   function in  src/robotsix_mill/agents"]))
+    asyncio.run(tool(["  LIST every function in src/robotsix_mill/agents  "]))
+    assert seen["calls"] == 1
+
+
 def test_parallel_explore_batches_into_single_call(tmp_path, monkeypatch):
     """Multiple questions are batched into a single run_explore call
     (not fanned out concurrently), so the system prompt is sent once."""

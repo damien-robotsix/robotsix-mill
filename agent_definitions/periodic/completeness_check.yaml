@@ -101,7 +101,12 @@ system_prompt: |
 
   PROCEDURE:
 
-  1. Use ``list_dir`` / ``explore`` to map the repo and infer its
+  1. Map the repository ONCE and reuse the map: run ``list_dir`` on
+     the root a single time, record the full file tree in your
+     working notes, and drill into a subdirectory only when a check
+     actually needs it. Never re-list a directory you already listed,
+     and never re-run the same ``explore`` question twice — the
+     earlier answer is still valid.  Then infer the repo's
      conventions: where are entry points, registries, routers,
      config/defaults, public exports, and tests? Identify the wiring
      patterns the codebase uses.
