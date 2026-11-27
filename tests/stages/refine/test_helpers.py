@@ -1321,6 +1321,115 @@ def test_workflow_change_review_kind_ambiguous_defaults_fail_closed():
     assert workflow_change_review_kind("") == "ambiguous"
 
 
+def test_workflow_change_review_kind_adds_with_input_to_existing_reusable():
+    """Adding/removing key/value inputs inside an unchanged ``with:`` block
+    of an existing ``uses:`` reusable call is additive config-enable work
+    — the observed robotsix-memory false-positive (ticket
+    20261121T235956Z) where a neighboring ``permissions:`` context line
+    misclassified it as destructive."""
+    diff = (
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "index 7a1f2c3..9b8d4e5 100644\n"
+        "--- a/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n"
+        "@@ -31,7 +31,9 @@ jobs:\n"
+        "  lint-workflows:\n"
+        "    name: Lint workflows\n"
+        "    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/"
+        "lint-workflows.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794 # v1.5.0\n"
+        "    with:\n"
+        "      run-actionlint: true\n"
+        "      run-zizmor: true\n"
+        "+      dockerfiles: Dockerfile\n"
+        "+      upload-sarif: true\n"
+        "    permissions:\n"
+        "      contents: read\n"
+        "      security-events: write # SARIF upload from the reusable workflow\n"
+    )
+    assert workflow_change_review_kind(diff) == "additive"
+    # Removing an input from the same block is equally additive.
+    removed = diff.replace(
+        "+      dockerfiles: Dockerfile\n", "-      dockerfiles: Dockerfile\n"
+    )
+    assert workflow_change_review_kind(removed) == "additive"
+
+
+def test_workflow_change_review_kind_diff_context_lines_never_classify():
+    """A ``permissions:``/``secrets:`` line that only appears as unchanged
+    git-diff context must not count as a destructive change."""
+    diff = (
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "--- a/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n"
+        "@@ -31,7 +31,8 @@ jobs:\n"
+        "    with:\n"
+        "      run-actionlint: true\n"
+        "+      audit-sarif: true\n"
+        "    permissions:\n"
+        "      contents: read\n"
+        "      security-events: write\n"
+    )
+    assert workflow_change_review_kind(diff) == "additive"
+
+
+def test_workflow_change_review_kind_diff_structural_changes_fail_closed():
+    """Diff hunks that touch workflow structure stay fail-closed even when
+    they also carry with-block inputs."""
+    # A permissions-scope change (value flip under an unchanged
+    # ``permissions:`` block) is not provably additive.
+    permissions = (
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "--- a/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n"
+        "@@ -31,7 +31,8 @@ jobs:\n"
+        "    with:\n"
+        "      run-actionlint: true\n"
+        "    permissions:\n"
+        "-      contents: read\n"
+        "+      contents: write\n"
+    )
+    assert workflow_change_review_kind(permissions) in ("destructive", "ambiguous")
+    # A removed reusable-workflow call is destructive.
+    removed = (
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "--- a/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n"
+        "@@ -31,7 +31,6 @@ jobs:\n"
+        "-    uses: org/.github/workflows/lint-workflows.yml@"
+        "86a722f2938c1dda343bbf8d3c5989613cbf1794 # v1.5.0\n"
+        "    with:\n"
+        "      run-actionlint: true\n"
+    )
+    assert workflow_change_review_kind(removed) == "destructive"
+    # A new job with deploy/env structure is destructive.
+    new_job = (
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "--- a/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n"
+        "@@ -10,0 +11,6 @@\n"
+        "+  deploy:\n"
+        "+    runs-on: ubuntu-latest\n"
+        "+    environment: production\n"
+        "+    steps:\n"
+        "+      - run: ./deploy.sh\n"
+    )
+    assert workflow_change_review_kind(new_job) == "destructive"
+
+
+def test_workflow_change_review_kind_secret_with_input_is_destructive():
+    """A with-block input that references a secret still fails closed."""
+    diff = (
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "--- a/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n"
+        "@@ -31,7 +31,8 @@ jobs:\n"
+        "    with:\n"
+        "      run-actionlint: true\n"
+        "+      token: ${{ secrets.GH_TOKEN }}\n"
+    )
+    assert workflow_change_review_kind(diff) == "destructive"
+
+
 def test_workflow_sensitive_disposition_additive_workflow_only_approves():
     sens = [(".github/workflows/ci.yml", ".github/workflows/**")]
     assert workflow_sensitive_disposition(

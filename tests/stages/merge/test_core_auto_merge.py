@@ -1385,6 +1385,72 @@ def test_auto_merge_additive_workflow_change_is_eligible(tmp_path, monkeypatch):
     assert "auto-merged" in out.note
 
 
+def test_auto_merge_with_block_input_enable_auto_merges(tmp_path, monkeypatch):
+    """A PR whose workflow diff only adds/removes ``with:`` inputs on an
+    existing reusable call auto-merges — even when the hunk's unchanged
+    context contains a ``permissions:`` line (the observed robotsix-memory
+    ticket 20261121T235956Z false 'destructive workflow change')."""
+    ctx = _gh(tmp_path, auto_merge_enabled="true", review_enabled="true")
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_status",
+        lambda self, *, source_branch: {
+            "merged": False,
+            "state": "open",
+            "url": "u",
+            "mergeable": True,
+            "author": "mill-bot",
+        },
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "check_status",
+        lambda self, *, source_branch: {"conclusion": "success", "failing": []},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "merge_pr",
+        lambda self, *, source_branch: {"merged": True, "reason": "merged"},
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "pr_files",
+        lambda self, *, source_branch: [{"path": ".github/workflows/ci.yml"}],
+    )
+    monkeypatch.setattr(
+        github.GitHubForge,
+        "get_authenticated_user_login",
+        lambda self: "mill-bot",
+    )
+    _mock_workflow_diff(
+        monkeypatch,
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "index 7a1f2c3..9b8d4e5 100644\n"
+        "--- a/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n"
+        "@@ -31,7 +31,9 @@ jobs:\n"
+        "  lint-workflows:\n"
+        "    name: Lint workflows\n"
+        "    uses: damien-robotsix/robotsix-github-workflows/.github/workflows/"
+        "lint-workflows.yml@86a722f2938c1dda343bbf8d3c5989613cbf1794 # v1.5.0\n"
+        "    with:\n"
+        "      run-actionlint: true\n"
+        "      run-zizmor: true\n"
+        "+      dockerfiles: Dockerfile\n"
+        "+      upload-sarif: true\n"
+        "    permissions:\n"
+        "      contents: read\n"
+        "      security-events: write # SARIF upload from the reusable workflow\n",
+    )
+
+    t = _human_mr_approval(ctx)
+    _write_review_artifact(ctx, t)
+
+    out = MergeStage().run(t, ctx)
+    assert out.next_state is State.DONE
+    assert "auto-merged" in out.note
+
+
 def test_auto_merge_destructive_workflow_change_still_blocks(tmp_path, monkeypatch):
     """A PR touching .github/workflows/** with a destructive diff
     (permissions/token scope, deploy target) still fails closed to

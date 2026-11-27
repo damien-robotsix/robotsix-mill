@@ -289,6 +289,93 @@ _WF_ADDITIVE_RE: tuple[re.Pattern[str], ...] = (
 )
 
 
+def _workflow_changed_lines(text: str) -> str:
+    """Restrict a workflow *diff* to its added/removed lines.
+
+    ``git diff`` hunks interleave changed ``+``/``-`` lines with unchanged
+    context lines; matching keyword regexes against the whole hunk reads
+    the unchanged surroundings as part of the change.  A ``permissions:``
+    line three lines below an added ``with:`` input then flags a purely
+    additive config enable as destructive (live robotsix-memory ticket
+    20261121T235956Z, "enable the shared docker lint").  Only ``+``/``-``
+    lines describe the change itself, so diff input is reduced to them
+    (the prefix is preserved so the anchored ``uses:`` patterns above
+    still match at line start).  Prose input carries no diff hunk markers
+    and is returned unchanged.
+    """
+    if not any(
+        line.startswith(("@@ ", "diff --git ")) for line in (text or "").splitlines()
+    ):
+        return text or ""
+    return "\n".join(
+        line
+        for line in (text or "").splitlines()
+        if line.startswith(("+", "-")) and not line.startswith(("+++ ", "--- "))
+    )
+
+
+def _with_block_input_line(line: str) -> bool:
+    """True iff *line* is an added/removed indented ``key: value`` entry.
+
+    A plain mapping entry (e.g. an input passed to a reusable workflow's
+    ``with:`` block) rather than a structural workflow line (``uses:``,
+    ``with:``, ``permissions:``, ``on:``, ``environment:``, job names,
+    ``steps:`` items) that the sensitive-path gate keeps in human
+    approval scope.
+    """
+    body = line[1:] if line[:1] in "+-" else line
+    return bool(re.match(r"^[ \t]+[\w./-]+:\s*\S", body))
+
+
+def _inside_unchanged_with(hunk: list[str], line: str) -> bool:
+    """True iff *line*'s nearest shallower container in *hunk* is an
+    unchanged ``with:`` block.
+
+    The entry therefore sits inside a reusable-workflow ``with:`` that the
+    diff did not itself add or remove — the ``uses:`` ref/SHA, the job's
+    ``permissions:`` block, the top-level ``on:`` triggers and the job
+    structure are all untouched by construction.
+    """
+    content = line[1:]
+    indent = len(content) - len(content.lstrip(" \t"))
+    for prev in reversed(hunk[:-1]):
+        body = prev[1:] if prev[:1] in "+-" else prev
+        if len(body) - len(body.lstrip(" \t")) >= indent:
+            continue  # same or deeper nesting — keep walking up
+        return prev.startswith(" ") and body.strip() == "with:"
+    return False
+
+
+def _is_with_block_config_edit(text: str) -> bool:
+    """True iff every changed line of the workflow *diff* is a ``key:
+    value`` input inside an unchanged ``with:`` block of an existing
+    ``uses:`` reusable-workflow call.
+
+    Adding or removing such inputs (e.g. ``dockerfiles: Dockerfile``,
+    ``upload-sarif: true``, a matrix/version entry) enables or disables an
+    already-shipped input on an existing call without touching the
+    ``uses:`` ref, the job's ``permissions:`` scope, the ``on:`` triggers
+    or job structure — the exact additive config-enable work the blanket
+    workflow glob was stalling in human approval (live robotsix-memory
+    ticket 20261121T235956Z).
+    """
+    hunk: list[str] = []  # context + changed lines of the current hunk
+    saw_change = False
+    for line in (text or "").splitlines():
+        if line.startswith("@@ "):
+            hunk = []
+            continue
+        if line.startswith(("diff --git ", "index ", "--- ", "+++ ")):
+            continue
+        hunk.append(line)
+        if not line.startswith(("+", "-")):
+            continue
+        saw_change = True
+        if not _with_block_input_line(line) or not _inside_unchanged_with(hunk, line):
+            return False
+    return saw_change
+
+
 def workflow_change_review_kind(
     text: str,
 ) -> Literal["destructive", "additive", "ambiguous"]:
@@ -300,14 +387,19 @@ def workflow_change_review_kind(
     Returns ``"additive"`` when no destructive construct is present but at
     least one additive/config-only construct is (dependabot block,
     version/matrix bump, test relocation, lint/ignore table, reusable-SHA
-    pin or reusable adoption) — safe to auto-approve.  Returns
-    ``"ambiguous"`` otherwise — the caller fails closed.
+    pin or reusable adoption, with-block input on an existing reusable
+    call) — safe to auto-approve.  Returns ``"ambiguous"`` otherwise —
+    the caller fails closed.  For git-diff input only the added/removed
+    lines are classified, never the unchanged context.
     """
+    changed = _workflow_changed_lines(text)
     for pattern in _WF_DESTRUCTIVE_RE:
-        if pattern.search(text or ""):
+        if pattern.search(changed):
             return "destructive"
+    if _is_with_block_config_edit(text):
+        return "additive"
     for pattern in _WF_ADDITIVE_RE:
-        if pattern.search(text or ""):
+        if pattern.search(changed):
             return "additive"
     return "ambiguous"
 
